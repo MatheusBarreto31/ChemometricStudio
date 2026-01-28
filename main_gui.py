@@ -273,6 +273,11 @@ class ChemometricsGUI:
         version_label = ttk.Label(text_frame, text=f"Version {version}", font=("Arial", 10))
         version_label.pack(anchor=tk.W)
         
+        version_text = lang_info.get("version_text", "")
+        if version_text:
+            version_text_label = ttk.Label(text_frame, text=version_text, font=("Arial", 9))
+            version_text_label.pack(anchor=tk.W)
+        
         # Description frame
         desc_frame = ttk.LabelFrame(about_win, text="About", padding=15)
         desc_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=(0, 10))
