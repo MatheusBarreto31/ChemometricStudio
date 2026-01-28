@@ -1,0 +1,110 @@
+{
+  "ui": {
+    "main_title": "CM Studio",
+    "panels": {
+      "available_functions": "Funções Disponíveis",
+      "functions_by_category": "Funções por Categoria",
+      "methodology": "Metodologia",
+      "selected_functions": "Funções Selecionadas"
+    },
+    "buttons": {
+      "run_pca": "Executar PCA de Amostra",
+      "add_to_methodology": "Adicionar à Metodologia",
+      "remove_from_methodology": "Remover Selecionado",
+      "clear_methodology": "Limpar Tudo",
+      "help": "Ajuda",
+      "save_model": "Salvar Modelo",
+      "load_model": "Carregar Modelo",
+      "run_model": "Executar Modelo",
+      "generate_report": "Gerar Relatório",
+      "browse": "Procurar",
+      "ok": "OK",
+      "cancel": "Cancelar",
+      "yes": "Sim",
+      "no": "Não"
+    },
+    "tabs": {
+      "setup": "Configuração",
+      "routing": "Roteamento",
+      "analysis": "Análise",
+      "report": "Relatório"
+    },
+    "labels": {
+      "language": "Idioma:",
+      "select_language": "Selecionar Idioma",
+      "summary": "Resumo:",
+      "details": "Detalhes:"
+    },
+    "dialogs": {
+      "error": "Erro",
+      "warning": "Aviso",
+      "info": "Informação",
+      "success": "Sucesso",
+      "select_file": "Selecionar Arquivo",
+      "select_files": "Selecionar Arquivos",
+      "file_filter_csv": "Arquivos CSV (*.csv)",
+      "file_filter_txt": "Arquivos de Texto (*.txt)",
+      "file_filter_all": "Todos os Arquivos (*.*)",
+      "file_filter_zip": "Arquivos ZIP (*.zip)",
+      "save_as": "Salvar Como",
+      "model_files": "Arquivos de Modelo",
+      "model_method_only": "Método do Modelo Apenas"
+    },
+    "messages": {
+      "no_methodology": "Nenhuma função selecionada. Por favor, adicione funções à sua metodologia.",
+      "empty_methodology": "Adicione funções à Metodologia primeiro",
+      "routing_required": "Por favor, configure o roteamento entre as funções.",
+      "missing_parameters": "Parâmetros obrigatórios faltando. Por favor, preencha todos os campos obrigatórios.",
+      "file_not_found": "Arquivo não encontrado:",
+      "invalid_input": "Entrada inválida",
+      "operation_successful": "Operação concluída com sucesso",
+      "operation_failed": "Operação falhou",
+      "unsaved_changes": "Você tem alterações não salvas. Deseja salvar antes de fechar?",
+      "confirm_clear": "Tem certeza de que deseja limpar a metodologia?",
+      "model_saved": "Modelo salvo com sucesso em:",
+      "model_loaded": "Modelo carregado com sucesso de:",
+      "model_loaded_select": "Modelo carregado. Selecione uma função para configurar.",
+      "report_generated": "Relatório gerado com sucesso",
+      "analysis_running": "Executando análise...",
+      "analysis_complete": "Análise concluída",
+      "routing_help": "Roteamento: Conecte Saídas de Funções a Entradas",
+      "output": "Saída",
+      "input": "Entrada",
+      "connections": "Conexões",
+      "outputs": "Saídas",
+      "inputs": "Entradas",
+      "same_function_error": "Não é possível selecionar a mesma função em ambos os lados",
+      "invalid_connection": "A fonte de saída deve vir antes do destino de entrada na ordem da metodologia",
+      "connection_removed": "Conexão removida",
+      "connection_created": "Conexão criada",
+      "analysis_tab": "Aba de Análise (Em Desenvolvimento)",
+      "report_tab": "Aba de Relatório (Em Desenvolvimento)",
+      "choose_save_option": "Escolha a opção de salvamento:",
+      "save_with_calibration": "Salvar Com Calibração (.mdcd)",
+      "save_full_model": "Salvar Modelo Completo (.mdfd)",
+      "save_method_only": "Salvar Método Apenas (.mdon)",
+      "model_executed": "Modelo executado com sucesso. Saída salva em model_log.txt",
+      "execution_failed": "Falha na execução do modelo:",
+      "check_log": "Verifique model_log.txt para detalhes",
+      "save_failed": "Falha ao salvar modelo:",
+      "load_failed": "Falha ao carregar modelo:",
+      "no_config": "Nenhuma configuração disponível para esta função"
+    }
+  },
+  "menu": {
+    "file": "Arquivo",
+    "load_model": "Carregar Modelo",
+    "save_model": "Salvar Modelo",
+    "exit": "Sair",
+    "settings": "Configurações",
+    "language": "Idioma",
+    "help": "Ajuda",
+    "about": "Sobre"
+  },
+  "tooltips": {
+    "add_function": "Clique para adicionar esta função à sua metodologia",
+    "remove_function": "Clique para remover a função selecionada",
+    "configure_routing": "Configure as conexões de dados entre as funções",
+    "run_analysis": "Execute o pipeline de análise configurado"
+  }
+}

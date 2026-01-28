@@ -1,0 +1,80 @@
+{
+  "display_name": "Calibração Univariada",
+  "category": "Modelagem",
+  "data_type": "firstorder",
+  "input_aliases": {
+    "X_cal": "X Calibração",
+    "Y_cal": "Y Calibração",
+    "X_val": "X Validação",
+    "Y_val": "Y Validação",
+    "degree": "Grau Polinomial",
+    "intercept": "Incluir Intercepto"
+  },
+  "output_aliases": {
+    "y_cal_pred": "Y Cal Previsto",
+    "y_val_pred": "Y Val Previsto",
+    "models": "Modelos",
+    "metrics": "Métricas"
+  },
+  "short_description": "Constrói modelos de calibração polinomial univariada",
+  "long_description": "Constrói modelos de regressão polinomial univariada para cada variável espectroscópica independentemente. Uma abordagem simples e interpretável útil para análise exploratória e comparação com métodos multivariados.\n\nComo Funciona:\n- Um modelo é construído por variável (comprimento de onda/frequência)\n- Cada variável é tratada independentemente\n- A resposta é prevista como uma função polinomial dessa variável\n- Coeficientes do modelo determinados via ajuste de mínimos quadrados\n\nGrau Polinomial:\n\n1. Linear (grau=1)\n   - Relação simples de linha reta\n   - y = a0 + a1*x\n   - Mais rápido, mais interpretável\n   - Pode subestimar relações complexas\n\n2. Quadrático (grau=2)\n   - Relação parabólica\n   - y = a0 + a1*x + a2*x^2\n   - Bom equilíbrio entre simplicidade e flexibilidade\n   - Ponto de partida recomendado\n\n3. Ordens Superiores (grau=3+)\n   - Polinômios cúbicos e superiores\n   - Ajuste de curva mais flexível\n   - Risco de overfitting com conjuntos de dados pequenos\n   - Use com cautela\n\nParâmetro de Intercepto:\n- Marque para incluir termo constante (a0)\n- Geralmente recomendado para calibração\n- Desmarque apenas em casos especiais (resposta zero em sinal zero conhecido)\n\nVantagens:\n- Resultados muito interpretáveis\n- Pode identificar comprimentos de onda com sinais mais fortes\n- Rápido de calcular\n- Bom para análise exploratória inicial\n- Funciona com conjuntos de dados pequenos\n\nLimitações:\n- Ignora correlações entre variáveis\n- Pode perder padrões multivariados\n- Desempenho tipicamente inferior a PLS/PCR\n- Polinômios de ordem alta podem fazer overfitting\n\nUse Quando:\n- Explorar estrutura de dados\n- Comparar contra métodos multivariados\n- Precisa de máxima interpretabilidade\n- Conjunto de dados é pequeno\n- Variáveis têm sinais fortes individuais\n\nDica: Compare resultados univariados com métodos multivariados (PLS/PCR) para análise abrangente.",
+  "setup": {
+    "layout": [
+      {
+        "name": "degree",
+        "label": "Grau Polinomial",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "1 para linear, 2 para quadrático, 3+ para polinômios de ordem superior"
+      },
+      {
+        "name": "intercept",
+        "label": "Incluir Intercepto",
+        "widget": "checkbutton",
+        "default": true,
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Incluir termo constante no modelo polinomial"
+      },
+      {
+        "name": "X_cal",
+        "label": "Dados X Calibração",
+        "widget": "data_input",
+        "required": true,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Roteado da saída da função anterior"
+      },
+      {
+        "name": "Y_cal",
+        "label": "Dados Y Calibração",
+        "widget": "data_input",
+        "required": true,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Roteado da saída da função anterior"
+      },
+      {
+        "name": "X_val",
+        "label": "Dados X Validação",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Roteado da saída da função anterior"
+      },
+      {
+        "name": "Y_val",
+        "label": "Dados Y Validação",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Roteado da saída da função anterior"
+      }
+    ]
+  }
+}

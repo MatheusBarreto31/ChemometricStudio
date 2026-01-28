@@ -1,0 +1,126 @@
+{
+  "display_name": "Carregar Dados",
+  "category": "Importação de Dados",
+  "data_type": "all",
+  "input_aliases": {
+    "d_specs": "Especificação de Formato",
+    "data_path": "Arquivos de Dados X",
+    "nway_flag": "Dimensionalidade dos Dados",
+    "y_path": "Arquivo de Dados Y",
+    "var_path": "Rótulos de Variáveis",
+    "smp_path": "Rótulos de Amostras",
+    "transpose": "Transpor"
+  },
+  "output_aliases": {
+    "X_cal": "Dados X",
+    "Y_cal": "Dados Y",
+    "var_label": "Rótulos de Variáveis",
+    "smp_cal": "Rótulos de Amostras"
+  },
+  "short_description": "Carrega dados espectroscópicos e de resposta de arquivos",
+  "long_description": "Esta etapa carrega seu conjunto de dados de calibração, incluindo dados espectroscópicos (X), variáveis de resposta (Y) e metadados opcionais.\n\nComponentes de Dados de Entrada:\n- Dados X (Espectros): Principais medições espectroscópicas (obrigatório)\n- Dados Y (Respostas): Variáveis alvo/dependentes (opcional)\n- Rótulos de Variáveis: Comprimentos de onda, frequências ou nomes de variáveis (opcional)\n- Rótulos de Amostras: IDs de amostra ou identificadores (opcional)\n\nFormatos de Dados:\n- Arquivos CSV com delimitadores configuráveis (vírgula, tabulações, espaços)\n- Formato de matriz: amostras (linhas) x variáveis (colunas)\n- Formatos de vetor para tipos de dados especializados\n- Suporte para múltiplos arquivos via seleção de arquivo\n\nConfiguração:\n- Especifique o tipo de delimitador para seus arquivos\n- Defina o número de linhas de cabeçalho para pular\n- Escolha a estrutura de tipo de dados apropriada\n- Transponha se necessário (amostras em colunas em vez de linhas)\n\nOs dados carregados se tornam entrada para etapas de pré-processamento e validação.",
+  "setup": {
+    "layout": [
+      {
+        "name": "d_specs_separator",
+        "label": "Separador de Dados",
+        "widget": "combobox",
+        "values": ["vírgula", "tabulações", "espaços"],
+        "value_aliases": ["Separado por Vírgula", "Separado por Tabulação", "Separado por Espaço"],
+        "default": "tabulações",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Delimitador usado nos arquivos de dados"
+      },
+      {
+        "name": "d_specs_headlines",
+        "label": "Número de Linhas de Cabeçalho",
+        "widget": "entry",
+        "type": "int",
+        "default": "0",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Número de linhas a pular no início de cada arquivo"
+      },
+      {
+        "name": "d_specs_type",
+        "label": "Tipo de Dados",
+        "widget": "combobox",
+        "values": ["x_vector", "xy_vector", "xyz_vector", "x_matrix", "xy_matrix"],
+        "value_aliases": ["Vetor X", "Vetor X-Y", "Vetor X-Y-Z", "Matriz X", "Matriz X-Y"],
+        "default": "x_matrix",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Estrutura dos dados: matriz (amostras × variáveis) ou formatos vetoriais"
+      },
+      {
+        "name": "d_specs_dimensions",
+        "label": "Dimensões dos Dados",
+        "widget": "entry",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Especifique dimensões para remodelar dados de ordem superior (ex: '100,500,10')"
+      },
+      {
+        "name": "data_path",
+        "label": "Arquivos de Dados X",
+        "widget": "file_selector",
+        "multiple": true,
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Arquivos de dados espectroscópicos (espectros/dados X)",
+        "ispath": true
+      },
+      {
+        "name": "nway_flag",
+        "label": "Ordem dos Dados",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "1 para dados 2D, >1 para dados multidimensionais"
+      },
+      {
+        "name": "y_path",
+        "label": "Arquivo de Dados Y (Opcional)",
+        "widget": "file_selector",
+        "multiple": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Arquivo de variável(is) de resposta",
+        "ispath": true
+      },
+      {
+        "name": "var_path",
+        "label": "Rótulos de Variáveis (Opcional)",
+        "widget": "file_selector",
+        "multiple": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Rótulos para variáveis/comprimentos de onda (ex: valores de número de onda)",
+        "ispath": true
+      },
+      {
+        "name": "smp_path",
+        "label": "Rótulos de Amostras (Opcional)",
+        "widget": "file_selector",
+        "multiple": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Rótulos para amostras (ex: IDs de amostra)",
+        "ispath": true
+      },
+      {
+        "name": "transpose",
+        "label": "Transpor Dados",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Transpõe os dados"
+      }
+    ]
+  }
+}

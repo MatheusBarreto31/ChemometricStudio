@@ -1,0 +1,95 @@
+{
+  "display_name": "Suavização",
+  "category": "Pré-Processamento",
+  "data_type": "firstorder",
+  "input_aliases": {
+    "X_cal": "X Calibração",
+    "method": "Método",
+    "X_val": "X Validação",
+    "nway_flag": "Dimensionalidade",
+    "direction": "Direção",
+    "window_size": "Tamanho da Janela",
+    "polyorder": "Ordem Polinomial"
+  },
+  "output_aliases": {
+    "X_cal": "X Cal (Suavizado)",
+    "X_val": "X Val (Suavizado)"
+  },
+  "short_description": "Reduz ruído enquanto preserva características espectrais",
+  "long_description": "A suavização reduz ruído de alta frequência em dados espectroscópicos enquanto preserva características espectrais importantes e informações de picos.\n\nMétodos de Suavização:\n\n1. Média Móvel\n   - Média simples em uma janela deslizante\n   - Rápido e direto\n   - Pode achatar picos agudos se a janela for muito grande\n   - Bom para redução inicial de ruído\n\n2. Filtro Savitzky-Golay\n   - Filtro que preserva polinômios\n   - Melhor na manutenção de formas de picos espectrais\n   - Usa ajuste polinomial dentro da janela deslizante\n   - Mais computacionalmente intensivo que média móvel\n   - Requer ordem polinomial < tamanho da janela\n\nParâmetros:\n\nTamanho da Janela:\n- Janelas maiores = suavização mais forte, mas mais perda de características\n- Valores típicos: 5-15 pontos\n- Deve ser número ímpar\n- Deve ser menor que a largura da característica espectral\n\nOrdem Polinomial (apenas Savitzky-Golay):\n- Ordem 2: ajuste parabólico (recomendado)\n- Ordem 3-5: polinômios de grau superior\n- Ordens inferiores preservam características melhor\n\nDados Multidirecionais:\n- Especifique dimensionalidade para dados 3D+\n- Parâmetro de direção controla o eixo de suavização\n\nDica: Para melhores resultados, aplique correção de linha de base antes de suavizar.",
+  "setup": {
+    "layout": [
+      {
+        "name": "method",
+        "label": "Método de Suavização",
+        "widget": "combobox",
+        "values": ["moving_average", "savitzky_golay"],
+        "value_aliases": ["Média Móvel", "Filtro Savitzky-Golay"],
+        "default": "moving_average",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Média Móvel: média simples. Savitzky-Golay: filtro que preserva polinômios"
+      },
+      {
+        "name": "direction",
+        "label": "Direção (para multidirecionais)",
+        "widget": "entry",
+        "type": "int",
+        "default": "-1",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Dimensão a suavizar (-1 para dimensão padrão/última)"
+      },
+      {
+        "name": "window_size",
+        "label": "Tamanho da Janela",
+        "widget": "entry",
+        "type": "int",
+        "default": "5",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Número de pontos para janela de média móvel ou Savitzky-Golay"
+      },
+      {
+        "name": "polyorder",
+        "label": "Ordem Polinomial (Savitzky-Golay)",
+        "widget": "entry",
+        "type": "int",
+        "default": "2",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Grau polinomial (deve ser < tamanho da janela e tipicamente 2-5)",
+        "visible_if": {"method": "savitzky_golay"}
+      },
+      {
+        "name": "X_cal",
+        "label": "Dados X Calibração",
+        "widget": "data_input",
+        "required": true,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Roteado da saída da função anterior"
+      },
+      {
+        "name": "X_val",
+        "label": "Dados X Validação",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Roteado da saída da função anterior"
+      },
+      {
+        "name": "nway_flag",
+        "label": "Dimensionalidade dos Dados",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": true,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Automaticamente herdada da função Carregar Dados"
+      }
+    ]
+  }
+}

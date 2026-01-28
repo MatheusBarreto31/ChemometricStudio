@@ -1,0 +1,84 @@
+{
+  "display_name": "Baseline Correction",
+  "category": "Preprocessing",
+  "data_type": "firstorder",
+  "input_aliases": {
+    "X_cal": "X Calibration",
+    "method": "Method",
+    "X_val": "X Validation",
+    "nway_flag": "Dimensionality",
+    "direction": "Direction",
+    "window_size": "Window Size"
+  },
+  "output_aliases": {
+    "X_cal": "X Cal (Corrected)",
+    "X_val": "X Val (Corrected)"
+  },
+  "short_description": "Removes baseline offset from spectra",
+  "long_description": "Baseline correction removes systematic offsets and trends from spectroscopic measurements, improving data quality and model performance.\n\nAvailable Methods:\n\n1. Multiplicative Scatter Correction (MSC)\n   - Corrects for multiplicative and additive scatter effects\n   - Works well for diffuse reflectance and transmittance data\n   - Preserves spectral shape while normalizing intensity\n\n2. Standard Normal Variate (SNV)\n   - Center-scales each spectrum independently\n   - Removes baseline drift and multiplicative effects\n   - Suitable for reflectance spectroscopy\n\n3. Moving Average\n   - Simple smoothing-based baseline correction\n   - Uses configurable window size\n   - Good for noisy data with local baselines\n\nMultiway Data Support:\n- For 2D data: standard processing (nway_flag=1)\n- For 3D+ data: specify dimensionality and direction\n- Direction parameter controls along which axis correction is applied\n\nThis preprocessing significantly improves model accuracy and interpretability.",
+  "setup": {
+    "layout": [
+      {
+        "name": "method",
+        "label": "Correction Method",
+        "widget": "combobox",
+        "values": ["msc", "svn", "moving_average"],
+        "value_aliases": ["Multiplicative Scatter Correction", "Standard Normal Variate", "Moving Average"],
+        "default": "msc",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "MSC: Multiplicative Scatter Correction, SNV: Standard Normal Variate, Moving Average: Smoothing-based correction"
+      },
+      {
+        "name": "direction",
+        "label": "Direction (for multiway)",
+        "widget": "entry",
+        "type": "int",
+        "default": "-1",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Dimension along which to apply correction (-1 for default/last dimension)"
+      },
+      {
+        "name": "window_size",
+        "label": "Window Size (for moving average)",
+        "widget": "entry",
+        "type": "int",
+        "default": "5",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Number of points in the moving average window (only used with moving_average method)",
+        "visible_if": {"method": "moving_average"}
+      },
+      {
+        "name": "X_cal",
+        "label": "X Calibration Data",
+        "widget": "data_input",
+        "required": true,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed from previous function output"
+      },
+      {
+        "name": "X_val",
+        "label": "X Validation Data",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed from previous function output"
+      },
+      {
+        "name": "nway_flag",
+        "label": "Data Dimensionality",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": true,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Automatically inherited from Load Data function"
+      }
+    ]
+  }
+}

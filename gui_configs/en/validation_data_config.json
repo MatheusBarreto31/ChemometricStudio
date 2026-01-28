@@ -1,0 +1,187 @@
+{
+  "display_name": "Load/Create Validation Set",
+  "category": "Data Import",
+  "data_type": "all",
+  "input_aliases": {
+    "X_cal": "X Data",
+    "Y_cal": "Y Data",
+    "smp_cal": "Sample Labels",
+    "createVal": "Create Validation",
+    "creationMethod": "Method",
+    "calProportion": "Cal. Proportion",
+    "selection_file": "Selection File"
+  },
+  "output_aliases": {
+    "X_cal": "X Calibration",
+    "Y_cal": "Y Calibration",
+    "X_val": "X Validation",
+    "Y_val": "Y Validation",
+    "smp_cal": "Cal Samples",
+    "smp_val": "Val Samples"
+  },
+  "short_description": "Creates or loads validation data for model assessment",
+  "long_description": "Validation data is essential for unbiased assessment of model performance. This step creates validation sets by splitting calibration data or loads external validation data.\n\nCreating Validation Sets from Calibration Data:\n\n1. Random Splitting\n   - Randomly selects samples for validation\n   - Fastest and simplest approach\n   - Suitable for large, diverse datasets\n   - May not ensure representative distribution\n\n2. Kennard-Stone Algorithm\n   - Selects samples that span the data space\n   - Ensures good representation of data range\n   - Better for small or clustered datasets\n   - More computationally expensive\n\n3. File-Based Selection\n   - Uses external index file for sample selection\n   - Allows custom selection criteria\n   - Requires pre-prepared selection file\n\nCalibration Proportion:\n- Typical value: 0.7 (70% calibration, 30% validation)\n- Larger sets: can use 0.8-0.9 for better calibration\n- Smaller datasets: may use 0.6-0.7 for more validation samples\n\nLoading External Validation Sets:\n- Load completely independent validation data\n- Useful for temporal or spatial validation\n- Provides most realistic performance estimate\n- Separate X and Y files required\n- Optional sample labels file\n\nBest Practices:\n- Validation set should be independent of calibration\n- Ensure both sets cover similar data ranges\n- Document how validation sets were selected\n- Use appropriate set size for statistical reliability\n\nUsage:\n- Create internal set OR load external set\n- Both can be used simultaneously for comprehensive validation\n- Settings applied automatically during model building.",
+  "setup": {
+    "layout": [
+      {
+        "name": "validation_mode",
+        "label": "Validation Set Mode",
+        "widget": "combobox",
+        "values": ["Load", "Create"],
+        "value_aliases": ["Load External Validation Data", "Create from Calibration Data"],
+        "default": "Load",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Choose whether to load external validation data or create it from calibration data"
+      },
+      {
+        "name": "creationMethod",
+        "label": "Creation Method",
+        "widget": "combobox",
+        "values": ["random", "kennard_stone", "file"],
+        "value_aliases": ["Random Splitting", "Kennard-Stone Algorithm", "File-Based Selection"],
+        "default": "random",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Random: random selection. Kennard-Stone: diversity-based. File: use external selection indices",
+        "visible_if": {"validation_mode": "Create"}
+      },
+      {
+        "name": "calProportion",
+        "label": "Calibration Proportion (0-1)",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.7",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Fraction of data for calibration (0.7 = 70% cal, 30% val)",
+        "visible_if": {"validation_mode": "Create"}
+      },
+      {
+        "name": "selection_file",
+        "label": "Selection File (if using 'file' method)",
+        "widget": "file_selector",
+        "multiple": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "File with sample indices/identifiers for selection",
+        "visible_if": {"creationMethod": "file"},
+        "ispath": true
+      },
+      {
+        "name": "X_val_path",
+        "label": "X Validation Data File",
+        "widget": "file_selector",
+        "multiple": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "External validation spectra file",
+        "visible_if": {"validation_mode": "Load"},
+        "ispath": true
+      },
+      {
+        "name": "Y_val_path",
+        "label": "Y Validation Data File",
+        "widget": "file_selector",
+        "multiple": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "External validation response file",
+        "visible_if": {"validation_mode": "Load"},
+        "ispath": true
+      },
+      {
+        "name": "val_labels_path",
+        "label": "Validation Sample Labels File (optional)",
+        "widget": "file_selector",
+        "multiple": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Labels for external validation samples",
+        "visible_if": {"validation_mode": "Load"},
+        "ispath": true
+      },
+      {
+        "name": "X_cal",
+        "label": "X Calibration Data",
+        "widget": "data_input",
+        "required": true,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed from previous function output"
+      },
+      {
+        "name": "Y_cal",
+        "label": "Y Calibration Data",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed from previous function output"
+      },
+      {
+        "name": "smp_cal",
+        "label": "Calibration Sample Labels",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed from previous function output"
+      },
+      {
+        "name": "d_specs_separator",
+        "label": "Data Separator",
+        "widget": "combobox",
+        "values": ["comma", "tabs", "spaces"],
+        "default": "tabs",
+        "required": true,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Automatically inherited from Load Data function"
+      },
+      {
+        "name": "d_specs_headlines",
+        "label": "Number of Header Rows",
+        "widget": "entry",
+        "type": "int",
+        "default": "0",
+        "required": true,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Automatically inherited from Load Data function"
+      },
+      {
+        "name": "d_specs_type",
+        "label": "Data Type",
+        "widget": "combobox",
+        "values": ["x_vector", "xy_vector", "xyz_vector", "x_matrix", "xy_matrix"],
+        "default": "x_matrix",
+        "required": true,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Automatically inherited from Load Data function"
+      },
+      {
+        "name": "d_specs_dimensions",
+        "label": "Data Dimensions",
+        "widget": "entry",
+        "default": "",
+        "required": false,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Automatically inherited from Load Data function"
+      },
+      {
+        "name": "nway_flag",
+        "label": "Data Dimensionality",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": true,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Automatically inherited from Load Data function"
+      }
+    ]
+  }
+}

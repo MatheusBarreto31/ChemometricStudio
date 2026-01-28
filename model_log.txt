@@ -1,0 +1,159 @@
+Analyst mode selected.
+
+Parsing line: "load_data d_specs:['tabs', '0', 'x_matrix', ''] nway_flag:1 data_path:['D:\\\\ChemometricsTool\\\\tempfiles\\\\x1.txt'] y_path:D:/ChemometricsTool/tempfiles/y1.txt"
+  Raw value for d_specs: "['tabs', '0', 'x_matrix', '']"
+  Parsed value for d_specs: ['tabs', '0', 'x_matrix', '']
+  Raw value for nway_flag: '1'
+  Parsed value for nway_flag: 1
+  Raw value for data_path: "['D:\\\\ChemometricsTool\\\\tempfiles\\\\x1.txt']"
+  Parsed value for data_path: ['D:\\ChemometricsTool\\tempfiles\\x1.txt']
+  Raw value for y_path: 'D:/ChemometricsTool/tempfiles/y1.txt'
+  Parsed value for y_path: 'D:/ChemometricsTool/tempfiles/y1.txt'
+Executing: load_data
+  Final arguments: {'d_specs': ['tabs', '0', 'x_matrix', ''], 'nway_flag': 1, 'data_path': ['D:\\ChemometricsTool\\tempfiles\\x1.txt'], 'y_path': 'D:/ChemometricsTool/tempfiles/y1.txt'}
+load_data executed successfully.
+
+Parsing line: "validation_data_main validation_mode:Load creationMethod:random calProportion:0.7 d_specs:['tabs', '0', 'x_matrix', ''] nway_flag:1 X_val_path:D:/ChemometricsTool/tempfiles/val.txt"
+  Raw value for validation_mode: 'Load'
+  Parsed value for validation_mode: 'Load'
+  Raw value for creationMethod: 'random'
+  Parsed value for creationMethod: 'random'
+  Raw value for calProportion: '0.7'
+  Parsed value for calProportion: 0.7
+  Raw value for d_specs: "['tabs', '0', 'x_matrix', '']"
+  Parsed value for d_specs: ['tabs', '0', 'x_matrix', '']
+  Raw value for nway_flag: '1'
+  Parsed value for nway_flag: 1
+  Raw value for X_val_path: 'D:/ChemometricsTool/tempfiles/val.txt'
+  Parsed value for X_val_path: 'D:/ChemometricsTool/tempfiles/val.txt'
+Executing: validation_data_main
+  Final arguments: {'validation_mode': 'Load', 'creationMethod': 'random', 'calProportion': 0.7, 'd_specs': ['tabs', '0', 'x_matrix', ''], 'nway_flag': 1, 'X_val_path': 'D:/ChemometricsTool/tempfiles/val.txt'}
+validation_data_main executed successfully.
+
+Parsing line: 'center_and_normalize center:True direction:-1 nway_flag:1'
+  Raw value for center: 'True'
+  Parsed value for center: True
+  Raw value for direction: '-1'
+  Parsed value for direction: -1
+  Raw value for nway_flag: '1'
+  Parsed value for nway_flag: 1
+Executing: center_and_normalize
+  Final arguments: {'center': True, 'direction': -1, 'nway_flag': 1}
+center_and_normalize executed successfully.
+
+Parsing line: 'univariate_calibration degree:1 intercept:True'
+  Raw value for degree: '1'
+  Parsed value for degree: 1
+  Raw value for intercept: 'True'
+  Parsed value for intercept: True
+Executing: univariate_calibration
+  Final arguments: {'degree': 1, 'intercept': True}
+univariate_calibration executed successfully.
+All functions executed.
+Final outputs:
+
+Outputs from load_data:
+X_cal: [[10.25509512 15.49723608]
+ [11.50595705 19.17193664]
+ [12.69907672 12.85839019]
+ [13.89090325 17.57200229]
+ [14.95929143 17.53729094]
+ [15.54721553 13.80445847]
+ [16.13862444 15.67821641]
+ [17.14929401 10.7585429 ]
+ [18.25750825 10.53950119]
+ [19.84071726 15.30797553]
+ [20.25428218 17.7916723 ]]
+Y_cal: [[ 1.         11.27411753]
+ [ 2.          2.42896829]
+ [ 3.          7.25706027]
+ [ 4.          6.16329705]
+ [ 5.          1.13092276]
+ [ 6.          4.70834909]
+ [ 7.          2.78400539]
+ [ 8.          9.73712995]
+ [ 9.          4.42336546]
+ [10.          6.81386449]
+ [11.          2.82213602]]
+var_label: None
+smp_cal: ['x1_1', 'x1_2', 'x1_3', 'x1_4', 'x1_5', 'x1_6', 'x1_7', 'x1_8', 'x1_9', 'x1_10', 'x1_11']
+
+Outputs from validation_data_main:
+X_cal: [[10.25509512 15.49723608]
+ [11.50595705 19.17193664]
+ [12.69907672 12.85839019]
+ [13.89090325 17.57200229]
+ [14.95929143 17.53729094]
+ [15.54721553 13.80445847]
+ [16.13862444 15.67821641]
+ [17.14929401 10.7585429 ]
+ [18.25750825 10.53950119]
+ [19.84071726 15.30797553]
+ [20.25428218 17.7916723 ]]
+Y_cal: [[ 1.         11.27411753]
+ [ 2.          2.42896829]
+ [ 3.          7.25706027]
+ [ 4.          6.16329705]
+ [ 5.          1.13092276]
+ [ 6.          4.70834909]
+ [ 7.          2.78400539]
+ [ 8.          9.73712995]
+ [ 9.          4.42336546]
+ [10.          6.81386449]
+ [11.          2.82213602]]
+X_val: [[18.25750825 10.53950119]
+ [19.84071726 15.30797553]
+ [20.25428218 17.7916723 ]]
+Y_val: None
+smp_cal: ['x1_1', 'x1_2', 'x1_3', 'x1_4', 'x1_5', 'x1_6', 'x1_7', 'x1_8', 'x1_9', 'x1_10', 'x1_11']
+smp_val: ['val_1', 'val_2', 'val_3']
+
+Outputs from center_and_normalize:
+X_cal: [[-5.24471991  0.35930673]
+ [-3.99385797  4.03400728]
+ [-2.8007383  -2.27953917]
+ [-1.60891177  2.43407293]
+ [-0.5405236   2.39936159]
+ [ 0.04740051 -1.33347089]
+ [ 0.63880942  0.54028705]
+ [ 1.64947898 -4.37938646]
+ [ 2.75769323 -4.59842817]
+ [ 4.34090223  0.17004617]
+ [ 4.75446716  2.65374294]]
+X_val: [[ 2.75769323 -4.59842817]
+ [ 4.34090223  0.17004617]
+ [ 4.75446716  2.65374294]]
+
+Outputs from univariate_calibration:
+y_cal_pred: {'X0_Y0': array([ 0.68925065,  1.95586056,  3.16400125,  4.37083252,  5.45267137,
+        6.04799727,  6.64685184,  7.67024543,  8.79241176, 10.39555289,
+       10.81432447]), 'X0_Y1': array([6.71602305, 6.40525768, 6.10883785, 5.81273929, 5.54730788,
+       5.40124344, 5.25431322, 5.00322148, 4.72789564, 4.33456163,
+       4.23181516]), 'X1_Y0': array([5.88524958, 4.71167444, 6.72800776, 5.22263938, 5.23372502,
+       6.42586553, 5.82745058, 7.398628  , 7.46858252, 5.945693  ,
+       5.15248421]), 'X1_Y1': array([5.22157919, 3.26367976, 6.6275699 , 4.11613304, 4.13462743,
+       6.12349984, 5.12515194, 7.74637938, 7.86308593, 5.32241819,
+       3.99909173])}
+y_val_pred: {'X0_Y0': array([ 8.79241176, 10.39555289, 10.81432447]), 'X0_Y1': array([4.72789564, 4.33456163, 4.23181516]), 'X1_Y0': array([7.46858252, 5.945693  , 5.15248421]), 'X1_Y1': array([7.86308593, 5.32241819, 3.99909173])}
+models: {'X0_Y0': {'x_index': 0, 'y_index': 0, 'degree': 1, 'intercept': True, 'coefficients': {'intercept': 5.999999999999998, 'coef_1': 1.01258969885028}, 'coeff_stats': {'intercept': {'std_err': 0.09731879263053263, 't_stat': 61.6530460132072, 'p_value': 3.918124481181136e-13}, 'coef_1': {'std_err': 0.03129601793475811, 't_stat': 32.35522490309138, 'p_value': 1.2652059329772409e-10}}, 'y_cal_predicted': array([ 0.68925065,  1.95586056,  3.16400125,  4.37083252,  5.45267137,
+        6.04799727,  6.64685184,  7.67024543,  8.79241176, 10.39555289,
+       10.81432447]), 'y_cal_observed': array([ 1.,  2.,  3.,  4.,  5.,  6.,  7.,  8.,  9., 10., 11.]), 'metrics_cal': {'RMSE': 0.2919563778915979, 'R2': 0.9914761473408419, 'SS_res': 0.9376237925073965, 'SS_tot': 110.0, 'n': 11}, 'y_val_predicted': array([ 8.79241176, 10.39555289, 10.81432447]), 'y_val_observed': None, 'metrics_val': None, 'residuals_cal': array([ 0.31074935,  0.04413944, -0.16400125, -0.37083252, -0.45267137,
+       -0.04799727,  0.35314816,  0.32975457,  0.20758824, -0.39555289,
+        0.18567553]), 'n_cal': 11, 'p': 2, 'dof': 9}, 'X0_Y1': {'x_index': 0, 'y_index': 1, 'degree': 1, 'intercept': True, 'coefficients': {'intercept': 5.413019664461382, 'coef_1': -0.248440986019233}, 'coeff_stats': {'intercept': {'std_err': 0.9783110304926725, 't_stat': 5.5330252810656875, 'p_value': 0.00036430922257219727}, 'coef_1': {'std_err': 0.3146076798579658, 't_stat': -0.7896850646856278, 'p_value': 0.45001526951598936}}, 'y_cal_predicted': array([6.71602305, 6.40525768, 6.10883785, 5.81273929, 5.54730788,
+       5.40124344, 5.25431322, 5.00322148, 4.72789564, 4.33456163,
+       4.23181516]), 'y_cal_observed': array([11.27411753,  2.42896829,  7.25706027,  6.16329705,  1.13092276,
+        4.70834909,  2.78400539,  9.73712995,  4.42336546,  6.81386449,
+        2.82213602]), 'metrics_cal': {'RMSE': 2.9349330914780176, 'R2': 0.06479927878334901, 'SS_res': 94.75215476597987, 'SS_tot': 101.31745262419375, 'n': 11}, 'y_val_predicted': array([4.72789564, 4.33456163, 4.23181516]), 'y_val_observed': None, 'metrics_val': None, 'residuals_cal': array([ 4.55809448, -3.97628938,  1.14822242,  0.35055776, -4.41638512,
+       -0.69289435, -2.47030783,  4.73390847, -0.30453018,  2.47930286,
+       -1.40967913]), 'n_cal': 11, 'p': 2, 'dof': 9}, 'X1_Y0': {'x_index': 1, 'y_index': 0, 'degree': 1, 'intercept': True, 'coefficients': {'intercept': 5.999999999999997, 'coef_1': -0.31936619684104167}, 'coeff_stats': {'intercept': {'std_err': 1.012848396285433, 't_stat': 5.923887545268052, 'p_value': 0.00022239629883753605}, 'coef_1': {'std_err': 0.3692894371630194, 't_stat': -0.8648127043505456, 'p_value': 0.4095998833547335}}, 'y_cal_predicted': array([5.88524958, 4.71167444, 6.72800776, 5.22263938, 5.23372502,
+       6.42586553, 5.82745058, 7.398628  , 7.46858252, 5.945693  ,
+       5.15248421]), 'y_cal_observed': array([ 1.,  2.,  3.,  4.,  5.,  6.,  7.,  8.,  9., 10., 11.]), 'metrics_cal': {'RMSE': 3.038545188856299, 'R2': 0.07672431352782372, 'SS_res': 101.5603255119394, 'SS_tot': 110.0, 'n': 11}, 'y_val_predicted': array([7.46858252, 5.945693  , 5.15248421]), 'y_val_observed': None, 'metrics_val': None, 'residuals_cal': array([-4.88524958, -2.71167444, -3.72800776, -1.22263938, -0.23372502,
+       -0.42586553,  1.17254942,  0.601372  ,  1.53141748,  4.054307  ,
+        5.84751579]), 'n_cal': 11, 'p': 2, 'dof': 9}, 'X1_Y1': {'x_index': 1, 'y_index': 1, 'degree': 1, 'intercept': True, 'coefficients': {'intercept': 5.413019664461381, 'coef_1': -0.5328051621181509}, 'coeff_stats': {'intercept': {'std_err': 0.8866425391031806, 't_stat': 6.105075524502277, 'p_value': 0.00017814435232291076}, 'coef_1': {'std_err': 0.3232741695904614, 't_stat': -1.648152596890537, 'p_value': 0.13372391932841707}}, 'y_cal_predicted': array([5.22157919, 3.26367976, 6.6275699 , 4.11613304, 4.13462743,
+       6.12349984, 5.12515194, 7.74637938, 7.86308593, 5.32241819,
+       3.99909173]), 'y_cal_observed': array([11.27411753,  2.42896829,  7.25706027,  6.16329705,  1.13092276,
+        4.70834909,  2.78400539,  9.73712995,  4.42336546,  6.81386449,
+        2.82213602]), 'metrics_cal': {'RMSE': 2.6599276173095414, 'R2': 0.23184641730716338, 'SS_res': 77.82736422258617, 'SS_tot': 101.31745262419375, 'n': 11}, 'y_val_predicted': array([7.86308593, 5.32241819, 3.99909173]), 'y_val_observed': None, 'metrics_val': None, 'residuals_cal': array([ 6.05253834, -0.83471147,  0.62949037,  2.04716401, -3.00370466,
+       -1.41515075, -2.34114655,  1.99075057, -3.43972047,  1.4914463 ,
+       -1.1769557 ]), 'n_cal': 11, 'p': 2, 'dof': 9}}
+metrics: {'X0_Y0': {'metrics_cal': {'RMSE': 0.2919563778915979, 'R2': 0.9914761473408419, 'SS_res': 0.9376237925073965, 'SS_tot': 110.0, 'n': 11}, 'metrics_val': None}, 'X0_Y1': {'metrics_cal': {'RMSE': 2.9349330914780176, 'R2': 0.06479927878334901, 'SS_res': 94.75215476597987, 'SS_tot': 101.31745262419375, 'n': 11}, 'metrics_val': None}, 'X1_Y0': {'metrics_cal': {'RMSE': 3.038545188856299, 'R2': 0.07672431352782372, 'SS_res': 101.5603255119394, 'SS_tot': 110.0, 'n': 11}, 'metrics_val': None}, 'X1_Y1': {'metrics_cal': {'RMSE': 2.6599276173095414, 'R2': 0.23184641730716338, 'SS_res': 77.82736422258617, 'SS_tot': 101.31745262419375, 'n': 11}, 'metrics_val': None}}

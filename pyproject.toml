@@ -1,0 +1,18 @@
+[project]
+name = "Chemometric Studio"
+version = "0.1.0"
+description = "Chemometric Studio — Your open lab for chemometric analysis"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "numpy==2.3.5",
+    "scipy==1.15.0",
+    "scikit-learn==1.5.2",
+    "matplotlib==3.10.8",
+    "tensorly==0.9.0",
+    "pylatex==1.4.2",
+    "pandas==2.3.3",
+]
+
+[tool.poetry.scripts]
+cm-studio = "launcher"

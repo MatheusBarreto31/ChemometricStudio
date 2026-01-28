@@ -1,0 +1,126 @@
+{
+  "display_name": "Load Data",
+  "category": "Data Import",
+  "data_type": "all",
+  "input_aliases": {
+    "d_specs": "Format Spec",
+    "data_path": "X Data Files",
+    "nway_flag": "Data Dimensionality",
+    "y_path": "Y Data File",
+    "var_path": "Variable Labels",
+    "smp_path": "Sample Labels",
+    "transpose": "Transpose"
+  },
+  "output_aliases": {
+    "X_cal": "X Data",
+    "Y_cal": "Y Data",
+    "var_label": "Variable Labels",
+    "smp_cal": "Sample Labels"
+  },
+  "short_description": "Loads spectroscopic and response data from files",
+  "long_description": "This step loads your calibration dataset including spectroscopic data (X), response variables (Y), and optional metadata.\n\nInput Data Components:\n- X Data (Spectra): Main spectroscopic measurements (required)\n- Y Data (Responses): Target/dependent variables (optional)\n- Variable Labels: Wavelengths, frequencies, or variable names (optional)\n- Sample Labels: Sample IDs or identifiers (optional)\n\nData Formats:\n- CSV files with configurable delimiters (comma, tabs, spaces)\n- Matrix format: samples (rows) x variables (columns)\n- Vector formats for specialized data types\n- Support for multiple files via file selection\n\nConfiguration:\n- Specify delimiter type for your files\n- Set number of header rows to skip\n- Choose appropriate data type structure\n- Transpose if needed (samples in columns instead of rows)\n\nThe loaded data becomes input for preprocessing and validation steps.",
+  "setup": {
+    "layout": [
+      {
+        "name": "d_specs_separator",
+        "label": "Data Separator",
+        "widget": "combobox",
+        "values": ["comma", "tabs", "spaces"],
+        "value_aliases": ["Comma-separated", "Tab-separated", "Space-separated"],
+        "default": "tabs",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Delimiter used in data files"
+      },
+      {
+        "name": "d_specs_headlines",
+        "label": "Number of Header Rows",
+        "widget": "entry",
+        "type": "int",
+        "default": "0",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Number of rows to skip at the beginning of each file"
+      },
+      {
+        "name": "d_specs_type",
+        "label": "Data Type",
+        "widget": "combobox",
+        "values": ["x_vector", "xy_vector", "xyz_vector", "x_matrix", "xy_matrix"],
+        "value_aliases": ["X Vector", "X-Y Vector", "X-Y-Z Vector", "X Matrix", "X-Y Matrix"],
+        "default": "x_matrix",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Structure of data: matrix (samples × variables) or vector formats"
+      },
+      {
+        "name": "d_specs_dimensions",
+        "label": "Data Dimensions",
+        "widget": "entry",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Specify dimensions for reshaping superior-order data (e.g., '100,500,10')"
+      },
+      {
+        "name": "data_path",
+        "label": "X Data Files",
+        "widget": "file_selector",
+        "multiple": true,
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Spectroscopic data files (spectra/X data)",
+        "ispath": true
+      },
+      {
+        "name": "nway_flag",
+        "label": "Data Order",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "1 for 2D data, >1 for multiway data"
+      },
+      {
+        "name": "y_path",
+        "label": "Y Data File (Optional)",
+        "widget": "file_selector",
+        "multiple": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Response variable(s) file",
+        "ispath": true
+      },
+      {
+        "name": "var_path",
+        "label": "Variable Labels (Optional)",
+        "widget": "file_selector",
+        "multiple": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Labels for variables/wavelengths (e.g., wavenumber values)",
+        "ispath": true
+      },
+      {
+        "name": "smp_path",
+        "label": "Sample Labels (Optional)",
+        "widget": "file_selector",
+        "multiple": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Labels for samples (e.g., sample IDs)",
+        "ispath": true
+      },
+      {
+        "name": "transpose",
+        "label": "Transpose Data",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Transposes data"
+      }
+    ]
+  }
+}

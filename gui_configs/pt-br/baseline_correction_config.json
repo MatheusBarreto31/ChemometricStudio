@@ -1,0 +1,84 @@
+{
+  "display_name": "Correção de Linha de Base",
+  "category": "Pré-Processamento",
+  "data_type": "firstorder",
+  "input_aliases": {
+    "X_cal": "X Calibração",
+    "method": "Método",
+    "X_val": "X Validação",
+    "nway_flag": "Dimensionalidade",
+    "direction": "Direção",
+    "window_size": "Tamanho da Janela"
+  },
+  "output_aliases": {
+    "X_cal": "X Cal (Corrigido)",
+    "X_val": "X Val (Corrigido)"
+  },
+  "short_description": "Remove a correção de linha de base dos espectros",
+  "long_description": "A correção de linha de base remove deslocamentos sistemáticos e tendências das medições espectroscópicas, melhorando a qualidade dos dados e o desempenho do modelo.\n\nMétodos Disponíveis:\n\n1. Correção de Espalhamento Multiplicativo (MSC)\n   - Corrige efeitos de espalhamento multiplicativo e aditivo\n   - Funciona bem para dados de refletância difusa e transmitância\n   - Preserva a forma espectral enquanto normaliza a intensidade\n\n2. Variante Normal Padrão (SNV)\n   - Centraliza e dimensiona cada espectro independentemente\n   - Remove desvio de linha de base e efeitos multiplicativos\n   - Adequado para espectroscopia de refletância\n\n3. Média Móvel\n   - Correção de linha de base simples baseada em suavização\n   - Usa tamanho de janela configurável\n   - Bom para dados ruidosos com linhas de base locais\n\nSuporte a Dados Multidirecionais:\n- Para dados 2D: processamento padrão (nway_flag=1)\n- Para dados 3D+: especifique dimensionalidade e direção\n- Parâmetro de direção controla em qual eixo a correção é aplicada\n\nEste pré-processamento melhora significativamente a precisão e interpretabilidade do modelo.",
+  "setup": {
+    "layout": [
+      {
+        "name": "method",
+        "label": "Método de Correção",
+        "widget": "combobox",
+        "values": ["msc", "svn", "moving_average"],
+        "value_aliases": ["Correção de Espalhamento Multiplicativo", "Variante Normal Padrão", "Média Móvel"],
+        "default": "msc",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "MSC: Correção de Espalhamento Multiplicativo, SNV: Variante Normal Padrão, Média Móvel: correção baseada em suavização"
+      },
+      {
+        "name": "direction",
+        "label": "Direção (para multidirecionais)",
+        "widget": "entry",
+        "type": "int",
+        "default": "-1",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Dimensão ao longo da qual aplicar correção (-1 para dimensão padrão/última)"
+      },
+      {
+        "name": "window_size",
+        "label": "Tamanho da Janela (para média móvel)",
+        "widget": "entry",
+        "type": "int",
+        "default": "5",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Número de pontos na janela de média móvel (apenas usado com método moving_average)",
+        "visible_if": {"method": "moving_average"}
+      },
+      {
+        "name": "X_cal",
+        "label": "Dados X Calibração",
+        "widget": "data_input",
+        "required": true,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Roteado da saída da função anterior"
+      },
+      {
+        "name": "X_val",
+        "label": "Dados X Validação",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Roteado da saída da função anterior"
+      },
+      {
+        "name": "nway_flag",
+        "label": "Dimensionalidade dos Dados",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": true,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Automaticamente herdada da função Carregar Dados"
+      }
+    ]
+  }
+}

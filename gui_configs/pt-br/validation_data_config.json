@@ -1,0 +1,186 @@
+{
+  "display_name": "Carregar/Criar Conjunto de Validação",
+  "category": "Importação de Dados",
+  "data_type": "all",
+  "input_aliases": {
+    "X_cal": "Dados X",
+    "Y_cal": "Dados Y",
+    "smp_cal": "Rótulos de Amostras",
+    "createVal": "Criar Validação",
+    "creationMethod": "Método",
+    "calProportion": "Proporção de Calibração",
+    "selection_file": "Arquivo de Seleção"
+  },
+  "output_aliases": {
+    "X_cal": "X Calibração",
+    "Y_cal": "Y Calibração",
+    "X_val": "X Validação",
+    "Y_val": "Y Validação",
+    "smp_cal": "Amostras Cal",
+    "smp_val": "Amostras Val"
+  },
+  "short_description": "Cria ou carrega dados de validação para avaliação de modelo",
+  "long_description": "Dados de validação são essenciais para avaliação imparcial do desempenho do modelo. Esta etapa cria conjuntos de validação dividindo dados de calibração ou carrega dados de validação externos.\n\nCriando Conjuntos de Validação a partir de Dados de Calibração:\n\n1. Divisão Aleatória\n   - Seleciona aleatoriamente amostras para validação\n   - Abordagem mais rápida e simples\n   - Adequada para conjuntos de dados grandes e diversos\n   - Pode não garantir distribuição representativa\n\n2. Algoritmo Kennard-Stone\n   - Seleciona amostras que abrangem o espaço de dados\n   - Garante boa representação da gama de dados\n   - Melhor para conjuntos de dados pequenos ou aglomerados\n   - Mais caro computacionalmente\n\n3. Seleção Baseada em Arquivo\n   - Usa arquivo de índice externo para seleção de amostras\n   - Permite critérios de seleção personalizados\n   - Requer arquivo de seleção pré-preparado\n\nProporção de Calibração:\n- Valor típico: 0.7 (70% calibração, 30% validação)\n- Conjuntos maiores: podem usar 0.8-0.9 para melhor calibração\n- Conjuntos menores: podem usar 0.6-0.7 para mais amostras de validação\n\nCarregando Conjuntos de Validação Externos:\n- Carrega dados de validação completamente independentes\n- Útil para validação temporal ou espacial\n- Fornece estimativa de desempenho mais realista\n- Arquivos X e Y separados obrigatórios\n- Arquivo opcional de rótulos de amostras\n\nMelhores Práticas:\n- Conjunto de validação deve ser independente da calibração\n- Garanta que ambos os conjuntos abrangem faixas de dados similares\n- Documente como os conjuntos de validação foram selecionados\n- Use tamanho apropriado para confiabilidade estatística\n\nUso:\n- Criar conjunto interno OU carregar conjunto externo\n- Ambos podem ser usados simultaneamente para validação abrangente\n- Configurações aplicadas automaticamente durante a construção do modelo.",
+  "setup": {
+    "layout": [
+      {
+        "name": "validation_mode",
+        "label": "Modo do Conjunto de Validação",
+        "widget": "combobox",
+        "values": ["Load", "Create"],
+        "value_aliases": ["Carregar Dados de Validação Externos", "Criar a partir de Dados de Calibração"],
+        "default": "Load",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Escolha se deseja carregar dados de validação externos ou criá-los a partir de dados de calibração"
+      },
+      {
+        "name": "creationMethod",
+        "label": "Método de Criação",
+        "widget": "combobox",
+        "values": ["random", "kennard_stone", "file"],
+        "value_aliases": ["Divisão Aleatória", "Algoritmo Kennard-Stone", "Seleção Baseada em Arquivo"],
+        "default": "random",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Aleatório: seleção aleatória. Kennard-Stone: baseado em diversidade. Arquivo: use índices de seleção externos",
+        "visible_if": {"validation_mode": "Create"}
+      },
+      {
+        "name": "calProportion",
+        "label": "Proporção de Calibração (0-1)",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.7",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Fração de dados para calibração (0.7 = 70% cal, 30% val)",
+        "visible_if": {"validation_mode": "Create"}
+      },
+      {
+        "name": "selection_file",
+        "label": "Arquivo de Seleção (se usando método 'arquivo')",
+        "widget": "file_selector",
+        "multiple": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Arquivo com índices/identificadores de amostras para seleção",
+        "visible_if": {"creationMethod": "file"},
+        "ispath": true
+      },
+      {
+        "name": "X_val_path",
+        "label": "Arquivo de Dados X de Validação",
+        "widget": "file_selector",
+        "multiple": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Arquivo de espectros de validação externa",
+        "visible_if": {"validation_mode": "Load"},
+        "ispath": true
+      },
+      {
+        "name": "Y_val_path",
+        "label": "Arquivo de Dados Y de Validação",
+        "widget": "file_selector",
+        "multiple": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Arquivo de resposta de validação externa",
+        "visible_if": {"validation_mode": "Load"},
+        "ispath": true
+      },
+      {
+        "name": "val_labels_path",
+        "label": "Arquivo de Rótulos de Amostras de Validação (opcional)",
+        "widget": "file_selector",
+        "multiple": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Rótulos para amostras de validação externa",
+        "visible_if": {"validation_mode": "Load"},
+        "ispath": true
+      },
+      {
+        "name": "X_cal",
+        "label": "Dados X Calibração",
+        "widget": "data_input",
+        "required": true,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Roteado da saída da função anterior"
+      },
+      {
+        "name": "Y_cal",
+        "label": "Dados Y Calibração",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Roteado da saída da função anterior"
+      },
+      {
+        "name": "smp_cal",
+        "label": "Rótulos de Amostra de Calibração",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Roteado da saída da função anterior"
+      },
+      {
+        "name": "d_specs_separator",
+        "label": "Separador de Dados (herdado de Carregar Dados)",
+        "widget": "combobox",
+        "values": ["vírgula", "tabulações", "espaços"],
+        "default": "tabulações",
+        "required": true,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Herdado automaticamente da função Carregar Dados"
+      },
+      {
+        "name": "d_specs_headlines",
+        "label": "Número de Linhas de Cabeçalho (herdado de Carregar Dados)",
+        "widget": "entry",
+        "type": "int",
+        "default": "0",
+        "required": true,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Herdado automaticamente da função Carregar Dados"
+      },
+      {
+        "name": "d_specs_type",
+        "label": "Tipo de Dados (herdado de Carregar Dados)",
+        "widget": "combobox",
+        "values": ["x_vector", "xy_vector", "xyz_vector", "x_matrix", "xy_matrix"],
+        "default": "x_matrix",
+        "required": true,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Herdado automaticamente da função Carregar Dados"
+      },
+      {
+        "name": "d_specs_dimensions",
+        "label": "Dimensões dos Dados (herdado de Carregar Dados)",
+        "widget": "entry",
+        "default": "",
+        "required": false,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Herdado automaticamente da função Carregar Dados"
+      },
+      {
+        "name": "nway_flag",
+        "label": "Dimensionalidade dos Dados (herdado de Carregar Dados)",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": true,
+        "input_type": "inherited",
+        "tooltip": "Herdado automaticamente da função Carregar Dados"
+      }
+    ]
+  }
+}
