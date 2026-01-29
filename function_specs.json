@@ -8,8 +8,8 @@
     "univariate_calibration": ["y_cal_pred", "y_val_pred", "models", "metrics"]
   },
   "input_specs": {
-    "load_data": ["d_specs", "data_path", "nway_flag", "y_path", "var_path", "smp_path", "transpose"],
-    "validation_data_main": ["X_cal", "Y_cal", "smp_cal", "validation_mode", "createVal", "creationMethod", "calProportion", "selection_file", "X_val_path", "Y_val_path", "val_labels_path", "d_specs", "data_path", "y_path", "var_path", "smp_path", "transpose", "nway_flag"],
+    "load_data": ["d_specs_separator", "d_specs_headlines", "d_specs_type", "d_specs_dimensions", "data_path", "nway_flag", "y_path", "var_path", "smp_path", "transpose"],
+    "validation_data_main": ["X_cal", "Y_cal", "smp_cal", "validation_mode", "createVal", "creationMethod", "calProportion", "selection_file", "X_val_path", "Y_val_path", "val_labels_path", "d_specs_separator", "d_specs_headlines", "d_specs_type", "d_specs_dimensions", "data_path", "y_path", "var_path", "smp_path", "transpose", "nway_flag"],
     "baseline_correction": ["X_cal", "method", "X_val", "nway_flag", "direction", "window_size"],
     "smoothing": ["X_cal", "method", "X_val", "nway_flag", "direction", "window_size", "polyorder"],
     "center_and_normalize": ["X_cal", "X_val", "center", "normalize", "nway_flag", "direction"],
@@ -41,6 +41,76 @@
     },
     "univariate_calibration": {
       "config_path": "gui_configs/univariate_calibration_config.json"
+    }
+  },
+  "parameter_types": {
+    "load_data": {
+      "d_specs_separator": "str",
+      "d_specs_headlines": "int",
+      "d_specs_type": "str",
+      "d_specs_dimensions": "str",
+      "data_path": "list",
+      "nway_flag": "int",
+      "y_path": "str",
+      "var_path": "str",
+      "smp_path": "str",
+      "transpose": "bool"
+    },
+    "validation_data_main": {
+      "X_cal": "ndarray",
+      "Y_cal": "ndarray",
+      "smp_cal": "list",
+      "validation_mode": "str",
+      "createVal": "str",
+      "creationMethod": "str",
+      "calProportion": "float",
+      "selection_file": "str",
+      "X_val_path": "str",
+      "Y_val_path": "str",
+      "val_labels_path": "str",
+      "d_specs_separator": "str",
+      "d_specs_headlines": "int",
+      "d_specs_type": "str",
+      "d_specs_dimensions": "str",
+      "data_path": "list",
+      "y_path": "str",
+      "var_path": "str",
+      "smp_path": "str",
+      "transpose": "bool",
+      "nway_flag": "int"
+    },
+    "baseline_correction": {
+      "X_cal": "ndarray",
+      "method": "str",
+      "X_val": "ndarray",
+      "nway_flag": "int",
+      "direction": "str",
+      "window_size": "int"
+    },
+    "smoothing": {
+      "X_cal": "ndarray",
+      "method": "str",
+      "X_val": "ndarray",
+      "nway_flag": "int",
+      "direction": "str",
+      "window_size": "int",
+      "polyorder": "int"
+    },
+    "center_and_normalize": {
+      "X_cal": "ndarray",
+      "X_val": "ndarray",
+      "center": "bool",
+      "normalize": "bool",
+      "nway_flag": "int",
+      "direction": "str"
+    },
+    "univariate_calibration": {
+      "X_cal": "ndarray",
+      "Y_cal": "ndarray",
+      "X_val": "ndarray",
+      "Y_val": "ndarray",
+      "degree": "int",
+      "intercept": "bool"
     }
   }
 }

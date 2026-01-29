@@ -602,7 +602,7 @@ class ChemometricsGUI:
         load_btn.pack(side=tk.RIGHT, padx=5)
         
         # Run Model button
-        run_btn = ttk.Button(control_frame, text="► " + self.language_manager.translate("ui.buttons.run_model", "Run Model"), command=self._run_model, width=12)
+        run_btn = ttk.Button(control_frame, text="🠊 " + self.language_manager.translate("ui.buttons.run_model", "Run Model"), command=self._run_model, width=12)
         run_btn.pack(side=tk.RIGHT, padx=5)
     
     def _clear_tab(self):
@@ -1159,6 +1159,7 @@ class ChemometricsGUI:
                     padx=8,
                     pady=2,
                     cursor="hand2",
+                    anchor="e", #delete to center it
                     command=lambda pk=param_key, pn=param_name, idx=output_idx: 
                         self._on_button_clicked(idx, True, pk, pn)
                 )
@@ -1204,6 +1205,7 @@ class ChemometricsGUI:
                     padx=8,
                     pady=2,
                     cursor="hand2",
+                    anchor="w", #delete to center it
                     command=lambda pk=param_key, pn=param_name, idx=input_idx: 
                         self._on_button_clicked(idx, False, pk, pn)
                 )
@@ -1397,9 +1399,17 @@ class ChemometricsGUI:
                          font=("Arial", 12, "bold"))
         label.pack(padx=20, pady=20)
     
-    def _generate_config_files(self) -> bool:
-        """Generate functions.txt and routing.txt from current configuration."""
+    def _generate_model_json(self) -> bool:
+        """Generate model.json from current configuration."""
         try:
+            from datetime import datetime
+            
+            # Load function specs to get parameter types
+            specs_path = Path(__file__).parent / "function_specs.json"
+            with open(specs_path, 'r', encoding='utf-8') as f:
+                specs_data = json.load(f)
+            parameter_types = specs_data.get("parameter_types", {})
+            
             # First pass: build parameters for each function, including inherited parameters
             all_function_params = {}  # {instance_alias: {key: value}}
             
@@ -1436,95 +1446,120 @@ class ChemometricsGUI:
                 
                 all_function_params[instance_alias] = params
             
-            # Second pass: generate functions.txt with assembled parameters
-            functions_content = []
-            for instance_alias in self.methodology_list:
+            # Build functions array
+            functions_array = []
+            for idx, instance_alias in enumerate(self.methodology_list):
+                base_alias = self.function_base_aliases[idx]
                 params = all_function_params.get(instance_alias, {})
+                func_config = self.gui_configs.get(base_alias, {})
+                display_name = func_config.get("display_name", base_alias)
                 
-                # Build parameter string
-                param_parts = []
+                # Process parameters: handle file path normalization
+                processed_params = {}
+                params_with_types = {}  # Store parameter types alongside values
+                
+                # Get type information for this function
+                func_types = parameter_types.get(base_alias, {})
+                
                 for key, value in params.items():
-                    if value or key.startswith("d_specs"):  # Include d_specs even if empty for assembly
-                        # Special handling for d_specs: assemble from individual parts
-                        if key == "d_specs_separator" and value:
-                            # Assemble d_specs list from individual components
-                            d_specs_sep = params.get("d_specs_separator", "tabs")
-                            d_specs_headlines = params.get("d_specs_headlines", "0")
-                            d_specs_type = params.get("d_specs_type", "x_matrix")
-                            d_specs_dims = params.get("d_specs_dimensions", "")
-                            d_specs_value = f'["{d_specs_sep}","{d_specs_headlines}","{d_specs_type}","{d_specs_dims}"]'
-                            param_parts.append(f"d_specs:{d_specs_value}")
-                            # Skip the individual d_specs parts in the loop
-                            continue
-                        elif key.startswith("d_specs_") and key != "d_specs_separator":
-                            # Skip individual d_specs parts (already assembled above)
-                            continue
-                        elif value:
-                            # Special handling for file paths: convert semicolon-separated to JSON list
-                            if key in ("data_path", "var_path", "smp_path", "y_path", "X_val_path", "y_val_path"):
-                                # Check if this is a multi-file path (contains semicolons)
-                                if ";" in str(value):
-                                    # Multiple files - convert to list
-                                    files = [f.strip().replace("\\", "/") for f in str(value).split(";")]
-                                    formatted_value = json.dumps(files)  # Use json.dumps for proper formatting
-                                elif key == "data_path":
-                                    # Even single file should be a list for data_path
-                                    # Make sure value is not already a list representation
-                                    if str(value).startswith("["):
-                                        # Already a list - normalize the paths inside
-                                        try:
-                                            path_list = json.loads(str(value))
-                                            normalized_list = [p.replace("\\", "/") for p in path_list]
-                                            formatted_value = json.dumps(normalized_list)
-                                        except:
-                                            formatted_value = value
-                                    else:
-                                        # Single path - normalize and wrap in list
-                                        normalized_path = str(value).replace("\\", "/")
-                                        formatted_value = json.dumps([normalized_path])
-                                else:
-                                    # Optional paths - normalize to forward slashes
-                                    formatted_value = str(value).replace("\\", "/")
+                    # Skip None values and empty strings, but keep False (for checkbuttons)
+                    if value is None or (isinstance(value, str) and not value):
+                        continue
+                    
+                    # Special handling for file paths
+                    if key in ("data_path", "var_path", "smp_path", "y_path", "y_val_path", "X_val_path", "Y_val_path"):
+                        # Check if value is already a list
+                        if isinstance(value, list):
+                            # Already a list - normalize the paths inside
+                            normalized_list = [p.replace("\\", "/") for p in value]
+                            processed_params[key] = normalized_list
+                        # Check if this is a multi-file path (contains semicolons)
+                        elif ";" in str(value):
+                            # Multiple files - convert to list
+                            files = [f.strip().replace("\\", "/") for f in str(value).split(";")]
+                            processed_params[key] = files
+                        elif key == "data_path":
+                            # Even single file should be a list for data_path
+                            if str(value).startswith("["):
+                                # String representation of list - parse it
+                                try:
+                                    path_list = json.loads(str(value))
+                                    normalized_list = [p.replace("\\", "/") for p in path_list]
+                                    processed_params[key] = normalized_list
+                                except:
+                                    processed_params[key] = [str(value).replace("\\", "/")]
                             else:
-                                formatted_value = value
-                            
-                            param_parts.append(f"{key}:{formatted_value}")
+                                # Single path - normalize and wrap in list
+                                normalized_path = str(value).replace("\\", "/")
+                                processed_params[key] = [normalized_path]
+                        else:
+                            # Optional paths - normalize to forward slashes
+                            processed_params[key] = str(value).replace("\\", "/")
+                    else:
+                        processed_params[key] = value
+                    
+                    # Store the type information for this parameter
+                    param_type = func_types.get(key, "str")
+                    params_with_types[key] = param_type
                 
-                param_str = " ".join(param_parts)
-                functions_content.append(f"{instance_alias} {param_str}".strip())
+                functions_array.append({
+                    "instance_alias": instance_alias,
+                    "base_alias": base_alias,
+                    "display_name": display_name,
+                    "parameters": processed_params,
+                    "parameter_types": params_with_types
+                })
             
-            functions_path = Path(__file__).parent / "functions.txt"
-            with open(functions_path, "w") as f:
-                f.write("\n".join(functions_content))
-            
-            # Generate routing.txt
-            routing_content = []
+            # Build routing array
+            routing_array = []
             for key, conn_info in self.routing_lines.items():
                 if isinstance(conn_info, dict):
-                    # New format with full information
                     src_idx = conn_info.get("src_idx", key[0] if isinstance(key, tuple) else 0)
                     dst_idx = conn_info.get("dst_idx", key[2] if isinstance(key, tuple) and len(key) > 2 else 1)
                     src_param_key = conn_info.get("src_param_key", key[1] if isinstance(key, tuple) else "")
                     dst_param_key = conn_info.get("dst_param_key", key[3] if isinstance(key, tuple) and len(key) > 3 else "")
+                    src_param_name = conn_info.get("src_param_name", src_param_key)
+                    dst_param_name = conn_info.get("dst_param_name", dst_param_key)
+                    auto_created = conn_info.get("auto_created", False)
                     
                     # Get function instance aliases from methodology list
                     src_instance_alias = self.methodology_list[src_idx] if src_idx < len(self.methodology_list) else ""
                     dst_instance_alias = self.methodology_list[dst_idx] if dst_idx < len(self.methodology_list) else ""
                     
-                    # Format: src_instance.src_param -> dst_instance.dst_param
                     if src_instance_alias and dst_instance_alias:
-                        routing_content.append(f"{src_instance_alias}.{src_param_key} -> {dst_instance_alias}.{dst_param_key}")
-                else:
-                    # Legacy format - just output the display
-                    routing_content.append(str(conn_info))
+                        routing_array.append({
+                            "source": {
+                                "instance_alias": src_instance_alias,
+                                "param_key": src_param_key,
+                                "param_name": src_param_name
+                            },
+                            "destination": {
+                                "instance_alias": dst_instance_alias,
+                                "param_key": dst_param_key,
+                                "param_name": dst_param_name
+                            },
+                            "auto_created": auto_created
+                        })
             
-            routing_path = Path(__file__).parent / "routing.txt"
-            with open(routing_path, "w") as f:
-                f.write("\n".join(routing_content))
+            # Build complete model JSON
+            model_data = {
+                "metadata": {
+                    "version": "1.0",
+                    "created": datetime.now().isoformat(),
+                    "description": "CM Studio Model Configuration"
+                },
+                "functions": functions_array,
+                "routing": routing_array
+            }
+            
+            # Write model.json
+            model_path = Path(__file__).parent / "model.json"
+            with open(model_path, "w", encoding='utf-8') as f:
+                json.dump(model_data, f, indent=2, ensure_ascii=False)
             
             return True
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to generate config files: {e}")
+            messagebox.showerror("Error", f"Failed to generate model.json: {e}")
             return False
     
     def _clean_tempfiles(self):
@@ -1631,120 +1666,64 @@ class ChemometricsGUI:
             return
         
         try:
-            # Generate functions.txt and routing.txt
-            if not self._generate_config_files():
+            # Generate model.json
+            if not self._generate_model_json():
                 return
             
             # Create temporary directory for packaging
             with tempfile.TemporaryDirectory() as tmpdir:
                 tmpdir_path = Path(tmpdir)
                 
-                # Read and modify functions.txt
-                functions_path = Path(__file__).parent / "functions.txt"
-                with open(functions_path) as f:
-                    functions_content = f.read()
+                # Read and modify model.json
+                model_path = Path(__file__).parent / "model.json"
+                with open(model_path, encoding='utf-8') as f:
+                    model_data = json.load(f)
                 
-                # Process functions: collect all file paths and copy them
+                # Process model.json: collect all file paths and copy them
                 files_to_copy = []
-                modified_functions = []
                 
-                for line in functions_content.split('\n'):
-                    if not line.strip():
-                        modified_functions.append(line)
-                        continue
-                    
-                    # Extract function instance alias (first word)
-                    parts = line.split()
-                    instance_alias = parts[0] if parts else ""
-                    
-                    # Get base alias to look up path parameters
-                    base_alias = None
-                    try:
-                        idx = self.methodology_list.index(instance_alias)
-                        base_alias = self.function_base_aliases[idx]
-                    except (ValueError, IndexError):
-                        # If not found, try to extract from instance alias
-                        if '#' in instance_alias:
-                            base_alias = instance_alias.split('#')[0]
-                        else:
-                            base_alias = instance_alias
+                # Process each function's parameters
+                for func_entry in model_data.get('functions', []):
+                    instance_alias = func_entry.get('instance_alias', '')
+                    base_alias = func_entry.get('base_alias', '')
+                    params = func_entry.get('parameters', {})
                     
                     # Get path parameters for this function using ispath flag
                     path_params = self._get_path_parameters(base_alias)
                     
-                    modified_line = line
-                    
                     # For validation_data functions, remove all file paths
                     if 'validation_data' in base_alias:
                         for param_name in path_params:
-                            import re
-                            modified_line = re.sub(rf'{param_name}:[^\s]*', '', modified_line)
-                        # Clean up multiple spaces
-                        modified_line = ' '.join(modified_line.split())
-                        modified_functions.append(modified_line)
+                            if param_name in params:
+                                del params[param_name]
                         continue
                     
                     # Replace paths with tempfiles references
                     for param_name in path_params:
-                        param_prefix = f'{param_name}:'
-                        if param_prefix in modified_line:
-                            # Find start position
-                            start_pos = modified_line.find(param_prefix)
-                            if start_pos != -1:
-                                start_pos += len(param_prefix)
-                                rest_of_line = modified_line[start_pos:]
-                                
-                                if rest_of_line.startswith('['):
-                                    # It's a JSON list - find the closing bracket
-                                    end_pos = rest_of_line.find(']')
-                                    if end_pos != -1:
-                                        value_str = rest_of_line[:end_pos+1]
-                                        try:
-                                            import json
-                                            paths_list = json.loads(value_str)
-                                            if isinstance(paths_list, list):
-                                                new_paths = []
-                                                for file_path in paths_list:
-                                                    src_file = Path(file_path)
-                                                    if src_file.exists():
-                                                        files_to_copy.append(src_file)
-                                                        new_path = f"tempfiles/{src_file.name}"
-                                                        new_paths.append(new_path)
-                                                    else:
-                                                        new_paths.append(file_path)
-                                                new_value_str = json.dumps(new_paths)
-                                                old_value = value_str
-                                                modified_line = modified_line[:start_pos] + new_value_str + modified_line[start_pos+len(old_value):]
-                                        except Exception as e:
-                                            pass
-                                else:
-                                    # It's a single value - find the next space or end of line
-                                    space_pos = rest_of_line.find(' ')
-                                    if space_pos == -1:
-                                        value_str = rest_of_line
-                                        end_in_rest = len(rest_of_line)
-                                    else:
-                                        value_str = rest_of_line[:space_pos]
-                                        end_in_rest = space_pos
-                                    
-                                    # Check if file exists and copy it
-                                    src_file = Path(value_str)
+                        if param_name in params:
+                            param_value = params[param_name]
+                            # Handle both list and string values
+                            if isinstance(param_value, list):
+                                new_paths = []
+                                for file_path in param_value:
+                                    src_file = Path(file_path)
                                     if src_file.exists():
                                         files_to_copy.append(src_file)
                                         new_path = f"tempfiles/{src_file.name}"
-                                        modified_line = modified_line[:start_pos] + new_path + modified_line[start_pos+end_in_rest:]
-                    
-                    modified_functions.append(modified_line)
+                                        new_paths.append(new_path)
+                                    else:
+                                        new_paths.append(file_path)
+                                params[param_name] = new_paths
+                            elif isinstance(param_value, str):
+                                src_file = Path(param_value)
+                                if src_file.exists():
+                                    files_to_copy.append(src_file)
+                                    params[param_name] = f"tempfiles/{src_file.name}"
                 
-                # Write modified functions.txt
-                functions_tmpfile = tmpdir_path / "functions.txt"
-                with open(functions_tmpfile, "w") as f:
-                    f.write('\n'.join(modified_functions))
-                
-                # Copy routing.txt
-                routing_path = Path(__file__).parent / "routing.txt"
-                if routing_path.exists():
-                    shutil.copy(routing_path, tmpdir_path / "routing.txt")
+                # Write modified model.json
+                model_tmpfile = tmpdir_path / "model.json"
+                with open(model_tmpfile, "w", encoding='utf-8') as f:
+                    json.dump(model_data, f, indent=2, ensure_ascii=False)
                 
                 # Create files subdirectory and copy data files
                 files_dir = tmpdir_path / "files"
@@ -1786,67 +1765,38 @@ class ChemometricsGUI:
             return
         
         try:
-            # Generate functions.txt and routing.txt
-            if not self._generate_config_files():
+            # Generate model.json
+            if not self._generate_model_json():
                 return
             
             # Create temporary directory for packaging
             with tempfile.TemporaryDirectory() as tmpdir:
                 tmpdir_path = Path(tmpdir)
                 
-                # Read and modify functions.txt - remove only file paths
-                functions_path = Path(__file__).parent / "functions.txt"
-                with open(functions_path) as f:
-                    functions_content = f.read()
+                # Read and modify model.json - remove only file paths
+                model_path = Path(__file__).parent / "model.json"
+                with open(model_path, encoding='utf-8') as f:
+                    model_data = json.load(f)
                 
-                modified_functions = []
-                
-                for line in functions_content.split('\n'):
-                    if not line.strip():
-                        modified_functions.append(line)
-                        continue
-                    
-                    # Extract function instance alias (first word)
-                    parts = line.split()
-                    instance_alias = parts[0] if parts else ""
-                    
-                    # Get base alias to look up path parameters
-                    base_alias = None
-                    try:
-                        idx = self.methodology_list.index(instance_alias)
-                        base_alias = self.function_base_aliases[idx]
-                    except (ValueError, IndexError):
-                        # If not found, try to extract from instance alias
-                        if '#' in instance_alias:
-                            base_alias = instance_alias.split('#')[0]
-                        else:
-                            base_alias = instance_alias
+                # Process model.json: remove only file paths
+                # Process each function's parameters
+                for func_entry in model_data.get('functions', []):
+                    instance_alias = func_entry.get('instance_alias', '')
+                    base_alias = func_entry.get('base_alias', '')
+                    params = func_entry.get('parameters', {})
                     
                     # Get path parameters for this function using ispath flag
                     path_params = self._get_path_parameters(base_alias)
                     
-                    # Remove only file paths marked with ispath:true (keep other validation inputs)
-                    modified_line = line
+                    # Remove only file paths marked with ispath:true
                     for param_name in path_params:
-                        # Look for param_name:value pattern and remove it
-                        import re
-                        # Remove the specific param:value part
-                        param_pattern = rf'{param_name}:[^\s]*'
-                        modified_line = re.sub(param_pattern, '', modified_line)
-                    
-                    # Clean up multiple spaces
-                    modified_line = ' '.join(modified_line.split())
-                    modified_functions.append(modified_line)
+                        if param_name in params:
+                            del params[param_name]
                 
-                # Write modified functions.txt
-                functions_tmpfile = tmpdir_path / "functions.txt"
-                with open(functions_tmpfile, "w") as f:
-                    f.write('\n'.join(modified_functions))
-                
-                # Copy routing.txt
-                routing_path = Path(__file__).parent / "routing.txt"
-                if routing_path.exists():
-                    shutil.copy(routing_path, tmpdir_path / "routing.txt")
+                # Write modified model.json
+                model_tmpfile = tmpdir_path / "model.json"
+                with open(model_tmpfile, "w", encoding='utf-8') as f:
+                    json.dump(model_data, f, indent=2, ensure_ascii=False)
                 
                 # Create zip file with .mdon extension
                 zip_path = save_path[:-5] + ".zip" if save_path.endswith(".mdon") else save_path + ".zip"
@@ -1882,119 +1832,56 @@ class ChemometricsGUI:
             return
         
         try:
-            # Generate functions.txt and routing.txt
-            if not self._generate_config_files():
+            # Generate model.json
+            if not self._generate_model_json():
                 return
             
             # Create temporary directory for packaging
             with tempfile.TemporaryDirectory() as tmpdir:
                 tmpdir_path = Path(tmpdir)
                 
-                # Read functions.txt
-                functions_path = Path(__file__).parent / "functions.txt"
-                with open(functions_path) as f:
-                    functions_content = f.read()
+                # Read model.json
+                model_path = Path(__file__).parent / "model.json"
+                with open(model_path, encoding='utf-8') as f:
+                    model_data = json.load(f)
                 
-                modified_functions = []
                 files_to_copy = []
                 
-                for line in functions_content.split('\n'):
-                    if not line.strip():
-                        modified_functions.append(line)
-                        continue
-                    
-                    # Extract function instance alias (first word)
-                    parts = line.split()
-                    instance_alias = parts[0] if parts else ""
-                    
-                    # Get base alias to look up path parameters
-                    base_alias = None
-                    try:
-                        idx = self.methodology_list.index(instance_alias)
-                        base_alias = self.function_base_aliases[idx]
-                    except (ValueError, IndexError):
-                        # If not found, try to extract from instance alias
-                        if '#' in instance_alias:
-                            base_alias = instance_alias.split('#')[0]
-                        else:
-                            base_alias = instance_alias
+                # Process each function's parameters
+                for func_entry in model_data.get('functions', []):
+                    instance_alias = func_entry.get('instance_alias', '')
+                    base_alias = func_entry.get('base_alias', '')
+                    params = func_entry.get('parameters', {})
                     
                     # Get path parameters for this function using ispath flag
                     path_params = self._get_path_parameters(base_alias)
                     
                     # Process each path parameter (copy files, rename paths to tempfiles/)
-                    modified_line = line
                     for param_name in path_params:
-                        # Look for param_name:[...] or param_name:value pattern
-                        import re
-                        
-                        # Find the parameter in the line
-                        param_pattern = rf'{param_name}:'
-                        if param_pattern in modified_line:
-                            start_pos = modified_line.find(param_pattern) + len(param_pattern)
-                            rest_of_line = modified_line[start_pos:]
-                            
-                            # Check if it's a list [...]
-                            if rest_of_line.startswith('['):
-                                # Find matching ]
-                                bracket_count = 0
-                                end_idx = -1
-                                for i, char in enumerate(rest_of_line):
-                                    if char == '[':
-                                        bracket_count += 1
-                                    elif char == ']':
-                                        bracket_count -= 1
-                                        if bracket_count == 0:
-                                            end_idx = i
-                                            break
-                                
-                                if end_idx != -1:
-                                    value_str = rest_of_line[:end_idx+1]
-                                    try:
-                                        # Parse the list
-                                        paths_list = json.loads(value_str)
-                                        new_paths = []
-                                        for file_path in paths_list:
-                                            src_file = Path(file_path)
-                                            if src_file.exists():
-                                                files_to_copy.append(src_file)
-                                                new_path = f"tempfiles/{src_file.name}"
-                                                new_paths.append(new_path)
-                                            else:
-                                                new_paths.append(file_path)
-                                        new_value_str = json.dumps(new_paths)
-                                        old_value = value_str
-                                        modified_line = modified_line[:start_pos] + new_value_str + modified_line[start_pos+len(old_value):]
-                                    except Exception as e:
-                                        pass
-                            else:
-                                # It's a single value - find the next space or end of line
-                                space_pos = rest_of_line.find(' ')
-                                if space_pos == -1:
-                                    value_str = rest_of_line
-                                    end_in_rest = len(rest_of_line)
-                                else:
-                                    value_str = rest_of_line[:space_pos]
-                                    end_in_rest = space_pos
-                                
-                                # Check if file exists and copy it
-                                src_file = Path(value_str)
+                        if param_name in params:
+                            param_value = params[param_name]
+                            # Handle both list and string values
+                            if isinstance(param_value, list):
+                                new_paths = []
+                                for file_path in param_value:
+                                    src_file = Path(file_path)
+                                    if src_file.exists():
+                                        files_to_copy.append(src_file)
+                                        new_path = f"tempfiles/{src_file.name}"
+                                        new_paths.append(new_path)
+                                    else:
+                                        new_paths.append(file_path)
+                                params[param_name] = new_paths
+                            elif isinstance(param_value, str):
+                                src_file = Path(param_value)
                                 if src_file.exists():
                                     files_to_copy.append(src_file)
-                                    new_path = f"tempfiles/{src_file.name}"
-                                    modified_line = modified_line[:start_pos] + new_path + modified_line[start_pos+end_in_rest:]
-                    
-                    modified_functions.append(modified_line)
+                                    params[param_name] = f"tempfiles/{src_file.name}"
                 
-                # Write modified functions.txt
-                functions_tmpfile = tmpdir_path / "functions.txt"
-                with open(functions_tmpfile, "w") as f:
-                    f.write('\n'.join(modified_functions))
-                
-                # Copy routing.txt
-                routing_path = Path(__file__).parent / "routing.txt"
-                if routing_path.exists():
-                    shutil.copy(routing_path, tmpdir_path / "routing.txt")
+                # Write modified model.json
+                model_tmpfile = tmpdir_path / "model.json"
+                with open(model_tmpfile, "w", encoding='utf-8') as f:
+                    json.dump(model_data, f, indent=2, ensure_ascii=False)
                 
                 # Create files subdirectory and copy data files
                 files_dir = tmpdir_path / "files"
@@ -2067,27 +1954,17 @@ class ChemometricsGUI:
             
             # Load functions.txt
             functions_file = tmpdir_path / "functions.txt"
-            if functions_file.exists():
-                functions_path = Path(__file__).parent / "functions.txt"
-                with open(functions_file) as f:
+            # Load model.json
+            model_file = tmpdir_path / "model.json"
+            if model_file.exists():
+                model_path = Path(__file__).parent / "model.json"
+                with open(model_file, encoding='utf-8') as f:
                     content = f.read()
-                with open(functions_path, "w") as f:
-                    f.write(content)
-            
-            # Load routing.txt
-            routing_file = tmpdir_path / "routing.txt"
-            if routing_file.exists():
-                routing_path = Path(__file__).parent / "routing.txt"
-                with open(routing_file) as f:
-                    content = f.read()
-                with open(routing_path, "w") as f:
+                with open(model_path, "w", encoding='utf-8') as f:
                     f.write(content)
         
-        # Parse and load configuration from functions.txt
-        self._parse_and_load_functions_txt()
-        
-        # Parse and load routing configuration
-        self._parse_and_load_routing_txt()
+        # Parse and load configuration from model.json
+        self._parse_and_load_model_json()
         
         # Refresh GUI
         self._refresh_gui_from_config()
@@ -2095,116 +1972,79 @@ class ChemometricsGUI:
         messagebox.showinfo(self.language_manager.translate("ui.dialogs.success", "Success"), 
                           self.language_manager.translate("ui.messages.model_loaded", "Model loaded from:") + f"\n{file_path}")
     
-    def _parse_and_load_functions_txt(self):
-        """Parse functions.txt and load configuration."""
-        functions_path = Path(__file__).parent / "functions.txt"
-        if not functions_path.exists():
+    def _parse_and_load_model_json(self):
+        """Parse model.json and load configuration."""
+        model_path = Path(__file__).parent / "model.json"
+        if not model_path.exists():
             return
         
         self.methodology_list = []
         self.function_base_aliases = []
         self.function_configs = {}
-        
-        with open(functions_path) as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                
-                parts = line.split()
-                if not parts:
-                    continue
-                
-                instance_alias = parts[0]
-                # Extract base alias (remove #N suffix if present)
-                if '#' in instance_alias:
-                    base_alias = instance_alias.split('#')[0]
-                else:
-                    base_alias = instance_alias
-                
-                self.methodology_list.append(instance_alias)
-                self.function_base_aliases.append(base_alias)
-                
-                # Parse parameters
-                params = {}
-                for part in parts[1:]:
-                    if ':' in part:
-                        key, value = part.split(':', 1)
-                        # Handle JSON list values
-                        if value.startswith('[') and value.endswith(']'):
-                            import json
-                            try:
-                                params[key] = json.loads(value)
-                                # For tempfiles references, convert to absolute paths so they can be found
-                                if isinstance(params[key], list):
-                                    converted_list = []
-                                    for item in params[key]:
-                                        if isinstance(item, str) and item.startswith('tempfiles/'):
-                                            # Convert to absolute path for file existence checking
-                                            abs_path = str(self.tempfiles_dir / item.replace('tempfiles/', ''))
-                                            converted_list.append(abs_path)
-                                        else:
-                                            converted_list.append(item)
-                                    params[key] = converted_list
-                            except:
-                                params[key] = value
-                        else:
-                            # Single value - check if it's a tempfiles reference
-                            if value.startswith('tempfiles/'):
-                                # Convert to absolute path for file existence checking
-                                params[key] = str(self.tempfiles_dir / value.replace('tempfiles/', ''))
-                            else:
-                                # Normalize validation_mode values from old format to new format
-                                if key == 'validation_mode' and base_alias == 'validation_data':
-                                    # Old format: "Load External Validation Set" or "Create Validation Set"
-                                    # New format: "Load" or "Create"
-                                    if value in ("Load External Validation Set", "load"):
-                                        params[key] = "Load"
-                                    elif value in ("Create Validation Set", "create"):
-                                        params[key] = "Create"
-                                    else:
-                                        params[key] = value
-                                else:
-                                    params[key] = value
-                
-                self.function_configs[instance_alias] = params
-    
-    def _parse_and_load_routing_txt(self):
-        """Parse routing.txt and load routing configuration."""
-        routing_path = Path(__file__).parent / "routing.txt"
-        if not routing_path.exists():
-            return
-        
         self.routing_lines = {}
         
-        with open(routing_path) as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
+        try:
+            with open(model_path, encoding='utf-8') as f:
+                model_data = json.load(f)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load model.json: {e}")
+            return
+        
+        # Load functions
+        for func_entry in model_data.get('functions', []):
+            instance_alias = func_entry.get('instance_alias', '')
+            base_alias = func_entry.get('base_alias', '')
+            params = func_entry.get('parameters', {}).copy()
+            
+            self.methodology_list.append(instance_alias)
+            self.function_base_aliases.append(base_alias)
+            
+            # Convert tempfiles references to absolute paths
+            for key, value in params.items():
+                if isinstance(value, list):
+                    converted_list = []
+                    for item in value:
+                        if isinstance(item, str) and item.startswith('tempfiles/'):
+                            abs_path = str(self.tempfiles_dir / item.replace('tempfiles/', ''))
+                            converted_list.append(abs_path)
+                        else:
+                            converted_list.append(item)
+                    params[key] = converted_list
+                elif isinstance(value, str) and value.startswith('tempfiles/'):
+                    params[key] = str(self.tempfiles_dir / value.replace('tempfiles/', ''))
+            
+            self.function_configs[instance_alias] = params
+        
+        # Load routing
+        for route_entry in model_data.get('routing', []):
+            src_info = route_entry.get('source', {})
+            dst_info = route_entry.get('destination', {})
+            auto_created = route_entry.get('auto_created', False)
+            
+            src_alias = src_info.get('instance_alias', '')
+            dst_alias = dst_info.get('instance_alias', '')
+            src_param = src_info.get('param_key', '')
+            dst_param = dst_info.get('param_key', '')
+            src_param_name = src_info.get('param_name', src_param)
+            dst_param_name = dst_info.get('param_name', dst_param)
+            
+            # Find indices
+            try:
+                src_idx = self.methodology_list.index(src_alias)
+                dst_idx = self.methodology_list.index(dst_alias)
                 
-                # Format: src_instance_alias.src_param -> dst_instance_alias.dst_param
-                if '->' in line:
-                    src_part, dst_part = line.split('->')
-                    src_instance_alias, src_param = src_part.strip().split('.')
-                    dst_instance_alias, dst_param = dst_part.strip().split('.')
-                    
-                    # Find indices in methodology list using instance aliases
-                    try:
-                        src_idx = self.methodology_list.index(src_instance_alias)
-                        dst_idx = self.methodology_list.index(dst_instance_alias)
-                        
-                        key = (src_idx, src_param, dst_idx, dst_param)
-                        self.routing_lines[key] = {
-                            "src_idx": src_idx,
-                            "src_param_key": src_param,
-                            "dst_idx": dst_idx,
-                            "dst_param_key": dst_param,
-                            "auto_created": False
-                        }
-                    except ValueError:
-                        # Instance alias not found in methodology list
-                        print(f"Warning: Could not find routing source or destination function instance in methodology")
+                key = (src_idx, src_param, dst_idx, dst_param)
+                self.routing_lines[key] = {
+                    "src_idx": src_idx,
+                    "src_param_key": src_param,
+                    "src_param_name": src_param_name,
+                    "dst_idx": dst_idx,
+                    "dst_param_key": dst_param,
+                    "dst_param_name": dst_param_name,
+                    "auto_created": auto_created
+                }
+            except ValueError:
+                print(f"Warning: Could not find routing source or destination: {src_alias} -> {dst_alias}")
     
     def _refresh_gui_from_config(self):
         """Refresh GUI to reflect loaded configuration."""
@@ -2241,7 +2081,7 @@ class ChemometricsGUI:
                                  self.language_manager.translate("ui.messages.empty_methodology", "Add functions to Methodology first"))
             return
         
-        if not self._generate_config_files():
+        if not self._generate_model_json():
             return
         
         try:

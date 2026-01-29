@@ -17,7 +17,8 @@ def _load_file(path: str, separator: Optional[str], num_headlines: int) -> np.nd
         return np.loadtxt(path, delimiter=separator, skiprows=num_headlines)
 
 
-def load_data(d_specs: List[str], data_path: List[str], nway_flag: int, y_path: Optional[str] = None,
+def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str, d_specs_dimensions: Optional[str] = None,
+              data_path: Optional[List[str]] = None, nway_flag: int = 1, y_path: Optional[str] = None,
               var_path: Optional[str] = None, smp_path: Optional[str] = None,
               transpose: bool = False) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[List[str]], List[str]]:
     """
@@ -26,14 +27,16 @@ def load_data(d_specs: List[str], data_path: List[str], nway_flag: int, y_path: 
     Supports text files (CSV, TSV, space-separated) and Excel files (.xlsx, .xls).
 
     Args:
-        d_specs: List of 4 strings: [separator, num_headlines, data_type, dimensions]
-                 For Excel files, separator is ignored.
-        data_path: List of paths to X data files (text or Excel)
-        nway_flag: Number of ways (1 for 1D/2D, 2+ for multi-way)
+        d_specs_separator: Separator type ('comma', 'tabs', 'spaces')
+        d_specs_headlines: Number of header rows to skip
+        d_specs_type: Data type ('x_vector', 'xy_vector', 'x_matrix', etc.)
+        d_specs_dimensions: Dimensions for reshaping (optional, defaults to None)
+        data_path: List of paths to X data files (text or Excel, defaults to None)
+        nway_flag: Number of ways (1 for 1D/2D, 2+ for multi-way, defaults to 1)
         y_path: Optional path to Y data file (text or Excel)
         var_path: Optional path to variable labels file (text)
         smp_path: Optional path to sample labels file (text)
-        transpose: Whether to transpose data
+        transpose: Whether to transpose data (defaults to False)
 
     Returns:
         X_cal: X data array
@@ -41,12 +44,12 @@ def load_data(d_specs: List[str], data_path: List[str], nway_flag: int, y_path: 
         var_label: Variable labels or None
         smp_cal: Sample labels
     """
-    # Parse d_specs
+    # Parse d_specs parameters
     separator_map = {"comma": ",", "spaces": None, "tabs": "\t"}
-    separator = separator_map.get(d_specs[0], ",")
-    num_headlines = int(d_specs[1])
-    data_type = d_specs[2]
-    dimensions = d_specs[3] if len(d_specs) > 3 and d_specs[3].strip() else None
+    separator = separator_map.get(d_specs_separator, ",")
+    num_headlines = int(d_specs_headlines)
+    data_type = d_specs_type
+    dimensions = d_specs_dimensions if d_specs_dimensions and d_specs_dimensions.strip() else None
 
     # Load X data
     X, row_counts = _load_x_data(data_path, separator, num_headlines, data_type, dimensions, transpose, nway_flag)
@@ -75,7 +78,7 @@ def _load_x_data(data_path: List[str], separator: Optional[str], num_headlines: 
     if nway_flag == 1:
         return _load_x_1way(data_path, separator, num_headlines, data_type, transpose)
     else:
-        X = _load_x_multiway(data_path, separator, num_headlines, data_type, dimensions, nway_flag)
+        X = _load_x_multiway(data_path, separator, num_headlines, data_type, dimensions, nway_flag, transpose)
         return X, []  # No row_counts for multiway
 
 

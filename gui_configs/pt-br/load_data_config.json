@@ -3,7 +3,10 @@
   "category": "Importação de Dados",
   "data_type": "all",
   "input_aliases": {
-    "d_specs": "Especificação de Formato",
+    "d_specs_separator": "Separador de Dados",
+    "d_specs_headlines": "Linhas de Cabeçalho",
+    "d_specs_type": "Tipo de Dados",
+    "d_specs_dimensions": "Dimensões dos Dados",
     "data_path": "Arquivos de Dados X",
     "nway_flag": "Dimensionalidade dos Dados",
     "y_path": "Arquivo de Dados Y",

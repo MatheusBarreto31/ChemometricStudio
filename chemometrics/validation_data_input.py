@@ -8,7 +8,9 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
                           validation_mode: Optional[str] = None, createVal: Optional[bool] = None,
                           creationMethod: Optional[str] = None,
                           calProportion: Optional[float] = None, selection_file: Optional[str] = None,
-                          d_specs: Optional[List[str]] = None, data_path: Optional[List[str]] = None,
+                          d_specs_separator: Optional[str] = None, d_specs_headlines: Optional[str] = None,
+                          d_specs_type: Optional[str] = None, d_specs_dimensions: Optional[str] = None,
+                          data_path: Optional[List[str]] = None,
                           y_path: Optional[str] = None, var_path: Optional[str] = None,
                           smp_path: Optional[str] = None, transpose: bool = False,
                           nway_flag: Optional[int] = None,
@@ -49,7 +51,10 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
         if X_val_path or Y_val_path:
             # Load from external file paths
             X_val, Y_val, _, smp_val = load_data(
-                d_specs=d_specs or ["tabs", "0", "x_matrix", ""],
+                d_specs_separator=d_specs_separator or "tabs",
+                d_specs_headlines=d_specs_headlines or "0",
+                d_specs_type=d_specs_type or "x_matrix",
+                d_specs_dimensions=d_specs_dimensions or "",
                 data_path=[X_val_path] if X_val_path else [],
                 nway_flag=nway_flag or 1,
                 y_path=Y_val_path,
@@ -58,10 +63,21 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
                 transpose=transpose
             )
         else:
-            # Use old parameters for backward compatibility
-            if d_specs is None or data_path is None or nway_flag is None:
-                raise ValueError("Either X_val_path/Y_val_path or d_specs/data_path/nway_flag required when loading external validation")
-            X_val, Y_val, _, smp_val = load_data(d_specs, data_path, nway_flag, y_path, var_path, smp_path, transpose)
+            # Use data_path parameters for loading external validation
+            if data_path is None or nway_flag is None:
+                raise ValueError("Either X_val_path/Y_val_path or data_path/nway_flag required when loading external validation")
+            X_val, Y_val, _, smp_val = load_data(
+                d_specs_separator=d_specs_separator or "tabs",
+                d_specs_headlines=d_specs_headlines or "0",
+                d_specs_type=d_specs_type or "x_matrix",
+                d_specs_dimensions=d_specs_dimensions or "",
+                data_path=data_path,
+                nway_flag=nway_flag,
+                y_path=y_path,
+                var_path=var_path,
+                smp_path=smp_path,
+                transpose=transpose
+            )
         
         X_cal_out, Y_cal_out, smp_cal_out = X_cal, Y_cal, smp_cal
     else:

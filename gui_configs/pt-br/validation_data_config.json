@@ -9,7 +9,11 @@
     "createVal": "Criar Validação",
     "creationMethod": "Método",
     "calProportion": "Proporção de Calibração",
-    "selection_file": "Arquivo de Seleção"
+    "selection_file": "Arquivo de Seleção",
+    "d_specs_separator": "Separador de Dados",
+    "d_specs_headlines": "Linhas de Cabeçalho",
+    "d_specs_type": "Tipo de Dados",
+    "d_specs_dimensions": "Dimensões dos Dados"
   },
   "output_aliases": {
     "X_cal": "X Calibração",

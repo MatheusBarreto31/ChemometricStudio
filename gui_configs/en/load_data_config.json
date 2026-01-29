@@ -3,7 +3,10 @@
   "category": "Data Import",
   "data_type": "all",
   "input_aliases": {
-    "d_specs": "Format Spec",
+    "d_specs_separator": "Data Separator",
+    "d_specs_headlines": "Header Rows",
+    "d_specs_type": "Data Type",
+    "d_specs_dimensions": "Data Dimensions",
     "data_path": "X Data Files",
     "nway_flag": "Data Dimensionality",
     "y_path": "Y Data File",

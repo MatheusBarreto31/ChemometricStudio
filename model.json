@@ -1,0 +1,191 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "created": "2026-01-29T10:12:56.358944",
+    "description": "CM Studio Model Configuration"
+  },
+  "functions": [
+    {
+      "instance_alias": "load_data",
+      "base_alias": "load_data",
+      "display_name": "Load Data",
+      "parameters": {
+        "d_specs_separator": "tabs",
+        "d_specs_headlines": "0",
+        "d_specs_type": "x_matrix",
+        "nway_flag": "1",
+        "transpose": false
+      },
+      "parameter_types": {
+        "d_specs_separator": "str",
+        "d_specs_headlines": "int",
+        "d_specs_type": "str",
+        "nway_flag": "int",
+        "transpose": "bool",
+        "data_path": "list",
+        "y_path": "str"
+      }
+    },
+    {
+      "instance_alias": "validation_data_main",
+      "base_alias": "validation_data_main",
+      "display_name": "Load/Create Validation Set",
+      "parameters": {
+        "validation_mode": "Load",
+        "creationMethod": "random",
+        "calProportion": "0.7",
+        "d_specs_separator": "tabs",
+        "d_specs_headlines": "0",
+        "d_specs_type": "x_matrix",
+        "nway_flag": "1"
+      },
+      "parameter_types": {
+        "validation_mode": "str",
+        "creationMethod": "str",
+        "calProportion": "float",
+        "d_specs_separator": "str",
+        "d_specs_headlines": "int",
+        "d_specs_type": "str",
+        "nway_flag": "int",
+        "X_val_path": "str"
+      }
+    },
+    {
+      "instance_alias": "center_and_normalize",
+      "base_alias": "center_and_normalize",
+      "display_name": "Center & Normalize",
+      "parameters": {
+        "nway_flag": "1"
+      },
+      "parameter_types": {
+        "nway_flag": "int"
+      }
+    },
+    {
+      "instance_alias": "univariate_calibration",
+      "base_alias": "univariate_calibration",
+      "display_name": "Univariate Calibration",
+      "parameters": {},
+      "parameter_types": {}
+    }
+  ],
+  "routing": [
+    {
+      "source": {
+        "instance_alias": "load_data",
+        "param_key": "X_cal",
+        "param_name": "X_cal"
+      },
+      "destination": {
+        "instance_alias": "validation_data_main",
+        "param_key": "X_cal",
+        "param_name": "X_cal"
+      },
+      "auto_created": true
+    },
+    {
+      "source": {
+        "instance_alias": "load_data",
+        "param_key": "Y_cal",
+        "param_name": "Y_cal"
+      },
+      "destination": {
+        "instance_alias": "validation_data_main",
+        "param_key": "Y_cal",
+        "param_name": "Y_cal"
+      },
+      "auto_created": true
+    },
+    {
+      "source": {
+        "instance_alias": "load_data",
+        "param_key": "smp_cal",
+        "param_name": "smp_cal"
+      },
+      "destination": {
+        "instance_alias": "validation_data_main",
+        "param_key": "smp_cal",
+        "param_name": "smp_cal"
+      },
+      "auto_created": true
+    },
+    {
+      "source": {
+        "instance_alias": "validation_data_main",
+        "param_key": "X_cal",
+        "param_name": "X_cal"
+      },
+      "destination": {
+        "instance_alias": "center_and_normalize",
+        "param_key": "X_cal",
+        "param_name": "X_cal"
+      },
+      "auto_created": true
+    },
+    {
+      "source": {
+        "instance_alias": "validation_data_main",
+        "param_key": "X_val",
+        "param_name": "X_val"
+      },
+      "destination": {
+        "instance_alias": "center_and_normalize",
+        "param_key": "X_val",
+        "param_name": "X_val"
+      },
+      "auto_created": true
+    },
+    {
+      "source": {
+        "instance_alias": "center_and_normalize",
+        "param_key": "X_cal",
+        "param_name": "X_cal"
+      },
+      "destination": {
+        "instance_alias": "univariate_calibration",
+        "param_key": "X_cal",
+        "param_name": "X_cal"
+      },
+      "auto_created": true
+    },
+    {
+      "source": {
+        "instance_alias": "validation_data_main",
+        "param_key": "Y_cal",
+        "param_name": "Y_cal"
+      },
+      "destination": {
+        "instance_alias": "univariate_calibration",
+        "param_key": "Y_cal",
+        "param_name": "Y_cal"
+      },
+      "auto_created": true
+    },
+    {
+      "source": {
+        "instance_alias": "center_and_normalize",
+        "param_key": "X_val",
+        "param_name": "X_val"
+      },
+      "destination": {
+        "instance_alias": "univariate_calibration",
+        "param_key": "X_val",
+        "param_name": "X_val"
+      },
+      "auto_created": true
+    },
+    {
+      "source": {
+        "instance_alias": "validation_data_main",
+        "param_key": "Y_val",
+        "param_name": "Y_val"
+      },
+      "destination": {
+        "instance_alias": "univariate_calibration",
+        "param_key": "Y_val",
+        "param_name": "Y_val"
+      },
+      "auto_created": true
+    }
+  ]
+}
