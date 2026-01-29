@@ -126,6 +126,8 @@ model_log.txt
 output.txt
 *.log
 Chemometric_Studio.egg-info/
+
+# Generated documentation and notes
 Generated Notes/
 COMPLETION_SUMMARY.md
 DELIVERABLES_MANIFEST.md
@@ -136,13 +138,15 @@ LANGUAGE_ARCHITECTURE_FIX.md
 LANGUAGE_QUICK_REFERENCE.md
 LANGUAGE_SUPPORT.md
 MULTILANGUAGE_README.md
+
+# Deprecated and test files
 analyst_backup.py
 fix_json_commas.py
 update_gui.py
 old_main.py
-test_config_loading.py
-test_gui_config_system.py
-test_languages.py
+test_*.py
 error_log.txt
 functions.txt
 routing.txt
+test_d_specs_refactoring.py
+test_load_data_params.py

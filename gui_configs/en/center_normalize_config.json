@@ -76,5 +76,62 @@
         "tooltip": "Automatically inherited from Load Data function"
       }
     ]
+  },
+  "analysis": {
+    "pages": [
+      {
+        "title": "Preprocessing Comparison",
+        "layout": "ew",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "x_axis": {"data_source": "X_cal", "label": "Variables"},
+              "y_axis": {"data_source": "X_cal", "label": "Intensity"},
+              "title": "Original Data",
+              "navigation_axes": ["Samples"]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "x_axis": {"data_source": "X_cal", "label": "Variables"},
+              "y_axis": {"data_source": "X_cal", "label": "Intensity"},
+              "title": "Processed Data",
+              "navigation_axes": ["Samples"]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Statistics",
+        "layout": "fd",
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "data_source": "X_cal",
+              "decimal_places": 6,
+              "max_rows": 20,
+              "title": "Original Statistics"
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "data_source": "X_cal",
+              "decimal_places": 6,
+              "max_rows": 20,
+              "title": "Processed Statistics"
+            }
+          },
+          {"type": null},
+          {"type": null}
+        ]
+      }
+    ],
+    "current_page": 0
   }
 }

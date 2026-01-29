@@ -7,20 +7,53 @@ import pandas as pd
 
 
 def _load_file(path: str, separator: Optional[str], num_headlines: int) -> np.ndarray:
-    """Load data from file, supporting text and Excel formats."""
+    """Load data from file, supporting text and Excel formats.
+    
+    Handles empty cells and formatting issues gracefully.
+    """
     if path.lower().endswith(('.xlsx', '.xls')):
         # Load Excel file
         df = pd.read_excel(path, header=None, skiprows=num_headlines)
         return df.values
     else:
-        # Load text file
-        return np.loadtxt(path, delimiter=separator, skiprows=num_headlines)
+        # Load text file - use pandas for more robust CSV handling
+        try:
+            # Map separator names to pandas parameters
+            if separator is None:
+                # Space-separated or whitespace
+                sep = r'\s+'  # One or more whitespace characters
+            elif separator == ',':
+                sep = ','
+            elif separator == '\t':
+                sep = '\t'
+            else:
+                sep = separator
+            
+            # Use pandas to read, which handles edge cases better
+            df = pd.read_csv(path, sep=sep, header=None, skiprows=num_headlines, 
+                           engine='python', na_values=['', ' '], 
+                           skip_blank_lines=True)
+            
+            # Convert to numeric, replacing any remaining non-numeric values
+            df = df.apply(pd.to_numeric, errors='coerce')
+            
+            # Check for NaN values (from conversion errors or empty cells)
+            if df.isna().any().any():
+                # Drop columns or rows with NaN if appropriate, or fill with 0
+                # For now, replace NaN with 0
+                df = df.fillna(0)
+            
+            return df.values
+        except Exception as e:
+            # Fallback to numpy loadtxt
+            print(f"Warning: pandas read failed, falling back to numpy: {e}")
+            return np.loadtxt(path, delimiter=separator, skiprows=num_headlines)
 
 
 def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str, d_specs_dimensions: Optional[str] = None,
               data_path: Optional[List[str]] = None, nway_flag: int = 1, y_path: Optional[str] = None,
               var_path: Optional[str] = None, smp_path: Optional[str] = None,
-              transpose: bool = False) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[List[str]], List[str]]:
+              transpose: bool = False, axis_info: Optional[str] = None) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[List[str]], List[str], Optional[List[np.ndarray]]]:
     """
     Load and organize chemometrics data.
 
@@ -37,12 +70,14 @@ def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str,
         var_path: Optional path to variable labels file (text)
         smp_path: Optional path to sample labels file (text)
         transpose: Whether to transpose data (defaults to False)
+        axis_info: Optional axis range information as semicolon-separated pairs (e.g., "100 200" for 1D, "100 200; 1 10" for 2D)
 
     Returns:
         X_cal: X data array
         Y_cal: Y data array or None
         var_label: Variable labels or None
         smp_cal: Sample labels
+        axis_n_info: List of axis vectors matching data dimensions or None
     """
     # Parse d_specs parameters
     separator_map = {"comma": ",", "spaces": None, "tabs": "\t"}
@@ -67,7 +102,15 @@ def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str,
     else:
         smp_labels = _load_labels(smp_path)
 
-    return X, Y, var_labels, smp_labels
+    # Generate axis information
+    if axis_info:
+        # Use provided axis information
+        axis_n_info = _generate_axis_info(axis_info, X)
+    else:
+        # Generate default axis information (1 to dimension size for each axis)
+        axis_n_info = _generate_default_axis_info(X)
+
+    return X, Y, var_labels, smp_labels, axis_n_info
 
 
 def _load_x_data(data_path: List[str], separator: Optional[str], num_headlines: int,
@@ -192,5 +235,77 @@ def _generate_row_labels(data_path: List[str], row_counts: List[int]) -> List[st
         for i in range(1, count + 1):
             labels.append(f"{name}_{i}")
     return labels
+
+
+def _generate_default_axis_info(X: np.ndarray) -> List[np.ndarray]:
+    """
+    Generate default axis vectors (1 to dimension size) for each axis.
+    
+    Args:
+        X: Data array to match dimensions
+        
+    Returns:
+        List of numpy arrays with values from 1 to dimension size for each axis
+    """
+    # Get data shape (excluding sample dimension)
+    data_shape = X.shape[1:]  # Skip first dimension (samples)
+    
+    # Generate axis vectors from 1 to dimension size
+    axis_vectors = []
+    for dim_size in data_shape:
+        axis_vector = np.arange(1, dim_size + 1, dtype=float)
+        axis_vectors.append(axis_vector)
+    
+    return axis_vectors
+
+
+def _generate_axis_info(axis_info: str, X: np.ndarray) -> Optional[List[np.ndarray]]:
+    """
+    Generate axis vectors from axis information string.
+    
+    Args:
+        axis_info: Semicolon-separated axis ranges (e.g., "100 200" or "100 200; 1 10")
+        X: Data array to match dimensions
+        
+    Returns:
+        List of numpy arrays representing axis vectors, or None if parsing fails
+    """
+    if not axis_info or not axis_info.strip():
+        return None
+    
+    try:
+        # Split by semicolon to get individual axis specifications
+        axis_specs = [spec.strip() for spec in axis_info.split(';') if spec.strip()]
+        
+        # Get data shape (excluding sample dimension)
+        data_shape = X.shape[1:]  # Skip first dimension (samples)
+        
+        # Check if number of axis specs matches data dimensions
+        if len(axis_specs) != len(data_shape):
+            print(f"Warning: Number of axis specifications ({len(axis_specs)}) doesn't match data dimensions ({len(data_shape)})")
+            return None
+        
+        # Generate axis vectors
+        axis_vectors = []
+        for spec, dim_size in zip(axis_specs, data_shape):
+            parts = spec.split()
+            if len(parts) != 2:
+                print(f"Warning: Invalid axis specification '{spec}'. Expected format: 'start end'")
+                return None
+            
+            try:
+                start = float(parts[0])
+                end = float(parts[1])
+                axis_vector = np.linspace(start, end, dim_size)
+                axis_vectors.append(axis_vector)
+            except ValueError:
+                print(f"Warning: Could not parse axis values from '{spec}'")
+                return None
+        
+        return axis_vectors
+    
+    except Exception as e:
+        print(f"Error generating axis information: {e}")
+        return None
 
 

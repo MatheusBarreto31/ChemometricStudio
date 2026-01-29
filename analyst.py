@@ -1,5 +1,13 @@
+from typing import Optional
 
-def analyst_main():
+def analyst_main(stop_at_function_idx: Optional[int] = None):
+    """
+    Execute the model configuration from model.json.
+    
+    Args:
+        stop_at_function_idx: If provided, stop execution after this function index (0-based).
+                            None means execute all functions.
+    """
     print("Analyst mode selected.")
     
     global nway_flag
@@ -111,8 +119,20 @@ def analyst_main():
     
     outputs = {}  # {instance_alias: {param_key: value}}
     
+    # Build ordered list of functions to execute
+    functions_list = []  # Maintain order from model
+    for func_entry in model_data.get('functions', []):
+        instance_alias = func_entry.get('instance_alias', '')
+        if instance_alias in functions_info:
+            functions_list.append((instance_alias, functions_info[instance_alias]))
+    
     # Execute each function in order
-    for instance_alias, info in functions_info.items():
+    for exec_idx, (instance_alias, info) in enumerate(functions_list):
+        # Check if we should stop before this function
+        if stop_at_function_idx is not None and exec_idx > stop_at_function_idx:
+            print(f"\nStopping at function index {stop_at_function_idx}")
+            break
+        
         base_alias = info['base_alias']
         params = info['parameters'].copy()
         param_types = info.get('parameter_types', {})
@@ -150,13 +170,20 @@ def analyst_main():
             print(f"{base_alias} executed successfully.")
         else:
             print(f"Function {base_alias} not found.")
+        
+        # Stop after requested function
+        if stop_at_function_idx is not None and exec_idx == stop_at_function_idx:
+            print(f"\nStopped after function index {stop_at_function_idx}")
+            break
     
-    print("\n\nAll functions executed.")
+    print("\n\nFunctions executed.")
     print("Final outputs:")
     for instance_alias, out_dict in outputs.items():
         print(f"\nOutputs from {instance_alias}:")
         for name, value in out_dict.items():
             print(f"  {name}: {value}")
+    
+    return outputs  # Return outputs for analysis tab
 
 
 if __name__ == "__main__":

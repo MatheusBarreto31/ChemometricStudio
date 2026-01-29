@@ -18,7 +18,8 @@
     "X_cal": "X Data",
     "Y_cal": "Y Data",
     "var_label": "Variable Labels",
-    "smp_cal": "Sample Labels"
+    "smp_cal": "Sample Labels",
+    "axis_n_info": "Axis Vectors"
   },
   "short_description": "Loads spectroscopic and response data from files",
   "long_description": "This step loads your calibration dataset including spectroscopic data (X), response variables (Y), and optional metadata.\n\nInput Data Components:\n- X Data (Spectra): Main spectroscopic measurements (required)\n- Y Data (Responses): Target/dependent variables (optional)\n- Variable Labels: Wavelengths, frequencies, or variable names (optional)\n- Sample Labels: Sample IDs or identifiers (optional)\n\nData Formats:\n- CSV files with configurable delimiters (comma, tabs, spaces)\n- Matrix format: samples (rows) x variables (columns)\n- Vector formats for specialized data types\n- Support for multiple files via file selection\n\nConfiguration:\n- Specify delimiter type for your files\n- Set number of header rows to skip\n- Choose appropriate data type structure\n- Transpose if needed (samples in columns instead of rows)\n\nThe loaded data becomes input for preprocessing and validation steps.",
@@ -123,7 +124,58 @@
         "required": false,
         "input_type": "user",
         "tooltip": "Transposes data"
+      },
+      {
+        "name": "axis_info",
+        "label": "Axis Information (Optional)",
+        "widget": "entry",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Axis range information (e.g., '100 200' for 1D or '100 200; 1 10' for 2D data)"
       }
     ]
+  },
+  "analysis": {
+    "pages": [
+      {
+        "title": "Data Overview",
+        "layout": "ed",
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "data_source": "X_cal",
+              "decimal_places": 4,
+              "max_rows": 50,
+              "max_cols": 15,
+              "title": "X Data (Spectra)"
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {"data_source": "axis_n_info", "label": "Variables"},
+              "y_axis": {"data_source": "X_cal", "label": "Intensity"},
+              "title": "Spectral Data Overview",
+              "navigation_axes": [{"name": "Sample", "dimension": 0, "axis": "y"}]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "x_axis": {"data_source": "X_cal", "label": "Variables"},
+              "y_axis": {"data_source": "X_cal", "label": "Intensity"},
+              "title": "Scatter test",
+              "navigation_axes": [{"name": "Sample", "dimension": 1, "axis": "x"},{"name": "Sam", "dimension": 1, "axis": "y"}]
+            }
+          }
+          
+        ]
+      }
+    ],
+    "current_page": 0
   }
 }

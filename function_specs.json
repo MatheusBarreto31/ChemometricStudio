@@ -1,6 +1,6 @@
 {
   "return_specs": {
-    "load_data": ["X_cal", "Y_cal", "var_label", "smp_cal"],
+    "load_data": ["X_cal", "Y_cal", "var_label", "smp_cal", "axis_n_info"],
     "validation_data_main": ["X_cal", "Y_cal", "X_val", "Y_val", "smp_cal", "smp_val"],
     "baseline_correction": ["X_cal", "X_val"],
     "smoothing": ["X_cal", "X_val"],
@@ -8,7 +8,7 @@
     "univariate_calibration": ["y_cal_pred", "y_val_pred", "models", "metrics"]
   },
   "input_specs": {
-    "load_data": ["d_specs_separator", "d_specs_headlines", "d_specs_type", "d_specs_dimensions", "data_path", "nway_flag", "y_path", "var_path", "smp_path", "transpose"],
+    "load_data": ["d_specs_separator", "d_specs_headlines", "d_specs_type", "d_specs_dimensions", "data_path", "nway_flag", "y_path", "var_path", "smp_path", "transpose", "axis_info"],
     "validation_data_main": ["X_cal", "Y_cal", "smp_cal", "validation_mode", "createVal", "creationMethod", "calProportion", "selection_file", "X_val_path", "Y_val_path", "val_labels_path", "d_specs_separator", "d_specs_headlines", "d_specs_type", "d_specs_dimensions", "data_path", "y_path", "var_path", "smp_path", "transpose", "nway_flag"],
     "baseline_correction": ["X_cal", "method", "X_val", "nway_flag", "direction", "window_size"],
     "smoothing": ["X_cal", "method", "X_val", "nway_flag", "direction", "window_size", "polyorder"],
@@ -54,7 +54,8 @@
       "y_path": "str",
       "var_path": "str",
       "smp_path": "str",
-      "transpose": "bool"
+      "transpose": "bool",
+      "axis_info": "str"
     },
     "validation_data_main": {
       "X_cal": "ndarray",

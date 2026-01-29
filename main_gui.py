@@ -18,6 +18,10 @@ import shutil
 from datetime import datetime
 import tempfile
 from PIL import Image, ImageTk
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
 
 # Import language manager
 from language_manager import get_language_manager, _
@@ -1380,15 +1384,1584 @@ class ChemometricsGUI:
         # Just draw the initial canvas
         self._draw_canvas()
 
+    def _position_paned_sash(self, paned):
+        """Position the PanedWindow sash to the middle."""
+        try:
+            # Force window to update first
+            paned.update_idletasks()
+            # Get the current paned window width
+            parent_width = paned.winfo_width()
+            if parent_width > 1:  # Only set if window has been rendered
+                sash_pos = parent_width // 2
+                paned.sashpos(0, sash_pos)
+        except Exception as e:
+            pass  # Silently fail if sash positioning isn't available
+
     
     def _show_analysis_tab(self):
-        """Show Analysis tab (placeholder)."""
+        """Show Analysis tab with analysis and visualization tools."""
         self._clear_tab()
         self.current_tab = "analysis"
         
-        label = ttk.Label(self.tab_content_frame, text=self.language_manager.translate("ui.messages.analysis_tab", "Analysis Tab (Under Development)"), 
-                         font=("Arial", 12, "bold"))
-        label.pack(padx=20, pady=20)
+        if self.selected_function_idx is None:
+            label = ttk.Label(self.tab_content_frame, text=self.language_manager.translate("ui.messages.no_methodology", "No functions selected. Please add functions to your methodology."), 
+                             font=("Arial", 10, "italic"))
+            label.pack(padx=20, pady=20)
+            return
+        
+        instance_alias = self.methodology_list[self.selected_function_idx]
+        base_alias = self.function_base_aliases[self.selected_function_idx]
+        
+        # Initialize analysis data in model if not present
+        if not hasattr(self, 'analysis_data'):
+            self.analysis_data = {}
+        
+        # Get or create analysis entry for this function
+        if instance_alias not in self.analysis_data:
+            # Load analysis configuration from function's gui_config if available
+            analysis_config = None
+            if base_alias in self.gui_configs:
+                analysis_config = self.gui_configs[base_alias].get('analysis')
+            
+            if analysis_config:
+                # Use analysis config from function's JSON
+                self.analysis_data[instance_alias] = {
+                    'pages': analysis_config.get('pages', [{'title': 'Default', 'layout': 'fp', 'sections': [{'type': None}]}]),
+                    'current_page': analysis_config.get('current_page', 0)
+                }
+            else:
+                # Fallback to default structure
+                self.analysis_data[instance_alias] = {
+                    'pages': [{'title': 'Default', 'layout': 'fp', 'sections': [{'type': None}]}],
+                    'current_page': 0
+                }
+        
+        analysis_info = self.analysis_data[instance_alias]
+        
+        # Create top control bar
+        control_frame = ttk.Frame(self.tab_content_frame)
+        control_frame.pack(fill=tk.X, padx=10, pady=10)
+        
+        # Get function display name
+        config = self.gui_configs.get(base_alias, {})
+        display_name = config.get("display_name", base_alias)
+        
+        title = ttk.Label(control_frame, text=f"Analysis: {display_name}", font=("Arial", 11, "bold"))
+        title.pack(side=tk.LEFT, padx=5)
+        
+        # Run to here button
+        run_btn = ttk.Button(control_frame, text="🠊 Run to here", 
+                            command=lambda: self._run_analysis_to_function(instance_alias))
+        run_btn.pack(side=tk.LEFT, padx=5)
+        
+        # Add graph button
+        add_graph_btn = ttk.Button(control_frame, text="Add graph", 
+                                   command=lambda: messagebox.showinfo("Info", "Add Graph feature is still in development"))
+        add_graph_btn.pack(side=tk.LEFT, padx=5)
+        
+        # Add table button
+        add_table_btn = ttk.Button(control_frame, text="Add table", 
+                                   command=lambda: messagebox.showinfo("Info", "Add Table feature is still in development"))
+        add_table_btn.pack(side=tk.LEFT, padx=5)
+        
+        # Remove section button
+        remove_section_btn = ttk.Button(control_frame, text="Remove section", 
+                                       command=lambda: self._show_remove_section_dialog(instance_alias))
+        remove_section_btn.pack(side=tk.LEFT, padx=5)
+        
+        # Spacer
+        spacer = ttk.Frame(control_frame)
+        spacer.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        # Add page button
+        add_page_btn = ttk.Button(control_frame, text="Add Page", 
+                                 command=lambda: self._show_add_page_dialog(instance_alias))
+        add_page_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # Remove page button
+        remove_page_btn = ttk.Button(control_frame, text="Remove Page", 
+                                    command=lambda: self._remove_current_page(instance_alias))
+        remove_page_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # Main content area
+        content_frame = ttk.Frame(self.tab_content_frame)
+        content_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Page navigation frame (bottom)
+        nav_frame = ttk.Frame(self.tab_content_frame)
+        nav_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+        
+        nav_label = ttk.Label(nav_frame, text="Pages:", font=("Arial", 9))
+        nav_label.pack(side=tk.LEFT, padx=5)
+        
+        # Page buttons
+        current_page = analysis_info.get('current_page', 0)
+        for idx, page in enumerate(analysis_info.get('pages', [])):
+            # Check if page passes condition
+            if page.get('condition'):
+                if not self._evaluate_condition(instance_alias, page.get('condition')):
+                    continue  # Skip pages that don't meet condition
+            
+            page_title = page.get('title', f'Page {idx + 1}')
+            btn = ttk.Button(nav_frame, text=page_title, width=15,
+                           command=lambda p=idx: self._switch_analysis_page(instance_alias, p))
+            btn.pack(side=tk.LEFT, padx=2)
+            
+            if idx == current_page:
+                btn.state(['pressed'])
+        
+        # Display current page
+        pages = analysis_info.get('pages', [])
+        if current_page < len(pages):
+            page_data = pages[current_page]
+            self._render_analysis_page(content_frame, instance_alias, page_data)
+    
+    def _switch_analysis_page(self, instance_alias: str, page_idx: int):
+        """Switch to a different analysis page."""
+        if instance_alias in self.analysis_data:
+            self.analysis_data[instance_alias]['current_page'] = page_idx
+            self._show_analysis_tab()
+    
+    def _evaluate_condition(self, instance_alias: str, condition: dict) -> bool:
+        """Evaluate a condition against execution inputs.
+        
+        Args:
+            instance_alias: The function instance alias
+            condition: Dict with 'parameter', 'operator', and 'value' keys
+                      Example: {"parameter": "nway_flag", "operator": ">", "value": 1}
+        
+        Returns:
+            True if condition is met, False otherwise
+        """
+        if not condition or not isinstance(condition, dict):
+            return True
+        
+        parameter = condition.get('parameter')
+        operator = condition.get('operator', '==')
+        expected_value = condition.get('value')
+        
+        if not parameter:
+            return True
+        
+        # Get the actual value from execution inputs
+        if instance_alias not in self.analysis_data:
+            return True
+        
+        execution_results = self.analysis_data[instance_alias].get('execution_results', {})
+        inputs = execution_results.get('inputs', {})
+        actual_value = inputs.get(parameter)
+        
+        if actual_value is None:
+            return False
+        
+        # Evaluate based on operator
+        try:
+            if operator == '==':
+                return actual_value == expected_value
+            elif operator == '!=':
+                return actual_value != expected_value
+            elif operator == '>':
+                return actual_value > expected_value
+            elif operator == '<':
+                return actual_value < expected_value
+            elif operator == '>=':
+                return actual_value >= expected_value
+            elif operator == '<=':
+                return actual_value <= expected_value
+            elif operator == 'in':
+                return actual_value in expected_value
+            elif operator == 'contains':
+                return expected_value in actual_value
+            else:
+                return True
+        except (TypeError, ValueError):
+            return False
+    
+    def _render_analysis_page(self, parent: ttk.Frame, instance_alias: str, page_data: dict):
+        """Render the current analysis page with the specified layout."""
+        layout_type = page_data.get('layout', 'fp')
+        sections = page_data.get('sections', [])
+        
+        # Create layout containers
+        containers = self._create_layout_containers(parent, layout_type)
+        
+        # Populate sections, filtering by condition if present
+        section_idx = 0
+        for container in containers:
+            # Find next section that passes condition check
+            while section_idx < len(sections):
+                section_data = sections[section_idx]
+                section_idx += 1
+                
+                # Check if section has a condition
+                if section_data.get('condition'):
+                    if not self._evaluate_condition(instance_alias, section_data.get('condition')):
+                        continue  # Skip this section, try next
+                
+                # Render the section
+                self._render_section(container, instance_alias, section_data, section_idx - 1)
+                break
+            else:
+                # No more sections with passing conditions
+                placeholder = ttk.Label(container, text="[Empty Section]", foreground="gray")
+                placeholder.pack(expand=True)
+    
+    def _create_layout_containers(self, parent: ttk.Frame, layout_type: str) -> list:
+        """Create layout containers based on layout type."""
+        containers = []
+        
+        if layout_type == 'fd':  # Four sections (2x2 grid)
+            for i in range(2):
+                row_frame = ttk.Frame(parent)
+                row_frame.pack(fill=tk.BOTH, expand=True)
+                for j in range(2):
+                    container = ttk.LabelFrame(row_frame, text=f"Section", padding=5)
+                    container.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=2, pady=2)
+                    containers.append(container)
+        
+        elif layout_type == 'fp':  # Full page (1 section)
+            container = ttk.LabelFrame(parent, text="Section", padding=5)
+            container.pack(fill=tk.BOTH, expand=True)
+            containers.append(container)
+        
+        elif layout_type == 'ns':  # North-South (2 sections: top, bottom)
+            top_frame = ttk.LabelFrame(parent, text="Section", padding=5)
+            top_frame.pack(fill=tk.BOTH, expand=True)
+            containers.append(top_frame)
+            
+            bottom_frame = ttk.LabelFrame(parent, text="Section", padding=5)
+            bottom_frame.pack(fill=tk.BOTH, expand=True)
+            containers.append(bottom_frame)
+        
+        elif layout_type == 'ew':  # East-West (2 sections: left, right)
+            paned = ttk.PanedWindow(parent, orient=tk.HORIZONTAL)
+            paned.pack(fill=tk.BOTH, expand=True)
+            
+            left_container = ttk.LabelFrame(paned, text="Section", padding=5)
+            paned.add(left_container, weight=1)
+            containers.append(left_container)
+            
+            right_container = ttk.LabelFrame(paned, text="Section", padding=5)
+            paned.add(right_container, weight=1)
+            containers.append(right_container)
+            
+            parent.after_idle(lambda: self._position_paned_sash(paned))
+        
+        elif layout_type == 'sd':  # South Divided (3 sections: 1 top, 2 bottom)
+            # Use vertical paned window for top/bottom division
+            main_paned = ttk.PanedWindow(parent, orient=tk.VERTICAL)
+            main_paned.pack(fill=tk.BOTH, expand=True)
+            
+            # Top section
+            top_frame = ttk.LabelFrame(main_paned, text="Section", padding=5)
+            main_paned.add(top_frame, weight=1)
+            containers.append(top_frame)
+            
+            # Bottom side with horizontal paned window for 2 side-by-side containers
+            bottom_paned = ttk.PanedWindow(main_paned, orient=tk.HORIZONTAL)
+            main_paned.add(bottom_paned, weight=1)
+            for j in range(2):
+                container = ttk.LabelFrame(bottom_paned, text=f"Section", padding=5)
+                bottom_paned.add(container, weight=1)
+                containers.append(container)
+        
+        elif layout_type == 'nd':  # North Divided (3 sections: 2 top, 1 bottom)
+            # Use vertical paned window for top/bottom division
+            main_paned = ttk.PanedWindow(parent, orient=tk.VERTICAL)
+            main_paned.pack(fill=tk.BOTH, expand=True)
+            
+            # Top side with horizontal paned window for 2 side-by-side containers
+            top_paned = ttk.PanedWindow(main_paned, orient=tk.HORIZONTAL)
+            main_paned.add(top_paned, weight=1)
+            for j in range(2):
+                container = ttk.LabelFrame(top_paned, text=f"Section", padding=5)
+                top_paned.add(container, weight=1)
+                containers.append(container)
+            
+            # Bottom section
+            bottom_frame = ttk.LabelFrame(main_paned, text="Section", padding=5)
+            main_paned.add(bottom_frame, weight=1)
+            containers.append(bottom_frame)
+        
+        elif layout_type == 'ed':  # East Divided (3 sections: 1 left, 2 right stacked)
+            paned = ttk.PanedWindow(parent, orient=tk.HORIZONTAL)
+            paned.pack(fill=tk.BOTH, expand=True)
+            
+            # Left side (single container)
+            left_container = ttk.LabelFrame(paned, text="Section", padding=5)
+            paned.add(left_container, weight=1)
+            containers.append(left_container)
+            
+            # Right side with vertical paned window for 2 stacked containers
+            right_paned = ttk.PanedWindow(paned, orient=tk.VERTICAL)
+            paned.add(right_paned, weight=1)
+            
+            for i in range(2):
+                container = ttk.LabelFrame(right_paned, text=f"Section", padding=5)
+                right_paned.add(container, weight=1)
+                containers.append(container)
+            
+            parent.after_idle(lambda: self._position_paned_sash(paned))
+        
+        elif layout_type == 'wd':  # West Divided (3 sections: 2 left stacked, 1 right)
+            paned = ttk.PanedWindow(parent, orient=tk.HORIZONTAL)
+            paned.pack(fill=tk.BOTH, expand=True)
+            
+            # Left side with vertical paned window for 2 stacked containers
+            left_paned = ttk.PanedWindow(paned, orient=tk.VERTICAL)
+            paned.add(left_paned, weight=1)
+            
+            for i in range(2):
+                container = ttk.LabelFrame(left_paned, text=f"Section", padding=5)
+                left_paned.add(container, weight=1)
+                containers.append(container)
+            
+            # Right side (single container)
+            right_container = ttk.LabelFrame(paned, text="Section", padding=5)
+            paned.add(right_container, weight=1)
+            containers.append(right_container)
+            
+            parent.after_idle(lambda: self._position_paned_sash(paned))
+        
+        else:
+            # Default to full page for unknown layouts
+            container = ttk.LabelFrame(parent, text="Section", padding=5)
+            container.pack(fill=tk.BOTH, expand=True)
+            containers.append(container)
+        
+        return containers
+    
+    def _render_section(self, parent: ttk.Frame, instance_alias: str, section_data: dict, section_idx: int = 0):
+        """Render a section (either graph or table)."""
+        section_type = section_data.get('type')
+        
+        if section_type == 'graph':
+            self._render_graph_section(parent, instance_alias, section_data, section_idx)
+        elif section_type == 'table':
+            self._render_table_section(parent, instance_alias, section_data, section_idx)
+        else:
+            # Empty section
+            label = ttk.Label(parent, text="[Empty]", foreground="gray")
+            label.pack(expand=True)
+    
+    def _render_graph_section(self, parent: ttk.Frame, instance_alias: str, section_data: dict, section_idx: int = 0):
+        """Render a graph using matplotlib with optional navigation controls."""
+        try:
+            config = section_data.get('config', {})
+            graph_type = config.get('graph_type', 'scatter')
+            
+            # Get execution results
+            if instance_alias not in self.analysis_data:
+                label = ttk.Label(parent, text="No data available - Please run 'Run Model' or 'Run to here' first", foreground="gray")
+                label.pack(expand=True)
+                return
+            
+            execution_results = self.analysis_data[instance_alias].get('execution_results', {})
+            if not execution_results:
+                label = ttk.Label(parent, text="No data available - Please run 'Run Model' or 'Run to here' first", foreground="gray")
+                label.pack(expand=True)
+                return
+            
+            if execution_results.get('status') != 'success':
+                label = ttk.Label(parent, text="Execution failed - Check model_log.txt for details", foreground="red")
+                label.pack(expand=True)
+                return
+            
+            outputs = execution_results.get('outputs', {})
+            
+            # Initialize slice state if needed
+            # Use section_idx as the key to ensure each graph (even in same section) has unique state
+            section_id = section_idx
+            if instance_alias not in self.analysis_data:
+                self.analysis_data[instance_alias] = {}
+            if 'graph_slices' not in self.analysis_data[instance_alias]:
+                self.analysis_data[instance_alias]['graph_slices'] = {}
+            
+            # Get current slices for this section
+            slice_state = self.analysis_data[instance_alias]['graph_slices']
+            if section_id not in slice_state:
+                # Initialize slices from config or defaults
+                slice_info = config.get('slice_info', {})
+                nav_axes = config.get('navigation_axes', [])
+                
+                # Build indices dict for multi-dimensional navigation
+                # Support both old format (list of strings) and new format (list of dicts)
+                indices = {}
+                for nav_item in nav_axes:
+                    if isinstance(nav_item, dict):
+                        # New format: {"name": "Samples", "dimension": 0}
+                        dim = nav_item.get('dimension', 0)
+                        indices[dim] = slice_info.get(f'index_{dim}', 0)
+                    else:
+                        # Old format: just a string, assume dimension index matches position
+                        dim = len(indices)  # Position in the list
+                        indices[dim] = slice_info.get(f'index_{dim}', 0)
+                
+                slice_state[section_id] = {
+                    'indices': indices,  # Now a dict: {dimension: index}
+                    'navigation_axes': nav_axes,
+                    'outputs': outputs,
+                    'config': config,
+                    'graph_type': graph_type
+                }
+            
+            current_slice = slice_state[section_id]
+            
+            # Initialize axis indices and dimension slicing indices with defaults BEFORE extraction
+            nav_axes = config.get('navigation_axes', [])
+            
+            if 'axis_indices' not in current_slice:
+                current_slice['axis_indices'] = {}
+                # Only initialize axis_indices for axes that appear in navigation_axes with "axis" field
+                for nav_item in nav_axes:
+                    if isinstance(nav_item, dict):
+                        target_axis = nav_item.get('axis')
+                        if target_axis:  # Only for axis selection items
+                            axis_indices_dict = {}
+                            dimension = nav_item.get('dimension', 0)
+                            # Get default from nav_item or axis config
+                            default_val = nav_item.get('default', None)
+                            if default_val is None:
+                                default_val = config.get(f'{target_axis}_axis', {}).get('default_column', 0)
+                            axis_indices_dict[dimension] = default_val
+                            current_slice['axis_indices'][target_axis] = axis_indices_dict
+            
+            if 'indices' not in current_slice:
+                current_slice['indices'] = {}
+                # Set default indices based on navigation_axes config for non-axis slicing
+                for nav_item in nav_axes:
+                    if isinstance(nav_item, dict):
+                        dimension = nav_item.get('dimension', 0)
+                        target_axis = nav_item.get('axis')
+                        # Only use default for non-axis items (slicing mode)
+                        if not target_axis:
+                            default_idx = nav_item.get('default', 0)
+                            current_slice['indices'][dimension] = default_idx
+            
+            # Extract axis data with current slices
+            # For each axis, merge its per-axis indices with the shared indices
+            base_indices = current_slice.get('indices', {})
+            axis_indices = current_slice.get('axis_indices', {})
+            
+            # Merge axis indices for x
+            x_indices = base_indices.copy()
+            if 'x' in axis_indices:
+                x_indices.update(axis_indices['x'])
+            x_data = self._extract_axis_data(outputs, config.get('x_axis', {}), x_indices)
+            
+            # Merge axis indices for y
+            y_indices = base_indices.copy()
+            if 'y' in axis_indices:
+                y_indices.update(axis_indices['y'])
+            y_data = self._extract_axis_data(outputs, config.get('y_axis', {}), y_indices)
+            
+            # Merge axis indices for z
+            z_indices = base_indices.copy()
+            if 'z' in axis_indices:
+                z_indices.update(axis_indices['z'])
+            z_data = self._extract_axis_data(outputs, config.get('z_axis', {}), z_indices)
+            
+            # Create container with navigation controls on top
+            control_frame = ttk.Frame(parent)
+            control_frame.pack(fill=tk.X, padx=5, pady=5)
+            
+            # Add navigation controls if axes are navigable
+            nav_axes = config.get('navigation_axes', [])
+            if nav_axes:
+                self._create_navigation_controls(control_frame, instance_alias, section_id, 
+                                                 outputs, config, current_slice)
+            
+            # Create matplotlib figure
+            fig = Figure(figsize=(6, 4), dpi=100)
+            ax = fig.add_subplot(111)
+            
+            # Render based on graph type
+            if graph_type == 'scatter':
+                if x_data is not None and y_data is not None:
+                    ax.scatter(x_data, y_data, alpha=0.6)
+                    ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+                    ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+                    
+            elif graph_type == 'line':
+                if x_data is not None and y_data is not None:
+                    marker = config.get('marker')  # None if absent, defaults to line only
+                    # Handle 2D arrays (matrices) by plotting each row as a separate line
+                    if isinstance(y_data, np.ndarray) and y_data.ndim == 2:
+                        for i, row in enumerate(y_data):
+                            ax.plot(row, marker=marker, label=f'Row {i+1}')
+                        # Show legend if enabled (default: False)
+                        if config.get('show_legend', False):
+                            ax.legend()
+                    else:
+                        ax.plot(x_data, y_data, marker=marker)
+                    ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+                    ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+                    
+            elif graph_type == 'bar':
+                if x_data is not None and y_data is not None:
+                    if isinstance(x_data, np.ndarray) and x_data.ndim == 1:
+                        ax.bar(range(len(y_data)), y_data)
+                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Value'))
+                    else:
+                        ax.bar(x_data, y_data)
+                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+                        
+            elif graph_type == 'histogram':
+                if y_data is not None:
+                    ax.hist(y_data, bins=30, alpha=0.7, edgecolor='black')
+                    ax.set_xlabel(config.get('x_axis', {}).get('label', 'Value'))
+                    ax.set_ylabel('Frequency')
+                    
+            elif graph_type == 'heatmap':
+                if y_data is not None and y_data.ndim >= 2:
+                    im = ax.imshow(y_data, cmap='viridis', aspect='auto')
+                    fig.colorbar(im, ax=ax)
+                    ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+                    ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+                    
+            elif graph_type == 'contour':
+                if x_data is not None and y_data is not None and z_data is not None:
+                    if isinstance(x_data, np.ndarray) and isinstance(y_data, np.ndarray):
+                        X, Y = np.meshgrid(x_data, y_data)
+                        ax.contour(X, Y, z_data, levels=10)
+                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+            
+            # Add title
+            title = config.get('title', 'Graph')
+            ax.set_title(title)
+            
+            # Apply tight layout with padding inside the plot area
+            fig.tight_layout()
+            # Add internal margins around the plot
+            fig.subplots_adjust(left=0.15, right=0.95, top=0.90, bottom=0.15)
+            
+            # Embed figure in tkinter within a managed frame
+            # Create a frame to hold the canvas for better geometry management
+            canvas_frame = ttk.Frame(parent)
+            canvas_frame.pack(fill=tk.BOTH, expand=True)
+            
+            canvas = FigureCanvasTkAgg(fig, master=canvas_frame)
+            canvas_widget = canvas.get_tk_widget()
+            canvas_widget.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+            canvas.draw()
+            
+            # Store canvas reference for updates
+            if 'graph_canvases' not in self.analysis_data[instance_alias]:
+                self.analysis_data[instance_alias]['graph_canvases'] = {}
+            self.analysis_data[instance_alias]['graph_canvases'][section_id] = (canvas, canvas_frame)
+            
+        except Exception as e:
+            label = ttk.Label(parent, text=f"Error rendering graph: {str(e)}", foreground="red")
+            label.pack(expand=True)
+    
+    def _extract_axis_data(self, outputs: dict, axis_config: dict, indices: dict = None) -> Optional[np.ndarray]:
+        """Extract data for an axis from execution outputs.
+        
+        Args:
+            outputs: Dictionary of output data
+            axis_config: Config for this axis (including data_source)
+            indices: Dictionary mapping dimension to index for slicing (e.g., {0: 5, 1: 2})
+                    or an integer for backward compatibility
+        """
+        if not axis_config:
+            return None
+        
+        data_source = axis_config.get('data_source')
+        if not data_source:
+            return None
+            
+        # Check if data source exists
+        if data_source not in outputs:
+            return None
+            
+        data = outputs[data_source]
+        
+        # Handle None values
+        if data is None:
+            return None
+        
+        # Handle list data (like axis_n_info which is a list of arrays)
+        if isinstance(data, list) and len(data) > 0:
+            # For axis_n_info, take the first axis (for 1D spectral data)
+            if data_source == 'axis_n_info':
+                data = data[0] if isinstance(data[0], np.ndarray) else np.array(data[0])
+        
+        # Convert to numpy array if needed
+        if not isinstance(data, np.ndarray):
+            try:
+                data = np.array(data)
+            except (ValueError, TypeError):
+                return None
+        
+        # Handle indexing for multi-dimensional data
+        # First apply config index if specified
+        config_index = axis_config.get('index')
+        if config_index is not None:
+            if isinstance(config_index, int) and data.ndim > 1:
+                try:
+                    data = data[config_index] if config_index < data.shape[0] else data
+                except (IndexError, TypeError):
+                    pass
+            elif isinstance(config_index, list) and data.ndim > 1:
+                try:
+                    for idx in config_index:
+                        data = data[idx]
+                except (IndexError, TypeError):
+                    pass
+        # Don't apply dimension-based slicing to axis_n_info - it's axis labels, not data to be sliced
+        elif data_source != 'axis_n_info' and isinstance(indices, dict):
+            # Apply multi-dimensional slicing using indices dict
+            # Sort by dimension to apply slices in order
+            for dim in sorted(indices.keys()):
+                idx = indices[dim]
+                try:
+                    if idx < data.shape[0]:
+                        data = data[idx]
+                except (IndexError, TypeError):
+                    pass
+        elif isinstance(indices, int) and data.ndim > 1:
+            # Backward compatibility: indices is a single integer
+            try:
+                if indices >= 0 and indices < data.shape[0]:
+                    data = data[indices]
+            except (IndexError, TypeError):
+                pass
+        
+        return data
+    
+    def _render_table_section(self, parent: ttk.Frame, instance_alias: str, section_data: dict, section_idx: int = 0):
+        """Render a comprehensive data table with sorting, filtering, and formatting."""
+        try:
+            config = section_data.get('config', {})
+            
+            # Get execution results
+            if instance_alias not in self.analysis_data:
+                label = ttk.Label(parent, text="No data available - Please run 'Run Model' or 'Run to here' first", foreground="gray")
+                label.pack(expand=True)
+                return
+            
+            execution_results = self.analysis_data[instance_alias].get('execution_results', {})
+            if not execution_results:
+                label = ttk.Label(parent, text="No data available - Please run 'Run Model' or 'Run to here' first", foreground="gray")
+                label.pack(expand=True)
+                return
+            
+            if execution_results.get('status') != 'success':
+                label = ttk.Label(parent, text="Execution failed - Check model_log.txt for details", foreground="red")
+                label.pack(expand=True)
+                return
+            
+            outputs = execution_results.get('outputs', {})
+            data_source = config.get('data_source')
+            
+            if not data_source or data_source not in outputs:
+                label = ttk.Label(parent, text="Data source not found", foreground="red")
+                label.pack(expand=True)
+                return
+            
+            data = outputs[data_source]
+            
+            # Convert to numpy array if needed
+            if not isinstance(data, np.ndarray):
+                data = np.array(data)
+            
+            # Get table configuration
+            title = config.get('title', f'Table: {data_source}')
+            decimal_places = config.get('decimal_places', 4)
+            max_rows = config.get('max_rows', 50)
+            max_cols = config.get('max_cols', 15)
+            col_headers = config.get('column_headers', None)
+            row_headers = config.get('row_headers', None)
+            
+            # Initialize table state if needed
+            section_id = id(section_data)
+            if 'table_state' not in self.analysis_data[instance_alias]:
+                self.analysis_data[instance_alias]['table_state'] = {}
+            
+            table_state = self.analysis_data[instance_alias]['table_state']
+            if section_id not in table_state:
+                table_state[section_id] = {
+                    'sort_column': None,
+                    'sort_order': 'ascending',
+                    'filter_text': '',
+                    'current_slice': 0
+                }
+            
+            # Create main container
+            main_frame = ttk.Frame(parent)
+            main_frame.pack(fill=tk.BOTH, expand=True)
+            
+            # Add title
+            title_label = ttk.Label(main_frame, text=title, font=('Arial', 10, 'bold'))
+            title_label.pack(anchor='w', pady=(0, 5))
+            
+            # Add info bar (shape, stats)
+            info_text = f"Shape: {data.shape} | Type: {data.dtype} | Min: {np.min(data):.4f} | Max: {np.max(data):.4f} | Mean: {np.mean(data):.4f}"
+            info_label = ttk.Label(main_frame, text=info_text, font=('Arial', 8), foreground='gray')
+            info_label.pack(anchor='w', pady=(0, 5))
+            
+            # Create toolbar for table controls
+            toolbar = ttk.Frame(main_frame)
+            toolbar.pack(fill=tk.X, pady=(0, 5))
+            
+            # Export button
+            export_btn = ttk.Button(toolbar, text='Export to CSV', 
+                                   command=lambda: self._export_table_to_csv(data, title))
+            export_btn.pack(side=tk.LEFT, padx=2)
+            
+            # Statistics button
+            stats_btn = ttk.Button(toolbar, text='Show Statistics',
+                                  command=lambda: self._show_table_statistics(data, title))
+            stats_btn.pack(side=tk.LEFT, padx=2)
+            
+            # Refresh button
+            refresh_btn = ttk.Button(toolbar, text='Refresh',
+                                    command=lambda: self._refresh_table(instance_alias, section_id))
+            refresh_btn.pack(side=tk.LEFT, padx=2)
+            
+            # Create table view
+            self._create_table_view(main_frame, data, config, decimal_places, 
+                                   max_rows, max_cols, col_headers, row_headers)
+            
+        except Exception as e:
+            import traceback
+            label = ttk.Label(parent, text=f"Error rendering table: {str(e)}", foreground="red")
+            label.pack(expand=True)
+            traceback.print_exc()
+    
+    def _create_table_view(self, parent: ttk.Frame, data: np.ndarray, config: dict,
+                          decimal_places: int, max_rows: int, max_cols: int,
+                          col_headers: list = None, row_headers: list = None) -> None:
+        """Create the actual table view with scrollbars and formatting."""
+        try:
+            # Prepare data for display
+            if data.ndim == 1:
+                display_data = data.reshape(-1, 1)
+            elif data.ndim == 2:
+                display_data = data
+            else:
+                # Flatten higher dimensional arrays
+                display_data = data.reshape(data.shape[0], -1)
+            
+            num_rows, num_cols = display_data.shape
+            num_rows = min(num_rows, max_rows)
+            num_cols = min(num_cols, max_cols)
+            
+            # Create frame for table
+            tree_frame = ttk.Frame(parent)
+            tree_frame.pack(fill=tk.BOTH, expand=True)
+            
+            # Create columns
+            if col_headers is not None:
+                columns = tuple(str(h) for h in col_headers[:num_cols])
+            else:
+                columns = tuple(f'Col{i}' for i in range(num_cols))
+            
+            # Create treeview
+            tree = ttk.Treeview(tree_frame, columns=columns)
+            
+            # Configure row header column
+            tree.column('#0', width=50, anchor='center')
+            tree.heading('#0', text='Row')
+            
+            # Configure data columns
+            col_width = max(50, min(150, 800 // num_cols))
+            for col_idx, col_name in enumerate(columns):
+                tree.column(col_name, width=col_width, anchor='center')
+                tree.heading(col_name, text=col_name)
+            
+            # Insert data rows
+            for row_idx in range(num_rows):
+                if row_headers is not None and row_idx < len(row_headers):
+                    row_label = str(row_headers[row_idx])
+                else:
+                    row_label = str(row_idx)
+                
+                # Format values
+                values = []
+                for col_idx in range(num_cols):
+                    val = display_data[row_idx, col_idx]
+                    if isinstance(val, float):
+                        formatted = f"{val:.{decimal_places}f}"
+                    else:
+                        formatted = str(val)
+                    values.append(formatted)
+                
+                tree.insert('', 'end', text=row_label, values=tuple(values))
+            
+            # Add scrollbars
+            scroll_x = ttk.Scrollbar(tree_frame, orient='horizontal', command=tree.xview)
+            scroll_y = ttk.Scrollbar(tree_frame, orient='vertical', command=tree.yview)
+            tree.configure(xscroll=scroll_x.set, yscroll=scroll_y.set)
+            
+            tree.grid(row=0, column=0, sticky='nsew')
+            scroll_x.grid(row=1, column=0, sticky='ew')
+            scroll_y.grid(row=0, column=1, sticky='ns')
+            
+            tree_frame.grid_rowconfigure(0, weight=1)
+            tree_frame.grid_columnconfigure(0, weight=1)
+            
+        except Exception as e:
+            label = ttk.Label(parent, text=f"Error creating table view: {str(e)}", foreground="red")
+            label.pack(expand=True)
+    
+    def _export_table_to_csv(self, data: np.ndarray, title: str = 'export') -> None:
+        """Export table data to CSV file."""
+        try:
+            import csv
+            from datetime import datetime
+            
+            filename = f"{title.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            
+            with open(filename, 'w', newline='') as f:
+                writer = csv.writer(f)
+                
+                # Write title
+                writer.writerow([title])
+                writer.writerow([])
+                
+                # Write data
+                if data.ndim == 1:
+                    writer.writerow(['Index', 'Value'])
+                    for i, val in enumerate(data):
+                        writer.writerow([i, val])
+                elif data.ndim == 2:
+                    writer.writerow([f'Col{i}' for i in range(data.shape[1])])
+                    for row in data:
+                        writer.writerow(row)
+                else:
+                    writer.writerow([f'Flattened: {data.shape}'])
+                    flat_data = data.reshape(data.shape[0], -1)
+                    for row in flat_data:
+                        writer.writerow(row)
+            
+            print(f"✅ Table exported to: {filename}")
+        except Exception as e:
+            print(f"❌ Error exporting table: {str(e)}")
+    
+    def _show_table_statistics(self, data: np.ndarray, title: str = 'Statistics') -> None:
+        """Display statistical summary of table data."""
+        try:
+            stats_window = tk.Toplevel(self.root)
+            stats_window.title(f"{title} - Statistics")
+            stats_window.geometry("500x400")
+            
+            # Calculate statistics
+            stats_text = f"""
+DATA STATISTICS
+===============
+
+Shape: {data.shape}
+Data Type: {data.dtype}
+
+Basic Statistics:
+  Min: {np.min(data):.6f}
+  Max: {np.max(data):.6f}
+  Mean: {np.mean(data):.6f}
+  Median: {np.median(data):.6f}
+  Std Dev: {np.std(data):.6f}
+  Variance: {np.var(data):.6f}
+
+Quartiles:
+  Q1 (25%): {np.percentile(data, 25):.6f}
+  Q2 (50%): {np.percentile(data, 50):.6f}
+  Q3 (75%): {np.percentile(data, 75):.6f}
+
+Count:
+  Total Elements: {data.size}
+  Non-zero Elements: {np.count_nonzero(data)}
+  Zero Elements: {np.sum(data == 0)}
+  NaN Elements: {np.isnan(data).sum()}
+  Inf Elements: {np.isinf(data).sum()}
+            """
+            
+            text_widget = tk.Text(stats_window, wrap=tk.WORD, padx=10, pady=10)
+            text_widget.pack(fill=tk.BOTH, expand=True)
+            text_widget.insert('1.0', stats_text)
+            text_widget.config(state=tk.DISABLED)
+            
+        except Exception as e:
+            print(f"Error showing statistics: {str(e)}")
+    
+    def _refresh_table(self, instance_alias: str, section_id: int) -> None:
+        """Refresh the table display."""
+        try:
+            if instance_alias in self.analysis_data:
+                if 'table_state' in self.analysis_data[instance_alias]:
+                    table_state = self.analysis_data[instance_alias]['table_state']
+                    if section_id in table_state:
+                        # Reset table state
+                        table_state[section_id] = {
+                            'sort_column': None,
+                            'sort_order': 'ascending',
+                            'filter_text': '',
+                            'current_slice': 0
+                        }
+            print(f"✅ Table refreshed")
+        except Exception as e:
+            print(f"Error refreshing table: {str(e)}")
+    
+    def _create_navigation_controls(self, parent_frame: ttk.Frame, instance_alias: str, 
+                                   section_id: int, outputs: dict, config: dict, 
+                                   slice_state: dict) -> None:
+        """Create navigation controls (arrow buttons) for multi-dimensional data slicing and axis selection.
+        
+        Supports both slicing and axis selection:
+        Slicing: "navigation_axes": [{"name": "Samples", "dimension": 0}]
+        Axis selection: "navigation_axes": [{"name": "X-Axis", "dimension": 1, "axis": "x"}, {"name": "Y-Axis", "dimension": 1, "axis": "y"}]
+        """
+        try:
+            nav_axes = config.get('navigation_axes', [])
+            if not nav_axes:
+                return
+            
+            # Get the data to determine shape/bounds - use the first available data source
+            axis_config = config.get('y_axis', {}) or config.get('x_axis', {})
+            data_source = axis_config.get('data_source')
+            
+            if not data_source or data_source not in outputs:
+                return
+            
+            data = outputs[data_source]
+            if not isinstance(data, np.ndarray):
+                try:
+                    data = np.array(data)
+                except (ValueError, TypeError):
+                    return
+            
+            # Initialize axis indices if not present (each axis has its own indices dict)
+            if 'axis_indices' not in slice_state:
+                slice_state['axis_indices'] = {}
+                # Only initialize axis_indices for axes that appear in navigation_axes with "axis" field
+                for nav_item in nav_axes:
+                    if isinstance(nav_item, dict):
+                        target_axis = nav_item.get('axis')
+                        if target_axis:  # Only for axis selection items
+                            axis_indices_dict = {}
+                            dimension = nav_item.get('dimension', 0)
+                            # Get default from nav_item or axis config
+                            default_val = nav_item.get('default', None)
+                            if default_val is None:
+                                default_val = config.get(f'{target_axis}_axis', {}).get('default_column', 0)
+                            # Validate default is in bounds
+                            max_idx = data.shape[dimension] - 1 if dimension < len(data.shape) else 0
+                            if default_val < 0 or default_val > max_idx:
+                                default_val = 0
+                            axis_indices_dict[dimension] = default_val
+                            slice_state['axis_indices'][target_axis] = axis_indices_dict
+            
+            # Initialize shared dimension slicing indices if not present
+            if 'indices' not in slice_state:
+                slice_state['indices'] = {}
+                # Set default indices based on navigation_axes config for non-axis slicing
+                for nav_item in nav_axes:
+                    if isinstance(nav_item, dict):
+                        dimension = nav_item.get('dimension', 0)
+                        target_axis = nav_item.get('axis')
+                        # Only use default for non-axis items (slicing mode)
+                        if not target_axis:
+                            default_idx = nav_item.get('default', 0)
+                            # Validate default is in bounds
+                            max_idx = data.shape[dimension] - 1 if dimension < len(data.shape) else 0
+                            if default_idx < 0 or default_idx > max_idx:
+                                default_idx = 0
+                            slice_state['indices'][dimension] = default_idx
+            
+            # For each navigable axis, create controls
+            for nav_item in nav_axes:
+                # Parse navigation item - support both old and new formats
+                if isinstance(nav_item, dict):
+                    # New format: {"name": "Samples", "dimension": 0} or {"name": "X-Axis", "dimension": 1, "axis": "x"}
+                    axis_name = nav_item.get('name', 'Axis')
+                    dimension = nav_item.get('dimension', 0)
+                    target_axis = nav_item.get('axis')  # 'x', 'y', 'z', or None for slicing
+                else:
+                    # Old format: just a string "Samples"
+                    axis_name = nav_item
+                    dimension = nav_axes.index(nav_item)  # Position in the list
+                    target_axis = None
+                
+                axis_frame = ttk.Frame(parent_frame)
+                axis_frame.pack(fill=tk.X, padx=5, pady=2)
+                
+                # Get max index from data shape
+                max_index = data.shape[dimension] - 1 if dimension < len(data.shape) else 0
+                
+                # Determine current index based on whether this is axis selection or slicing
+                if target_axis:
+                    # Axis selection mode - get from that axis's indices dict
+                    axis_indices_dict = slice_state.get('axis_indices', {}).get(target_axis, {})
+                    # Get default from nav_item or axis config
+                    default_col = nav_item.get('default', None)
+                    if default_col is None:
+                        default_col = config.get(f'{target_axis}_axis', {}).get('default_column',
+                                                 0 if target_axis == 'x' else 1 if target_axis == 'y' else 2)
+                    # Validate default is in bounds
+                    if default_col < 0 or default_col > max_index:
+                        default_col = 0
+                    # Use stored value for this dimension, or default
+                    current_index = axis_indices_dict.get(dimension, default_col)
+                else:
+                    # Slicing mode - get from shared indices dict
+                    indices = slice_state.get('indices', {})
+                    # Get default from nav_item
+                    default_idx = nav_item.get('default', 0) if isinstance(nav_item, dict) else 0
+                    # Validate default is in bounds
+                    if default_idx < 0 or default_idx > max_index:
+                        default_idx = 0
+                    # Use stored value for this dimension, or default
+                    current_index = indices.get(dimension, default_idx)
+                
+                # Axis label - display 1-based for user (current_index + 1 and max_index + 1)
+                label_text = f"{axis_name}: {current_index + 1}/{max_index + 1}"
+                label = ttk.Label(axis_frame, text=label_text, width=15)
+                label.pack(side=tk.LEFT, padx=5)
+                
+                # Previous button
+                prev_btn = ttk.Button(
+                    axis_frame,
+                    text="<",
+                    width=3,
+                    command=lambda an=axis_name, d=dimension, ax=target_axis: self._on_navigate_slice(
+                        instance_alias, section_id, -1, d, an, max_index, ax
+                    )
+                )
+                prev_btn.pack(side=tk.LEFT, padx=2)
+                
+                # Index display - show 1-based for user
+                index_label = ttk.Label(axis_frame, text=str(current_index + 1), width=3)
+                index_label.pack(side=tk.LEFT, padx=2)
+                
+                # Next button
+                next_btn = ttk.Button(
+                    axis_frame,
+                    text=">",
+                    width=3,
+                    command=lambda an=axis_name, d=dimension, ax=target_axis: self._on_navigate_slice(
+                        instance_alias, section_id, 1, d, an, max_index, ax
+                    )
+                )
+                next_btn.pack(side=tk.LEFT, padx=2)
+                
+                # Store reference to index label for updates
+                if not hasattr(self, '_nav_labels'):
+                    self._nav_labels = {}
+                # Use a tuple that includes axis name and target_axis to ensure uniqueness
+                label_key = (instance_alias, section_id, dimension, axis_name, target_axis)
+                self._nav_labels[label_key] = (index_label, label)
+        
+        except Exception as e:
+            print(f"Error creating navigation controls: {str(e)}")
+    
+    def _on_navigate_slice(self, instance_alias: str, section_id: int, direction: int,
+                          dimension: int, axis_name: str, max_index: int, target_axis: str = None) -> None:
+        """Handle navigation button click to change slice index or axis selection.
+        
+        Args:
+            target_axis: 'x', 'y', 'z' for axis selection, or None for dimension slicing
+        """
+        try:
+            if instance_alias not in self.analysis_data:
+                return
+            
+            if 'graph_slices' not in self.analysis_data[instance_alias]:
+                return
+            
+            slice_state = self.analysis_data[instance_alias]['graph_slices']
+            if section_id not in slice_state:
+                return
+            
+            current_state = slice_state[section_id]
+            
+            # Handle axis selection or dimension slicing
+            if target_axis:
+                # Axis selection mode - get from that axis's indices dict
+                axis_indices_dict = current_state.get('axis_indices', {}).get(target_axis, {})
+                current_index = axis_indices_dict.get(dimension, 0)
+            else:
+                # Dimension slicing mode
+                indices = current_state.get('indices', {})
+                current_index = indices.get(dimension, 0)
+            
+            # Calculate new index
+            new_index = current_index + direction
+            
+            # Bounds checking
+            if new_index < 0:
+                new_index = 0
+            elif new_index > max_index:
+                new_index = max_index
+            
+            # Update state only if index changed
+            if new_index != current_index:
+                if target_axis:
+                    # Update axis's indices dict for this dimension
+                    if 'axis_indices' not in current_state:
+                        current_state['axis_indices'] = {}
+                    if target_axis not in current_state['axis_indices']:
+                        current_state['axis_indices'][target_axis] = {}
+                    current_state['axis_indices'][target_axis][dimension] = new_index
+                else:
+                    # Update dimension slicing indices dict
+                    indices = current_state.get('indices', {})
+                    indices[dimension] = new_index
+                    current_state['indices'] = indices
+                
+                # Update label display if it exists - show 1-based for user
+                if hasattr(self, '_nav_labels'):
+                    # Use the same unique key as when storing
+                    key = (instance_alias, section_id, dimension, axis_name, target_axis)
+                    if key in self._nav_labels:
+                        index_label, full_label = self._nav_labels[key]
+                        index_label.config(text=str(new_index + 1))
+                        full_label.config(text=f"{axis_name}: {new_index + 1}/{max_index + 1}")
+                
+                # Refresh the graph with new slice/axis
+                self._update_graph_with_slice(instance_alias, section_id, dimension)
+        
+        except Exception as e:
+            print(f"Error navigating slice: {str(e)}")
+    
+    def _update_graph_with_slice(self, instance_alias: str, section_id: int, 
+                                dimension: int) -> None:
+        """Update the graph display with the new slice index for a specific dimension."""
+        try:
+            if instance_alias not in self.analysis_data:
+                return
+            
+            if 'graph_slices' not in self.analysis_data[instance_alias]:
+                return
+            
+            slice_state = self.analysis_data[instance_alias]['graph_slices']
+            if section_id not in slice_state:
+                return
+            
+            current_state = slice_state[section_id]
+            outputs = current_state.get('outputs', {})
+            config = current_state.get('config', {})
+            graph_type = current_state.get('graph_type', 'scatter')
+            
+            # Extract data for each axis, merging per-axis indices with shared indices
+            base_indices = current_state.get('indices', {})
+            axis_indices = current_state.get('axis_indices', {})
+            
+            # Merge axis indices for x
+            x_indices = base_indices.copy()
+            if 'x' in axis_indices:
+                x_indices.update(axis_indices['x'])
+            x_data = self._extract_axis_data(outputs, config.get('x_axis', {}), x_indices)
+            
+            # Merge axis indices for y
+            y_indices = base_indices.copy()
+            if 'y' in axis_indices:
+                y_indices.update(axis_indices['y'])
+            y_data = self._extract_axis_data(outputs, config.get('y_axis', {}), y_indices)
+            
+            # Merge axis indices for z
+            z_indices = base_indices.copy()
+            if 'z' in axis_indices:
+                z_indices.update(axis_indices['z'])
+            z_data = self._extract_axis_data(outputs, config.get('z_axis', {}), z_indices)
+            
+            # Create new matplotlib figure
+            fig = Figure(figsize=(6, 4), dpi=100)
+            ax = fig.add_subplot(111)
+            
+            # Render based on graph type
+            if graph_type == 'scatter':
+                if x_data is not None and y_data is not None:
+                    ax.scatter(x_data, y_data, alpha=0.6)
+                    ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+                    ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+                    
+            elif graph_type == 'line':
+                if x_data is not None and y_data is not None:
+                    marker = config.get('marker')  # None if absent, defaults to line only
+                    # Handle 2D arrays (matrices) by plotting each row as a separate line
+                    if isinstance(y_data, np.ndarray) and y_data.ndim == 2:
+                        for i, row in enumerate(y_data):
+                            ax.plot(row, marker=marker, label=f'Row {i+1}')
+                        # Show legend if enabled (default: False)
+                        if config.get('show_legend', False):
+                            ax.legend()
+                    else:
+                        ax.plot(x_data, y_data, marker=marker)
+                    ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+                    ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+                    
+            elif graph_type == 'bar':
+                if x_data is not None and y_data is not None:
+                    if isinstance(x_data, np.ndarray) and x_data.ndim == 1:
+                        ax.bar(range(len(y_data)), y_data)
+                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Value'))
+                    else:
+                        ax.bar(x_data, y_data)
+                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+                        
+            elif graph_type == 'histogram':
+                if y_data is not None:
+                    ax.hist(y_data, bins=30, alpha=0.7, edgecolor='black')
+                    ax.set_xlabel(config.get('x_axis', {}).get('label', 'Value'))
+                    ax.set_ylabel('Frequency')
+                    
+            elif graph_type == 'heatmap':
+                if y_data is not None and y_data.ndim >= 2:
+                    im = ax.imshow(y_data, cmap='viridis', aspect='auto')
+                    fig.colorbar(im, ax=ax)
+                    ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+                    ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+                    
+            elif graph_type == 'contour':
+                if x_data is not None and y_data is not None and z_data is not None:
+                    if isinstance(x_data, np.ndarray) and isinstance(y_data, np.ndarray):
+                        X, Y = np.meshgrid(x_data, y_data)
+                        ax.contour(X, Y, z_data, levels=10)
+                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+            
+            # Add title with slice info
+            title = config.get('title', 'Graph')
+            slice_info = config.get('slice_info', {})
+            if slice_info.get('description'):
+                title += f" - {slice_info.get('description')} {list(indices.values())}"
+            ax.set_title(title)
+            
+            # Apply tight layout with padding inside the plot area
+            fig.tight_layout()
+            # Add internal margins around the plot
+            fig.subplots_adjust(left=0.15, right=0.95, top=0.90, bottom=0.15)
+            
+            # Get the stored canvas reference and update it
+            if 'graph_canvases' in self.analysis_data[instance_alias]:
+                canvas_data = self.analysis_data[instance_alias]['graph_canvases'].get(section_id)
+                if canvas_data:
+                    old_canvas, canvas_frame = canvas_data
+                    # Destroy old canvas widget
+                    old_canvas.get_tk_widget().destroy()
+                    
+                    # Create and embed new canvas with updated figure
+                    new_canvas = FigureCanvasTkAgg(fig, master=canvas_frame)
+                    canvas_widget = new_canvas.get_tk_widget()
+                    canvas_widget.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+                    new_canvas.draw()
+                    
+                    # Update stored reference
+                    self.analysis_data[instance_alias]['graph_canvases'][section_id] = (new_canvas, canvas_frame)
+            
+        except Exception as e:
+            print(f"Error updating graph with slice: {str(e)}")
+            
+            # Create new matplotlib figure
+            fig = Figure(figsize=(6, 4), dpi=100)
+            ax = fig.add_subplot(111)
+            
+            # Render based on graph type
+            if graph_type == 'scatter':
+                if x_data is not None and y_data is not None:
+                    ax.scatter(x_data, y_data, alpha=0.6)
+                    ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+                    ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+                    
+            elif graph_type == 'line':
+                if x_data is not None and y_data is not None:
+                    marker = config.get('marker')  # None if absent, defaults to line only
+                    # Handle 2D arrays (matrices) by plotting each row as a separate line
+                    if isinstance(y_data, np.ndarray) and y_data.ndim == 2:
+                        for i, row in enumerate(y_data):
+                            ax.plot(row, marker=marker, label=f'Row {i+1}')
+                        # Show legend if enabled (default: False)
+                        if config.get('show_legend', False):
+                            ax.legend()
+                    else:
+                        ax.plot(x_data, y_data, marker=marker)
+                    ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+                    ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+                    
+            elif graph_type == 'bar':
+                if x_data is not None and y_data is not None:
+                    if isinstance(x_data, np.ndarray) and x_data.ndim == 1:
+                        ax.bar(range(len(y_data)), y_data)
+                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Value'))
+                    else:
+                        ax.bar(x_data, y_data)
+                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+                        
+            elif graph_type == 'histogram':
+                if y_data is not None:
+                    ax.hist(y_data, bins=30, alpha=0.7, edgecolor='black')
+                    ax.set_xlabel(config.get('x_axis', {}).get('label', 'Value'))
+                    ax.set_ylabel('Frequency')
+                    
+            elif graph_type == 'heatmap':
+                if y_data is not None and y_data.ndim >= 2:
+                    im = ax.imshow(y_data, cmap='viridis', aspect='auto')
+                    fig.colorbar(im, ax=ax)
+                    ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+                    ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+                    
+            elif graph_type == 'contour':
+                if x_data is not None and y_data is not None and z_data is not None:
+                    if isinstance(x_data, np.ndarray) and isinstance(y_data, np.ndarray):
+                        X, Y = np.meshgrid(x_data, y_data)
+                        ax.contour(X, Y, z_data, levels=10)
+                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+            
+            # Add title with slice info
+            title = config.get('title', 'Graph')
+            slice_info = config.get('slice_info', {})
+            if slice_info.get('description'):
+                title += f" - {slice_info.get('description')} [{current_index}]"
+            ax.set_title(title)
+            
+            # Apply tight layout with padding inside the plot area
+            fig.tight_layout()
+            # Add internal margins around the plot
+            fig.subplots_adjust(left=0.15, right=0.95, top=0.90, bottom=0.15)
+            
+            # Get the stored canvas reference and update it
+            if 'graph_canvases' in self.analysis_data[instance_alias]:
+                canvas_data = self.analysis_data[instance_alias]['graph_canvases'].get(section_id)
+                if canvas_data:
+                    old_canvas, canvas_frame = canvas_data
+                    # Destroy old canvas widget
+                    old_canvas.get_tk_widget().destroy()
+                    
+                    # Create and embed new canvas with updated figure
+                    new_canvas = FigureCanvasTkAgg(fig, master=canvas_frame)
+                    canvas_widget = new_canvas.get_tk_widget()
+                    canvas_widget.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+                    new_canvas.draw()
+                    
+                    # Update stored reference
+                    self.analysis_data[instance_alias]['graph_canvases'][section_id] = (new_canvas, canvas_frame)
+            
+        except Exception as e:
+            print(f"Error updating graph with slice: {str(e)}")
+    
+    def _show_remove_section_dialog(self, instance_alias: str):
+        """Show dialog to remove a section."""
+        if instance_alias not in self.analysis_data:
+            return
+        
+        current_page = self.analysis_data[instance_alias]['current_page']
+        pages = self.analysis_data[instance_alias].get('pages', [])
+        
+        if current_page >= len(pages):
+            return
+        
+        page_data = pages[current_page]
+        sections = page_data.get('sections', [])
+        
+        if not sections:
+            messagebox.showinfo("Info", "No sections to remove")
+            return
+        
+        # Create dialog
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Remove Section")
+        dialog.geometry("300x200")
+        dialog.resizable(False, False)
+        
+        label = ttk.Label(dialog, text="Select section to remove:", font=("Arial", 10))
+        label.pack(padx=10, pady=10)
+        
+        # Section list
+        listbox = tk.Listbox(dialog, height=8)
+        listbox.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+        
+        for idx, section in enumerate(sections):
+            section_type = section.get('type', 'Empty')
+            listbox.insert(tk.END, f"Section {idx + 1} ({section_type})")
+        
+        # Buttons
+        button_frame = ttk.Frame(dialog)
+        button_frame.pack(fill=tk.X, padx=10, pady=10)
+        
+        def remove_selected():
+            selection = listbox.curselection()
+            if selection:
+                idx = selection[0]
+                sections[idx]['type'] = None  # Clear the section
+                dialog.destroy()
+                self._show_analysis_tab()
+        
+        ok_btn = ttk.Button(button_frame, text="Remove", command=remove_selected)
+        ok_btn.pack(side=tk.LEFT, padx=5)
+        
+        cancel_btn = ttk.Button(button_frame, text="Cancel", command=dialog.destroy)
+        cancel_btn.pack(side=tk.LEFT, padx=5)
+    
+    def _show_add_page_dialog(self, instance_alias: str):
+        """Show dialog to add a new page."""
+        if instance_alias not in self.analysis_data:
+            return
+        
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Add Page")
+        dialog.geometry("350x250")
+        dialog.resizable(False, False)
+        
+        # Page title
+        title_label = ttk.Label(dialog, text="Page Title:", font=("Arial", 10))
+        title_label.pack(padx=10, pady=(10, 5))
+        
+        title_entry = ttk.Entry(dialog, width=30)
+        title_entry.pack(padx=10, pady=(0, 10))
+        title_entry.insert(0, f"Page {len(self.analysis_data[instance_alias]['pages']) + 1}")
+        
+        # Layout selection
+        layout_label = ttk.Label(dialog, text="Layout:", font=("Arial", 10))
+        layout_label.pack(padx=10, pady=(10, 5))
+        
+        layouts = [
+            ('fp', 'Full Page (1 section)'),
+            ('ns', 'North-South (2 sections)'),
+            ('ew', 'East-West (2 sections)'),
+            ('fd', 'Four Divisions (4 sections)'),
+            ('sd', 'South Division (3 sections)'),
+        ]
+        
+        layout_var = tk.StringVar(value='fp')
+        for layout_code, layout_desc in layouts:
+            radio = ttk.Radiobutton(dialog, text=layout_desc, variable=layout_var, value=layout_code)
+            radio.pack(anchor=tk.W, padx=30, pady=2)
+        
+        # Buttons
+        button_frame = ttk.Frame(dialog)
+        button_frame.pack(fill=tk.X, padx=10, pady=10)
+        
+        def add_page():
+            title = title_entry.get() or "New Page"
+            layout = layout_var.get()
+            
+            # Create sections based on layout
+            num_sections = {
+                'fp': 1, 'ns': 2, 'ew': 2, 'fd': 4, 'sd': 3, 'nd': 3, 'ed': 3, 'wd': 4
+            }.get(layout, 1)
+            
+            new_page = {
+                'title': title,
+                'layout': layout,
+                'sections': [{'type': None} for _ in range(num_sections)]
+            }
+            
+            self.analysis_data[instance_alias]['pages'].append(new_page)
+            self.analysis_data[instance_alias]['current_page'] = len(self.analysis_data[instance_alias]['pages']) - 1
+            
+            dialog.destroy()
+            self._show_analysis_tab()
+        
+        ok_btn = ttk.Button(button_frame, text="Add", command=add_page)
+        ok_btn.pack(side=tk.LEFT, padx=5)
+        
+        cancel_btn = ttk.Button(button_frame, text="Cancel", command=dialog.destroy)
+        cancel_btn.pack(side=tk.LEFT, padx=5)
+    
+    def _remove_current_page(self, instance_alias: str):
+        """Remove the current page."""
+        if instance_alias not in self.analysis_data:
+            return
+        
+        pages = self.analysis_data[instance_alias]['pages']
+        current_page = self.analysis_data[instance_alias]['current_page']
+        
+        if len(pages) <= 1:
+            messagebox.showwarning("Warning", "Cannot remove the last page")
+            return
+        
+        if messagebox.askyesno("Confirm", f"Remove page '{pages[current_page]['title']}'?"):
+            pages.pop(current_page)
+            self.analysis_data[instance_alias]['current_page'] = min(current_page, len(pages) - 1)
+            self._show_analysis_tab()
+    
+    def _run_analysis_to_function(self, instance_alias: str):
+        """Run the model up to the specified function and populate analysis data."""
+        try:
+            # Find the index of this function in the methodology
+            if instance_alias not in self.methodology_list:
+                messagebox.showerror("Error", "Function not found in methodology")
+                return
+            
+            stop_at_idx = self.methodology_list.index(instance_alias)
+            
+            # Generate model.json first
+            if not self._generate_model_json():
+                messagebox.showerror("Error", "Failed to generate model.json")
+                return
+            
+            # Run analyst in partial mode
+            from analyst import analyst_main
+            
+            # Capture output
+            old_stdout = sys.stdout
+            old_stderr = sys.stderr
+            output_buffer = StringIO()
+            sys.stdout = output_buffer
+            sys.stderr = output_buffer
+            
+            try:
+                # Run analyst with stop_at_function_idx parameter
+                outputs = analyst_main(stop_at_function_idx=stop_at_idx)
+                
+            finally:
+                sys.stdout = old_stdout
+                sys.stderr = old_stderr
+            
+            # Store execution results in analysis data
+            # Extract base function alias to handle both "load_data" and "load_data#2" cases
+            base_alias = instance_alias.split('#')[0] if '#' in instance_alias else instance_alias
+            
+            # Load analysis configuration from function's gui_config if available
+            analysis_config = None
+            if base_alias in self.gui_configs:
+                analysis_config = self.gui_configs[base_alias].get('analysis')
+            
+            if instance_alias not in self.analysis_data:
+                if analysis_config:
+                    # Use analysis config from function's JSON
+                    self.analysis_data[instance_alias] = {
+                        'pages': analysis_config.get('pages', [{'title': 'Default', 'layout': 'fp', 'sections': [{'type': None}]}]),
+                        'current_page': analysis_config.get('current_page', 0)
+                    }
+                else:
+                    # Fallback to default structure
+                    self.analysis_data[instance_alias] = {
+                        'pages': [{'title': 'Default', 'layout': 'fp', 'sections': [{'type': None}]}],
+                        'current_page': 0
+                    }
+            else:
+                # Update pages if config exists but keep execution results
+                if analysis_config and 'execution_results' in self.analysis_data[instance_alias]:
+                    # Preserve execution results but update page structure from config
+                    self.analysis_data[instance_alias]['pages'] = analysis_config.get('pages', self.analysis_data[instance_alias]['pages'])
+                    self.analysis_data[instance_alias]['current_page'] = analysis_config.get('current_page', self.analysis_data[instance_alias]['current_page'])
+            
+            # Store the outputs from the execution
+            self.analysis_data[instance_alias]['execution_results'] = {
+                'status': 'success',
+                'timestamp': datetime.now().isoformat(),
+                'execution_time': 0,  # TODO: measure execution time
+                'outputs': outputs.get(instance_alias, {}) if outputs else {}
+            }
+            
+            # Show success message
+            messagebox.showinfo("Success", f"Model executed up to {instance_alias}\n\nResults loaded for analysis.")
+            
+            # Refresh the analysis tab to show results
+            self._show_analysis_tab()
+            
+        except Exception as e:
+            error_msg = f"Failed to run model: {str(e)}"
+            messagebox.showerror("Error", error_msg)
+            print(f"ERROR: {error_msg}")
+            import traceback
+            traceback.print_exc()
+
     
     def _show_report_tab(self):
         """Show Report tab (placeholder)."""
@@ -1552,6 +3125,10 @@ class ChemometricsGUI:
                 "routing": routing_array
             }
             
+            # Add analysis config if present
+            if hasattr(self, 'analysis_data') and self.analysis_data:
+                model_data['analysis'] = self._serialize_analysis_data()
+            
             # Write model.json
             model_path = Path(__file__).parent / "model.json"
             with open(model_path, "w", encoding='utf-8') as f:
@@ -1561,6 +3138,51 @@ class ChemometricsGUI:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to generate model.json: {e}")
             return False
+    
+    def _serialize_analysis_data(self) -> dict:
+        """Serialize analysis_data structure for saving to model.json."""
+        try:
+            analysis_config = {}
+            
+            for instance_alias, analysis_info in self.analysis_data.items():
+                # Only serialize persistent data, skip execution results
+                analysis_config[instance_alias] = {
+                    'pages': analysis_info.get('pages', []),
+                    'current_page': analysis_info.get('current_page', 0)
+                }
+                
+                # For each page, preserve section configurations
+                for page in analysis_config[instance_alias].get('pages', []):
+                    for section in page.get('sections', []):
+                        # Only keep config data, remove runtime references
+                        if 'config' in section:
+                            # Deep copy config to avoid reference issues
+                            section['config'] = section['config'].copy()
+            
+            return analysis_config
+        except Exception as e:
+            print(f"Warning: Failed to serialize analysis data: {e}")
+            return {}
+    
+    def _deserialize_analysis_data(self, analysis_config: dict):
+        """Deserialize analysis_data from model.json."""
+        try:
+            if not analysis_config:
+                return
+            
+            # Initialize analysis_data if needed
+            if not hasattr(self, 'analysis_data'):
+                self.analysis_data = {}
+            
+            for instance_alias, config_data in analysis_config.items():
+                self.analysis_data[instance_alias] = {
+                    'pages': config_data.get('pages', []),
+                    'current_page': config_data.get('current_page', 0),
+                    'execution_results': {}  # Will be populated on demand
+                }
+        except Exception as e:
+            print(f"Warning: Failed to deserialize analysis data: {e}")
+            self.analysis_data = {}
     
     def _clean_tempfiles(self):
         """Clean the tempfiles directory."""
@@ -2045,6 +3667,11 @@ class ChemometricsGUI:
                 }
             except ValueError:
                 print(f"Warning: Could not find routing source or destination: {src_alias} -> {dst_alias}")
+        
+        # Load analysis configuration if present
+        analysis_config = model_data.get('analysis', {})
+        if analysis_config:
+            self._deserialize_analysis_data(analysis_config)
     
     def _refresh_gui_from_config(self):
         """Refresh GUI to reflect loaded configuration."""
@@ -2097,7 +3724,8 @@ class ChemometricsGUI:
                 sys.stdout = output_buffer
                 sys.stderr = output_buffer
                 
-                analyst_main()
+                # Run the full model and capture outputs
+                outputs = analyst_main()
                 
             finally:
                 sys.stdout = old_stdout
@@ -2108,8 +3736,47 @@ class ChemometricsGUI:
             with open(log_path, "w") as f:
                 f.write(output_buffer.getvalue())
             
+            # Load results into analysis_data for each function
+            if not hasattr(self, 'analysis_data'):
+                self.analysis_data = {}
+            
+            for idx, instance_alias in enumerate(self.methodology_list):
+                base_alias = self.function_base_aliases[idx]
+                
+                # Load analysis configuration from function's gui_config if available
+                analysis_config = None
+                if base_alias in self.gui_configs:
+                    analysis_config = self.gui_configs[base_alias].get('analysis')
+                
+                # Initialize analysis data structure if needed
+                if instance_alias not in self.analysis_data:
+                    if analysis_config:
+                        # Use analysis config from function's JSON
+                        self.analysis_data[instance_alias] = {
+                            'pages': analysis_config.get('pages', [{'title': 'Default', 'layout': 'fp', 'sections': [{'type': None}]}]),
+                            'current_page': analysis_config.get('current_page', 0)
+                        }
+                    else:
+                        # Fallback to default structure
+                        self.analysis_data[instance_alias] = {
+                            'pages': [{'title': 'Default', 'layout': 'fp', 'sections': [{'type': None}]}],
+                            'current_page': 0
+                        }
+                
+                # Store the outputs from the execution
+                self.analysis_data[instance_alias]['execution_results'] = {
+                    'status': 'success',
+                    'timestamp': datetime.now().isoformat(),
+                    'execution_time': 0,
+                    'outputs': outputs.get(instance_alias, {}) if outputs else {}
+                }
+            
             messagebox.showinfo(self.language_manager.translate("ui.dialogs.success", "Success"), 
-                              self.language_manager.translate("ui.messages.model_executed", "Model executed successfully. Output saved to model_log.txt"))
+                              self.language_manager.translate("ui.messages.model_executed", "Model executed successfully. Results loaded for analysis."))
+            
+            # Switch to analysis tab to show results
+            if self.selected_function_idx is not None:
+                self._show_analysis_tab()
             
         except Exception as e:
             error_log_path = Path(__file__).parent / "model_log.txt"
