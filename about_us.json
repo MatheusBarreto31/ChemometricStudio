@@ -5,13 +5,13 @@
   "en": {
     "title": "About Chemometric Studio",
     "version_text": "GEAQA - Group of Advanced Studies in Analytical Chemistry\nJoão Pessoa - Brazil",
-    "description": "Chemometric Studio is a comprehensive software suite for chemometric analysis and multivariate data processing. It provides tools for data import, preprocessing, calibration, and validation of spectroscopic data using advanced statistical methods.\n\nThe tool is designed for chemists, analytical laboratories, and researchers working with spectroscopic and multivariate data.\n\nFor more information or support, please visit the documentation.",
+    "description": "Chemometric Studio is a comprehensive software suite for chemometric analysis and multivariate data processing. It provides tools for data import, preprocessing, calibration, and validation of multivariate chemical data using advanced statistical methods.\n\nThe tool is designed for chemists, analytical laboratories, and researchers working with spectroscopic and multivariate data.\n\nFor more information or support, please visit the documentation.",
     "website_label": "Visit our GitHub repository"
   },
   "pt-br": {
     "title": "Sobre Chemometric Studio",
     "version_text": "GEAQA - Grupo de Estudos Avançados em Química Analítica\nJoão Pessoa, Brasil",
-    "description": "Chemometric Studio é uma suíte abrangente de software para análise quimiométrica e processamento de dados multivariados. Fornece ferramentas para importação de dados, pré-processamento, calibração e validação de dados espectroscópicos usando métodos estatísticos avançados.\n\nA ferramenta foi projetada para químicos, laboratórios analíticos e pesquisadores que trabalham com dados espectroscópicos e multivariados.\n\nPara mais informações ou suporte, consulte a documentação.",
+    "description": "Chemometric Studio é uma suíte abrangente de software para análise quimiométrica e processamento de dados multivariados. Fornece ferramentas para importação de dados, pré-processamento, calibração e validação de dados químicos multivariados usando métodos estatísticos avançados.\n\nA ferramenta foi projetada para químicos, laboratórios analíticos e pesquisadores que trabalham com dados espectroscópicos e multivariados.\n\nPara mais informações ou suporte, consulte a documentação.",
     "website_label": "Visite nosso repositório GitHub"
   }
 }

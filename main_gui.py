@@ -1146,7 +1146,7 @@ class ChemometricsGUI:
                 # Create button with smaller height for better layout
                 button = tk.Button(
                     self.routing_canvas,
-                    text=f"◄ {param_name}",
+                    text=f"{param_name} ►",
                     font=("Arial", 9, "bold"),
                     width=16,
                     height=1,
@@ -1191,7 +1191,7 @@ class ChemometricsGUI:
                 # Create button with smaller height for better layout
                 button = tk.Button(
                     self.routing_canvas,
-                    text=f"{param_name} ►",
+                    text=f"► {param_name}",
                     font=("Arial", 9, "bold"),
                     width=16,
                     height=1,
