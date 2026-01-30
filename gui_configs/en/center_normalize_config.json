@@ -17,10 +17,12 @@
   "short_description": "Centers and/or normalizes spectroscopic data",
   "long_description": "Preprocessing step that centers and/or normalizes data to improve model performance. Essential preparation for multivariate calibration methods.\n\nCentering:\n- Subtracts column means from all samples\n- Removes baseline/offset effects\n- Centers data around zero\n- Recommended for most applications\n\nNormalization (Autoscaling):\n- Divides by column standard deviations\n- Scales each variable to unit variance\n- Gives equal weight to all variables\n- Important when variables have different scales/units\n- Particularly useful for spectroscopic data\n\nCombination Effects:\n\nCentering Only:\n- Removes offset differences between samples\n- Preserves variance structure\n- Good when variables are on same scale\n\nNormalization Only (rare):\n- Without centering, less common\n- Useful for specific data distributions\n\nBoth Centering + Normalization (recommended):\n- Standard preprocessing for chemometrics\n- Equal treatment of all variables\n- Improves model stability and interpretability\n- Required for most PLS and PCR applications\n\nMultiway Data:\n- Works with 2D, 3D, and higher dimensional data\n- Direction parameter specifies axis\n- Default direction (-1) applies along last axis\n\nNote: Validation data will be transformed using calibration statistics during modeling.",
   "setup": {
+    "categories": ["Processing Options", "Data Inputs", "Multiway Configuration"],
     "layout": [
       {
         "name": "center",
         "label": "Center Data",
+        "category": "Processing Options",
         "widget": "checkbutton",
         "default": true,
         "required": true,
@@ -30,6 +32,7 @@
       {
         "name": "normalize",
         "label": "Normalize Data",
+        "category": "Processing Options",
         "widget": "checkbutton",
         "default": false,
         "required": true,
@@ -39,6 +42,7 @@
       {
         "name": "direction",
         "label": "Direction (for multiway, -1=default)",
+        "category": "Multiway Configuration",
         "widget": "entry",
         "type": "int",
         "default": "-1",
@@ -49,6 +53,7 @@
       {
         "name": "X_cal",
         "label": "X Calibration Data",
+        "category": "Data Inputs",
         "widget": "data_input",
         "required": true,
         "input_type": "routed",
@@ -58,6 +63,7 @@
       {
         "name": "X_val",
         "label": "X Validation Data",
+        "category": "Data Inputs",
         "widget": "data_input",
         "required": false,
         "input_type": "routed",
@@ -67,6 +73,7 @@
       {
         "name": "nway_flag",
         "label": "Data Dimensionality",
+        "category": "Multiway Configuration",
         "widget": "entry",
         "type": "int",
         "default": "1",

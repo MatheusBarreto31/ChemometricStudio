@@ -27,10 +27,12 @@
   "short_description": "Creates or loads validation data for model assessment",
   "long_description": "Validation data is essential for unbiased assessment of model performance. This step creates validation sets by splitting calibration data or loads external validation data.\n\nCreating Validation Sets from Calibration Data:\n\n1. Random Splitting\n   - Randomly selects samples for validation\n   - Fastest and simplest approach\n   - Suitable for large, diverse datasets\n   - May not ensure representative distribution\n\n2. Kennard-Stone Algorithm\n   - Selects samples that span the data space\n   - Ensures good representation of data range\n   - Better for small or clustered datasets\n   - More computationally expensive\n\n3. File-Based Selection\n   - Uses external index file for sample selection\n   - Allows custom selection criteria\n   - Requires pre-prepared selection file\n\nCalibration Proportion:\n- Typical value: 0.7 (70% calibration, 30% validation)\n- Larger sets: can use 0.8-0.9 for better calibration\n- Smaller datasets: may use 0.6-0.7 for more validation samples\n\nLoading External Validation Sets:\n- Load completely independent validation data\n- Useful for temporal or spatial validation\n- Provides most realistic performance estimate\n- Separate X and Y files required\n- Optional sample labels file\n\nBest Practices:\n- Validation set should be independent of calibration\n- Ensure both sets cover similar data ranges\n- Document how validation sets were selected\n- Use appropriate set size for statistical reliability\n\nUsage:\n- Create internal set OR load external set\n- Both can be used simultaneously for comprehensive validation\n- Settings applied automatically during model building.",
   "setup": {
+    "categories": ["Validation Mode", "Creation Settings", "External Data Files", "Data Inputs", "Data Format"],
     "layout": [
       {
         "name": "validation_mode",
         "label": "Validation Set Mode",
+        "category": "Validation Mode",
         "widget": "combobox",
         "values": ["Load", "Create"],
         "value_aliases": ["Load External Validation Data", "Create from Calibration Data"],
@@ -42,6 +44,7 @@
       {
         "name": "creationMethod",
         "label": "Creation Method",
+        "category": "Creation Settings",
         "widget": "combobox",
         "values": ["random", "kennard_stone", "file"],
         "value_aliases": ["Random Splitting", "Kennard-Stone Algorithm", "File-Based Selection"],
@@ -54,6 +57,7 @@
       {
         "name": "calProportion",
         "label": "Calibration Proportion (0-1)",
+        "category": "Creation Settings",
         "widget": "entry",
         "type": "float",
         "default": "0.7",
@@ -65,6 +69,7 @@
       {
         "name": "selection_file",
         "label": "Selection File (if using 'file' method)",
+        "category": "Creation Settings",
         "widget": "file_selector",
         "multiple": false,
         "required": false,
@@ -76,6 +81,7 @@
       {
         "name": "X_val_path",
         "label": "X Validation Data File",
+        "category": "External Data Files",
         "widget": "file_selector",
         "multiple": false,
         "required": false,
@@ -87,6 +93,7 @@
       {
         "name": "Y_val_path",
         "label": "Y Validation Data File",
+        "category": "External Data Files",
         "widget": "file_selector",
         "multiple": false,
         "required": false,
@@ -98,6 +105,7 @@
       {
         "name": "val_labels_path",
         "label": "Validation Sample Labels File (optional)",
+        "category": "External Data Files",
         "widget": "file_selector",
         "multiple": false,
         "required": false,
@@ -109,6 +117,7 @@
       {
         "name": "X_cal",
         "label": "X Calibration Data",
+        "category": "Data Inputs",
         "widget": "data_input",
         "required": true,
         "input_type": "routed",
@@ -118,6 +127,7 @@
       {
         "name": "Y_cal",
         "label": "Y Calibration Data",
+        "category": "Data Inputs",
         "widget": "data_input",
         "required": false,
         "input_type": "routed",
@@ -127,6 +137,7 @@
       {
         "name": "smp_cal",
         "label": "Calibration Sample Labels",
+        "category": "Data Inputs",
         "widget": "data_input",
         "required": false,
         "input_type": "routed",
@@ -136,6 +147,7 @@
       {
         "name": "d_specs_separator",
         "label": "Data Separator",
+        "category": "Data Format",
         "widget": "combobox",
         "values": ["comma", "tabs", "spaces"],
         "default": "tabs",
@@ -147,6 +159,7 @@
       {
         "name": "d_specs_headlines",
         "label": "Number of Header Rows",
+        "category": "Data Format",
         "widget": "entry",
         "type": "int",
         "default": "0",
@@ -158,6 +171,7 @@
       {
         "name": "d_specs_type",
         "label": "Data Type",
+        "category": "Data Format",
         "widget": "combobox",
         "values": ["x_vector", "xy_vector", "xyz_vector", "x_matrix", "xy_matrix"],
         "default": "x_matrix",
@@ -169,6 +183,7 @@
       {
         "name": "d_specs_dimensions",
         "label": "Data Dimensions",
+        "category": "Data Format",
         "widget": "entry",
         "default": "",
         "required": false,
@@ -179,6 +194,7 @@
       {
         "name": "nway_flag",
         "label": "Data Dimensionality",
+        "category": "Data Format",
         "widget": "entry",
         "type": "int",
         "default": "1",
@@ -190,6 +206,7 @@
       {
         "name": "reshape_order",
         "label": "Reshape Order (Multiway)",
+        "category": "Data Format",
         "widget": "combobox",
         "values": ["F", "C"],
         "value_aliases": ["Fortran/MATLAB", "C/NumPy"],

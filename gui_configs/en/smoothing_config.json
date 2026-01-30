@@ -18,10 +18,12 @@
   "short_description": "Reduces noise while preserving spectral features",
   "long_description": "Smoothing reduces high-frequency noise in spectroscopic data while preserving important spectral features and peak information.\n\nSmoothing Methods:\n\n1. Moving Average\n   - Simple averaging over a sliding window\n   - Fast and straightforward\n   - Can flatten sharp peaks if window is too large\n   - Good for initial noise reduction\n\n2. Savitzky-Golay Filter\n   - Polynomial-preserving filter\n   - Better at maintaining spectral peak shapes\n   - Uses polynomial fitting within sliding window\n   - More computationally intensive than moving average\n   - Requires polynomial order < window size\n\nParameters:\n\nWindow Size:\n- Larger windows = stronger smoothing but more feature loss\n- Typical values: 5-15 points\n- Must be odd number\n- Should be smaller than spectral feature width\n\nPolynomial Order (Savitzky-Golay only):\n- Order 2: parabolic fitting (recommended)\n- Order 3-5: higher-degree polynomials\n- Lower orders preserve features better\n\nMultiway Data:\n- Specify dimensionality for 3D+ data\n- Direction parameter controls axis of smoothing\n\nTip: For best results, apply baseline correction before smoothing.",
   "setup": {
+    "categories": ["Method Parameters", "Data Inputs", "Multiway Configuration"],
     "layout": [
       {
         "name": "method",
         "label": "Smoothing Method",
+        "category": "Method Parameters",
         "widget": "combobox",
         "values": ["moving_average", "savitzky_golay"],
         "value_aliases": ["Moving Average", "Savitzky-Golay Filter"],
@@ -33,6 +35,7 @@
       {
         "name": "direction",
         "label": "Direction (for multiway)",
+        "category": "Multiway Configuration",
         "widget": "entry",
         "type": "int",
         "default": "-1",
@@ -43,6 +46,7 @@
       {
         "name": "window_size",
         "label": "Window Size",
+        "category": "Method Parameters",
         "widget": "entry",
         "type": "int",
         "default": "5",
@@ -53,6 +57,7 @@
       {
         "name": "polyorder",
         "label": "Polynomial Order (Savitzky-Golay)",
+        "category": "Method Parameters",
         "widget": "entry",
         "type": "int",
         "default": "2",
@@ -64,6 +69,7 @@
       {
         "name": "X_cal",
         "label": "X Calibration Data",
+        "category": "Data Inputs",
         "widget": "data_input",
         "required": true,
         "input_type": "routed",
@@ -73,6 +79,7 @@
       {
         "name": "X_val",
         "label": "X Validation Data",
+        "category": "Data Inputs",
         "widget": "data_input",
         "required": false,
         "input_type": "routed",
@@ -82,6 +89,7 @@
       {
         "name": "nway_flag",
         "label": "Data Dimensionality",
+        "category": "Multiway Configuration",
         "widget": "entry",
         "type": "int",
         "default": "1",

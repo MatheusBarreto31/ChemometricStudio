@@ -19,10 +19,12 @@
   "short_description": "Builds univariate polynomial calibration models",
   "long_description": "Constructs univariate polynomial regression models for each spectroscopic variable independently. A simple, interpretable approach useful for exploratory analysis and comparison with multivariate methods.\n\nHow It Works:\n- One model is built per variable (wavelength/frequency)\n- Each variable is treated independently\n- Response is predicted as a polynomial function of that variable\n- Model coefficients determined via least-squares fitting\n\nPolynomial Degree:\n\n1. Linear (degree=1)\n   - Simple straight-line relationship\n   - y = a0 + a1*x\n   - Fastest, most interpretable\n   - May underfit complex relationships\n\n2. Quadratic (degree=2)\n   - Parabolic relationship\n   - y = a0 + a1*x + a2*x^2\n   - Good balance of simplicity and flexibility\n   - Recommended starting point\n\n3. Higher Orders (degree=3+)\n   - Cubic and higher polynomials\n   - More flexible curve fitting\n   - Risk of overfitting with small datasets\n   - Use with caution\n\nIntercept Parameter:\n- Check to include constant term (a0)\n- Usually recommended for calibration\n- Uncheck only in special cases (known zero-response at zero-signal)\n\nAdvantages:\n- Very interpretable results\n- Can identify wavelengths with strongest signals\n- Fast to compute\n- Good for initial exploratory analysis\n- Works with small datasets\n\nLimitations:\n- Ignores correlations between variables\n- May miss multivariate patterns\n- Typically lower performance than PLS/PCR\n- High-order polynomials can overfit\n\nUse When:\n- Exploring data structure\n- Comparing against multivariate methods\n- Need maximum interpretability\n- Dataset is small\n- Variables have strong individual signals\n\nTip: Compare univariate results with multivariate (PLS/PCR) methods for comprehensive analysis.",
   "setup": {
+    "categories": ["Model Parameters", "Data Inputs"],
     "layout": [
       {
         "name": "degree",
         "label": "Polynomial Degree",
+        "category": "Model Parameters",
         "widget": "entry",
         "type": "int",
         "default": "1",
@@ -33,6 +35,7 @@
       {
         "name": "intercept",
         "label": "Include Intercept",
+        "category": "Model Parameters",
         "widget": "checkbutton",
         "default": true,
         "required": true,
@@ -42,6 +45,7 @@
       {
         "name": "X_cal",
         "label": "X Calibration Data",
+        "category": "Data Inputs",
         "widget": "data_input",
         "required": true,
         "input_type": "routed",
@@ -51,6 +55,7 @@
       {
         "name": "Y_cal",
         "label": "Y Calibration Data",
+        "category": "Data Inputs",
         "widget": "data_input",
         "required": true,
         "input_type": "routed",
@@ -60,6 +65,7 @@
       {
         "name": "X_val",
         "label": "X Validation Data",
+        "category": "Data Inputs",
         "widget": "data_input",
         "required": false,
         "input_type": "routed",
@@ -69,6 +75,7 @@
       {
         "name": "Y_val",
         "label": "Y Validation Data",
+        "category": "Data Inputs",
         "widget": "data_input",
         "required": false,
         "input_type": "routed",

@@ -24,10 +24,12 @@
   "short_description": "Loads spectroscopic and response data from files",
   "long_description": "This step loads your calibration dataset including spectroscopic data (X), response variables (Y), and optional metadata.\n\nInput Data Components:\n- X Data (Spectra): Main spectroscopic measurements (required)\n- Y Data (Responses): Target/dependent variables (optional)\n- Variable Labels: Wavelengths, frequencies, or variable names (optional)\n- Sample Labels: Sample IDs or identifiers (optional)\n\nData Formats:\n- CSV files with configurable delimiters (comma, tabs, spaces)\n- Matrix format: samples (rows) x variables (columns)\n- Vector formats for specialized data types\n- Support for multiple files via file selection\n\nConfiguration:\n- Specify delimiter type for your files\n- Set number of header rows to skip\n- Choose appropriate data type structure\n- Transpose if needed (samples in columns instead of rows)\n\nThe loaded data becomes input for preprocessing and validation steps.",
   "setup": {
+    "categories": ["File Format", "Data Configuration", "Data Files", "Optional Data", "Multiway Configuration"],
     "layout": [
       {
         "name": "d_specs_separator",
         "label": "Data Separator",
+        "category": "File Format",
         "widget": "combobox",
         "values": ["comma", "tabs", "spaces"],
         "value_aliases": ["Comma-separated", "Tab-separated", "Space-separated"],
@@ -39,6 +41,7 @@
       {
         "name": "d_specs_headlines",
         "label": "Number of Header Rows",
+        "category": "File Format",
         "widget": "entry",
         "type": "int",
         "default": "0",
@@ -49,6 +52,7 @@
       {
         "name": "d_specs_type",
         "label": "Data Type",
+        "category": "File Format",
         "widget": "combobox",
         "values": ["x_vector", "xy_vector", "xyz_vector", "x_matrix", "xy_matrix"],
         "value_aliases": ["X Vector", "X-Y Vector", "X-Y-Z Vector", "X Matrix", "X-Y Matrix"],
@@ -60,6 +64,7 @@
       {
         "name": "d_specs_dimensions",
         "label": "Data Dimensions",
+        "category": "Multiway Configuration",
         "widget": "entry",
         "default": "",
         "required": false,
@@ -69,6 +74,7 @@
       {
         "name": "data_path",
         "label": "X Data Files",
+        "category": "Data Files",
         "widget": "file_selector",
         "multiple": true,
         "required": true,
@@ -79,6 +85,7 @@
       {
         "name": "nway_flag",
         "label": "Data Order",
+        "category": "Data Configuration",
         "widget": "entry",
         "type": "int",
         "default": "1",
@@ -89,6 +96,7 @@
       {
         "name": "y_path",
         "label": "Y Data File (Optional)",
+        "category": "Data Files",
         "widget": "file_selector",
         "multiple": false,
         "required": false,
@@ -99,6 +107,7 @@
       {
         "name": "var_path",
         "label": "Variable Labels (Optional)",
+        "category": "Optional Data",
         "widget": "file_selector",
         "multiple": false,
         "required": false,
@@ -109,6 +118,7 @@
       {
         "name": "smp_path",
         "label": "Sample Labels (Optional)",
+        "category": "Optional Data",
         "widget": "file_selector",
         "multiple": false,
         "required": false,
@@ -119,6 +129,7 @@
       {
         "name": "transpose",
         "label": "Transpose Data",
+        "category": "Data Configuration",
         "widget": "checkbutton",
         "default": false,
         "required": false,
@@ -128,6 +139,7 @@
       {
         "name": "reshape_order",
         "label": "Reshape Order (Multiway)",
+        "category": "Multiway Configuration",
         "widget": "combobox",
         "values": ["F", "C"],
         "value_aliases": ["Fortran/MATLAB", "C/NumPy"],
@@ -139,6 +151,7 @@
       {
         "name": "axis_info",
         "label": "Axis Information (Optional)",
+        "category": "Optional Data",
         "widget": "entry",
         "default": "",
         "required": false,

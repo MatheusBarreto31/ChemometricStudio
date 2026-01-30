@@ -17,10 +17,12 @@
   "short_description": "Removes baseline offset from spectra",
   "long_description": "Baseline correction removes systematic offsets and trends from spectroscopic measurements, improving data quality and model performance.\n\nAvailable Methods:\n\n1. Multiplicative Scatter Correction (MSC)\n   - Corrects for multiplicative and additive scatter effects\n   - Works well for diffuse reflectance and transmittance data\n   - Preserves spectral shape while normalizing intensity\n\n2. Standard Normal Variate (SNV)\n   - Center-scales each spectrum independently\n   - Removes baseline drift and multiplicative effects\n   - Suitable for reflectance spectroscopy\n\n3. Moving Average\n   - Simple smoothing-based baseline correction\n   - Uses configurable window size\n   - Good for noisy data with local baselines\n\nMultiway Data Support:\n- For 2D data: standard processing (nway_flag=1)\n- For 3D+ data: specify dimensionality and direction\n- Direction parameter controls along which axis correction is applied\n\nThis preprocessing significantly improves model accuracy and interpretability.",
   "setup": {
+    "categories": ["Method Parameters", "Data Inputs", "Multiway Configuration"],
     "layout": [
       {
         "name": "method",
         "label": "Correction Method",
+        "category": "Method Parameters",
         "widget": "combobox",
         "values": ["msc", "svn", "moving_average"],
         "value_aliases": ["Multiplicative Scatter Correction", "Standard Normal Variate", "Moving Average"],
@@ -32,6 +34,7 @@
       {
         "name": "direction",
         "label": "Direction (for multiway)",
+        "category": "Multiway Configuration",
         "widget": "entry",
         "type": "int",
         "default": "-1",
@@ -42,6 +45,7 @@
       {
         "name": "window_size",
         "label": "Window Size (for moving average)",
+        "category": "Method Parameters",
         "widget": "entry",
         "type": "int",
         "default": "5",
@@ -53,6 +57,7 @@
       {
         "name": "X_cal",
         "label": "X Calibration Data",
+        "category": "Data Inputs",
         "widget": "data_input",
         "required": true,
         "input_type": "routed",
@@ -62,6 +67,7 @@
       {
         "name": "X_val",
         "label": "X Validation Data",
+        "category": "Data Inputs",
         "widget": "data_input",
         "required": false,
         "input_type": "routed",
@@ -71,6 +77,7 @@
       {
         "name": "nway_flag",
         "label": "Data Dimensionality",
+        "category": "Multiway Configuration",
         "widget": "entry",
         "type": "int",
         "default": "1",

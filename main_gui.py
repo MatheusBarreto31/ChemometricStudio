@@ -754,7 +754,44 @@ class ChemometricsGUI:
         # Store widgets for visibility control
         visible_widgets = {}
         
+        # Get categories and sort inputs by category
+        setup_config = config.get("setup", {})
+        categories_list = setup_config.get("categories", [])
+        
+        # Group inputs by category (keeping original order within each category)
+        categorized_inputs = {cat: [] for cat in categories_list}
+        uncategorized = []
+        
         for widget_spec in layout:
+            category = widget_spec.get("category")
+            if category and category in categorized_inputs:
+                categorized_inputs[category].append(widget_spec)
+            else:
+                uncategorized.append(widget_spec)
+        
+        # Create widgets in order: uncategorized first, then by category order
+        all_inputs_ordered = uncategorized.copy()
+        for cat in categories_list:
+            all_inputs_ordered.extend(categorized_inputs[cat])
+        
+        current_category = None
+        category_headers = {}  # Track category header widgets
+        row = 0  # Grid row counter
+        
+        for widget_spec in all_inputs_ordered:
+            widget_category = widget_spec.get("category")
+            
+            # Create category section if category changed
+            if widget_category != current_category:
+                current_category = widget_category
+                if current_category:
+                    # Add category header
+                    cat_header = ttk.Label(form_frame, text=current_category, font=("Arial", 10, "bold"), 
+                                          foreground="#0066cc")
+                    cat_header.grid(row=row, column=0, sticky=tk.W, padx=10, pady=(15, 5))
+                    category_headers[current_category] = {"widget": cat_header, "grid_params": {"row": row, "column": 0, "sticky": tk.W, "padx": 10, "pady": (15, 5)}}
+                    row += 1
+            
             name = widget_spec.get("name")
             label_text = widget_spec.get("label", name)
             widget_type = widget_spec.get("widget")
@@ -765,7 +802,8 @@ class ChemometricsGUI:
             
             # Create a container frame for each input
             input_container = ttk.Frame(form_frame)
-            input_container.pack(anchor=tk.W, padx=10, pady=(10, 2), fill=tk.X)
+            grid_params = {"row": row, "column": 0, "sticky": tk.W, "padx": 10, "pady": (10, 2)}
+            input_container.grid(**grid_params)
             
             # Create label with help button
             label_frame = ttk.Frame(input_container)
@@ -786,9 +824,12 @@ class ChemometricsGUI:
                 "container": input_container,
                 "visible_if": visible_if,
                 "field_name": name,
-                "widget_spec": widget_spec
+                "widget_spec": widget_spec,
+                "category": widget_category,
+                "grid_params": grid_params
             }
             visible_widgets[name] = widget_data
+            row += 1
             
             # Create widget based on type
             if widget_type == "entry":
@@ -802,13 +843,13 @@ class ChemometricsGUI:
                 entry.pack(anchor=tk.W, padx=20, pady=(0, 5))
                 
                 # Binding for FocusOut: save value and update visibility
-                def on_entry_focus_out(event, n=name, e_widget=entry, a=instance_alias, vw=visible_widgets):
+                def on_entry_focus_out(event, n=name, e_widget=entry, a=instance_alias, vw=visible_widgets, ch=category_headers):
                     self._save_widget_value(a, n, e_widget.get())
-                    self._update_field_visibility(a, vw)
+                    self._update_field_visibility(a, vw, ch)
                 entry.bind("<FocusOut>", on_entry_focus_out)
                 
                 # Binding for KeyRelease: update visibility (value will be saved on FocusOut)
-                entry.bind("<KeyRelease>", lambda e, a=instance_alias, vw=visible_widgets: self._update_field_visibility(a, vw))
+                entry.bind("<KeyRelease>", lambda e, a=instance_alias, vw=visible_widgets, ch=category_headers: self._update_field_visibility(a, vw, ch))
                 
                 widget_data["widget"] = entry
                 
@@ -839,11 +880,11 @@ class ChemometricsGUI:
                 combo.pack(anchor=tk.W, padx=20, pady=(0, 5))
                 
                 # Binding for ComboboxSelected: convert alias to actual value, then save and update visibility
-                def on_combo_selected(event, n=name, c_widget=combo, a=instance_alias, vw=visible_widgets, a2v=alias_to_value):
+                def on_combo_selected(event, n=name, c_widget=combo, a=instance_alias, vw=visible_widgets, a2v=alias_to_value, ch=category_headers):
                     selected_alias = c_widget.get()
                     actual_value = a2v.get(selected_alias, selected_alias)
                     self._save_widget_value(a, n, actual_value)
-                    self._update_field_visibility(a, vw)
+                    self._update_field_visibility(a, vw, ch)
                 combo.bind("<<ComboboxSelected>>", on_combo_selected)
                 
                 widget_data["widget"] = combo
@@ -853,8 +894,8 @@ class ChemometricsGUI:
                 default_val = widget_spec.get("default", False)
                 var = tk.BooleanVar(value=func_config.get(name, default_val))
                 check = ttk.Checkbutton(input_container, text=label_text, variable=var, 
-                                       command=lambda n=name, v=var, a=instance_alias, vw=visible_widgets: 
-                                       (self._save_widget_value(a, n, v.get()), self._update_field_visibility(a, vw)))
+                                       command=lambda n=name, v=var, a=instance_alias, vw=visible_widgets, ch=category_headers: 
+                                       (self._save_widget_value(a, n, v.get()), self._update_field_visibility(a, vw, ch)))
                 # Save the value immediately
                 self._save_widget_value(instance_alias, name, var.get())
                 check.pack(anchor=tk.W, padx=20, pady=(0, 5))
@@ -895,7 +936,7 @@ class ChemometricsGUI:
                 widget_data["widget"] = file_entry
         
         # Initial visibility update
-        self._update_field_visibility(instance_alias, visible_widgets)
+        self._update_field_visibility(instance_alias, visible_widgets, category_headers)
     
     def _save_widget_value(self, func_alias: str, param_name: str, value: Any):
         """Save widget value to function config."""
@@ -936,14 +977,18 @@ class ChemometricsGUI:
         close_btn = ttk.Button(popup, text="Close", command=popup.destroy)
         close_btn.pack(pady=10)
     
-    def _update_field_visibility(self, func_alias: str, visible_widgets: Dict):
-        """Update visibility of fields based on visible_if conditions."""
+    def _update_field_visibility(self, func_alias: str, visible_widgets: Dict, category_headers: Dict = None):
+        """Update visibility of fields based on visible_if conditions and hide empty categories."""
         func_config = self.function_configs.get(func_alias, {})
+        
+        # Track which categories have visible content
+        visible_categories = set()
         
         for field_name, widget_data in visible_widgets.items():
             visible_if = widget_data.get("visible_if")
             container = widget_data.get("container")
             widget_spec = widget_data.get("widget_spec", {})
+            grid_params = widget_data.get("grid_params", {})
             
             # Default to showing the field
             should_show = True
@@ -976,11 +1021,25 @@ class ChemometricsGUI:
                             should_show = False
                             break
             
-            # Show or hide the container
+            # Show or hide the container using grid with stored parameters
             if should_show:
-                container.pack(anchor=tk.W, padx=10, pady=(10, 2), fill=tk.X)
+                container.grid(**grid_params)  # Re-show with original grid parameters
+                # Track that this category has visible content
+                category = widget_data.get("category")
+                if category:
+                    visible_categories.add(category)
             else:
-                container.pack_forget()
+                container.grid_remove()  # Hide but keep grid position
+        
+        # Update category header visibility
+        if category_headers:
+            for cat_name, cat_header_info in category_headers.items():
+                cat_header = cat_header_info.get("widget")
+                cat_grid_params = cat_header_info.get("grid_params", {})
+                if cat_name in visible_categories:
+                    cat_header.grid(**cat_grid_params)  # Re-show with original grid parameters
+                else:
+                    cat_header.grid_remove()  # Hide but keep grid position
     
     def _show_routing_tab(self):
         """Show Routing tab with visual connection drawing using canvas."""
