@@ -26,6 +26,9 @@ from matplotlib.figure import Figure
 # Import language manager
 from language_manager import get_language_manager, _
 
+# Import routing map window
+from routing_map_window import RoutingMapWindow
+
 # Load function specs
 SPECS_PATH = Path(__file__).parent / "function_specs.json"
 with open(SPECS_PATH, encoding='utf-8') as f:
@@ -1022,6 +1025,20 @@ class ChemometricsGUI:
         # Populate function dropdowns
         self._populate_function_dropdowns()
         
+        # Button row for Routing Map
+        button_frame = ttk.Frame(routing_frame)
+        button_frame.pack(fill=tk.X, pady=10)
+        
+        routing_map_btn = ttk.Button(
+            button_frame,
+            text=self.language_manager.translate("ui.buttons.routing_map", "🗺️ Routing Map"),
+            command=self._open_routing_map_window
+        )
+        routing_map_btn.pack(side=tk.LEFT, padx=5)
+        
+        Tooltip(routing_map_btn, self.language_manager.translate("ui.tooltips.routing_map", 
+                "Open full routing map showing all functions and connections"))
+        
         # Canvas area for visual connections
         canvas_frame = ttk.LabelFrame(routing_frame, text=self.language_manager.translate("ui.messages.connections", "Connections"), padding=10)
         canvas_frame.pack(fill=tk.BOTH, expand=True, pady=10)
@@ -1383,6 +1400,25 @@ class ChemometricsGUI:
         """Refresh routing display (called when opening tab)."""
         # Just draw the initial canvas
         self._draw_canvas()
+
+    def _open_routing_map_window(self):
+        """Open the full routing map window."""
+        if not self.methodology_list:
+            messagebox.showinfo(
+                self.language_manager.translate("ui.dialogs.info", "Info"),
+                self.language_manager.translate("ui.messages.empty_methodology", "Add functions to Methodology first")
+            )
+            return
+        
+        # Open routing map window
+        RoutingMapWindow(
+            self.root,
+            self.methodology_list,
+            self.function_base_aliases,
+            self.routing_lines,
+            self.gui_configs,
+            FUNCTION_SPECS
+        )
 
     def _position_paned_sash(self, paned):
         """Position the PanedWindow sash to the middle."""

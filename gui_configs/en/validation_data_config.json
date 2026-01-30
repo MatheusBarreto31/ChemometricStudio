@@ -13,7 +13,8 @@
     "d_specs_separator": "Data Separator",
     "d_specs_headlines": "Header Rows",
     "d_specs_type": "Data Type",
-    "d_specs_dimensions": "Data Dimensions"
+    "d_specs_dimensions": "Data Dimensions",
+    "nway_flag": "Data Dimensionality"
   },
   "output_aliases": {
     "X_cal": "X Calibration",
