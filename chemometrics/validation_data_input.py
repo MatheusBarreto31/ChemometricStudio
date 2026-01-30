@@ -13,7 +13,7 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
                           data_path: Optional[List[str]] = None,
                           y_path: Optional[str] = None, var_path: Optional[str] = None,
                           smp_path: Optional[str] = None, transpose: bool = False,
-                          nway_flag: Optional[int] = None,
+                          nway_flag: Optional[int] = None, reshape_order: str = 'F',
                           X_val_path: Optional[str] = None, Y_val_path: Optional[str] = None,
                           val_labels_path: Optional[str] = None) -> Tuple[np.ndarray, Optional[np.ndarray], np.ndarray, Optional[np.ndarray], List[str], List[str]]:
     """
@@ -60,7 +60,8 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
                 y_path=Y_val_path,
                 var_path=None,
                 smp_path=val_labels_path,
-                transpose=transpose
+                transpose=transpose,
+                reshape_order=reshape_order
             )
         else:
             # Use data_path parameters for loading external validation
@@ -76,7 +77,8 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
                 y_path=y_path,
                 var_path=var_path,
                 smp_path=smp_path,
-                transpose=transpose
+                transpose=transpose,
+                reshape_order=reshape_order
             )
         
         X_cal_out, Y_cal_out, smp_cal_out = X_cal, Y_cal, smp_cal

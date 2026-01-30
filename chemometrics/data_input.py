@@ -53,7 +53,7 @@ def _load_file(path: str, separator: Optional[str], num_headlines: int) -> np.nd
 def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str, d_specs_dimensions: Optional[str] = None,
               data_path: Optional[List[str]] = None, nway_flag: int = 1, y_path: Optional[str] = None,
               var_path: Optional[str] = None, smp_path: Optional[str] = None,
-              transpose: bool = False, axis_info: Optional[str] = None) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[List[str]], List[str], Optional[List[np.ndarray]]]:
+              transpose: bool = False, axis_info: Optional[str] = None, reshape_order: str = 'F') -> Tuple[np.ndarray, Optional[np.ndarray], Optional[List[str]], List[str], Optional[List[np.ndarray]]]:
     """
     Load and organize chemometrics data.
 
@@ -71,6 +71,7 @@ def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str,
         smp_path: Optional path to sample labels file (text)
         transpose: Whether to transpose data (defaults to False)
         axis_info: Optional axis range information as semicolon-separated pairs (e.g., "100 200" for 1D, "100 200; 1 10" for 2D)
+        reshape_order: Reshape order for multiway data - 'F' (Fortran/MATLAB column-major, default) or 'C' (C row-major)
 
     Returns:
         X_cal: X data array
@@ -87,7 +88,7 @@ def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str,
     dimensions = d_specs_dimensions if d_specs_dimensions and d_specs_dimensions.strip() else None
 
     # Load X data
-    X, row_counts = _load_x_data(data_path, separator, num_headlines, data_type, dimensions, transpose, nway_flag)
+    X, row_counts = _load_x_data(data_path, separator, num_headlines, data_type, dimensions, transpose, nway_flag, reshape_order)
 
     # Load Y data (using same separator as X for consistency)
     Y = _load_y_data(y_path, separator, 0) if y_path else None
@@ -114,14 +115,14 @@ def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str,
 
 
 def _load_x_data(data_path: List[str], separator: Optional[str], num_headlines: int,
-                 data_type: str, dimensions: Optional[str], transpose: bool, nway_flag: int) -> Tuple[np.ndarray, List[int]]:
+                 data_type: str, dimensions: Optional[str], transpose: bool, nway_flag: int, reshape_order: str = 'F') -> Tuple[np.ndarray, List[int]]:
     """Load and organize X data based on nway_flag and data_type."""
     # global nway_flag
 
     if nway_flag == 1:
         return _load_x_1way(data_path, separator, num_headlines, data_type, transpose)
     else:
-        X = _load_x_multiway(data_path, separator, num_headlines, data_type, dimensions, nway_flag, transpose)
+        X = _load_x_multiway(data_path, separator, num_headlines, data_type, dimensions, nway_flag, transpose, reshape_order)
         return X, []  # No row_counts for multiway
 
 
@@ -157,8 +158,12 @@ def _load_x_1way(data_path: List[str], separator: Optional[str], num_headlines: 
 
 
 def _load_x_multiway(data_path: List[str], separator: Optional[str], num_headlines: int,
-                     data_type: str, dimensions: Optional[str], nway_flag: int, transpose: Optional[bool]) -> np.ndarray:
-    """Load multi-way X data."""
+                     data_type: str, dimensions: Optional[str], nway_flag: int, transpose: Optional[bool], reshape_order: str = 'F') -> np.ndarray:
+    """Load multi-way X data.
+    
+    Args:
+        reshape_order: 'F' for Fortran/MATLAB column-major (default) or 'C' for C row-major
+    """
     # global nway_flag
 
     dims = None
@@ -174,13 +179,16 @@ def _load_x_multiway(data_path: List[str], separator: Optional[str], num_headlin
         data = _load_file(path, separator, num_headlines)
         if data_type == "x_vector":
             sample = data.flatten()
-            sample = sample.reshape(dims)
+            # Use specified reshape order (Fortran for MATLAB, C for NumPy default)
+            sample = sample.reshape(dims, order=reshape_order)
         elif data_type == "xy_vector":
             sample = data[:, 1] if data.ndim > 1 else data
-            sample = sample.reshape(dims)
+            # Use specified reshape order (Fortran for MATLAB, C for NumPy default)
+            sample = sample.reshape(dims, order=reshape_order)
         elif data_type == "xyz_vector":
             sample = data[:, 2] if data.ndim > 1 else data
-            sample = sample.reshape(dims)
+            # Use specified reshape order (Fortran for MATLAB, C for NumPy default)
+            sample = sample.reshape(dims, order=reshape_order)
         elif data_type == "x_matrix" and nway_flag == 2:
             sample = data
             if dims is None:
@@ -247,12 +255,9 @@ def _generate_default_axis_info(X: np.ndarray) -> List[np.ndarray]:
     Returns:
         List of numpy arrays with values from 1 to dimension size for each axis
     """
-    # Get data shape (excluding sample dimension)
-    data_shape = X.shape[1:]  # Skip first dimension (samples)
-    
-    # Generate axis vectors from 1 to dimension size
+    # Generate axis vectors from 1 to dimension size for ALL dimensions (including samples)
     axis_vectors = []
-    for dim_size in data_shape:
+    for dim_size in X.shape:
         axis_vector = np.arange(1, dim_size + 1, dtype=float)
         axis_vectors.append(axis_vector)
     
@@ -280,13 +285,19 @@ def _generate_axis_info(axis_info: str, X: np.ndarray) -> Optional[List[np.ndarr
         # Get data shape (excluding sample dimension)
         data_shape = X.shape[1:]  # Skip first dimension (samples)
         
-        # Check if number of axis specs matches data dimensions
+        # Check if number of axis specs matches data dimensions (excluding samples)
         if len(axis_specs) != len(data_shape):
             print(f"Warning: Number of axis specifications ({len(axis_specs)}) doesn't match data dimensions ({len(data_shape)})")
             return None
         
         # Generate axis vectors
         axis_vectors = []
+        
+        # First vector: sample indices (auto-generated)
+        sample_vector = np.arange(1, X.shape[0] + 1, dtype=float)
+        axis_vectors.append(sample_vector)
+        
+        # Remaining vectors: from axis_info specifications
         for spec, dim_size in zip(axis_specs, data_shape):
             parts = spec.split()
             if len(parts) != 2:

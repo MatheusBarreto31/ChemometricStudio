@@ -53,6 +53,8 @@ class Tooltip:
     
     def showtip(self, event=None):
         """Show the tooltip."""
+        if self.tipwindow:
+            return  # Already showing
         if self.text:
             x = self.widget.winfo_rootx() + 50
             y = self.widget.winfo_rooty() + self.widget.winfo_height() + 10
@@ -1989,53 +1991,206 @@ class ChemometricsGUI:
                     if isinstance(nav_item, dict):
                         target_axis = nav_item.get('axis')
                         if target_axis:  # Only for axis selection items
-                            axis_indices_dict = {}
-                            dimension = nav_item.get('dimension', 0)
-                            # Get default from nav_item or axis config
-                            default_val = nav_item.get('default', None)
-                            if default_val is None:
-                                default_val = config.get(f'{target_axis}_axis', {}).get('default_column', 0)
-                            axis_indices_dict[dimension] = default_val
-                            current_slice['axis_indices'][target_axis] = axis_indices_dict
+                            # Only set axis index if dimension is explicitly specified
+                            if 'dimension' in nav_item:
+                                axis_indices_dict = {}
+                                dimension = nav_item['dimension']
+                                # Get default from nav_item or axis config
+                                default_val = nav_item.get('default', None)
+                                if default_val is None:
+                                    default_val = config.get(f'{target_axis}_axis', {}).get('default_column', 0)
+                                axis_indices_dict[dimension] = default_val
+                                current_slice['axis_indices'][target_axis] = axis_indices_dict
             
             if 'indices' not in current_slice:
                 current_slice['indices'] = {}
                 # Set default indices based on navigation_axes config for non-axis slicing
                 for nav_item in nav_axes:
                     if isinstance(nav_item, dict):
-                        dimension = nav_item.get('dimension', 0)
-                        target_axis = nav_item.get('axis')
-                        # Only use default for non-axis items (slicing mode)
-                        if not target_axis:
-                            default_idx = nav_item.get('default', 0)
-                            current_slice['indices'][dimension] = default_idx
+                        # Only process if dimension is explicitly specified
+                        # If dimension is missing, it will be handled by md_slice_indices
+                        if 'dimension' in nav_item:
+                            dimension = nav_item['dimension']
+                            target_axis = nav_item.get('axis')
+                            # Only use default for non-axis items (slicing mode)
+                            if not target_axis:
+                                default_idx = nav_item.get('default', 0)
+                                current_slice['indices'][dimension] = default_idx
             
             # Extract axis data with current slices
             # For each axis, merge its per-axis indices with the shared indices
             base_indices = current_slice.get('indices', {})
             axis_indices = current_slice.get('axis_indices', {})
+            md_slice_indices = current_slice.get('md_slice_indices', {})
             
-            # Merge axis indices for x
+            # For 4D+ data with aux_axis, ensure md_slice_indices is initialized
+            if 'aux_axis' in config:
+                # Get data source to check if we need 4D+ initialization
+                data_source_check = config.get('z_axis', {}).get('data_source')
+                if data_source_check and data_source_check in outputs:
+                    data_check = outputs[data_source_check]
+                    if isinstance(data_check, np.ndarray) and data_check.ndim >= 4:
+                        # Initialize md_combo_index if not present
+                        if 'md_combo_index' not in current_slice:
+                            md_defaults = config.get('md_default', {})
+                            current_slice['md_combo_index'] = md_defaults.get('combo_index', 0)
+                        
+                        # Initialize md_slice_indices if not present
+                        if 'md_slice_indices' not in current_slice:
+                            nav_axes_init = config.get('data_slicing', [])
+                            specified_dims_init = set()
+                            for nav_item in nav_axes_init:
+                                if isinstance(nav_item, dict):
+                                    dim = nav_item.get('dimension')
+                                    if dim is not None:
+                                        specified_dims_init.add(dim)
+                            
+                            # Compute combinations
+                            combo_size_init = 2
+                            md_combinations_init = self._compute_dimension_combinations(data_check.shape, specified_dims_init, combo_size_init)
+                            
+                            if md_combinations_init:
+                                current_slice['md_slice_indices'] = {}
+                                combo_idx_init = current_slice.get('md_combo_index', 0)
+                                if combo_idx_init < len(md_combinations_init):
+                                    current_combo_init = md_combinations_init[combo_idx_init]
+                                    all_dims_init = set(range(len(data_check.shape)))
+                                    navigable_dims_init = all_dims_init - set(current_combo_init) - specified_dims_init
+                                    
+                                    md_defaults = config.get('md_default', {})
+                                    for dim in navigable_dims_init:
+                                        default_val = md_defaults.get(f'dim_{dim}', 0)
+                                        max_idx = data_check.shape[dim] - 1
+                                        if default_val < 0 or default_val > max_idx:
+                                            default_val = 0
+                                        current_slice['md_slice_indices'][dim] = default_val
+                        
+                        # Update md_slice_indices reference
+                        md_slice_indices = current_slice.get('md_slice_indices', {})
+            
+            # For 4D+ data, get the active dimension combination
+            md_active_dims = None
+            if md_slice_indices:
+                # Get the active combination from the computed combinations
+                nav_axes_temp = config.get('data_slicing', [])
+                specified_dims = set()
+                for nav_item in nav_axes_temp:
+                    if isinstance(nav_item, dict):
+                        dim = nav_item.get('dimension')
+                        if dim is not None:
+                            specified_dims.add(dim)
+                
+                # Get data to compute combinations
+                # For aux_axis configs, use z_axis as it points to actual data
+                data_source_temp = None
+                if 'aux_axis' in config:
+                    data_source_temp = config.get('z_axis', {}).get('data_source')
+                else:
+                    axis_config_temp = config.get('y_axis', {}) or config.get('x_axis', {})
+                    data_source_temp = axis_config_temp.get('data_source')
+                
+                if data_source_temp and data_source_temp in outputs:
+                    data_temp = outputs[data_source_temp]
+                    if isinstance(data_temp, np.ndarray):
+                        # For heatmaps, we display 2 dimensions (x, y) and navigate through others
+                        # Combo size is always 2 regardless of how many dimensions are specified
+                        combo_size = 2
+                        md_combinations = self._compute_dimension_combinations(data_temp.shape, specified_dims, combo_size)
+                        
+                        combo_idx = current_slice.get('md_combo_index', 0)
+                        if combo_idx < len(md_combinations):
+                            md_active_dims = list(md_combinations[combo_idx])
+            
+            # For 4D+ data with aux_axis config, create axis configs automatically
+            if 'aux_axis' in config and md_active_dims:
+                # aux_axis contains data_source and labels for all dimensions
+                aux_axis_config = config['aux_axis']
+                data_source = aux_axis_config.get('data_source')
+                labels_config = aux_axis_config.get('labels', [])
+                
+                print(f"DEBUG _render: md_active_dims = {md_active_dims}")
+                print(f"DEBUG _render: data_source = {data_source}")
+                if data_source in outputs:
+                    if isinstance(outputs[data_source], list):
+                        print(f"DEBUG _render: axis list length = {len(outputs[data_source])}")
+                        for i, ax in enumerate(outputs[data_source]):
+                            if isinstance(ax, np.ndarray):
+                                print(f"DEBUG _render: axis[{i}] shape = {ax.shape}")
+                
+                # Resolve labels - can be array or variable name
+                labels = []
+                if isinstance(labels_config, str):
+                    # labels is a variable name - look it up in outputs
+                    if labels_config in outputs:
+                        label_data = outputs[labels_config]
+                        if isinstance(label_data, (list, np.ndarray)):
+                            labels = [str(lbl) for lbl in label_data]
+                elif isinstance(labels_config, list):
+                    # labels is a direct array
+                    labels = labels_config
+                
+                # x-axis uses first dimension in active combination
+                x_axis_config = None
+                if len(md_active_dims) > 0:
+                    dim_idx = md_active_dims[0]
+                    x_label = labels[dim_idx] if dim_idx < len(labels) else f"Axis {dim_idx}"
+                    x_axis_config = {'data_source': data_source, 'index': dim_idx, 'label': x_label}
+                
+                # y-axis uses second dimension in active combination
+                y_axis_config = None
+                if len(md_active_dims) > 1:
+                    dim_idx = md_active_dims[1]
+                    y_label = labels[dim_idx] if dim_idx < len(labels) else f"Axis {dim_idx}"
+                    y_axis_config = {'data_source': data_source, 'index': dim_idx, 'label': y_label}
+            else:
+                # Traditional x_axis/y_axis config
+                x_axis_config = config.get('x_axis', {})
+                y_axis_config = config.get('y_axis', {})
+            
+            # Merge axis indices for x (base + md + axis-specific)
             x_indices = base_indices.copy()
+            x_indices.update(md_slice_indices)  # Add multi-dimensional slices
             if 'x' in axis_indices:
                 x_indices.update(axis_indices['x'])
-            x_data = self._extract_axis_data(outputs, config.get('x_axis', {}), x_indices)
+            print(f"DEBUG _render: x_axis_config = {x_axis_config}")
+            print(f"DEBUG _render: x_indices = {x_indices}")
+            x_data = self._extract_axis_data(outputs, x_axis_config, x_indices)
+            print(f"DEBUG _render: x_data shape = {x_data.shape if isinstance(x_data, np.ndarray) else len(x_data) if x_data else 'None'}")
             
-            # Merge axis indices for y
+            # Merge axis indices for y (base + md + axis-specific)
             y_indices = base_indices.copy()
+            y_indices.update(md_slice_indices)  # Add multi-dimensional slices
             if 'y' in axis_indices:
                 y_indices.update(axis_indices['y'])
-            y_data = self._extract_axis_data(outputs, config.get('y_axis', {}), y_indices)
+            print(f"DEBUG _render: y_axis_config = {y_axis_config}")
+            print(f"DEBUG _render: y_indices = {y_indices}")
+            y_data = self._extract_axis_data(outputs, y_axis_config, y_indices)
+            print(f"DEBUG _render: y_data shape = {y_data.shape if isinstance(y_data, np.ndarray) else len(y_data) if y_data else 'None'}")
             
-            # Merge axis indices for z
+            # Merge axis indices for z (base + md + axis-specific)
             z_indices = base_indices.copy()
+            z_indices.update(md_slice_indices)  # Add multi-dimensional slices
             if 'z' in axis_indices:
                 z_indices.update(axis_indices['z'])
+            # For 4D+ multi-dimensional display, exclude dimensions that are being displayed
+            # (md_active_dims) from z_indices AFTER all merges to avoid slicing them away
+            if md_active_dims:
+                for dim in md_active_dims:
+                    z_indices.pop(dim, None)  # Remove if present
+            print(f"DEBUG _render: z_axis_config = {config.get('z_axis', {})}")
+            print(f"DEBUG _render: z_indices = {z_indices}")
+            print(f"DEBUG _render: md_slice_indices = {md_slice_indices}")
             z_data = self._extract_axis_data(outputs, config.get('z_axis', {}), z_indices)
+            print(f"DEBUG _render: z_data shape = {z_data.shape if isinstance(z_data, np.ndarray) else 'None'}")
             
             # Create container with navigation controls on top
             control_frame = ttk.Frame(parent)
             control_frame.pack(fill=tk.X, padx=5, pady=5)
+            
+            # Store control frame reference for later updates (e.g., when combo changes)
+            if 'graph_control_frames' not in self.analysis_data[instance_alias]:
+                self.analysis_data[instance_alias]['graph_control_frames'] = {}
+            self.analysis_data[instance_alias]['graph_control_frames'][section_id] = control_frame
             
             # Add navigation controls if axes are navigable
             nav_axes = config.get('data_slicing', [])
@@ -2108,7 +2263,7 @@ class ChemometricsGUI:
                         # Create mesh grids from x and y data
                         X, Y = np.meshgrid(x_data, y_data)
                         # Use pcolormesh for proper axis mapping
-                        im = ax.pcolormesh(X, Y, z_data, cmap='viridis', shading='auto')
+                        im = ax.pcolormesh(X, Y, z_data.T, cmap='viridis', shading='nearest')
                         fig.colorbar(im, ax=ax)
                         ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
                         ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
@@ -2199,10 +2354,10 @@ class ChemometricsGUI:
         
         # Handle list data (list of arrays like axis vectors)
         if is_list_source:
-            # Use config index if specified, otherwise take first element
-            config_index = axis_config.get('index')
-            if config_index is not None and isinstance(config_index, int) and config_index < len(data):
-                data = data[config_index] if isinstance(data[config_index], np.ndarray) else np.array(data[config_index])
+            # Get index from config
+            list_index = axis_config.get('index', 0)
+            if list_index < len(data):
+                data = data[list_index] if isinstance(data[list_index], np.ndarray) else np.array(data[list_index])
             else:
                 data = data[0] if isinstance(data[0], np.ndarray) else np.array(data[0])
         
@@ -2232,16 +2387,27 @@ class ChemometricsGUI:
         
         # Apply dimension-based slicing (only for array data, not list sources like axes)
         # List sources are coordinate arrays and should not be sliced by data dimensions
-        if not is_list_source and isinstance(indices, dict):
-            # Apply multi-dimensional slicing using indices dict
-            # Sort by dimension to apply slices in order
-            for dim in sorted(indices.keys()):
-                idx = indices[dim]
-                try:
-                    if idx < data.shape[0]:
-                        data = data[idx]
-                except (IndexError, TypeError):
-                    pass
+        if not is_list_source and isinstance(indices, dict) and indices:
+            # Build proper indexing tuple for multi-dimensional slicing
+            # Create a list of slice objects for each dimension
+            index_list = []
+            for dim in range(data.ndim):
+                if dim in indices:
+                    # Clip index to valid range for this dimension
+                    idx = indices[dim]
+                    max_idx = data.shape[dim] - 1
+                    if idx > max_idx:
+                        idx = max_idx
+                    elif idx < 0:
+                        idx = 0
+                    index_list.append(idx)
+                else:
+                    index_list.append(slice(None))
+            # Apply the indexing
+            try:
+                data = data[tuple(index_list)]
+            except (IndexError, TypeError):
+                pass
         elif not is_list_source and isinstance(indices, int) and data.ndim > 1:
             # Backward compatibility: indices is a single integer
             try:
@@ -2280,6 +2446,40 @@ class ChemometricsGUI:
                     pass
         
         return result
+    
+    def _compute_dimension_combinations(self, data_shape: tuple, specified_dims: set, 
+                                       ndim: int) -> List[Tuple[int, ...]]:
+        """Compute all combinations of remaining dimensions for multi-dimensional slicing.
+        
+        For 4D+ data, computes all possible combinations of dimensions not specified in
+        the "dimension" field of data_slicing config.
+        
+        Args:
+            data_shape: Shape of the data array
+            specified_dims: Set of dimensions already specified in data_slicing
+            ndim: Target dimensionality for combinations (ndim-1 or ndim-2)
+        
+        Returns:
+            List of tuples, each representing a combination of dimension indices
+        """
+        from itertools import combinations
+        
+        # Get all dimensions
+        all_dims = set(range(len(data_shape)))
+        
+        # Get remaining (unspecified) dimensions
+        remaining_dims = sorted(all_dims - specified_dims)
+        
+        # If no remaining dimensions, return empty list
+        if not remaining_dims:
+            return []
+        
+        # Compute combinations of size ndim
+        if ndim <= 0 or ndim > len(remaining_dims):
+            return []
+        
+        combos = list(combinations(remaining_dims, ndim))
+        return combos
     
     def _create_table_navigation_controls(self, parent_frame: ttk.Frame, instance_alias: str,
                                          section_id: int, outputs: dict, config: dict,
@@ -2809,9 +3009,17 @@ Count:
             if not nav_axes:
                 return
             
-            # Get the data to determine shape/bounds - use the first available data source
-            axis_config = config.get('y_axis', {}) or config.get('x_axis', {})
-            data_source = axis_config.get('data_source')
+            # Get the data to determine shape/bounds
+            # For aux_axis configs, use z_axis as it points to actual data (e.g., X_cal)
+            # aux_axis points to axis vectors (e.g., axis_n_info) which is a list
+            data_source = None
+            if 'aux_axis' in config:
+                # Use z_axis to get the actual data array
+                data_source = config.get('z_axis', {}).get('data_source')
+            else:
+                # Traditional configs - use y_axis or x_axis
+                axis_config = config.get('y_axis', {}) or config.get('x_axis', {})
+                data_source = axis_config.get('data_source')
             
             if not data_source or data_source not in outputs:
                 return
@@ -2831,18 +3039,20 @@ Count:
                     if isinstance(nav_item, dict):
                         target_axis = nav_item.get('axis')
                         if target_axis:  # Only for axis selection items
-                            axis_indices_dict = {}
-                            dimension = nav_item.get('dimension', 0)
-                            # Get default from nav_item or axis config
-                            default_val = nav_item.get('default', None)
-                            if default_val is None:
-                                default_val = config.get(f'{target_axis}_axis', {}).get('default_column', 0)
-                            # Validate default is in bounds
-                            max_idx = data.shape[dimension] - 1 if dimension < len(data.shape) else 0
-                            if default_val < 0 or default_val > max_idx:
-                                default_val = 0
-                            axis_indices_dict[dimension] = default_val
-                            slice_state['axis_indices'][target_axis] = axis_indices_dict
+                            # Only set axis index if dimension is explicitly specified
+                            if 'dimension' in nav_item:
+                                axis_indices_dict = {}
+                                dimension = nav_item['dimension']
+                                # Get default from nav_item or axis config
+                                default_val = nav_item.get('default', None)
+                                if default_val is None:
+                                    default_val = config.get(f'{target_axis}_axis', {}).get('default_column', 0)
+                                # Validate default is in bounds
+                                max_idx = data.shape[dimension] - 1 if dimension < len(data.shape) else 0
+                                if default_val < 0 or default_val > max_idx:
+                                    default_val = 0
+                                axis_indices_dict[dimension] = default_val
+                                slice_state['axis_indices'][target_axis] = axis_indices_dict
             
             # Initialize shared dimension slicing indices if not present
             if 'indices' not in slice_state:
@@ -2850,16 +3060,149 @@ Count:
                 # Set default indices based on navigation_axes config for non-axis slicing
                 for nav_item in nav_axes:
                     if isinstance(nav_item, dict):
-                        dimension = nav_item.get('dimension', 0)
-                        target_axis = nav_item.get('axis')
-                        # Only use default for non-axis items (slicing mode)
-                        if not target_axis:
-                            default_idx = nav_item.get('default', 0)
-                            # Validate default is in bounds
-                            max_idx = data.shape[dimension] - 1 if dimension < len(data.shape) else 0
-                            if default_idx < 0 or default_idx > max_idx:
-                                default_idx = 0
-                            slice_state['indices'][dimension] = default_idx
+                        # Only process if dimension is explicitly specified
+                        if 'dimension' in nav_item:
+                            dimension = nav_item['dimension']
+                            target_axis = nav_item.get('axis')
+                            # Only use default for non-axis items (slicing mode)
+                            if not target_axis:
+                                default_idx = nav_item.get('default', 0)
+                                # Validate default is in bounds
+                                max_idx = data.shape[dimension] - 1 if dimension < len(data.shape) else 0
+                                if default_idx < 0 or default_idx > max_idx:
+                                    default_idx = 0
+                                slice_state['indices'][dimension] = default_idx
+            
+            # ===== Multi-Dimensional Slicing for 4D+ Data =====
+            # For 4D+ data, always compute combinations and initialize state
+            # show_md_menu only controls UI visibility
+            show_md_menu = config.get('show_md_menu', False)
+            md_combinations = []
+            
+            if data.ndim >= 4:
+                # Collect dimensions already specified in data_slicing
+                specified_dims = set()
+                for nav_item in nav_axes:
+                    if isinstance(nav_item, dict):
+                        dim = nav_item.get('dimension')
+                        if dim is not None:
+                            specified_dims.add(dim)
+                
+                # Determine combination size: always 2 for heatmap (x and y axes)
+                # The remaining dimensions (not in combination, not specified) will be navigable
+                combo_size = 2
+                
+                # Compute all possible combinations of remaining dimensions
+                md_combinations = self._compute_dimension_combinations(data.shape, specified_dims, combo_size)
+                
+                if md_combinations:
+                    # Initialize multi-dimensional state if needed
+                    if 'md_combo_index' not in slice_state:
+                        # Get default combination index from config, default to 0
+                        md_defaults = config.get('md_default', {})
+                        slice_state['md_combo_index'] = md_defaults.get('combo_index', 0)
+                    
+                    if 'md_slice_indices' not in slice_state:
+                        # Initialize slice indices for dimensions NOT in the current combination
+                        # These are the dimensions we navigate through (not displayed on x/y axes)
+                        slice_state['md_slice_indices'] = {}
+                        md_defaults = config.get('md_default', {})
+                        current_combo_idx = slice_state.get('md_combo_index', 0)
+                        if current_combo_idx < len(md_combinations):
+                            current_combo = md_combinations[current_combo_idx]
+                            # Find all dimensions that are NOT in the combination and NOT specified
+                            all_dims = set(range(len(data.shape)))
+                            navigable_dims = all_dims - set(current_combo) - specified_dims
+                            
+                            for dim in navigable_dims:
+                                # Get default from md_default config or use 0
+                                default_val = md_defaults.get(f'dim_{dim}', 0)
+                                max_idx = data.shape[dim] - 1 if dim < len(data.shape) else 0
+                                if default_val < 0 or default_val > max_idx:
+                                    default_val = 0
+                                slice_state['md_slice_indices'][dim] = default_val
+                    
+                    # Create UI for multi-dimensional slicing ONLY if show_md_menu is True
+                    if show_md_menu:
+                        md_frame = ttk.LabelFrame(parent_frame, text="Multi-Dimensional Slicing (4D+)", padding=5)
+                        md_frame.pack(fill=tk.X, padx=5, pady=5)
+                        
+                        # Combination selector
+                        combo_select_frame = ttk.Frame(md_frame)
+                        combo_select_frame.pack(fill=tk.X, padx=5, pady=2)
+                        
+                        ttk.Label(combo_select_frame, text="Dimension Combination:", width=20).pack(side=tk.LEFT, padx=5)
+                        
+                        # Create combo box with dimension combinations
+                        combo_options = []
+                        for combo in md_combinations:
+                            combo_str = f"Dims: {', '.join(str(d) for d in combo)}"
+                            combo_options.append(combo_str)
+                        
+                        current_combo_idx = slice_state.get('md_combo_index', 0)
+                        combo_var = tk.StringVar(value=combo_options[current_combo_idx] if current_combo_idx < len(combo_options) else combo_options[0])
+                        
+                        combo_dropdown = ttk.Combobox(combo_select_frame, textvariable=combo_var, 
+                                                     values=combo_options, state='readonly', width=30)
+                        combo_dropdown.pack(side=tk.LEFT, padx=5)
+                        combo_dropdown.bind('<<ComboboxSelected>>', 
+                                           lambda e: self._on_md_combo_changed(instance_alias, section_id, 
+                                                                               combo_dropdown.current(), md_combinations))
+                        
+                        # Create slicing controls for dimensions NOT in current combination
+                        # These are the dimensions we navigate through (not displayed on x/y axes)
+                        if current_combo_idx < len(md_combinations):
+                            current_combo = md_combinations[current_combo_idx]
+                            # Find all dimensions that are NOT in the combination and NOT specified
+                            all_dims = set(range(len(data.shape)))
+                            navigable_dims = sorted(all_dims - set(current_combo) - specified_dims)
+                            
+                            for dim in navigable_dims:
+                                dim_frame = ttk.Frame(md_frame)
+                                dim_frame.pack(fill=tk.X, padx=5, pady=2)
+                                
+                                # Get max index for this dimension
+                                max_index = data.shape[dim] - 1 if dim < len(data.shape) else 0
+                                
+                                # Get current index
+                                current_index = slice_state.get('md_slice_indices', {}).get(dim, 0)
+                                
+                                # Dimension label
+                                label_text = f"Dimension {dim}: {current_index + 1}/{max_index + 1}"
+                                label = ttk.Label(dim_frame, text=label_text, width=20)
+                                label.pack(side=tk.LEFT, padx=5)
+                                
+                                # Previous button - capture max_index by value with m=max_index
+                                prev_btn = ttk.Button(
+                                    dim_frame,
+                                    text="<",
+                                    width=3,
+                                    command=lambda d=dim, m=max_index: self._on_md_navigate(
+                                        instance_alias, section_id, -1, d, m
+                                    )
+                                )
+                                prev_btn.pack(side=tk.LEFT, padx=2)
+                                
+                                # Index display
+                                index_label = ttk.Label(dim_frame, text=str(current_index + 1), width=3)
+                                index_label.pack(side=tk.LEFT, padx=2)
+                                
+                                # Next button - capture max_index by value with m=max_index
+                                next_btn = ttk.Button(
+                                    dim_frame,
+                                    text=">",
+                                    width=3,
+                                    command=lambda d=dim, m=max_index: self._on_md_navigate(
+                                        instance_alias, section_id, 1, d, m
+                                    )
+                                )
+                                next_btn.pack(side=tk.LEFT, padx=2)
+                                
+                                # Store reference for updates
+                                if not hasattr(self, '_md_nav_labels'):
+                                    self._md_nav_labels = {}
+                                label_key = (instance_alias, section_id, dim)
+                                self._md_nav_labels[label_key] = (index_label, label)
             
             # For each navigable axis, create controls if enabled for that item
             for nav_item in nav_axes:
@@ -2918,13 +3261,13 @@ Count:
                 label = ttk.Label(axis_frame, text=label_text, width=15)
                 label.pack(side=tk.LEFT, padx=5)
                 
-                # Previous button
+                # Previous button - capture max_index by value with m=max_index
                 prev_btn = ttk.Button(
                     axis_frame,
                     text="<",
                     width=3,
-                    command=lambda an=axis_name, d=dimension, ax=target_axis: self._on_navigate_slice(
-                        instance_alias, section_id, -1, d, an, max_index, ax
+                    command=lambda an=axis_name, d=dimension, ax=target_axis, m=max_index: self._on_navigate_slice(
+                        instance_alias, section_id, -1, d, an, m, ax
                     )
                 )
                 prev_btn.pack(side=tk.LEFT, padx=2)
@@ -2933,13 +3276,13 @@ Count:
                 index_label = ttk.Label(axis_frame, text=str(current_index + 1), width=3)
                 index_label.pack(side=tk.LEFT, padx=2)
                 
-                # Next button
+                # Next button - capture max_index by value with m=max_index
                 next_btn = ttk.Button(
                     axis_frame,
                     text=">",
                     width=3,
-                    command=lambda an=axis_name, d=dimension, ax=target_axis: self._on_navigate_slice(
-                        instance_alias, section_id, 1, d, an, max_index, ax
+                    command=lambda an=axis_name, d=dimension, ax=target_axis, m=max_index: self._on_navigate_slice(
+                        instance_alias, section_id, 1, d, an, m, ax
                     )
                 )
                 next_btn.pack(side=tk.LEFT, padx=2)
@@ -3023,6 +3366,176 @@ Count:
         except Exception as e:
             print(f"Error navigating slice: {str(e)}")
     
+    def _on_md_combo_changed(self, instance_alias: str, section_id: int, 
+                            combo_index: int, combinations: List[Tuple[int, ...]]) -> None:
+        """Handle multi-dimensional combination dropdown change.
+        
+        Args:
+            instance_alias: Function instance identifier
+            section_id: Section identifier
+            combo_index: Selected combination index
+            combinations: List of all dimension combinations
+        """
+        try:
+            if instance_alias not in self.analysis_data:
+                return
+            
+            if 'graph_slices' not in self.analysis_data[instance_alias]:
+                return
+            
+            slice_state = self.analysis_data[instance_alias]['graph_slices']
+            if section_id not in slice_state:
+                return
+            
+            current_state = slice_state[section_id]
+            
+            # Update the selected combination index
+            current_state['md_combo_index'] = combo_index
+            
+            # Reset slice indices for dimensions NOT in the new combination
+            # These are the navigable dimensions
+            if combo_index < len(combinations):
+                current_combo = combinations[combo_index]
+                current_state['md_slice_indices'] = {}
+                
+                # Get data to validate bounds and find specified dimensions
+                outputs = current_state.get('outputs', {})
+                config = current_state.get('config', {})
+                
+                # Get data source - support both aux_axis and traditional configs
+                data_source = None
+                if 'aux_axis' in config:
+                    data_source = config.get('z_axis', {}).get('data_source')
+                else:
+                    axis_config = config.get('y_axis', {}) or config.get('x_axis', {})
+                    data_source = axis_config.get('data_source')
+                
+                if data_source and data_source in outputs:
+                    data = outputs[data_source]
+                    if isinstance(data, np.ndarray):
+                        # Find specified dimensions
+                        specified_dims = set()
+                        nav_axes = config.get('data_slicing', [])
+                        for nav_item in nav_axes:
+                            if isinstance(nav_item, dict):
+                                dim = nav_item.get('dimension')
+                                if dim is not None:
+                                    specified_dims.add(dim)
+                        
+                        # Find navigable dimensions (not in combo, not specified)
+                        all_dims = set(range(len(data.shape)))
+                        navigable_dims = all_dims - set(current_combo) - specified_dims
+                        
+                        # Clear old md_slice_indices and rebuild for new combination
+                        current_state['md_slice_indices'] = {}
+                        for dim in navigable_dims:
+                            # Initialize to 0 for new combination
+                            max_idx = data.shape[dim] - 1 if dim < len(data.shape) else 0
+                            current_state['md_slice_indices'][dim] = 0
+            
+            # Rebuild navigation controls to reflect new navigable dimensions
+            config = current_state.get('config', {})
+            outputs = current_state.get('outputs', {})
+            
+            print(f"DEBUG _on_md_combo_changed: Rebuilding controls for section {section_id}")
+            print(f"DEBUG _on_md_combo_changed: New navigable dims = {list(current_state.get('md_slice_indices', {}).keys())}")
+            
+            # Get stored control frame and rebuild controls
+            if 'graph_control_frames' in self.analysis_data[instance_alias]:
+                control_frame = self.analysis_data[instance_alias]['graph_control_frames'].get(section_id)
+                print(f"DEBUG _on_md_combo_changed: control_frame = {control_frame}")
+                if control_frame:
+                    # Clear existing controls
+                    for widget in control_frame.winfo_children():
+                        widget.destroy()
+                    
+                    # Clear stored label references for this section
+                    if hasattr(self, '_md_nav_labels'):
+                        keys_to_remove = [k for k in self._md_nav_labels.keys() 
+                                         if k[0] == instance_alias and k[1] == section_id]
+                        for k in keys_to_remove:
+                            del self._md_nav_labels[k]
+                    
+                    # Rebuild navigation controls
+                    nav_axes = config.get('data_slicing', [])
+                    print(f"DEBUG _on_md_combo_changed: nav_axes = {nav_axes}")
+                    if nav_axes:
+                        self._create_navigation_controls(control_frame, instance_alias, section_id,
+                                                        outputs, config, current_state)
+                        print(f"DEBUG _on_md_combo_changed: Controls rebuilt")
+            else:
+                print(f"DEBUG _on_md_combo_changed: graph_control_frames not found")
+            
+            # Update the graph with the new slice
+            self._update_graph_with_slice(instance_alias, section_id, 0)
+            self._update_graph_with_slice(instance_alias, section_id, 0)
+        
+        except Exception as e:
+            print(f"Error changing MD combination: {str(e)}")
+            import traceback
+            traceback.print_exc()
+    
+    def _on_md_navigate(self, instance_alias: str, section_id: int, direction: int,
+                       dimension: int, max_index: int) -> None:
+        """Handle multi-dimensional slice navigation button click.
+        
+        Args:
+            instance_alias: Function instance identifier
+            section_id: Section identifier
+            direction: Navigation direction (-1 or 1)
+            dimension: Dimension being sliced
+            max_index: Maximum valid index for this dimension
+        """
+        try:
+            if instance_alias not in self.analysis_data:
+                return
+            
+            if 'graph_slices' not in self.analysis_data[instance_alias]:
+                return
+            
+            slice_state = self.analysis_data[instance_alias]['graph_slices']
+            if section_id not in slice_state:
+                return
+            
+            current_state = slice_state[section_id]
+            md_slice_indices = current_state.get('md_slice_indices', {})
+            
+            # Validate dimension is still navigable (controls might be stale after combo change)
+            if dimension not in md_slice_indices:
+                print(f"WARNING: Dimension {dimension} is not in current navigable dimensions {list(md_slice_indices.keys())}")
+                return
+            
+            # Get current index
+            current_index = md_slice_indices.get(dimension, 0)
+            
+            # Calculate new index
+            new_index = current_index + direction
+            
+            # Bounds checking
+            if new_index < 0:
+                new_index = 0
+            elif new_index > max_index:
+                new_index = max_index
+            
+            # Update state only if index changed
+            if new_index != current_index:
+                md_slice_indices[dimension] = new_index
+                current_state['md_slice_indices'] = md_slice_indices
+                
+                # Update label display if it exists
+                if hasattr(self, '_md_nav_labels'):
+                    key = (instance_alias, section_id, dimension)
+                    if key in self._md_nav_labels:
+                        index_label, full_label = self._md_nav_labels[key]
+                        index_label.config(text=str(new_index + 1))
+                        full_label.config(text=f"Dimension {dimension}: {new_index + 1}/{max_index + 1}")
+                
+                # Refresh the graph with new multi-dimensional slice
+                self._update_graph_with_slice(instance_alias, section_id, dimension)
+        
+        except Exception as e:
+            print(f"Error navigating MD slice: {str(e)}")
+    
     def _update_graph_with_slice(self, instance_alias: str, section_id: int, 
                                 dimension: int) -> None:
         """Update the graph display with the new slice index for a specific dimension."""
@@ -3046,23 +3559,119 @@ Count:
             base_indices = current_state.get('indices', {})
             axis_indices = current_state.get('axis_indices', {})
             
-            # Merge axis indices for x
+            # Also merge multi-dimensional slice indices if present
+            md_slice_indices = current_state.get('md_slice_indices', {})
+            
+            # For 4D+ data, get the active dimension combination
+            md_active_dims = None
+            if md_slice_indices:
+                # Get the active combination from the computed combinations
+                nav_axes_temp = config.get('data_slicing', [])
+                specified_dims = set()
+                for nav_item in nav_axes_temp:
+                    if isinstance(nav_item, dict):
+                        dim = nav_item.get('dimension')
+                        if dim is not None:
+                            specified_dims.add(dim)
+                
+                # Get data to compute combinations
+                # For aux_axis configs, use z_axis as it points to actual data
+                data_source_temp = None
+                if 'aux_axis' in config:
+                    data_source_temp = config.get('z_axis', {}).get('data_source')
+                else:
+                    axis_config_temp = config.get('y_axis', {}) or config.get('x_axis', {})
+                    data_source_temp = axis_config_temp.get('data_source')
+                
+                if data_source_temp and data_source_temp in outputs:
+                    data_temp = outputs[data_source_temp]
+                    if isinstance(data_temp, np.ndarray):
+                        # For heatmaps, we display 2 dimensions (x, y) and navigate through others
+                        combo_size = 2
+                        md_combinations = self._compute_dimension_combinations(data_temp.shape, specified_dims, combo_size)
+                        
+                        combo_idx = current_state.get('md_combo_index', 0)
+                        if combo_idx < len(md_combinations):
+                            md_active_dims = list(md_combinations[combo_idx])
+            
+            # For 4D+ data with aux_axis config, create axis configs automatically
+            if 'aux_axis' in config and md_active_dims:
+                # aux_axis contains data_source and labels for all dimensions
+                aux_axis_config = config['aux_axis']
+                data_source = aux_axis_config.get('data_source')
+                labels_config = aux_axis_config.get('labels', [])
+                
+                print(f"DEBUG _combo_changed: md_active_dims = {md_active_dims}")
+                print(f"DEBUG _combo_changed: data_source = {data_source}")
+                if data_source in outputs:
+                    if isinstance(outputs[data_source], list):
+                        print(f"DEBUG _combo_changed: axis list length = {len(outputs[data_source])}")
+                        for i, ax in enumerate(outputs[data_source]):
+                            if isinstance(ax, np.ndarray):
+                                print(f"DEBUG _combo_changed: axis[{i}] shape = {ax.shape}")
+                
+                # Resolve labels - can be array or variable name
+                labels = []
+                if isinstance(labels_config, str):
+                    # labels is a variable name - look it up in outputs
+                    if labels_config in outputs:
+                        label_data = outputs[labels_config]
+                        if isinstance(label_data, (list, np.ndarray)):
+                            labels = [str(lbl) for lbl in label_data]
+                elif isinstance(labels_config, list):
+                    # labels is a direct array
+                    labels = labels_config
+                
+                # x-axis uses first dimension in active combination
+                x_axis_config = None
+                if len(md_active_dims) > 0:
+                    dim_idx = md_active_dims[0]
+                    x_label = labels[dim_idx] if dim_idx < len(labels) else f"Axis {dim_idx}"
+                    x_axis_config = {'data_source': data_source, 'index': dim_idx, 'label': x_label}
+                
+                # y-axis uses second dimension in active combination
+                y_axis_config = None
+                if len(md_active_dims) > 1:
+                    dim_idx = md_active_dims[1]
+                    y_label = labels[dim_idx] if dim_idx < len(labels) else f"Axis {dim_idx}"
+                    y_axis_config = {'data_source': data_source, 'index': dim_idx, 'label': y_label}
+            else:
+                # Traditional x_axis/y_axis config
+                x_axis_config = config.get('x_axis', {})
+                y_axis_config = config.get('y_axis', {})
+            
+            # Merge axis indices for x (base + md + axis-specific)
             x_indices = base_indices.copy()
+            x_indices.update(md_slice_indices)  # Add multi-dimensional slices
             if 'x' in axis_indices:
                 x_indices.update(axis_indices['x'])
-            x_data = self._extract_axis_data(outputs, config.get('x_axis', {}), x_indices)
+            print(f"DEBUG _combo_changed: x_axis_config = {x_axis_config}")
+            print(f"DEBUG _combo_changed: x_indices = {x_indices}")
+            x_data = self._extract_axis_data(outputs, x_axis_config, x_indices)
+            print(f"DEBUG _combo_changed: x_data shape = {x_data.shape if isinstance(x_data, np.ndarray) else len(x_data) if x_data else 'None'}")
             
-            # Merge axis indices for y
+            # Merge axis indices for y (base + md + axis-specific)
             y_indices = base_indices.copy()
+            y_indices.update(md_slice_indices)  # Add multi-dimensional slices
             if 'y' in axis_indices:
                 y_indices.update(axis_indices['y'])
-            y_data = self._extract_axis_data(outputs, config.get('y_axis', {}), y_indices)
+            y_data = self._extract_axis_data(outputs, y_axis_config, y_indices)
             
-            # Merge axis indices for z
+            # Merge axis indices for z (base + md + axis-specific)
             z_indices = base_indices.copy()
+            z_indices.update(md_slice_indices)  # Add multi-dimensional slices
             if 'z' in axis_indices:
                 z_indices.update(axis_indices['z'])
+            # For 4D+ multi-dimensional display, exclude dimensions that are being displayed
+            # (md_active_dims) from z_indices AFTER all merges to avoid slicing them away
+            if md_active_dims:
+                for dim in md_active_dims:
+                    z_indices.pop(dim, None)  # Remove if present
+            print(f"DEBUG _combo_changed: z_axis_config = {config.get('z_axis', {})}")
+            print(f"DEBUG _combo_changed: z_indices = {z_indices}")
+            print(f"DEBUG _combo_changed: md_slice_indices = {md_slice_indices}")
             z_data = self._extract_axis_data(outputs, config.get('z_axis', {}), z_indices)
+            print(f"DEBUG _combo_changed: z_data shape = {z_data.shape if isinstance(z_data, np.ndarray) else 'None'}")
             
             # Create new matplotlib figure
             fig = Figure(figsize=(6, 4), dpi=100)
@@ -3129,10 +3738,13 @@ Count:
                         # Create mesh grids from x and y data
                         X, Y = np.meshgrid(x_data, y_data)
                         # Use pcolormesh for proper axis mapping
-                        im = ax.pcolormesh(X, Y, z_data, cmap='viridis', shading='auto')
+                        im = ax.pcolormesh(X, Y, z_data.T, cmap='viridis', shading='nearest')
                         fig.colorbar(im, ax=ax)
-                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
-                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+                        # Use dynamic axis configs if available (for aux_axis), else fallback to config
+                        x_label = x_axis_config.get('label', 'X') if x_axis_config else config.get('x_axis', {}).get('label', 'X')
+                        y_label = y_axis_config.get('label', 'Y') if y_axis_config else config.get('y_axis', {}).get('label', 'Y')
+                        ax.set_xlabel(x_label)
+                        ax.set_ylabel(y_label)
             
             elif graph_type == '3d_surf':
                 if x_data is not None and y_data is not None and z_data is not None:
@@ -3145,8 +3757,11 @@ Count:
                             ax.plot_wireframe(X, Y, z_data, cmap='viridis')
                         else:
                             ax.plot_surface(X, Y, z_data, cmap='viridis')
-                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
-                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+                        # Use dynamic axis configs if available (for aux_axis), else fallback to config
+                        x_label = x_axis_config.get('label', 'X') if x_axis_config else config.get('x_axis', {}).get('label', 'X')
+                        y_label = y_axis_config.get('label', 'Y') if y_axis_config else config.get('y_axis', {}).get('label', 'Y')
+                        ax.set_xlabel(x_label)
+                        ax.set_ylabel(y_label)
                         ax.set_zlabel(config.get('z_axis', {}).get('label', 'Z'))
                     
             elif graph_type == 'contour':
@@ -3158,8 +3773,11 @@ Count:
                             ax.contourf(X, Y, z_data, levels=10)
                         else:
                             ax.contour(X, Y, z_data, levels=10)
-                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
-                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+                        # Use dynamic axis configs if available (for aux_axis), else fallback to config
+                        x_label = x_axis_config.get('label', 'X') if x_axis_config else config.get('x_axis', {}).get('label', 'X')
+                        y_label = y_axis_config.get('label', 'Y') if y_axis_config else config.get('y_axis', {}).get('label', 'Y')
+                        ax.set_xlabel(x_label)
+                        ax.set_ylabel(y_label)
             
             # Add title with slice info
             title = config.get('title', 'Graph')
@@ -3258,7 +3876,7 @@ Count:
                         # Create mesh grids from x and y data
                         X, Y = np.meshgrid(x_data, y_data)
                         # Use pcolormesh for proper axis mapping
-                        im = ax.pcolormesh(X, Y, z_data, cmap='viridis', shading='auto')
+                        im = ax.pcolormesh(X, Y, z_data.T, cmap='viridis', shading='nearest')
                         fig.colorbar(im, ax=ax)
                         ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
                         ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
@@ -3524,12 +4142,15 @@ Count:
             # Get input parameters from function_configs
             input_parameters = self.function_configs.get(instance_alias, {}).copy()
             
+            # Get outputs for this function instance
+            function_outputs = outputs.get(instance_alias, {}) if outputs else {}
+            
             # Store the outputs from the execution
             self.analysis_data[instance_alias]['execution_results'] = {
                 'status': 'success',
                 'timestamp': datetime.now().isoformat(),
                 'execution_time': 0,  # TODO: measure execution time
-                'outputs': outputs.get(instance_alias, {}) if outputs else {},
+                'outputs': function_outputs,
                 'inputs': input_parameters  # Store the input parameters for condition evaluation
             }
             

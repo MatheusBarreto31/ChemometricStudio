@@ -126,6 +126,17 @@
         "tooltip": "Transposes data"
       },
       {
+        "name": "reshape_order",
+        "label": "Reshape Order (Multiway)",
+        "widget": "combobox",
+        "values": ["F", "C"],
+        "value_aliases": ["Fortran/MATLAB", "C/NumPy"],
+        "default": "F",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Order for reshaping multiway data: Fortran (F) for MATLAB compatibility, C for NumPy default"
+      },
+      {
         "name": "axis_info",
         "label": "Axis Information (Optional)",
         "widget": "entry",
@@ -157,7 +168,7 @@
             "type": "graph",
             "config": {
               "graph_type": "line",
-              "x_axis": {"data_source": "axis_n_info", "label": "Variables"},
+              "x_axis": {"data_source": "axis_n_info", "index": 1, "label": "Variables"},
               "y_axis": {"data_source": "X_cal", "label": "Intensity"},
               "title": "Spectral Data Overview",
               "data_slicing": [{"name": "Sample", "dimension": 0, "axis": "y", "show_navigation_menu": true}]
@@ -181,7 +192,7 @@
       {
         "title": "Data Overview",
         "layout": "ed",
-        "condition": {"parameter": "nway_flag", "operator": ">", "value": "1"},
+        "condition": {"parameter": "nway_flag", "operator": "==", "value": "2"},
         "sections": [
           {
             "type": "table",
@@ -205,10 +216,11 @@
             "type": "graph",
             "config": {
               "graph_type": "contour",
-              "x_axis": {"data_source": "axis_n_info", "index": 1, "label": "Variables 2"},
-              "y_axis": {"data_source": "axis_n_info", "index": 0, "label": "Variables 1"},
+              "x_axis": {"data_source": "axis_n_info", "index": 2, "label": "Variables 2"},
+              "y_axis": {"data_source": "axis_n_info", "index": 1, "label": "Variables 1"},
               "z_axis": {"data_source": "X_cal", "label": "Intensity"},
               "title": "Spectral Data Heatmap",
+              "cmap": "jet",
               "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}]
             }
           },
@@ -216,10 +228,11 @@
             "type": "graph",
             "config": {
               "graph_type": "3d_surf",
-              "x_axis": {"data_source": "axis_n_info", "index": 1, "label": "Variables 2"},
-              "y_axis": {"data_source": "axis_n_info", "index": 0, "label": "Variables 1"},
+              "x_axis": {"data_source": "axis_n_info", "index": 2, "label": "Variables 2"},
+              "y_axis": {"data_source": "axis_n_info", "index": 1, "label": "Variables 1"},
               "z_axis": {"data_source": "X_cal", "label": "Intensity"},
               "title": "Spectral Data 3D Surface",
+              "cmap": "jet",
               "use_wireframe": true,
               "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}]
             }
@@ -228,11 +241,47 @@
             "type": "graph",
             "config": {
               "graph_type": "3d_surf",
-              "x_axis": {"data_source": "axis_n_info", "index": 1, "label": "Variables 2"},
-              "y_axis": {"data_source": "axis_n_info", "index": 0, "label": "Variables 1"},
+              "x_axis": {"data_source": "axis_n_info", "index": 2, "label": "Variables 2"},
+              "y_axis": {"data_source": "axis_n_info", "index": 1, "label": "Variables 1"},
               "z_axis": {"data_source": "X_cal", "label": "Intensity"},
               "title": "Spectral Data 3D Surface",
+              "cmap": "jet",
               "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Data Overview",
+        "layout": "ew",
+        "condition": {"parameter": "nway_flag", "operator": ">", "value": "2"},
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "aux_axis": {
+                "data_source": "axis_n_info"
+              },
+              "z_axis": {"data_source": "X_cal", "label": "Intensity"},
+              "title": "Spectral Data Heatmap (4D+)",
+              "cmap": "jet",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}],
+              "show_md_menu": true
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "aux_axis": {
+                "data_source": "axis_n_info"
+              },
+              "z_axis": {"data_source": "X_cal", "label": "Intensity"},
+              "title": "Spectral Data Heatmap (4D+)",
+              "cmap": "jet",
+              "data_slicing": [{"name": "Sample", "axis": "z"}],
+              "show_md_menu": true
             }
           }
         ]

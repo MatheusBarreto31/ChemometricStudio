@@ -186,6 +186,18 @@
         "input_type": "inherited",
         "visible_if": {"input_type": "user"},
         "tooltip": "Automatically inherited from Load Data function"
+      },
+      {
+        "name": "reshape_order",
+        "label": "Reshape Order (Multiway)",
+        "widget": "combobox",
+        "values": ["F", "C"],
+        "value_aliases": ["Fortran/MATLAB", "C/NumPy"],
+        "default": "F",
+        "required": false,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Automatically inherited from Load Data function"
       }
     ]
   }
