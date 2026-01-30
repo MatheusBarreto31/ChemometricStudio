@@ -90,7 +90,7 @@
               "x_axis": {"data_source": "X_cal", "label": "Variables"},
               "y_axis": {"data_source": "X_cal", "label": "Intensity"},
               "title": "Original Data",
-              "navigation_axes": ["Samples"]
+              "data_slicing": ["Samples"]
             }
           },
           {
@@ -100,7 +100,7 @@
               "x_axis": {"data_source": "X_cal", "label": "Variables"},
               "y_axis": {"data_source": "X_cal", "label": "Intensity"},
               "title": "Processed Data",
-              "navigation_axes": ["Samples"]
+              "data_slicing": ["Samples"]
             }
           }
         ]

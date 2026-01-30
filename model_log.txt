@@ -1,9 +1,9 @@
 Analyst mode selected.
 
 Processing: load_data (load_data)
-  Parameters: {'d_specs_separator': 'comma', 'd_specs_headlines': '0', 'd_specs_type': 'x_matrix', 'nway_flag': '1', 'transpose': False, 'data_path': ['D:/cm-studio/tempfiles/x.txt']}
+  Parameters: {'d_specs_separator': 'comma', 'd_specs_headlines': '0', 'd_specs_type': 'x_matrix', 'nway_flag': '1', 'transpose': False, 'data_path': ['D:/cm-studio/.venv/DataforTesting/x.txt']}
 Executing: load_data
-  Final arguments: {'d_specs_separator': 'comma', 'd_specs_headlines': 0, 'd_specs_type': 'x_matrix', 'nway_flag': 1, 'transpose': False, 'data_path': ['D:/cm-studio/tempfiles/x.txt']}
+  Final arguments: {'d_specs_separator': 'comma', 'd_specs_headlines': 0, 'd_specs_type': 'x_matrix', 'nway_flag': 1, 'transpose': False, 'data_path': ['D:/cm-studio/.venv/DataforTesting/x.txt']}
 load_data executed successfully.
 
 

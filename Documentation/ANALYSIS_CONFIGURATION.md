@@ -440,7 +440,15 @@ Switch between different columns/variables on a specific plot axis:
     "title": "Data Table",
     "decimal_places": 4,
     "max_rows": 100,
-    "max_cols": 20
+    "max_cols": 20,
+    "data_slicing": [
+      {
+        "name": "Sample",
+        "dimension": 0,
+        "default": 0,
+        "show_navigation_menu": true
+      }
+    ]
   }
 }
 ```
@@ -451,6 +459,59 @@ Switch between different columns/variables on a specific plot axis:
 - `decimal_places` (integer, default: 2): Decimal precision for floating-point numbers
 - `max_rows` (integer, default: 50): Maximum rows to display before scrolling
 - `max_cols` (integer, default: 15): Maximum columns to display before scrolling
+- `data_slicing` (array, optional): Configuration for interactive data slicing through multi-dimensional arrays
+
+### Data Slicing Configuration
+
+Similar to graphs, tables support interactive slicing through multi-dimensional data:
+
+```json
+{
+  "data_slicing": [
+    {
+      "name": "Sample",
+      "dimension": 0,
+      "default": 0,
+      "show_navigation_menu": true
+    }
+  ]
+}
+```
+
+**Data Slicing Properties:**
+- `name` (string): Label for the dimension (e.g., "Sample", "Batch")
+- `dimension` (integer): Which dimension to slice (0 = first, 1 = second, etc.)
+- `default` (integer, default: 0): Initial index to display
+- `show_navigation_menu` (boolean, default: true): Whether to show navigation controls (< > buttons)
+
+**Example: 3-Dimensional Data Slicing**
+
+For 3D data arrays, you can slice multiple dimensions:
+
+```json
+{
+  "type": "table",
+  "config": {
+    "data_source": "X_cal",
+    "title": "Sliced Spectral Data",
+    "max_rows": 20,
+    "data_slicing": [
+      {
+        "name": "Sample",
+        "dimension": 0,
+        "default": 0,
+        "show_navigation_menu": true
+      },
+      {
+        "name": "Batch",
+        "dimension": 2,
+        "default": 0,
+        "show_navigation_menu": true
+      }
+    ]
+  }
+}
+```
 
 ---
 

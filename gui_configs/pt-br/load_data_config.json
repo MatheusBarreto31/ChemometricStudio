@@ -159,7 +159,7 @@
               "x_axis": {"data_source": "axis_n_info", "label": "Variables"},
               "y_axis": {"data_source": "X_cal", "label": "Intensity"},
               "title": "Spectral Data Overview",
-              "navigation_axes": ["Samples"]
+              "data_slicing": ["Samples"]
             }
           }
         ]

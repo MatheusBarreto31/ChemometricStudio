@@ -22,6 +22,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
+from mpl_toolkits.mplot3d import Axes3D
 
 # Import language manager
 from language_manager import get_language_manager, _
@@ -1433,6 +1434,34 @@ class ChemometricsGUI:
         except Exception as e:
             pass  # Silently fail if sash positioning isn't available
 
+    def _position_fd_sashes(self, main_paned, top_paned, bottom_paned):
+        """Position the sashes for fd (Four Divided) layout."""
+        try:
+            # Force window to update first
+            main_paned.update_idletasks()
+            
+            # Get dimensions
+            main_height = main_paned.winfo_height()
+            top_width = top_paned.winfo_width()
+            bottom_width = bottom_paned.winfo_width()
+            
+            # Position vertical sash in main paned window (center vertically)
+            if main_height > 1:
+                vertical_sash_pos = main_height // 2
+                main_paned.sashpos(0, vertical_sash_pos)
+            
+            # Position horizontal sash in top paned window (center horizontally)
+            if top_width > 1:
+                horizontal_sash_pos = top_width // 2
+                top_paned.sashpos(0, horizontal_sash_pos)
+            
+            # Position horizontal sash in bottom paned window (center horizontally)
+            if bottom_width > 1:
+                horizontal_sash_pos = bottom_width // 2
+                bottom_paned.sashpos(0, horizontal_sash_pos)
+        except Exception as e:
+            pass  # Silently fail if sash positioning isn't available
+
     
     def _show_analysis_tab(self):
         """Show Analysis tab with analysis and visualization tools."""
@@ -1519,37 +1548,64 @@ class ChemometricsGUI:
                                     command=lambda: self._remove_current_page(instance_alias))
         remove_page_btn.pack(side=tk.RIGHT, padx=5)
         
-        # Main content area
-        content_frame = ttk.Frame(self.tab_content_frame)
-        content_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        # Build list of visible pages (pages that pass conditions)
+        pages = analysis_info.get('pages', [])
+        visible_pages = []  # List of (idx, page_data) tuples for pages that are visible
         
-        # Page navigation frame (bottom)
-        nav_frame = ttk.Frame(self.tab_content_frame)
-        nav_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+        # Only filter by condition if we have execution results with inputs
+        has_execution_results = 'execution_results' in analysis_info and analysis_info['execution_results'].get('inputs')
         
-        nav_label = ttk.Label(nav_frame, text="Pages:", font=("Arial", 9))
-        nav_label.pack(side=tk.LEFT, padx=5)
-        
-        # Page buttons
-        current_page = analysis_info.get('current_page', 0)
-        for idx, page in enumerate(analysis_info.get('pages', [])):
-            # Check if page passes condition
+        for idx, page in enumerate(pages):
+            # Check if page has a condition
             if page.get('condition'):
-                if not self._evaluate_condition(instance_alias, page.get('condition')):
-                    continue  # Skip pages that don't meet condition
-            
-            page_title = page.get('title', f'Page {idx + 1}')
-            btn = ttk.Button(nav_frame, text=page_title, width=15,
-                           command=lambda p=idx: self._switch_analysis_page(instance_alias, p))
-            btn.pack(side=tk.LEFT, padx=2)
-            
+                # Only apply condition if we have execution results; otherwise show all pages
+                if has_execution_results:
+                    if not self._evaluate_condition(instance_alias, page.get('condition')):
+                        continue  # Skip pages that don't meet condition
+            # Add all pages that don't have conditions, or pages with conditions that pass
+            visible_pages.append((idx, page))
+        
+        # Get current page, ensuring it's a valid visible page
+        current_page = analysis_info.get('current_page', 0)
+        # Find the position of current_page in visible_pages
+        visible_page_idx = 0
+        for i, (idx, page) in enumerate(visible_pages):
             if idx == current_page:
-                btn.state(['pressed'])
+                visible_page_idx = i
+                break
+        
+        # Page navigation frame (bottom) - PACK THIS FIRST so it doesn't get pushed off screen
+        nav_frame = ttk.Frame(self.tab_content_frame)
+        nav_frame.pack(fill=tk.X, padx=10, pady=(0, 10), side=tk.BOTTOM)
+        
+        # Page display label (first)
+        if visible_pages:
+            current_idx, current_page_data = visible_pages[visible_page_idx]
+            page_title = current_page_data.get('title', f'Page {current_idx + 1}')
+            page_info = f"Page {visible_page_idx + 1}/{len(visible_pages)}: {page_title}"
+        else:
+            page_info = "No pages available"
+        
+        page_label = ttk.Label(nav_frame, text=page_info, font=("Arial", 9))
+        page_label.pack(side=tk.LEFT, padx=10)
+        
+        # Previous page button
+        prev_btn = ttk.Button(nav_frame, text="← Previous", width=10,
+                             command=lambda: self._switch_analysis_page_relative(instance_alias, -1))
+        prev_btn.pack(side=tk.LEFT, padx=2)
+        
+        # Next page button
+        next_btn = ttk.Button(nav_frame, text="Next →", width=10,
+                             command=lambda: self._switch_analysis_page_relative(instance_alias, 1))
+        next_btn.pack(side=tk.LEFT, padx=2)
+        
+        # Main content area - PACK THIS AFTER so it expands into remaining space
+        content_frame = ttk.Frame(self.tab_content_frame)
+        content_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10, side=tk.TOP)
         
         # Display current page
-        pages = analysis_info.get('pages', [])
-        if current_page < len(pages):
-            page_data = pages[current_page]
+        if visible_pages:
+            current_idx, page_data = visible_pages[visible_page_idx]
             self._render_analysis_page(content_frame, instance_alias, page_data)
     
     def _switch_analysis_page(self, instance_alias: str, page_idx: int):
@@ -1558,13 +1614,59 @@ class ChemometricsGUI:
             self.analysis_data[instance_alias]['current_page'] = page_idx
             self._show_analysis_tab()
     
+    def _switch_analysis_page_relative(self, instance_alias: str, direction: int):
+        """Switch to the previous or next visible analysis page.
+        
+        Args:
+            instance_alias: The function instance alias
+            direction: -1 for previous, 1 for next
+        """
+        if instance_alias not in self.analysis_data:
+            return
+        
+        analysis_info = self.analysis_data[instance_alias]
+        pages = analysis_info.get('pages', [])
+        current_page = analysis_info.get('current_page', 0)
+        
+        # Build list of visible pages
+        visible_pages = []
+        for idx, page in enumerate(pages):
+            if page.get('condition'):
+                if not self._evaluate_condition(instance_alias, page.get('condition')):
+                    continue
+            visible_pages.append((idx, page))
+        
+        if not visible_pages:
+            return
+        
+        # Find current page position in visible pages
+        current_visible_idx = 0
+        for i, (idx, page) in enumerate(visible_pages):
+            if idx == current_page:
+                current_visible_idx = i
+                break
+        
+        # Calculate new position
+        new_visible_idx = current_visible_idx + direction
+        
+        # Clamp to valid range
+        if new_visible_idx < 0:
+            new_visible_idx = 0
+        elif new_visible_idx >= len(visible_pages):
+            new_visible_idx = len(visible_pages) - 1
+        
+        # Switch to the new page
+        new_page_idx = visible_pages[new_visible_idx][0]
+        self.analysis_data[instance_alias]['current_page'] = new_page_idx
+        self._show_analysis_tab()
+    
     def _evaluate_condition(self, instance_alias: str, condition: dict) -> bool:
         """Evaluate a condition against execution inputs.
         
         Args:
             instance_alias: The function instance alias
             condition: Dict with 'parameter', 'operator', and 'value' keys
-                      Example: {"parameter": "nway_flag", "operator": ">", "value": 1}
+                      Example: {"parameter": "nway_flag", "operator": ">", "value": "1"}
         
         Returns:
             True if condition is met, False otherwise
@@ -1588,7 +1690,26 @@ class ChemometricsGUI:
         actual_value = inputs.get(parameter)
         
         if actual_value is None:
-            return False
+            # If parameter not found in inputs, default to showing the page
+            return True
+        
+        # Convert both values to appropriate types for comparison
+        try:
+            # Try to convert to int/float for numeric comparisons
+            if operator in ['>', '<', '>=', '<=']:
+                try:
+                    actual_value = int(actual_value) if isinstance(actual_value, str) else actual_value
+                    expected_value = int(expected_value) if isinstance(expected_value, str) else expected_value
+                except (ValueError, TypeError):
+                    # If conversion fails, convert to strings for comparison
+                    actual_value = str(actual_value)
+                    expected_value = str(expected_value)
+            else:
+                # For == and != operators, convert both to strings for consistent comparison
+                actual_value = str(actual_value)
+                expected_value = str(expected_value)
+        except Exception:
+            pass
         
         # Evaluate based on operator
         try:
@@ -1647,13 +1768,28 @@ class ChemometricsGUI:
         containers = []
         
         if layout_type == 'fd':  # Four sections (2x2 grid)
-            for i in range(2):
-                row_frame = ttk.Frame(parent)
-                row_frame.pack(fill=tk.BOTH, expand=True)
-                for j in range(2):
-                    container = ttk.LabelFrame(row_frame, text=f"Section", padding=5)
-                    container.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=2, pady=2)
-                    containers.append(container)
+            # Use nested paned windows to ensure equal space distribution
+            main_paned = ttk.PanedWindow(parent, orient=tk.VERTICAL)
+            main_paned.pack(fill=tk.BOTH, expand=True)
+            
+            # Top row with horizontal paned window for 2 side-by-side containers
+            top_paned = ttk.PanedWindow(main_paned, orient=tk.HORIZONTAL)
+            main_paned.add(top_paned, weight=1)
+            for j in range(2):
+                container = ttk.LabelFrame(top_paned, text=f"Section", padding=5)
+                top_paned.add(container, weight=1)
+                containers.append(container)
+            
+            # Bottom row with horizontal paned window for 2 side-by-side containers
+            bottom_paned = ttk.PanedWindow(main_paned, orient=tk.HORIZONTAL)
+            main_paned.add(bottom_paned, weight=1)
+            for j in range(2):
+                container = ttk.LabelFrame(bottom_paned, text=f"Section", padding=5)
+                bottom_paned.add(container, weight=1)
+                containers.append(container)
+            
+            # Position sashes after rendering
+            parent.after_idle(lambda: self._position_fd_sashes(main_paned, top_paned, bottom_paned))
         
         elif layout_type == 'fp':  # Full page (1 section)
             container = ttk.LabelFrame(parent, text="Section", padding=5)
@@ -1818,7 +1954,7 @@ class ChemometricsGUI:
             if section_id not in slice_state:
                 # Initialize slices from config or defaults
                 slice_info = config.get('slice_info', {})
-                nav_axes = config.get('navigation_axes', [])
+                nav_axes = config.get('data_slicing', [])
                 
                 # Build indices dict for multi-dimensional navigation
                 # Support both old format (list of strings) and new format (list of dicts)
@@ -1835,7 +1971,7 @@ class ChemometricsGUI:
                 
                 slice_state[section_id] = {
                     'indices': indices,  # Now a dict: {dimension: index}
-                    'navigation_axes': nav_axes,
+                    'data_slicing': nav_axes,
                     'outputs': outputs,
                     'config': config,
                     'graph_type': graph_type
@@ -1844,11 +1980,11 @@ class ChemometricsGUI:
             current_slice = slice_state[section_id]
             
             # Initialize axis indices and dimension slicing indices with defaults BEFORE extraction
-            nav_axes = config.get('navigation_axes', [])
+            nav_axes = config.get('data_slicing', [])
             
             if 'axis_indices' not in current_slice:
                 current_slice['axis_indices'] = {}
-                # Only initialize axis_indices for axes that appear in navigation_axes with "axis" field
+                # Only initialize axis_indices for axes that appear in data_slicing with "axis" field
                 for nav_item in nav_axes:
                     if isinstance(nav_item, dict):
                         target_axis = nav_item.get('axis')
@@ -1902,21 +2038,38 @@ class ChemometricsGUI:
             control_frame.pack(fill=tk.X, padx=5, pady=5)
             
             # Add navigation controls if axes are navigable
-            nav_axes = config.get('navigation_axes', [])
+            nav_axes = config.get('data_slicing', [])
             if nav_axes:
                 self._create_navigation_controls(control_frame, instance_alias, section_id, 
                                                  outputs, config, current_slice)
             
             # Create matplotlib figure
             fig = Figure(figsize=(6, 4), dpi=100)
-            ax = fig.add_subplot(111)
+            
+            # Check if z_axis is defined for 3D scatter or 3d_surf
+            z_axis_config = config.get('z_axis', {})
+            use_3d = (graph_type == 'scatter' or graph_type == '3d_surf') and z_axis_config and z_data is not None
+            
+            if use_3d:
+                # Create 3D plot
+                ax = fig.add_subplot(111, projection='3d')
+            else:
+                ax = fig.add_subplot(111)
             
             # Render based on graph type
             if graph_type == 'scatter':
                 if x_data is not None and y_data is not None:
-                    ax.scatter(x_data, y_data, alpha=0.6)
-                    ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
-                    ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+                    if use_3d:
+                        # 3D scatter
+                        ax.scatter(x_data, y_data, z_data, alpha=0.6)
+                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+                        ax.set_zlabel(config.get('z_axis', {}).get('label', 'Z'))
+                    else:
+                        # 2D scatter
+                        ax.scatter(x_data, y_data, alpha=0.6)
+                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
                     
             elif graph_type == 'line':
                 if x_data is not None and y_data is not None:
@@ -1950,17 +2103,40 @@ class ChemometricsGUI:
                     ax.set_ylabel('Frequency')
                     
             elif graph_type == 'heatmap':
-                if y_data is not None and y_data.ndim >= 2:
-                    im = ax.imshow(y_data, cmap='viridis', aspect='auto')
-                    fig.colorbar(im, ax=ax)
-                    ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
-                    ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+                if x_data is not None and y_data is not None and z_data is not None:
+                    if isinstance(x_data, np.ndarray) and isinstance(y_data, np.ndarray) and isinstance(z_data, np.ndarray):
+                        # Create mesh grids from x and y data
+                        X, Y = np.meshgrid(x_data, y_data)
+                        # Use pcolormesh for proper axis mapping
+                        im = ax.pcolormesh(X, Y, z_data, cmap='viridis', shading='auto')
+                        fig.colorbar(im, ax=ax)
+                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+            
+            elif graph_type == '3d_surf':
+                if x_data is not None and y_data is not None and z_data is not None:
+                    if isinstance(x_data, np.ndarray) and isinstance(y_data, np.ndarray) and isinstance(z_data, np.ndarray):
+                        # Create mesh grids from x and y data
+                        X, Y = np.meshgrid(x_data, y_data)
+                        # Use plot_surface or plot_wireframe for 3D surface plot
+                        use_wireframe = config.get('use_wireframe', False)
+                        if use_wireframe:
+                            ax.plot_wireframe(X, Y, z_data, cmap='viridis')
+                        else:
+                            ax.plot_surface(X, Y, z_data, cmap='viridis')
+                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+                        ax.set_zlabel(config.get('z_axis', {}).get('label', 'Z'))
                     
             elif graph_type == 'contour':
                 if x_data is not None and y_data is not None and z_data is not None:
                     if isinstance(x_data, np.ndarray) and isinstance(y_data, np.ndarray):
                         X, Y = np.meshgrid(x_data, y_data)
-                        ax.contour(X, Y, z_data, levels=10)
+                        contour_type = config.get('contour_type', 'contourf')
+                        if contour_type == 'contourf':
+                            ax.contourf(X, Y, z_data, levels=10)
+                        else:
+                            ax.contour(X, Y, z_data, levels=10)
                         ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
                         ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
             
@@ -2018,10 +2194,16 @@ class ChemometricsGUI:
         if data is None:
             return None
         
-        # Handle list data (like axis_n_info which is a list of arrays)
-        if isinstance(data, list) and len(data) > 0:
-            # For axis_n_info, take the first axis (for 1D spectral data)
-            if data_source == 'axis_n_info':
+        # Track if this is a list source (coordinates/axes) vs array source (data)
+        is_list_source = isinstance(data, list) and len(data) > 0
+        
+        # Handle list data (list of arrays like axis vectors)
+        if is_list_source:
+            # Use config index if specified, otherwise take first element
+            config_index = axis_config.get('index')
+            if config_index is not None and isinstance(config_index, int) and config_index < len(data):
+                data = data[config_index] if isinstance(data[config_index], np.ndarray) else np.array(data[config_index])
+            else:
                 data = data[0] if isinstance(data[0], np.ndarray) else np.array(data[0])
         
         # Convert to numpy array if needed
@@ -2031,23 +2213,26 @@ class ChemometricsGUI:
             except (ValueError, TypeError):
                 return None
         
-        # Handle indexing for multi-dimensional data
-        # First apply config index if specified
-        config_index = axis_config.get('index')
-        if config_index is not None:
-            if isinstance(config_index, int) and data.ndim > 1:
-                try:
-                    data = data[config_index] if config_index < data.shape[0] else data
-                except (IndexError, TypeError):
-                    pass
-            elif isinstance(config_index, list) and data.ndim > 1:
-                try:
-                    for idx in config_index:
-                        data = data[idx]
-                except (IndexError, TypeError):
-                    pass
-        # Don't apply dimension-based slicing to axis_n_info - it's axis labels, not data to be sliced
-        elif data_source != 'axis_n_info' and isinstance(indices, dict):
+        # Handle indexing for multi-dimensional array data (not list sources)
+        # Apply config index if specified
+        if not is_list_source:
+            config_index = axis_config.get('index')
+            if config_index is not None:
+                if isinstance(config_index, int) and data.ndim > 1:
+                    try:
+                        data = data[config_index] if config_index < data.shape[0] else data
+                    except (IndexError, TypeError):
+                        pass
+                elif isinstance(config_index, list) and data.ndim > 1:
+                    try:
+                        for idx in config_index:
+                            data = data[idx]
+                    except (IndexError, TypeError):
+                        pass
+        
+        # Apply dimension-based slicing (only for array data, not list sources like axes)
+        # List sources are coordinate arrays and should not be sliced by data dimensions
+        if not is_list_source and isinstance(indices, dict):
             # Apply multi-dimensional slicing using indices dict
             # Sort by dimension to apply slices in order
             for dim in sorted(indices.keys()):
@@ -2057,7 +2242,7 @@ class ChemometricsGUI:
                         data = data[idx]
                 except (IndexError, TypeError):
                     pass
-        elif isinstance(indices, int) and data.ndim > 1:
+        elif not is_list_source and isinstance(indices, int) and data.ndim > 1:
             # Backward compatibility: indices is a single integer
             try:
                 if indices >= 0 and indices < data.shape[0]:
@@ -2066,6 +2251,179 @@ class ChemometricsGUI:
                 pass
         
         return data
+    
+    def _extract_sliced_data(self, data: np.ndarray, indices: dict) -> np.ndarray:
+        """Extract sliced data from multi-dimensional array using indices dictionary.
+        
+        Args:
+            data: NumPy array to slice
+            indices: Dictionary mapping dimension to index (e.g., {0: 5, 1: 2})
+        
+        Returns:
+            Sliced data array
+        """
+        if not isinstance(data, np.ndarray):
+            return data
+        
+        result = data.copy()
+        
+        # Apply slicing for each dimension in REVERSE sorted order
+        # This way we slice from higher dimensions first, so dimension indices don't shift
+        if isinstance(indices, dict):
+            for dim in sorted(indices.keys(), reverse=True):
+                idx = indices[dim]
+                try:
+                    if dim < len(result.shape) and idx >= 0 and idx < result.shape[dim]:
+                        # Use take with axis to properly handle multi-dimensional slicing
+                        result = np.take(result, idx, axis=dim)
+                except (IndexError, TypeError):
+                    pass
+        
+        return result
+    
+    def _create_table_navigation_controls(self, parent_frame: ttk.Frame, instance_alias: str,
+                                         section_id: int, outputs: dict, config: dict,
+                                         slice_state: dict) -> None:
+        """Create navigation controls for table data slicing.
+        
+        Similar to graph navigation but for table dimensions.
+        """
+        try:
+            nav_axes = config.get('data_slicing', [])
+            if not nav_axes:
+                return
+            
+            # Get the data to determine shape/bounds
+            data_source = config.get('data_source')
+            if not data_source or data_source not in outputs:
+                return
+            
+            data = outputs[data_source]
+            if not isinstance(data, np.ndarray):
+                try:
+                    data = np.array(data)
+                except (ValueError, TypeError):
+                    return
+            
+            # Initialize indices if not present
+            if 'indices' not in slice_state:
+                slice_state['indices'] = {}
+                for nav_item in nav_axes:
+                    if isinstance(nav_item, dict):
+                        dim = nav_item.get('dimension', 0)
+                        slice_state['indices'][dim] = nav_item.get('default', 0)
+            
+            # Create navigation frame
+            nav_frame = ttk.Frame(parent_frame)
+            nav_frame.pack(fill=tk.X, padx=5, pady=5)
+            
+            # For each navigable axis, create controls
+            for nav_item in nav_axes:
+                # Parse navigation item
+                if isinstance(nav_item, dict):
+                    axis_name = nav_item.get('name', 'Dimension')
+                    dimension = nav_item.get('dimension', 0)
+                    show_nav = nav_item.get('show_navigation_menu', True)
+                else:
+                    # Old format: just a string
+                    axis_name = nav_item
+                    dimension = nav_axes.index(nav_item)
+                    show_nav = True
+                
+                # Skip if navigation is disabled
+                if not show_nav:
+                    continue
+                
+                axis_frame = ttk.Frame(nav_frame)
+                axis_frame.pack(fill=tk.X, padx=5, pady=2)
+                
+                # Get max index from data shape
+                max_index = data.shape[dimension] - 1 if dimension < len(data.shape) else 0
+                
+                # Get current index
+                indices = slice_state.get('indices', {})
+                current_index = indices.get(dimension, 0)
+                
+                # Axis label
+                label_text = f"{axis_name}: {current_index + 1}/{max_index + 1}"
+                label = ttk.Label(axis_frame, text=label_text, width=15)
+                label.pack(side=tk.LEFT, padx=5)
+                
+                # Previous button
+                prev_btn = ttk.Button(
+                    axis_frame,
+                    text="<",
+                    width=3,
+                    command=lambda d=dimension, an=axis_name: self._on_table_navigate_slice(
+                        instance_alias, section_id, -1, d, an, max_index
+                    )
+                )
+                prev_btn.pack(side=tk.LEFT, padx=2)
+                
+                # Index display
+                index_label = ttk.Label(axis_frame, text=str(current_index + 1), width=3)
+                index_label.pack(side=tk.LEFT, padx=2)
+                
+                # Next button
+                next_btn = ttk.Button(
+                    axis_frame,
+                    text=">",
+                    width=3,
+                    command=lambda d=dimension, an=axis_name: self._on_table_navigate_slice(
+                        instance_alias, section_id, 1, d, an, max_index
+                    )
+                )
+                next_btn.pack(side=tk.LEFT, padx=2)
+                
+                # Store reference for updates
+                if not hasattr(self, '_table_nav_labels'):
+                    self._table_nav_labels = {}
+                label_key = (instance_alias, section_id, dimension, axis_name)
+                self._table_nav_labels[label_key] = (index_label, label)
+        
+        except Exception as e:
+            print(f"Error creating table navigation controls: {str(e)}")
+    
+    def _on_table_navigate_slice(self, instance_alias: str, section_id: int, direction: int,
+                                 dimension: int, axis_name: str, max_index: int) -> None:
+        """Handle table navigation button click to change slice index."""
+        try:
+            if instance_alias not in self.analysis_data:
+                return
+            
+            if 'table_slices' not in self.analysis_data[instance_alias]:
+                return
+            
+            slice_state = self.analysis_data[instance_alias]['table_slices']
+            if section_id not in slice_state:
+                return
+            
+            current_state = slice_state[section_id]
+            indices = current_state.get('indices', {})
+            
+            # Update index
+            current_idx = indices.get(dimension, 0)
+            new_idx = current_idx + direction
+            
+            # Clamp to valid range
+            new_idx = max(0, min(new_idx, max_index))
+            
+            # Store updated index
+            indices[dimension] = new_idx
+            
+            # Update label if it exists
+            if hasattr(self, '_table_nav_labels'):
+                label_key = (instance_alias, section_id, dimension, axis_name)
+                if label_key in self._table_nav_labels:
+                    index_label, full_label = self._table_nav_labels[label_key]
+                    index_label.config(text=str(new_idx + 1))
+                    full_label.config(text=f"{axis_name}: {new_idx + 1}/{max_index + 1}")
+            
+            # Refresh table display
+            self._refresh_table(instance_alias, section_id)
+        
+        except Exception as e:
+            print(f"Error navigating table slice: {str(e)}")
     
     def _render_table_section(self, parent: ttk.Frame, instance_alias: str, section_data: dict, section_idx: int = 0):
         """Render a comprehensive data table with sorting, filtering, and formatting."""
@@ -2103,6 +2461,62 @@ class ChemometricsGUI:
             if not isinstance(data, np.ndarray):
                 data = np.array(data)
             
+            # Initialize table slices state for data slicing support
+            # Use data_source as stable section ID instead of id(section_data) which changes each call
+            section_id = f"{instance_alias}_{data_source}_{section_idx}"
+            if 'table_slices' not in self.analysis_data[instance_alias]:
+                self.analysis_data[instance_alias]['table_slices'] = {}
+            
+            slice_state = self.analysis_data[instance_alias]['table_slices']
+            if section_id not in slice_state:
+                # Initialize slices from config or defaults
+                nav_axes = config.get('data_slicing', [])
+                
+                # Build indices dict for multi-dimensional slicing
+                indices = {}
+                for nav_item in nav_axes:
+                    if isinstance(nav_item, dict):
+                        dim = nav_item.get('dimension', 0)
+                        indices[dim] = nav_item.get('default', 0)
+                    else:
+                        # Old format: just a string
+                        dim = len(indices)
+                        indices[dim] = 0
+                
+                slice_state[section_id] = {
+                    'indices': indices,  # Dict: {dimension: index}
+                    'data_slicing': nav_axes,
+                    'outputs': outputs,
+                    'config': config
+                }
+            
+            current_slice = slice_state[section_id]
+            
+            # Extract sliced data if data_slicing is configured
+            nav_axes = config.get('data_slicing', [])
+            if nav_axes:
+                indices = current_slice.get('indices', {})
+                data = self._extract_sliced_data(data, indices)
+                # Update slice info in config for display
+                current_index = list(indices.values())[0] if indices else 0
+                config['slice_info'] = {
+                    'description': list(nav_axes)[0].get('name', '') if isinstance(list(nav_axes)[0], dict) else list(nav_axes)[0],
+                    'index': current_index
+                }
+            else:
+                config['slice_info'] = {}
+            
+            # NOW check for 3D+ data without data_slicing configuration (AFTER extraction)
+            if data.ndim > 2:
+                error_msg = f"Cannot display {data.ndim}D data ({data.shape}) in table without data slicing configuration.\n\n"
+                error_msg += "Add 'data_slicing' to your table config:\n"
+                error_msg += '{\n  "data_slicing": [\n'
+                error_msg += '    {\n      "name": "Dimension",\n'
+                error_msg += '      "dimension": 0,\n      "show_navigation_menu": true\n    }\n  ]\n}'
+                label = ttk.Label(parent, text=error_msg, foreground="red", justify=tk.LEFT)
+                label.pack(expand=True, padx=10, pady=10)
+                return
+            
             # Get table configuration
             title = config.get('title', f'Table: {data_source}')
             decimal_places = config.get('decimal_places', 4)
@@ -2112,7 +2526,7 @@ class ChemometricsGUI:
             row_headers = config.get('row_headers', None)
             
             # Initialize table state if needed
-            section_id = id(section_data)
+            # Note: section_id is already defined above as stable identifier
             if 'table_state' not in self.analysis_data[instance_alias]:
                 self.analysis_data[instance_alias]['table_state'] = {}
             
@@ -2137,6 +2551,12 @@ class ChemometricsGUI:
             info_text = f"Shape: {data.shape} | Type: {data.dtype} | Min: {np.min(data):.4f} | Max: {np.max(data):.4f} | Mean: {np.mean(data):.4f}"
             info_label = ttk.Label(main_frame, text=info_text, font=('Arial', 8), foreground='gray')
             info_label.pack(anchor='w', pady=(0, 5))
+            
+            # Add navigation controls if data_slicing is configured
+            nav_axes = config.get('data_slicing', [])
+            if nav_axes:
+                self._create_table_navigation_controls(main_frame, instance_alias, section_id,
+                                                      outputs, config, current_slice)
             
             # Create toolbar for table controls
             toolbar = ttk.Frame(main_frame)
@@ -2172,13 +2592,22 @@ class ChemometricsGUI:
                           col_headers: list = None, row_headers: list = None) -> None:
         """Create the actual table view with scrollbars and formatting."""
         try:
+            # Check if data is still 3D+ (shouldn't happen if slicing is configured, but safety check)
+            if data.ndim > 2:
+                error_msg = f"Cannot display {data.ndim}D data in table view.\n"
+                error_msg += f"Data shape: {data.shape}\n\n"
+                error_msg += "This should have been caught earlier. Ensure data_slicing is configured."
+                label = ttk.Label(parent, text=error_msg, foreground="red", justify=tk.LEFT)
+                label.pack(expand=True, padx=10, pady=10)
+                return
+            
             # Prepare data for display
             if data.ndim == 1:
                 display_data = data.reshape(-1, 1)
             elif data.ndim == 2:
                 display_data = data
             else:
-                # Flatten higher dimensional arrays
+                # Should not reach here due to check above
                 display_data = data.reshape(data.shape[0], -1)
             
             num_rows, num_cols = display_data.shape
@@ -2322,22 +2751,49 @@ Count:
             print(f"Error showing statistics: {str(e)}")
     
     def _refresh_table(self, instance_alias: str, section_id: int) -> None:
-        """Refresh the table display."""
+        """Refresh the table display with current slicing."""
         try:
-            if instance_alias in self.analysis_data:
-                if 'table_state' in self.analysis_data[instance_alias]:
-                    table_state = self.analysis_data[instance_alias]['table_state']
-                    if section_id in table_state:
-                        # Reset table state
-                        table_state[section_id] = {
-                            'sort_column': None,
-                            'sort_order': 'ascending',
-                            'filter_text': '',
-                            'current_slice': 0
-                        }
-            print(f"✅ Table refreshed")
+            if instance_alias not in self.analysis_data:
+                return
+            
+            if 'execution_results' not in self.analysis_data[instance_alias]:
+                return
+            
+            # Get all analysis pages and sections to find and update the matching table
+            analysis_info = self.analysis_data[instance_alias]
+            pages = analysis_info.get('pages', [])
+            current_page_idx = analysis_info.get('current_page', 0)
+            
+            if current_page_idx >= len(pages):
+                return
+            
+            page_data = pages[current_page_idx]
+            sections = page_data.get('sections', [])
+            
+            # Find the matching section and re-render it
+            for idx, section in enumerate(sections):
+                if id(section) == section_id:
+                    # Found matching section - get its parent frame and clear it
+                    # We need to find the actual frame widget for this section
+                    # This is a bit tricky since we need to locate the frame by content
+                    
+                    # For now, trigger a full page re-render which is safer
+                    # Get the current tab frame
+                    if hasattr(self, 'tab_content_frame'):
+                        # Clear the tab content
+                        for widget in self.tab_content_frame.winfo_children():
+                            widget.destroy()
+                        
+                        # Re-render the current page
+                        self._render_analysis_page(self.tab_content_frame, instance_alias, page_data)
+                    
+                    print(f"✅ Table refreshed")
+                    return
+            
         except Exception as e:
             print(f"Error refreshing table: {str(e)}")
+            import traceback
+            traceback.print_exc()
     
     def _create_navigation_controls(self, parent_frame: ttk.Frame, instance_alias: str, 
                                    section_id: int, outputs: dict, config: dict, 
@@ -2345,11 +2801,11 @@ Count:
         """Create navigation controls (arrow buttons) for multi-dimensional data slicing and axis selection.
         
         Supports both slicing and axis selection:
-        Slicing: "navigation_axes": [{"name": "Samples", "dimension": 0}]
-        Axis selection: "navigation_axes": [{"name": "X-Axis", "dimension": 1, "axis": "x"}, {"name": "Y-Axis", "dimension": 1, "axis": "y"}]
+        Slicing: "data_slicing": [{"name": "Samples", "dimension": 0}]
+        Axis selection: "data_slicing": [{"name": "X-Axis", "dimension": 1, "axis": "x"}, {"name": "Y-Axis", "dimension": 1, "axis": "y"}]
         """
         try:
-            nav_axes = config.get('navigation_axes', [])
+            nav_axes = config.get('data_slicing', [])
             if not nav_axes:
                 return
             
@@ -2405,7 +2861,7 @@ Count:
                                 default_idx = 0
                             slice_state['indices'][dimension] = default_idx
             
-            # For each navigable axis, create controls
+            # For each navigable axis, create controls if enabled for that item
             for nav_item in nav_axes:
                 # Parse navigation item - support both old and new formats
                 if isinstance(nav_item, dict):
@@ -2413,11 +2869,18 @@ Count:
                     axis_name = nav_item.get('name', 'Axis')
                     dimension = nav_item.get('dimension', 0)
                     target_axis = nav_item.get('axis')  # 'x', 'y', 'z', or None for slicing
+                    # Check if this item should show navigation (default to False - must be explicitly enabled)
+                    show_nav = nav_item.get('show_navigation_menu', False)
                 else:
                     # Old format: just a string "Samples"
                     axis_name = nav_item
                     dimension = nav_axes.index(nav_item)  # Position in the list
                     target_axis = None
+                    show_nav = True  # Show by default for old format
+                
+                # Skip this item if navigation menu is disabled
+                if not show_nav:
+                    continue
                 
                 axis_frame = ttk.Frame(parent_frame)
                 axis_frame.pack(fill=tk.X, padx=5, pady=2)
@@ -2603,14 +3066,31 @@ Count:
             
             # Create new matplotlib figure
             fig = Figure(figsize=(6, 4), dpi=100)
-            ax = fig.add_subplot(111)
+            
+            # Check if z_axis is defined for 3D scatter or 3d_surf
+            z_axis_config = config.get('z_axis', {})
+            use_3d = (graph_type == 'scatter' or graph_type == '3d_surf') and z_axis_config and z_data is not None
+            
+            if use_3d:
+                # Create 3D plot
+                ax = fig.add_subplot(111, projection='3d')
+            else:
+                ax = fig.add_subplot(111)
             
             # Render based on graph type
             if graph_type == 'scatter':
                 if x_data is not None and y_data is not None:
-                    ax.scatter(x_data, y_data, alpha=0.6)
-                    ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
-                    ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+                    if use_3d:
+                        # 3D scatter
+                        ax.scatter(x_data, y_data, z_data, alpha=0.6)
+                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+                        ax.set_zlabel(config.get('z_axis', {}).get('label', 'Z'))
+                    else:
+                        # 2D scatter
+                        ax.scatter(x_data, y_data, alpha=0.6)
+                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
                     
             elif graph_type == 'line':
                 if x_data is not None and y_data is not None:
@@ -2644,17 +3124,40 @@ Count:
                     ax.set_ylabel('Frequency')
                     
             elif graph_type == 'heatmap':
-                if y_data is not None and y_data.ndim >= 2:
-                    im = ax.imshow(y_data, cmap='viridis', aspect='auto')
-                    fig.colorbar(im, ax=ax)
-                    ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
-                    ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+                if x_data is not None and y_data is not None and z_data is not None:
+                    if isinstance(x_data, np.ndarray) and isinstance(y_data, np.ndarray) and isinstance(z_data, np.ndarray):
+                        # Create mesh grids from x and y data
+                        X, Y = np.meshgrid(x_data, y_data)
+                        # Use pcolormesh for proper axis mapping
+                        im = ax.pcolormesh(X, Y, z_data, cmap='viridis', shading='auto')
+                        fig.colorbar(im, ax=ax)
+                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+            
+            elif graph_type == '3d_surf':
+                if x_data is not None and y_data is not None and z_data is not None:
+                    if isinstance(x_data, np.ndarray) and isinstance(y_data, np.ndarray) and isinstance(z_data, np.ndarray):
+                        # Create mesh grids from x and y data
+                        X, Y = np.meshgrid(x_data, y_data)
+                        # Use plot_surface or plot_wireframe for 3D surface plot
+                        use_wireframe = config.get('use_wireframe', False)
+                        if use_wireframe:
+                            ax.plot_wireframe(X, Y, z_data, cmap='viridis')
+                        else:
+                            ax.plot_surface(X, Y, z_data, cmap='viridis')
+                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+                        ax.set_zlabel(config.get('z_axis', {}).get('label', 'Z'))
                     
             elif graph_type == 'contour':
                 if x_data is not None and y_data is not None and z_data is not None:
                     if isinstance(x_data, np.ndarray) and isinstance(y_data, np.ndarray):
                         X, Y = np.meshgrid(x_data, y_data)
-                        ax.contour(X, Y, z_data, levels=10)
+                        contour_type = config.get('contour_type', 'contourf')
+                        if contour_type == 'contourf':
+                            ax.contourf(X, Y, z_data, levels=10)
+                        else:
+                            ax.contour(X, Y, z_data, levels=10)
                         ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
                         ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
             
@@ -2662,7 +3165,7 @@ Count:
             title = config.get('title', 'Graph')
             slice_info = config.get('slice_info', {})
             if slice_info.get('description'):
-                title += f" - {slice_info.get('description')} {list(indices.values())}"
+                title += f" - {slice_info.get('description')} {list(base_indices.values())}"
             ax.set_title(title)
             
             # Apply tight layout with padding inside the plot area
@@ -2692,14 +3195,31 @@ Count:
             
             # Create new matplotlib figure
             fig = Figure(figsize=(6, 4), dpi=100)
-            ax = fig.add_subplot(111)
+            
+            # Check if z_axis is defined for 3D scatter or 3d_surf
+            z_axis_config = config.get('z_axis', {})
+            use_3d = (graph_type == 'scatter' or graph_type == '3d_surf') and z_axis_config and z_data is not None
+            
+            if use_3d:
+                # Create 3D plot
+                ax = fig.add_subplot(111, projection='3d')
+            else:
+                ax = fig.add_subplot(111)
             
             # Render based on graph type
             if graph_type == 'scatter':
                 if x_data is not None and y_data is not None:
-                    ax.scatter(x_data, y_data, alpha=0.6)
-                    ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
-                    ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+                    if use_3d:
+                        # 3D scatter
+                        ax.scatter(x_data, y_data, z_data, alpha=0.6)
+                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+                        ax.set_zlabel(config.get('z_axis', {}).get('label', 'Z'))
+                    else:
+                        # 2D scatter
+                        ax.scatter(x_data, y_data, alpha=0.6)
+                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
                     
             elif graph_type == 'line':
                 if x_data is not None and y_data is not None:
@@ -2733,17 +3253,40 @@ Count:
                     ax.set_ylabel('Frequency')
                     
             elif graph_type == 'heatmap':
-                if y_data is not None and y_data.ndim >= 2:
-                    im = ax.imshow(y_data, cmap='viridis', aspect='auto')
-                    fig.colorbar(im, ax=ax)
-                    ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
-                    ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+                if x_data is not None and y_data is not None and z_data is not None:
+                    if isinstance(x_data, np.ndarray) and isinstance(y_data, np.ndarray) and isinstance(z_data, np.ndarray):
+                        # Create mesh grids from x and y data
+                        X, Y = np.meshgrid(x_data, y_data)
+                        # Use pcolormesh for proper axis mapping
+                        im = ax.pcolormesh(X, Y, z_data, cmap='viridis', shading='auto')
+                        fig.colorbar(im, ax=ax)
+                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+            
+            elif graph_type == '3d_surf':
+                if x_data is not None and y_data is not None and z_data is not None:
+                    if isinstance(x_data, np.ndarray) and isinstance(y_data, np.ndarray) and isinstance(z_data, np.ndarray):
+                        # Create mesh grids from x and y data
+                        X, Y = np.meshgrid(x_data, y_data)
+                        # Use plot_surface or plot_wireframe for 3D surface plot
+                        use_wireframe = config.get('use_wireframe', False)
+                        if use_wireframe:
+                            ax.plot_wireframe(X, Y, z_data, cmap='viridis')
+                        else:
+                            ax.plot_surface(X, Y, z_data, cmap='viridis')
+                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+                        ax.set_zlabel(config.get('z_axis', {}).get('label', 'Z'))
                     
             elif graph_type == 'contour':
                 if x_data is not None and y_data is not None and z_data is not None:
                     if isinstance(x_data, np.ndarray) and isinstance(y_data, np.ndarray):
                         X, Y = np.meshgrid(x_data, y_data)
-                        ax.contour(X, Y, z_data, levels=10)
+                        contour_type = config.get('contour_type', 'contourf')
+                        if contour_type == 'contourf':
+                            ax.contourf(X, Y, z_data, levels=10)
+                        else:
+                            ax.contour(X, Y, z_data, levels=10)
                         ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
                         ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
             
@@ -2751,6 +3294,7 @@ Count:
             title = config.get('title', 'Graph')
             slice_info = config.get('slice_info', {})
             if slice_info.get('description'):
+                current_index = list(base_indices.values())[0] if base_indices else 0
                 title += f" - {slice_info.get('description')} [{current_index}]"
             ax.set_title(title)
             
@@ -2977,12 +3521,16 @@ Count:
                     self.analysis_data[instance_alias]['pages'] = analysis_config.get('pages', self.analysis_data[instance_alias]['pages'])
                     self.analysis_data[instance_alias]['current_page'] = analysis_config.get('current_page', self.analysis_data[instance_alias]['current_page'])
             
+            # Get input parameters from function_configs
+            input_parameters = self.function_configs.get(instance_alias, {}).copy()
+            
             # Store the outputs from the execution
             self.analysis_data[instance_alias]['execution_results'] = {
                 'status': 'success',
                 'timestamp': datetime.now().isoformat(),
                 'execution_time': 0,  # TODO: measure execution time
-                'outputs': outputs.get(instance_alias, {}) if outputs else {}
+                'outputs': outputs.get(instance_alias, {}) if outputs else {},
+                'inputs': input_parameters  # Store the input parameters for condition evaluation
             }
             
             # Show success message
