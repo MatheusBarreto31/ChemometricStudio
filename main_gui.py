@@ -950,6 +950,14 @@ class ChemometricsGUI:
         popup.title(f"Help: {title}")
         popup.geometry("600x400")
         
+        # Set the window icon to Info.ico
+        try:
+            info_icon_path = Path(__file__).parent / "Info.ico"
+            if info_icon_path.exists():
+                popup.iconbitmap(str(info_icon_path))
+        except Exception as e:
+            print(f"Warning: Could not set help window icon: {e}")
+        
         # Create scrollable text area
         text_frame = ttk.Frame(popup)
         text_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
@@ -2167,15 +2175,6 @@ class ChemometricsGUI:
                 data_source = aux_axis_config.get('data_source')
                 labels_config = aux_axis_config.get('labels', [])
                 
-                print(f"DEBUG _render: md_active_dims = {md_active_dims}")
-                print(f"DEBUG _render: data_source = {data_source}")
-                if data_source in outputs:
-                    if isinstance(outputs[data_source], list):
-                        print(f"DEBUG _render: axis list length = {len(outputs[data_source])}")
-                        for i, ax in enumerate(outputs[data_source]):
-                            if isinstance(ax, np.ndarray):
-                                print(f"DEBUG _render: axis[{i}] shape = {ax.shape}")
-                
                 # Resolve labels - can be array or variable name
                 labels = []
                 if isinstance(labels_config, str):
@@ -2211,20 +2210,14 @@ class ChemometricsGUI:
             x_indices.update(md_slice_indices)  # Add multi-dimensional slices
             if 'x' in axis_indices:
                 x_indices.update(axis_indices['x'])
-            print(f"DEBUG _render: x_axis_config = {x_axis_config}")
-            print(f"DEBUG _render: x_indices = {x_indices}")
             x_data = self._extract_axis_data(outputs, x_axis_config, x_indices)
-            print(f"DEBUG _render: x_data shape = {x_data.shape if isinstance(x_data, np.ndarray) else len(x_data) if x_data else 'None'}")
             
             # Merge axis indices for y (base + md + axis-specific)
             y_indices = base_indices.copy()
             y_indices.update(md_slice_indices)  # Add multi-dimensional slices
             if 'y' in axis_indices:
                 y_indices.update(axis_indices['y'])
-            print(f"DEBUG _render: y_axis_config = {y_axis_config}")
-            print(f"DEBUG _render: y_indices = {y_indices}")
             y_data = self._extract_axis_data(outputs, y_axis_config, y_indices)
-            print(f"DEBUG _render: y_data shape = {y_data.shape if isinstance(y_data, np.ndarray) else len(y_data) if y_data else 'None'}")
             
             # Merge axis indices for z (base + md + axis-specific)
             z_indices = base_indices.copy()
@@ -2236,11 +2229,7 @@ class ChemometricsGUI:
             if md_active_dims:
                 for dim in md_active_dims:
                     z_indices.pop(dim, None)  # Remove if present
-            print(f"DEBUG _render: z_axis_config = {config.get('z_axis', {})}")
-            print(f"DEBUG _render: z_indices = {z_indices}")
-            print(f"DEBUG _render: md_slice_indices = {md_slice_indices}")
             z_data = self._extract_axis_data(outputs, config.get('z_axis', {}), z_indices)
-            print(f"DEBUG _render: z_data shape = {z_data.shape if isinstance(z_data, np.ndarray) else 'None'}")
             
             # Create container with navigation controls on top
             control_frame = ttk.Frame(parent)
@@ -2322,7 +2311,8 @@ class ChemometricsGUI:
                         # Create mesh grids from x and y data
                         X, Y = np.meshgrid(x_data, y_data)
                         # Use pcolormesh for proper axis mapping
-                        im = ax.pcolormesh(X, Y, z_data.T, cmap='viridis', shading='nearest')
+                        cmap = config.get('cmap', 'viridis')
+                        im = ax.pcolormesh(X, Y, z_data.T, cmap=cmap, shading='nearest')
                         fig.colorbar(im, ax=ax)
                         ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
                         ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
@@ -2334,10 +2324,11 @@ class ChemometricsGUI:
                         X, Y = np.meshgrid(x_data, y_data)
                         # Use plot_surface or plot_wireframe for 3D surface plot
                         use_wireframe = config.get('use_wireframe', False)
+                        cmap = config.get('cmap', 'viridis')
                         if use_wireframe:
-                            ax.plot_wireframe(X, Y, z_data, cmap='viridis')
+                            ax.plot_wireframe(X, Y, z_data, cmap=cmap)
                         else:
-                            ax.plot_surface(X, Y, z_data, cmap='viridis')
+                            ax.plot_surface(X, Y, z_data, cmap=cmap)
                         ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
                         ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
                         ax.set_zlabel(config.get('z_axis', {}).get('label', 'Z'))
@@ -2347,10 +2338,11 @@ class ChemometricsGUI:
                     if isinstance(x_data, np.ndarray) and isinstance(y_data, np.ndarray):
                         X, Y = np.meshgrid(x_data, y_data)
                         contour_type = config.get('contour_type', 'contourf')
+                        cmap = config.get('cmap', 'viridis')
                         if contour_type == 'contourf':
-                            ax.contourf(X, Y, z_data, levels=10)
+                            ax.contourf(X, Y, z_data, levels=10, cmap=cmap)
                         else:
-                            ax.contour(X, Y, z_data, levels=10)
+                            ax.contour(X, Y, z_data, levels=10, cmap=cmap)
                         ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
                         ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
             
@@ -3071,9 +3063,14 @@ Count:
             # Get the data to determine shape/bounds
             # For aux_axis configs, use z_axis as it points to actual data (e.g., X_cal)
             # aux_axis points to axis vectors (e.g., axis_n_info) which is a list
+            # For 3D graph types (heatmap, contour, 3d_surf), use z_axis as it contains the actual data
             data_source = None
+            graph_type = config.get('graph_type', '')
             if 'aux_axis' in config:
                 # Use z_axis to get the actual data array
+                data_source = config.get('z_axis', {}).get('data_source')
+            elif graph_type in ('heatmap', 'contour', '3d_surf'):
+                # For 3D visualization types, z_axis contains the actual multi-dimensional data
                 data_source = config.get('z_axis', {}).get('data_source')
             else:
                 # Traditional configs - use y_axis or x_axis
@@ -3199,10 +3196,10 @@ Count:
                             combo_options.append(combo_str)
                         
                         current_combo_idx = slice_state.get('md_combo_index', 0)
-                        combo_var = tk.StringVar(value=combo_options[current_combo_idx] if current_combo_idx < len(combo_options) else combo_options[0])
                         
-                        combo_dropdown = ttk.Combobox(combo_select_frame, textvariable=combo_var, 
+                        combo_dropdown = ttk.Combobox(combo_select_frame, 
                                                      values=combo_options, state='readonly', width=30)
+                        combo_dropdown.current(current_combo_idx if current_combo_idx < len(combo_options) else 0)
                         combo_dropdown.pack(side=tk.LEFT, padx=5)
                         combo_dropdown.bind('<<ComboboxSelected>>', 
                                            lambda e: self._on_md_combo_changed(instance_alias, section_id, 
@@ -3496,13 +3493,9 @@ Count:
             config = current_state.get('config', {})
             outputs = current_state.get('outputs', {})
             
-            print(f"DEBUG _on_md_combo_changed: Rebuilding controls for section {section_id}")
-            print(f"DEBUG _on_md_combo_changed: New navigable dims = {list(current_state.get('md_slice_indices', {}).keys())}")
-            
             # Get stored control frame and rebuild controls
             if 'graph_control_frames' in self.analysis_data[instance_alias]:
                 control_frame = self.analysis_data[instance_alias]['graph_control_frames'].get(section_id)
-                print(f"DEBUG _on_md_combo_changed: control_frame = {control_frame}")
                 if control_frame:
                     # Clear existing controls
                     for widget in control_frame.winfo_children():
@@ -3517,13 +3510,9 @@ Count:
                     
                     # Rebuild navigation controls
                     nav_axes = config.get('data_slicing', [])
-                    print(f"DEBUG _on_md_combo_changed: nav_axes = {nav_axes}")
                     if nav_axes:
                         self._create_navigation_controls(control_frame, instance_alias, section_id,
                                                         outputs, config, current_state)
-                        print(f"DEBUG _on_md_combo_changed: Controls rebuilt")
-            else:
-                print(f"DEBUG _on_md_combo_changed: graph_control_frames not found")
             
             # Update the graph with the new slice
             self._update_graph_with_slice(instance_alias, section_id, 0)
@@ -3660,15 +3649,6 @@ Count:
                 data_source = aux_axis_config.get('data_source')
                 labels_config = aux_axis_config.get('labels', [])
                 
-                print(f"DEBUG _combo_changed: md_active_dims = {md_active_dims}")
-                print(f"DEBUG _combo_changed: data_source = {data_source}")
-                if data_source in outputs:
-                    if isinstance(outputs[data_source], list):
-                        print(f"DEBUG _combo_changed: axis list length = {len(outputs[data_source])}")
-                        for i, ax in enumerate(outputs[data_source]):
-                            if isinstance(ax, np.ndarray):
-                                print(f"DEBUG _combo_changed: axis[{i}] shape = {ax.shape}")
-                
                 # Resolve labels - can be array or variable name
                 labels = []
                 if isinstance(labels_config, str):
@@ -3704,10 +3684,7 @@ Count:
             x_indices.update(md_slice_indices)  # Add multi-dimensional slices
             if 'x' in axis_indices:
                 x_indices.update(axis_indices['x'])
-            print(f"DEBUG _combo_changed: x_axis_config = {x_axis_config}")
-            print(f"DEBUG _combo_changed: x_indices = {x_indices}")
             x_data = self._extract_axis_data(outputs, x_axis_config, x_indices)
-            print(f"DEBUG _combo_changed: x_data shape = {x_data.shape if isinstance(x_data, np.ndarray) else len(x_data) if x_data else 'None'}")
             
             # Merge axis indices for y (base + md + axis-specific)
             y_indices = base_indices.copy()
@@ -3726,11 +3703,7 @@ Count:
             if md_active_dims:
                 for dim in md_active_dims:
                     z_indices.pop(dim, None)  # Remove if present
-            print(f"DEBUG _combo_changed: z_axis_config = {config.get('z_axis', {})}")
-            print(f"DEBUG _combo_changed: z_indices = {z_indices}")
-            print(f"DEBUG _combo_changed: md_slice_indices = {md_slice_indices}")
             z_data = self._extract_axis_data(outputs, config.get('z_axis', {}), z_indices)
-            print(f"DEBUG _combo_changed: z_data shape = {z_data.shape if isinstance(z_data, np.ndarray) else 'None'}")
             
             # Create new matplotlib figure
             fig = Figure(figsize=(6, 4), dpi=100)
@@ -3797,7 +3770,8 @@ Count:
                         # Create mesh grids from x and y data
                         X, Y = np.meshgrid(x_data, y_data)
                         # Use pcolormesh for proper axis mapping
-                        im = ax.pcolormesh(X, Y, z_data.T, cmap='viridis', shading='nearest')
+                        cmap = config.get('cmap', 'viridis')
+                        im = ax.pcolormesh(X, Y, z_data.T, cmap=cmap, shading='nearest')
                         fig.colorbar(im, ax=ax)
                         # Use dynamic axis configs if available (for aux_axis), else fallback to config
                         x_label = x_axis_config.get('label', 'X') if x_axis_config else config.get('x_axis', {}).get('label', 'X')
@@ -3812,10 +3786,11 @@ Count:
                         X, Y = np.meshgrid(x_data, y_data)
                         # Use plot_surface or plot_wireframe for 3D surface plot
                         use_wireframe = config.get('use_wireframe', False)
+                        cmap = config.get('cmap', 'viridis')
                         if use_wireframe:
-                            ax.plot_wireframe(X, Y, z_data, cmap='viridis')
+                            ax.plot_wireframe(X, Y, z_data, cmap=cmap)
                         else:
-                            ax.plot_surface(X, Y, z_data, cmap='viridis')
+                            ax.plot_surface(X, Y, z_data, cmap=cmap)
                         # Use dynamic axis configs if available (for aux_axis), else fallback to config
                         x_label = x_axis_config.get('label', 'X') if x_axis_config else config.get('x_axis', {}).get('label', 'X')
                         y_label = y_axis_config.get('label', 'Y') if y_axis_config else config.get('y_axis', {}).get('label', 'Y')
@@ -3935,7 +3910,8 @@ Count:
                         # Create mesh grids from x and y data
                         X, Y = np.meshgrid(x_data, y_data)
                         # Use pcolormesh for proper axis mapping
-                        im = ax.pcolormesh(X, Y, z_data.T, cmap='viridis', shading='nearest')
+                        cmap = config.get('cmap', 'viridis')
+                        im = ax.pcolormesh(X, Y, z_data.T, cmap=cmap, shading='nearest')
                         fig.colorbar(im, ax=ax)
                         ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
                         ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
@@ -3947,10 +3923,11 @@ Count:
                         X, Y = np.meshgrid(x_data, y_data)
                         # Use plot_surface or plot_wireframe for 3D surface plot
                         use_wireframe = config.get('use_wireframe', False)
+                        cmap = config.get('cmap', 'viridis')
                         if use_wireframe:
-                            ax.plot_wireframe(X, Y, z_data, cmap='viridis')
+                            ax.plot_wireframe(X, Y, z_data, cmap=cmap)
                         else:
-                            ax.plot_surface(X, Y, z_data, cmap='viridis')
+                            ax.plot_surface(X, Y, z_data, cmap=cmap)
                         ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
                         ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
                         ax.set_zlabel(config.get('z_axis', {}).get('label', 'Z'))
