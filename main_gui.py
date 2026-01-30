@@ -1101,7 +1101,7 @@ class ChemometricsGUI:
         
         routing_map_btn = ttk.Button(
             button_frame,
-            text=self.language_manager.translate("ui.buttons.routing_map", "🗺️ Routing Map"),
+            text=self.language_manager.translate("ui.buttons.routing_map", "Routing Map"),
             command=self._open_routing_map_window
         )
         routing_map_btn.pack(side=tk.LEFT, padx=5)
