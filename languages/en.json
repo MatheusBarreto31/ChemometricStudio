@@ -98,6 +98,9 @@
     "exit": "Exit",
     "settings": "Settings",
     "language": "Language",
+    "colormap": "Colormap",
+    "colormap_continuous": "Continuous",
+    "colormap_qualitative": "Qualitative",
     "help": "Help",
     "about": "About"
   },

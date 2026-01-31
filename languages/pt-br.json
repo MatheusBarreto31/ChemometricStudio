@@ -98,6 +98,9 @@
     "exit": "Sair",
     "settings": "Configurações",
     "language": "Idioma",
+    "colormap": "Mapa de Cores",
+    "colormap_continuous": "Contínuos",
+    "colormap_qualitative": "Qualitativos",
     "help": "Ajuda",
     "about": "Sobre"
   },

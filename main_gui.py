@@ -27,6 +27,12 @@ from mpl_toolkits.mplot3d import Axes3D
 # Import language manager
 from language_manager import get_language_manager, _
 
+# Import settings manager
+from settings import get_settings_manager
+
+# Import graph renderer module
+import graph_renderer
+
 # Import routing map window
 from routing_map_window import RoutingMapWindow
 
@@ -80,7 +86,15 @@ class ChemometricsGUI:
     
     def __init__(self, root: tk.Tk):
         self.root = root
+        
+        # Initialize settings manager and load saved language
+        self.settings_manager = get_settings_manager()
+        saved_language = self.settings_manager.get("language", "en")
+        
+        # Initialize language manager with saved language
         self.language_manager = get_language_manager()
+        self.language_manager.set_language(saved_language)
+        
         self.root.title(self.language_manager.translate("ui.main_title", "CM Studio"))
         self.root.geometry("1280x720")
         
@@ -212,15 +226,58 @@ class ChemometricsGUI:
         for lang_code, lang_name in self.language_manager.SUPPORTED_LANGUAGES.items():
             lang_menu.add_command(label=lang_name, command=lambda code=lang_code: self._change_language(code))
         
+        # Colormap submenu
+        colormap_menu = tk.Menu(settings_menu, tearoff=0)
+        settings_menu.add_cascade(label=self.language_manager.translate("menu.colormap", "Colormap"), menu=colormap_menu)
+        
+        # Load available colormaps
+        try:
+            colormaps_path = Path(__file__).parent / "Settings" / "colormaps.json"
+            with open(colormaps_path, encoding='utf-8') as f:
+                colormaps_data = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            colormaps_data = {"continuous": {"Perceptually Uniform": ["viridis", "plasma", "inferno"]}, "qualitative": []}
+        
+        # Continuous colormaps submenu
+        continuous_menu = tk.Menu(colormap_menu, tearoff=0)
+        colormap_menu.add_cascade(label=self.language_manager.translate("menu.colormap_continuous", "Continuous"), menu=continuous_menu)
+        
+        # Handle both old flat structure and new nested structure for continuous colormaps
+        continuous_data = colormaps_data.get("continuous", {})
+        if isinstance(continuous_data, list):
+            # Old flat structure - treat as a single category
+            for cmap in continuous_data:
+                continuous_menu.add_command(label=cmap, command=lambda cm=cmap: self._change_colormap(cm))
+        else:
+            # New nested structure with subcategories
+            for category, cmaps in continuous_data.items():
+                category_menu = tk.Menu(continuous_menu, tearoff=0)
+                continuous_menu.add_cascade(label=category, menu=category_menu)
+                for cmap in cmaps:
+                    category_menu.add_command(label=cmap, command=lambda cm=cmap: self._change_colormap(cm))
+        
+        # Qualitative colormaps submenu
+        qualitative_menu = tk.Menu(colormap_menu, tearoff=0)
+        colormap_menu.add_cascade(label=self.language_manager.translate("menu.colormap_qualitative", "Qualitative"), menu=qualitative_menu)
+        for cmap in colormaps_data.get("qualitative", []):
+            qualitative_menu.add_command(label=cmap, command=lambda cm=cmap: self._change_colormap(cm))
+        
         # Help Menu
         help_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label=self.language_manager.translate("menu.help", "Help"), menu=help_menu)
         help_menu.add_command(label=self.language_manager.translate("menu.about", "About"), command=self._show_about_dialog)
     
     def _change_language(self, language_code: str):
-        """Change the application language."""
+        """Change the application language and save setting."""
         self.language_manager.set_language(language_code)
+        self.settings_manager.set("language", language_code)
         self._refresh_ui_text()
+    
+    def _change_colormap(self, colormap_name: str):
+        """Change the default colormap and save setting."""
+        self.settings_manager.set("colormap", colormap_name)
+        messagebox.showinfo(self.language_manager.translate("ui.dialogs.info", "Information"),
+                          f"Colormap changed to '{colormap_name}'.\nThis will be used for new plots.")
     
     def _show_about_dialog(self):
         """Show the About dialog with program information."""
@@ -534,7 +591,13 @@ class ChemometricsGUI:
         selection = self.methodology_listbox.curselection()
         if selection:
             self.selected_function_idx = selection[0]
-            self._show_setup_tab()
+            # Only refresh function-specific tabs (Setup and Analysis)
+            # Routing and Report are not function-specific, so don't refresh them
+            if self.current_tab == "analysis":
+                self._show_analysis_tab()
+            elif self.current_tab == "setup":
+                self._show_setup_tab()
+            # Routing and Report tabs are not function-specific, don't refresh them
     
     def _remove_from_methodology(self):
         """Remove selected item from methodology."""
@@ -1835,17 +1898,19 @@ class ChemometricsGUI:
     def _create_layout_containers(self, parent: ttk.Frame, layout_type: str) -> list:
         """Create layout containers based on layout type."""
         containers = []
+        # Use consistent padding for all section containers to prevent border clipping
+        section_padding = 8
         
         if layout_type == 'fd':  # Four sections (2x2 grid)
             # Use nested paned windows to ensure equal space distribution
             main_paned = ttk.PanedWindow(parent, orient=tk.VERTICAL)
-            main_paned.pack(fill=tk.BOTH, expand=True)
+            main_paned.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
             
             # Top row with horizontal paned window for 2 side-by-side containers
             top_paned = ttk.PanedWindow(main_paned, orient=tk.HORIZONTAL)
             main_paned.add(top_paned, weight=1)
             for j in range(2):
-                container = ttk.LabelFrame(top_paned, text=f"Section", padding=5)
+                container = ttk.LabelFrame(top_paned, text=f"Section", padding=section_padding)
                 top_paned.add(container, weight=1)
                 containers.append(container)
             
@@ -1853,7 +1918,7 @@ class ChemometricsGUI:
             bottom_paned = ttk.PanedWindow(main_paned, orient=tk.HORIZONTAL)
             main_paned.add(bottom_paned, weight=1)
             for j in range(2):
-                container = ttk.LabelFrame(bottom_paned, text=f"Section", padding=5)
+                container = ttk.LabelFrame(bottom_paned, text=f"Section", padding=section_padding)
                 bottom_paned.add(container, weight=1)
                 containers.append(container)
             
@@ -1861,28 +1926,28 @@ class ChemometricsGUI:
             parent.after_idle(lambda: self._position_fd_sashes(main_paned, top_paned, bottom_paned))
         
         elif layout_type == 'fp':  # Full page (1 section)
-            container = ttk.LabelFrame(parent, text="Section", padding=5)
-            container.pack(fill=tk.BOTH, expand=True)
+            container = ttk.LabelFrame(parent, text="Section", padding=section_padding)
+            container.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
             containers.append(container)
         
         elif layout_type == 'ns':  # North-South (2 sections: top, bottom)
-            top_frame = ttk.LabelFrame(parent, text="Section", padding=5)
-            top_frame.pack(fill=tk.BOTH, expand=True)
+            top_frame = ttk.LabelFrame(parent, text="Section", padding=section_padding)
+            top_frame.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
             containers.append(top_frame)
             
-            bottom_frame = ttk.LabelFrame(parent, text="Section", padding=5)
-            bottom_frame.pack(fill=tk.BOTH, expand=True)
+            bottom_frame = ttk.LabelFrame(parent, text="Section", padding=section_padding)
+            bottom_frame.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
             containers.append(bottom_frame)
         
         elif layout_type == 'ew':  # East-West (2 sections: left, right)
             paned = ttk.PanedWindow(parent, orient=tk.HORIZONTAL)
-            paned.pack(fill=tk.BOTH, expand=True)
+            paned.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
             
-            left_container = ttk.LabelFrame(paned, text="Section", padding=5)
+            left_container = ttk.LabelFrame(paned, text="Section", padding=section_padding)
             paned.add(left_container, weight=1)
             containers.append(left_container)
             
-            right_container = ttk.LabelFrame(paned, text="Section", padding=5)
+            right_container = ttk.LabelFrame(paned, text="Section", padding=section_padding)
             paned.add(right_container, weight=1)
             containers.append(right_container)
             
@@ -1891,10 +1956,10 @@ class ChemometricsGUI:
         elif layout_type == 'sd':  # South Divided (3 sections: 1 top, 2 bottom)
             # Use vertical paned window for top/bottom division
             main_paned = ttk.PanedWindow(parent, orient=tk.VERTICAL)
-            main_paned.pack(fill=tk.BOTH, expand=True)
+            main_paned.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
             
             # Top section
-            top_frame = ttk.LabelFrame(main_paned, text="Section", padding=5)
+            top_frame = ttk.LabelFrame(main_paned, text="Section", padding=section_padding)
             main_paned.add(top_frame, weight=1)
             containers.append(top_frame)
             
@@ -1902,34 +1967,34 @@ class ChemometricsGUI:
             bottom_paned = ttk.PanedWindow(main_paned, orient=tk.HORIZONTAL)
             main_paned.add(bottom_paned, weight=1)
             for j in range(2):
-                container = ttk.LabelFrame(bottom_paned, text=f"Section", padding=5)
+                container = ttk.LabelFrame(bottom_paned, text=f"Section", padding=section_padding)
                 bottom_paned.add(container, weight=1)
                 containers.append(container)
         
         elif layout_type == 'nd':  # North Divided (3 sections: 2 top, 1 bottom)
             # Use vertical paned window for top/bottom division
             main_paned = ttk.PanedWindow(parent, orient=tk.VERTICAL)
-            main_paned.pack(fill=tk.BOTH, expand=True)
+            main_paned.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
             
             # Top side with horizontal paned window for 2 side-by-side containers
             top_paned = ttk.PanedWindow(main_paned, orient=tk.HORIZONTAL)
             main_paned.add(top_paned, weight=1)
             for j in range(2):
-                container = ttk.LabelFrame(top_paned, text=f"Section", padding=5)
+                container = ttk.LabelFrame(top_paned, text=f"Section", padding=section_padding)
                 top_paned.add(container, weight=1)
                 containers.append(container)
             
             # Bottom section
-            bottom_frame = ttk.LabelFrame(main_paned, text="Section", padding=5)
+            bottom_frame = ttk.LabelFrame(main_paned, text="Section", padding=section_padding)
             main_paned.add(bottom_frame, weight=1)
             containers.append(bottom_frame)
         
         elif layout_type == 'ed':  # East Divided (3 sections: 1 left, 2 right stacked)
             paned = ttk.PanedWindow(parent, orient=tk.HORIZONTAL)
-            paned.pack(fill=tk.BOTH, expand=True)
+            paned.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
             
             # Left side (single container)
-            left_container = ttk.LabelFrame(paned, text="Section", padding=5)
+            left_container = ttk.LabelFrame(paned, text="Section", padding=section_padding)
             paned.add(left_container, weight=1)
             containers.append(left_container)
             
@@ -1938,7 +2003,7 @@ class ChemometricsGUI:
             paned.add(right_paned, weight=1)
             
             for i in range(2):
-                container = ttk.LabelFrame(right_paned, text=f"Section", padding=5)
+                container = ttk.LabelFrame(right_paned, text=f"Section", padding=section_padding)
                 right_paned.add(container, weight=1)
                 containers.append(container)
             
@@ -1946,19 +2011,19 @@ class ChemometricsGUI:
         
         elif layout_type == 'wd':  # West Divided (3 sections: 2 left stacked, 1 right)
             paned = ttk.PanedWindow(parent, orient=tk.HORIZONTAL)
-            paned.pack(fill=tk.BOTH, expand=True)
+            paned.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
             
             # Left side with vertical paned window for 2 stacked containers
             left_paned = ttk.PanedWindow(paned, orient=tk.VERTICAL)
             paned.add(left_paned, weight=1)
             
             for i in range(2):
-                container = ttk.LabelFrame(left_paned, text=f"Section", padding=5)
+                container = ttk.LabelFrame(left_paned, text=f"Section", padding=section_padding)
                 left_paned.add(container, weight=1)
                 containers.append(container)
             
             # Right side (single container)
-            right_container = ttk.LabelFrame(paned, text="Section", padding=5)
+            right_container = ttk.LabelFrame(paned, text="Section", padding=section_padding)
             paned.add(right_container, weight=1)
             containers.append(right_container)
             
@@ -1966,8 +2031,8 @@ class ChemometricsGUI:
         
         else:
             # Default to full page for unknown layouts
-            container = ttk.LabelFrame(parent, text="Section", padding=5)
-            container.pack(fill=tk.BOTH, expand=True)
+            container = ttk.LabelFrame(parent, text="Section", padding=section_padding)
+            container.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
             containers.append(container)
         
         return containers
@@ -1975,6 +2040,15 @@ class ChemometricsGUI:
     def _render_section(self, parent: ttk.Frame, instance_alias: str, section_data: dict, section_idx: int = 0):
         """Render a section (either graph or table)."""
         section_type = section_data.get('type')
+        
+        # Set the section frame title from config's 'title' field if parent is a LabelFrame
+        config = section_data.get('config', {})
+        section_title = config.get('title', 'Section')
+        if hasattr(parent, 'configure'):
+            try:
+                parent.configure(text=section_title)
+            except tk.TclError:
+                pass  # Parent may not be a LabelFrame
         
         if section_type == 'graph':
             self._render_graph_section(parent, instance_alias, section_data, section_idx)
@@ -2246,124 +2320,14 @@ class ChemometricsGUI:
                 self._create_navigation_controls(control_frame, instance_alias, section_id, 
                                                  outputs, config, current_slice)
             
-            # Create matplotlib figure
-            fig = Figure(figsize=(6, 4), dpi=100)
-            
-            # Check if z_axis is defined for 3D scatter or 3d_surf
-            z_axis_config = config.get('z_axis', {})
-            use_3d = (graph_type == 'scatter' or graph_type == '3d_surf') and z_axis_config and z_data is not None
-            
-            if use_3d:
-                # Create 3D plot
-                ax = fig.add_subplot(111, projection='3d')
-            else:
-                ax = fig.add_subplot(111)
-            
-            # Render based on graph type
-            if graph_type == 'scatter':
-                if x_data is not None and y_data is not None:
-                    if use_3d:
-                        # 3D scatter
-                        ax.scatter(x_data, y_data, z_data, alpha=0.6)
-                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
-                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
-                        ax.set_zlabel(config.get('z_axis', {}).get('label', 'Z'))
-                    else:
-                        # 2D scatter
-                        ax.scatter(x_data, y_data, alpha=0.6)
-                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
-                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
-                    
-            elif graph_type == 'line':
-                if x_data is not None and y_data is not None:
-                    marker = config.get('marker')  # None if absent, defaults to line only
-                    # Handle 2D arrays (matrices) by plotting each row as a separate line
-                    if isinstance(y_data, np.ndarray) and y_data.ndim == 2:
-                        for i, row in enumerate(y_data):
-                            ax.plot(row, marker=marker, label=f'Row {i+1}')
-                        # Show legend if enabled (default: False)
-                        if config.get('show_legend', False):
-                            ax.legend()
-                    else:
-                        ax.plot(x_data, y_data, marker=marker)
-                    ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
-                    ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
-                    
-            elif graph_type == 'bar':
-                if x_data is not None and y_data is not None:
-                    if isinstance(x_data, np.ndarray) and x_data.ndim == 1:
-                        ax.bar(range(len(y_data)), y_data)
-                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Value'))
-                    else:
-                        ax.bar(x_data, y_data)
-                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
-                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
-                        
-            elif graph_type == 'histogram':
-                if y_data is not None:
-                    ax.hist(y_data, bins=30, alpha=0.7, edgecolor='black')
-                    ax.set_xlabel(config.get('x_axis', {}).get('label', 'Value'))
-                    ax.set_ylabel('Frequency')
-                    
-            elif graph_type == 'heatmap':
-                if x_data is not None and y_data is not None and z_data is not None:
-                    if isinstance(x_data, np.ndarray) and isinstance(y_data, np.ndarray) and isinstance(z_data, np.ndarray):
-                        # Create mesh grids from x and y data
-                        X, Y = np.meshgrid(x_data, y_data)
-                        # Use pcolormesh for proper axis mapping
-                        cmap = config.get('cmap', 'viridis')
-                        im = ax.pcolormesh(X, Y, z_data.T, cmap=cmap, shading='nearest')
-                        fig.colorbar(im, ax=ax)
-                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
-                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
-            
-            elif graph_type == '3d_surf':
-                if x_data is not None and y_data is not None and z_data is not None:
-                    if isinstance(x_data, np.ndarray) and isinstance(y_data, np.ndarray) and isinstance(z_data, np.ndarray):
-                        # Create mesh grids from x and y data
-                        X, Y = np.meshgrid(x_data, y_data)
-                        # Use plot_surface or plot_wireframe for 3D surface plot
-                        use_wireframe = config.get('use_wireframe', False)
-                        cmap = config.get('cmap', 'viridis')
-                        if use_wireframe:
-                            ax.plot_wireframe(X, Y, z_data, cmap=cmap)
-                        else:
-                            ax.plot_surface(X, Y, z_data, cmap=cmap)
-                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
-                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
-                        ax.set_zlabel(config.get('z_axis', {}).get('label', 'Z'))
-                    
-            elif graph_type == 'contour':
-                if x_data is not None and y_data is not None and z_data is not None:
-                    if isinstance(x_data, np.ndarray) and isinstance(y_data, np.ndarray):
-                        X, Y = np.meshgrid(x_data, y_data)
-                        contour_type = config.get('contour_type', 'contourf')
-                        cmap = config.get('cmap', 'viridis')
-                        if contour_type == 'contourf':
-                            ax.contourf(X, Y, z_data, levels=10, cmap=cmap)
-                        else:
-                            ax.contour(X, Y, z_data, levels=10, cmap=cmap)
-                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
-                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
-            
-            # Add title
-            title = config.get('title', 'Graph')
-            ax.set_title(title)
-            
-            # Apply tight layout with padding inside the plot area
-            fig.tight_layout()
-            # Add internal margins around the plot
-            fig.subplots_adjust(left=0.15, right=0.95, top=0.90, bottom=0.15)
+            # Render graph using graph_renderer module
+            fig, ax = graph_renderer.render_graph_figure(
+                graph_type, config, x_data, y_data, z_data, x_axis_config, y_axis_config,
+                default_cmap=self.settings_manager.get('colormap', 'viridis')
+            )
             
             # Embed figure in tkinter within a managed frame
-            # Create a frame to hold the canvas for better geometry management
-            canvas_frame = ttk.Frame(parent)
-            canvas_frame.pack(fill=tk.BOTH, expand=True)
-            
-            canvas = FigureCanvasTkAgg(fig, master=canvas_frame)
-            canvas_widget = canvas.get_tk_widget()
-            canvas_widget.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-            canvas.draw()
+            canvas, canvas_frame = graph_renderer.embed_figure_in_tkinter(fig, parent)
             
             # Store canvas reference for updates
             if 'graph_canvases' not in self.analysis_data[instance_alias]:
@@ -3705,6 +3669,16 @@ Count:
                     z_indices.pop(dim, None)  # Remove if present
             z_data = self._extract_axis_data(outputs, config.get('z_axis', {}), z_indices)
             
+            # Render graph using graph_renderer module
+            fig, ax = graph_renderer.render_graph_figure(
+                graph_type, config, x_data, y_data, z_data, x_axis_config, y_axis_config,
+                default_cmap=self.settings_manager.get('colormap', 'viridis')
+            )
+            
+            # Update existing canvas with new figure
+            graph_renderer.update_embedded_figure(fig, instance_alias, section_id, 
+                                                 self.analysis_data, None)
+            
             # Create new matplotlib figure
             fig = Figure(figsize=(6, 4), dpi=100)
             
@@ -3813,163 +3787,44 @@ Count:
                         ax.set_xlabel(x_label)
                         ax.set_ylabel(y_label)
             
-            # Add title with slice info
-            title = config.get('title', 'Graph')
-            slice_info = config.get('slice_info', {})
-            if slice_info.get('description'):
-                title += f" - {slice_info.get('description')} {list(base_indices.values())}"
-            ax.set_title(title)
+            # Add graph title only if graph_title is provided
+            graph_title = config.get('graph_title')
+            if graph_title:
+                slice_info = config.get('slice_info', {})
+                if slice_info.get('description'):
+                    graph_title += f" - {slice_info.get('description')} {list(base_indices.values())}"
+                ax.set_title(graph_title)
             
             # Apply tight layout with padding inside the plot area
             fig.tight_layout()
-            # Add internal margins around the plot
-            fig.subplots_adjust(left=0.15, right=0.95, top=0.90, bottom=0.15)
+            # Add internal margins around the plot (increased top margin to prevent title clipping)
+            fig.subplots_adjust(left=0.15, right=0.95, top=0.92, bottom=0.15)
             
             # Get the stored canvas reference and update it
             if 'graph_canvases' in self.analysis_data[instance_alias]:
                 canvas_data = self.analysis_data[instance_alias]['graph_canvases'].get(section_id)
                 if canvas_data:
                     old_canvas, canvas_frame = canvas_data
+                    
+                    # Get current widget size to maintain dimensions and prevent resize flash
+                    old_widget = old_canvas.get_tk_widget()
+                    current_width = old_widget.winfo_width()
+                    current_height = old_widget.winfo_height()
+                    
                     # Destroy old canvas widget
-                    old_canvas.get_tk_widget().destroy()
+                    old_widget.destroy()
+                    
+                    # Resize figure to match container dimensions to prevent flash
+                    if current_width > 1 and current_height > 1:
+                        dpi = fig.get_dpi()
+                        fig.set_size_inches(current_width / dpi, current_height / dpi)
                     
                     # Create and embed new canvas with updated figure
                     new_canvas = FigureCanvasTkAgg(fig, master=canvas_frame)
                     canvas_widget = new_canvas.get_tk_widget()
-                    canvas_widget.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-                    new_canvas.draw()
-                    
-                    # Update stored reference
-                    self.analysis_data[instance_alias]['graph_canvases'][section_id] = (new_canvas, canvas_frame)
-            
-        except Exception as e:
-            print(f"Error updating graph with slice: {str(e)}")
-            
-            # Create new matplotlib figure
-            fig = Figure(figsize=(6, 4), dpi=100)
-            
-            # Check if z_axis is defined for 3D scatter or 3d_surf
-            z_axis_config = config.get('z_axis', {})
-            use_3d = (graph_type == 'scatter' or graph_type == '3d_surf') and z_axis_config and z_data is not None
-            
-            if use_3d:
-                # Create 3D plot
-                ax = fig.add_subplot(111, projection='3d')
-            else:
-                ax = fig.add_subplot(111)
-            
-            # Render based on graph type
-            if graph_type == 'scatter':
-                if x_data is not None and y_data is not None:
-                    if use_3d:
-                        # 3D scatter
-                        ax.scatter(x_data, y_data, z_data, alpha=0.6)
-                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
-                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
-                        ax.set_zlabel(config.get('z_axis', {}).get('label', 'Z'))
-                    else:
-                        # 2D scatter
-                        ax.scatter(x_data, y_data, alpha=0.6)
-                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
-                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
-                    
-            elif graph_type == 'line':
-                if x_data is not None and y_data is not None:
-                    marker = config.get('marker')  # None if absent, defaults to line only
-                    # Handle 2D arrays (matrices) by plotting each row as a separate line
-                    if isinstance(y_data, np.ndarray) and y_data.ndim == 2:
-                        for i, row in enumerate(y_data):
-                            ax.plot(row, marker=marker, label=f'Row {i+1}')
-                        # Show legend if enabled (default: False)
-                        if config.get('show_legend', False):
-                            ax.legend()
-                    else:
-                        ax.plot(x_data, y_data, marker=marker)
-                    ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
-                    ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
-                    
-            elif graph_type == 'bar':
-                if x_data is not None and y_data is not None:
-                    if isinstance(x_data, np.ndarray) and x_data.ndim == 1:
-                        ax.bar(range(len(y_data)), y_data)
-                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Value'))
-                    else:
-                        ax.bar(x_data, y_data)
-                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
-                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
-                        
-            elif graph_type == 'histogram':
-                if y_data is not None:
-                    ax.hist(y_data, bins=30, alpha=0.7, edgecolor='black')
-                    ax.set_xlabel(config.get('x_axis', {}).get('label', 'Value'))
-                    ax.set_ylabel('Frequency')
-                    
-            elif graph_type == 'heatmap':
-                if x_data is not None and y_data is not None and z_data is not None:
-                    if isinstance(x_data, np.ndarray) and isinstance(y_data, np.ndarray) and isinstance(z_data, np.ndarray):
-                        # Create mesh grids from x and y data
-                        X, Y = np.meshgrid(x_data, y_data)
-                        # Use pcolormesh for proper axis mapping
-                        cmap = config.get('cmap', 'viridis')
-                        im = ax.pcolormesh(X, Y, z_data.T, cmap=cmap, shading='nearest')
-                        fig.colorbar(im, ax=ax)
-                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
-                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
-            
-            elif graph_type == '3d_surf':
-                if x_data is not None and y_data is not None and z_data is not None:
-                    if isinstance(x_data, np.ndarray) and isinstance(y_data, np.ndarray) and isinstance(z_data, np.ndarray):
-                        # Create mesh grids from x and y data
-                        X, Y = np.meshgrid(x_data, y_data)
-                        # Use plot_surface or plot_wireframe for 3D surface plot
-                        use_wireframe = config.get('use_wireframe', False)
-                        cmap = config.get('cmap', 'viridis')
-                        if use_wireframe:
-                            ax.plot_wireframe(X, Y, z_data, cmap=cmap)
-                        else:
-                            ax.plot_surface(X, Y, z_data, cmap=cmap)
-                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
-                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
-                        ax.set_zlabel(config.get('z_axis', {}).get('label', 'Z'))
-                    
-            elif graph_type == 'contour':
-                if x_data is not None and y_data is not None and z_data is not None:
-                    if isinstance(x_data, np.ndarray) and isinstance(y_data, np.ndarray):
-                        X, Y = np.meshgrid(x_data, y_data)
-                        contour_type = config.get('contour_type', 'contourf')
-                        if contour_type == 'contourf':
-                            ax.contourf(X, Y, z_data, levels=10)
-                        else:
-                            ax.contour(X, Y, z_data, levels=10)
-                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
-                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
-            
-            # Add title with slice info
-            title = config.get('title', 'Graph')
-            slice_info = config.get('slice_info', {})
-            if slice_info.get('description'):
-                current_index = list(base_indices.values())[0] if base_indices else 0
-                title += f" - {slice_info.get('description')} [{current_index}]"
-            ax.set_title(title)
-            
-            # Apply tight layout with padding inside the plot area
-            fig.tight_layout()
-            # Add internal margins around the plot
-            fig.subplots_adjust(left=0.15, right=0.95, top=0.90, bottom=0.15)
-            
-            # Get the stored canvas reference and update it
-            if 'graph_canvases' in self.analysis_data[instance_alias]:
-                canvas_data = self.analysis_data[instance_alias]['graph_canvases'].get(section_id)
-                if canvas_data:
-                    old_canvas, canvas_frame = canvas_data
-                    # Destroy old canvas widget
-                    old_canvas.get_tk_widget().destroy()
-                    
-                    # Create and embed new canvas with updated figure
-                    new_canvas = FigureCanvasTkAgg(fig, master=canvas_frame)
-                    canvas_widget = new_canvas.get_tk_widget()
-                    canvas_widget.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-                    new_canvas.draw()
+                    # Use grid for consistent sizing to prevent resize flash
+                    canvas_widget.grid(row=0, column=0, sticky='nsew')
+                    new_canvas.draw_idle()  # Use draw_idle for smoother updates
                     
                     # Update stored reference
                     self.analysis_data[instance_alias]['graph_canvases'][section_id] = (new_canvas, canvas_frame)
@@ -4116,6 +3971,9 @@ Count:
     def _run_analysis_to_function(self, instance_alias: str):
         """Run the model up to the specified function and populate analysis data."""
         try:
+            # Clear any cached execution results and graphs to ensure fresh data
+            self._clear_execution_cache()
+            
             # Find the index of this function in the methodology
             if instance_alias not in self.methodology_list:
                 messagebox.showerror("Error", "Function not found in methodology")
@@ -4189,6 +4047,12 @@ Count:
                 'outputs': function_outputs,
                 'inputs': input_parameters  # Store the input parameters for condition evaluation
             }
+            
+            # Clear cached graphs so they are re-rendered with updated settings (e.g., colormap)
+            if 'graph_canvases' in self.analysis_data[instance_alias]:
+                del self.analysis_data[instance_alias]['graph_canvases']
+            if 'graph_slices' in self.analysis_data[instance_alias]:
+                del self.analysis_data[instance_alias]['graph_slices']
             
             # Show success message
             messagebox.showinfo("Success", f"Model executed up to {instance_alias}\n\nResults loaded for analysis.")
@@ -4793,6 +4657,9 @@ Count:
         file_path = Path(file_path)
         is_with_data = file_path.suffix in (".mdcd", ".mdfd") or str(file_path).endswith((".mdcd", ".mdfd"))
         
+        # Clear any cached execution results and graphs to ensure fresh data
+        self._clear_execution_cache()
+        
         # Clean tempfiles before loading
         self._clean_tempfiles()
         
@@ -4914,6 +4781,16 @@ Count:
         if analysis_config:
             self._deserialize_analysis_data(analysis_config)
     
+    def _clear_execution_cache(self):
+        """Clear all cached execution results, graphs, and analysis structures.
+        
+        This ensures that when a model is run, loaded, or a function is executed,
+        the analysis displays fresh results without stale cached values.
+        Completely resets analysis_data so page configurations are rebuilt from JSON.
+        """
+        # Completely reset analysis_data to force fresh rebuild from configs
+        self.analysis_data = {}
+    
     def _refresh_gui_from_config(self):
         """Refresh GUI to reflect loaded configuration."""
         # Rebuild methodology listbox
@@ -4948,6 +4825,9 @@ Count:
             messagebox.showwarning(self.language_manager.translate("ui.dialogs.warning", "Warning"), 
                                  self.language_manager.translate("ui.messages.empty_methodology", "Add functions to Methodology first"))
             return
+        
+        # Clear any cached execution results and graphs to ensure fresh data
+        self._clear_execution_cache()
         
         if not self._generate_model_json():
             return
@@ -5004,12 +4884,16 @@ Count:
                             'current_page': 0
                         }
                 
+                # Get input parameters from function_configs for condition evaluation
+                input_parameters = self.function_configs.get(instance_alias, {}).copy()
+                
                 # Store the outputs from the execution
                 self.analysis_data[instance_alias]['execution_results'] = {
                     'status': 'success',
                     'timestamp': datetime.now().isoformat(),
                     'execution_time': 0,
-                    'outputs': outputs.get(instance_alias, {}) if outputs else {}
+                    'outputs': outputs.get(instance_alias, {}) if outputs else {},
+                    'inputs': input_parameters  # Store the input parameters for condition evaluation
                 }
             
             messagebox.showinfo(self.language_manager.translate("ui.dialogs.success", "Success"), 

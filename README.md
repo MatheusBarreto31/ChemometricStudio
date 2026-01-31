@@ -82,9 +82,3 @@ ChemometricsTool/
 
 ## Development
 
-Tests are located in the `tests/` directory. Run tests with:
-
-```bash
-python -m pytest tests/
-```
-

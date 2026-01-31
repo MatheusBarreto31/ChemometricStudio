@@ -193,7 +193,7 @@
               "graph_type": "scatter",
               "x_axis": {"data_source": "X_cal", "label": "Variables"},
               "y_axis": {"data_source": "X_cal", "label": "Intensity"},
-              "title": "Scatter test",
+              "graph_title": "Scatter test",
               "data_slicing": [
                 {"name": "Sample", "dimension": 1, "axis": "x", "show_navigation_menu": true},
                 {"name": "Sam", "dimension": 1, "axis": "y", "show_navigation_menu": true}]
@@ -204,7 +204,7 @@
       },
       {
         "title": "Data Overview",
-        "layout": "ed",
+        "layout": "fd",
         "condition": {"parameter": "nway_flag", "operator": "==", "value": "2"},
         "sections": [
           {
@@ -233,7 +233,6 @@
               "y_axis": {"data_source": "axis_n_info", "index": 1, "label": "Variables 1"},
               "z_axis": {"data_source": "X_cal", "label": "Intensity"},
               "title": "Spectral Data Heatmap",
-              "cmap": "jet",
               "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}]
             }
           },
@@ -246,7 +245,7 @@
               "z_axis": {"data_source": "X_cal", "label": "Intensity"},
               "title": "Spectral Data 3D Surface",
               "cmap": "jet",
-              "use_wireframe": true,
+              "use_wireframeccc": true,
               "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}]
             }
           },
@@ -258,7 +257,7 @@
               "y_axis": {"data_source": "axis_n_info", "index": 1, "label": "Variables 1"},
               "z_axis": {"data_source": "X_cal", "label": "Intensity"},
               "title": "Spectral Data 3D Surface",
-              "cmap": "jet",
+              "cmap": "terrain",
               "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}]
             }
           }
