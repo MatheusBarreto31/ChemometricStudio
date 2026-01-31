@@ -2733,7 +2733,8 @@ class ChemometricsGUI:
                 return
             
             # Get table configuration
-            title = config.get('title', f'Table: {data_source}')
+            title = config.get('title', 'Table')  # Section title as fallback
+            table_title = config.get('table_title')  # Optional table title displayed on table
             decimal_places = config.get('decimal_places', 4)
             max_rows = config.get('max_rows', 50)
             max_cols = config.get('max_cols', 15)
@@ -2758,9 +2759,10 @@ class ChemometricsGUI:
             main_frame = ttk.Frame(parent)
             main_frame.pack(fill=tk.BOTH, expand=True)
             
-            # Add title
-            title_label = ttk.Label(main_frame, text=title, font=('Arial', 10, 'bold'))
-            title_label.pack(anchor='w', pady=(0, 5))
+            # Add title only if table_title is provided
+            if table_title:
+                title_label = ttk.Label(main_frame, text=table_title, font=('Arial', 10, 'bold'))
+                title_label.pack(anchor='w', pady=(0, 5))
             
             # Add info bar (shape, stats)
             info_text = f"Shape: {data.shape} | Type: {data.dtype} | Min: {np.min(data):.4f} | Max: {np.max(data):.4f} | Mean: {np.mean(data):.4f}"
@@ -2777,14 +2779,16 @@ class ChemometricsGUI:
             toolbar = ttk.Frame(main_frame)
             toolbar.pack(fill=tk.X, pady=(0, 5))
             
-            # Export button
+            # Export button - use table_title > section title > data_source
+            export_title = table_title or title or data_source
             export_btn = ttk.Button(toolbar, text='Export to CSV', 
-                                   command=lambda: self._export_table_to_csv(data, title))
+                                   command=lambda: self._export_table_to_csv(data, export_title))
             export_btn.pack(side=tk.LEFT, padx=2)
             
-            # Statistics button
+            # Statistics button - use table_title > section title > data_source
+            stats_title = table_title or title or data_source
             stats_btn = ttk.Button(toolbar, text='Show Statistics',
-                                  command=lambda: self._show_table_statistics(data, title))
+                                  command=lambda: self._show_table_statistics(data, stats_title))
             stats_btn.pack(side=tk.LEFT, padx=2)
             
             # Refresh button
@@ -2888,14 +2892,28 @@ class ChemometricsGUI:
             label.pack(expand=True)
     
     def _export_table_to_csv(self, data: np.ndarray, title: str = 'export') -> None:
-        """Export table data to CSV file."""
+        """Export table data to CSV file with file save dialog."""
         try:
+            from tkinter import filedialog
             import csv
             from datetime import datetime
             
-            filename = f"{title.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            # Create default filename
+            default_filename = f"{title.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
             
-            with open(filename, 'w', newline='') as f:
+            # Open file save dialog
+            filepath = filedialog.asksaveasfilename(
+                defaultextension=".csv",
+                initialfile=default_filename,
+                filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+                title="Export Table to CSV"
+            )
+            
+            # User cancelled the dialog
+            if not filepath:
+                return
+            
+            with open(filepath, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 
                 # Write title
@@ -2917,9 +2935,9 @@ class ChemometricsGUI:
                     for row in flat_data:
                         writer.writerow(row)
             
-            print(f"✅ Table exported to: {filename}")
+            messagebox.showinfo("Success", f"✅ Table exported to:\n{filepath}")
         except Exception as e:
-            print(f"❌ Error exporting table: {str(e)}")
+            messagebox.showerror("Export Error", f"❌ Error exporting table: {str(e)}")
     
     def _show_table_statistics(self, data: np.ndarray, title: str = 'Statistics') -> None:
         """Display statistical summary of table data."""

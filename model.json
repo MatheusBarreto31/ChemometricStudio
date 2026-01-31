@@ -1,7 +1,7 @@
 {
   "metadata": {
     "version": "1.0",
-    "created": "2026-01-30T07:44:14.451389",
+    "created": "2026-01-31T18:57:43.340932",
     "description": "CM Studio Model Configuration"
   },
   "functions": [
@@ -16,7 +16,7 @@
         "nway_flag": "1",
         "transpose": false,
         "data_path": [
-          "tempfiles/x.txt"
+          "D:/cm-studio/tempfiles/x.txt"
         ]
       },
       "parameter_types": {
