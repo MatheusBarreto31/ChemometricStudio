@@ -8,7 +8,7 @@
     "univariate_calibration": ["y_cal_pred", "y_val_pred", "models", "metrics"]
   },
   "input_specs": {
-    "load_data": ["d_specs_separator", "d_specs_headlines", "d_specs_type", "d_specs_dimensions", "data_path", "nway_flag", "y_path", "var_path", "smp_path", "transpose", "axis_info", "reshape_order"],
+    "load_data": ["d_specs_separator", "d_specs_headlines", "d_specs_type", "d_specs_dimensions", "data_path", "nway_flag", "y_path", "var_path", "smp_path", "transpose", "axis_info", "reshape_order", "multi_file_per_sample", "num_samples", "sample_paths"],
     "validation_data_main": ["X_cal", "Y_cal", "smp_cal", "validation_mode", "createVal", "creationMethod", "calProportion", "selection_file", "X_val_path", "Y_val_path", "val_labels_path", "d_specs_separator", "d_specs_headlines", "d_specs_type", "d_specs_dimensions", "data_path", "y_path", "var_path", "smp_path", "transpose", "nway_flag", "reshape_order"],
     "baseline_correction": ["X_cal", "method", "X_val", "nway_flag", "direction", "window_size"],
     "smoothing": ["X_cal", "method", "X_val", "nway_flag", "direction", "window_size", "polyorder"],
@@ -56,7 +56,10 @@
       "smp_path": "str",
       "transpose": "bool",
       "axis_info": "str",
-      "reshape_order": "str"
+      "reshape_order": "str",
+      "multi_file_per_sample": "bool",
+      "num_samples": "int",
+      "sample_paths": "list"
     },
     "validation_data_main": {
       "X_cal": "ndarray",

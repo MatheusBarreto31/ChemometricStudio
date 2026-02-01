@@ -84,7 +84,8 @@
         "required": true,
         "input_type": "user",
         "tooltip": "Spectroscopic data files (spectra/X data)",
-        "ispath": true
+        "ispath": true,
+        "visible_if": {"multi_file_per_sample": false}
       },
       {
         "name": "nway_flag",
@@ -96,6 +97,41 @@
         "required": true,
         "input_type": "user",
         "tooltip": "1 for 2D data, >1 for multiway data"
+      },
+      {
+        "name": "multi_file_per_sample",
+        "label": "Multiple files per sample",
+        "category": "Data Files",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Enable when each sample consists of multiple data files (only for 3+ dimensional data)",
+        "visible_if": {"nway_flag": {"operator": ">=", "value": 3}}
+      },
+      {
+        "name": "num_samples",
+        "label": "Number of Samples",
+        "category": "Data Files",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Number of samples to load (each sample has multiple files)",
+        "visible_if": {"multi_file_per_sample": true}
+      },
+      {
+        "name": "sample_paths",
+        "label": "Sample Paths",
+        "category": "Data Files",
+        "widget": "sample_paths_list",
+        "count_source": "num_samples",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Files for each sample - each entry contains a list of files for one sample",
+        "ispath": true,
+        "visible_if": {"multi_file_per_sample": true}
       },
       {
         "name": "y_path",

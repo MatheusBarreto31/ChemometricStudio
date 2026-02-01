@@ -78,7 +78,8 @@
         "required": true,
         "input_type": "user",
         "tooltip": "Arquivos de dados espectroscópicos (espectros/dados X)",
-        "ispath": true
+        "ispath": true,
+        "visible_if": {"multi_file_per_sample": false}
       },
       {
         "name": "nway_flag",
@@ -89,6 +90,38 @@
         "required": true,
         "input_type": "user",
         "tooltip": "1 para dados 2D, >1 para dados multidimensionais"
+      },
+      {
+        "name": "multi_file_per_sample",
+        "label": "Múltiplos arquivos por amostra",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Habilitar quando cada amostra consiste de múltiplos arquivos de dados (apenas para dados 3+ dimensionais)",
+        "visible_if": {"nway_flag": {"operator": ">=", "value": 3}}
+      },
+      {
+        "name": "num_samples",
+        "label": "Número de Amostras",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Número de amostras a carregar (cada amostra tem múltiplos arquivos)",
+        "visible_if": {"multi_file_per_sample": true}
+      },
+      {
+        "name": "sample_paths",
+        "label": "Caminhos das Amostras",
+        "widget": "sample_paths_list",
+        "count_source": "num_samples",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Arquivos para cada amostra - cada entrada contém uma lista de arquivos para uma amostra",
+        "ispath": true,
+        "visible_if": {"multi_file_per_sample": true}
       },
       {
         "name": "y_path",

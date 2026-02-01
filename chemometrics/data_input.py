@@ -54,7 +54,9 @@ def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str,
               data_path: Optional[List[str]] = None, nway_flag: int = 1, y_path: Optional[str] = None,
               var_path: Optional[List[str]] = None, smp_path: Optional[str] = None,
               transpose: bool = False, axis_info: Optional[List[str]] = None, reshape_order: str = 'F',
-              dim_labels: Optional[List[str]] = None, scale_type: Optional[List[str]] = None) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[List[List[str]]], List[str], Optional[List[np.ndarray]], List[str]]:
+              dim_labels: Optional[List[str]] = None, scale_type: Optional[List[str]] = None,
+              multi_file_per_sample: bool = False, num_samples: Optional[int] = None,
+              sample_paths: Optional[List[List[str]]] = None) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[List[List[str]]], List[str], Optional[List[np.ndarray]], List[str]]:
     """
     Load and organize chemometrics data.
 
@@ -75,6 +77,9 @@ def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str,
         reshape_order: Reshape order for multiway data - 'F' (Fortran/MATLAB column-major, default) or 'C' (C row-major)
         dim_labels: Optional list of dimension names or comma-separated string
         scale_type: Optional list of scale types for axis generation ('Linear', 'Log10', 'Log2', 'Ln')
+        multi_file_per_sample: If True, each sample consists of multiple files (only for nway_flag >= 3)
+        num_samples: Number of samples when using multi_file_per_sample mode
+        sample_paths: List of file lists, where each inner list contains files for one sample
 
     Returns:
         X_cal: X data array
@@ -127,20 +132,31 @@ def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str,
         elif isinstance(axis_info, list):
             axis_info_list = [a.strip() if isinstance(a, str) else a for a in axis_info if a]
 
-    # Load X data
-    X, row_counts = _load_x_data(data_path, separator, num_headlines, data_type, dimensions, transpose, nway_flag, reshape_order)
+    # Load X data - check if multi_file_per_sample mode is enabled
+    if multi_file_per_sample and nway_flag >= 3 and sample_paths:
+        # Multi-file per sample mode: each sample consists of multiple files
+        X = _load_x_multifile_per_sample(sample_paths, separator, num_headlines, data_type, 
+                                         dimensions, nway_flag, transpose, reshape_order)
+        row_counts = []
+        # Generate sample labels from sample indices if no smp_path provided
+        if smp_path is None:
+            smp_labels = [f"Sample_{i+1}" for i in range(len(sample_paths))]
+        else:
+            smp_labels = _load_labels(smp_path)
+    else:
+        # Standard loading mode
+        X, row_counts = _load_x_data(data_path, separator, num_headlines, data_type, dimensions, transpose, nway_flag, reshape_order)
+        # Load sample labels
+        if smp_path is None:
+            if nway_flag == 1 and data_type == "x_matrix":
+                smp_labels = _generate_row_labels(data_path, row_counts)
+            else:
+                smp_labels = _generate_sample_labels(data_path)
+        else:
+            smp_labels = _load_labels(smp_path)
 
     # Load Y data (using same separator as X for consistency)
     Y = _load_y_data(y_path, separator, 0) if y_path else None
-
-    # Load sample labels
-    if smp_path is None:
-        if nway_flag == 1 and data_type == "x_matrix":
-            smp_labels = _generate_row_labels(data_path, row_counts)
-        else:
-            smp_labels = _generate_sample_labels(data_path)
-    else:
-        smp_labels = _load_labels(smp_path)
 
     # Generate axis information (numerical vectors)
     if axis_info_list:
@@ -249,6 +265,140 @@ def _load_x_multiway(data_path: List[str], separator: Optional[str], num_headlin
         samples.append(sample)
 
     # Stack into tensor with sample dimension first
+    X = np.array(samples)
+    return X
+
+
+def _load_x_multifile_per_sample(sample_paths: List[List[str]], separator: Optional[str], num_headlines: int,
+                                  data_type: str, dimensions: Optional[str], nway_flag: int, 
+                                  transpose: Optional[bool], reshape_order: str = 'F') -> np.ndarray:
+    """Load multi-way X data where each sample consists of multiple files.
+    
+    This function handles the case where each sample is stored across multiple files.
+    For example, with dimensions [4, 3, 2] (excluding samples):
+    - If data_type is vector: expects 4 values per file, 6 files per sample (3*2=6)
+      Files fill dimensions from innermost to outermost (last dimension varies slowest)
+    - If data_type is matrix: expects 4x3 matrices, 2 files per sample (one for each position in dim 2)
+    
+    Args:
+        sample_paths: List of lists, where each inner list contains file paths for one sample
+        separator: File separator character
+        num_headlines: Number of header lines to skip
+        data_type: Type of data in files ('x_vector', 'xy_vector', 'xyz_vector', 'x_matrix', 'xy_matrix')
+        dimensions: Comma-separated dimension sizes (excluding sample dimension)
+        nway_flag: Number of dimensions (excluding samples), must be >= 3
+        transpose: Whether to transpose data
+        reshape_order: 'F' for Fortran/MATLAB column-major (default) or 'C' for C row-major
+        
+    Returns:
+        Tensor with shape (num_samples, dim1, dim2, ..., dimN)
+    """
+    if dimensions is None:
+        raise ValueError("Dimensions are required for multi-file per sample loading")
+    
+    # Parse dimensions (excluding sample dimension)
+    dims = [int(d) for d in dimensions.split(",")]
+    if len(dims) != nway_flag:
+        raise ValueError(f"Number of dimensions ({len(dims)}) doesn't match nway_flag ({nway_flag})")
+    
+    # Determine what shape of data each file contains based on data_type
+    if data_type in ["x_vector", "xy_vector", "xyz_vector"]:
+        # Vector types: each file contains a 1D array
+        # The first dimension value tells us how many elements per file
+        elements_per_file = dims[0]
+        # Remaining dimensions tell us how many files per sample
+        files_per_sample = int(np.prod(dims[1:]))
+        file_shape = (elements_per_file,)
+        # Shape to organize files into (excluding first dim which is from the vector)
+        file_organization_shape = dims[1:]
+    elif data_type in ["x_matrix", "xy_matrix"]:
+        # Matrix types: each file contains a 2D array
+        # First two dimensions tell us the matrix shape per file
+        matrix_rows = dims[0]
+        matrix_cols = dims[1]
+        # Remaining dimensions tell us how many files per sample
+        files_per_sample = int(np.prod(dims[2:])) if len(dims) > 2 else 1
+        file_shape = (matrix_rows, matrix_cols)
+        # Shape to organize files into (remaining dims after the matrix)
+        file_organization_shape = dims[2:] if len(dims) > 2 else []
+    else:
+        raise ValueError(f"Unknown data_type for multi-file per sample loading: {data_type}")
+    
+    samples = []
+    
+    for sample_idx, file_list in enumerate(sample_paths):
+        if not file_list:
+            raise ValueError(f"No files provided for sample {sample_idx + 1}")
+        
+        if len(file_list) != files_per_sample:
+            raise ValueError(f"Sample {sample_idx + 1}: expected {files_per_sample} files, got {len(file_list)}")
+        
+        # Load all files for this sample
+        file_data_list = []
+        for file_path in file_list:
+            raw_data = _load_file(file_path, separator, num_headlines)
+            
+            # Extract the relevant data based on data_type
+            if data_type == "x_vector":
+                data = raw_data.flatten()
+            elif data_type == "xy_vector":
+                data = raw_data[:, 1] if raw_data.ndim > 1 else raw_data.flatten()
+            elif data_type == "xyz_vector":
+                data = raw_data[:, 2] if raw_data.ndim > 1 else raw_data.flatten()
+            elif data_type == "x_matrix":
+                data = raw_data
+                if transpose:
+                    data = data.T
+            elif data_type == "xy_matrix":
+                data = raw_data[:, 1::2]  # Every second column starting from second
+                if transpose:
+                    data = data.T
+            
+            file_data_list.append(data)
+        
+        # Organize the files into the sample tensor
+        if data_type in ["x_vector", "xy_vector", "xyz_vector"]:
+            # For vector types: stack vectors and reshape
+            # file_data_list contains vectors of shape (elements_per_file,)
+            # We need to arrange them into shape dims
+            stacked = np.array(file_data_list)  # Shape: (files_per_sample, elements_per_file)
+            
+            # Reshape to the target dimensions
+            # The organization is: innermost dimensions (last in dims) vary fastest
+            # So if dims = [4, 3, 2], with 6 files:
+            #   - Files 0-2 are for position 0 of dim 2, files 3-5 are for position 1 of dim 2
+            #   - Within each group, file 0 is for pos 0 of dim 1, file 1 is for pos 1 of dim 1, etc.
+            
+            # Reshape stacked data: (files_per_sample, elements_per_file) -> (dim2, dim3, ..., dim1)
+            # Then transpose to get (dim1, dim2, dim3, ...)
+            if file_organization_shape:
+                # Reshape to (file_organization_shape..., elements_per_file)
+                intermediate_shape = list(file_organization_shape) + [elements_per_file]
+                sample_tensor = stacked.reshape(intermediate_shape, order=reshape_order)
+                # Move the last axis (elements) to the front
+                sample_tensor = np.moveaxis(sample_tensor, -1, 0)
+            else:
+                sample_tensor = stacked.T  # Just transpose if no file organization needed
+            
+        elif data_type in ["x_matrix", "xy_matrix"]:
+            # For matrix types: stack matrices along new dimensions
+            # file_data_list contains matrices of shape (matrix_rows, matrix_cols)
+            stacked = np.array(file_data_list)  # Shape: (files_per_sample, matrix_rows, matrix_cols)
+            
+            if file_organization_shape:
+                # Reshape: (files_per_sample, rows, cols) -> (file_org_shape..., rows, cols)
+                intermediate_shape = list(file_organization_shape) + [matrix_rows, matrix_cols]
+                sample_tensor = stacked.reshape(intermediate_shape, order=reshape_order)
+                # Move the matrix dimensions (last 2) to the front
+                ndim = len(sample_tensor.shape)
+                new_axes = list(range(ndim - 2, ndim)) + list(range(ndim - 2))
+                sample_tensor = np.transpose(sample_tensor, new_axes)
+            else:
+                sample_tensor = stacked[0]  # Only one file, just use the matrix
+        
+        samples.append(sample_tensor)
+    
+    # Stack all samples into final tensor with sample dimension first
     X = np.array(samples)
     return X
 

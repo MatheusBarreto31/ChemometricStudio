@@ -1162,6 +1162,81 @@ class ChemometricsGUI:
                 widget_data["list_frame"] = list_frame
                 widget_data["count_source"] = count_source
                 widget_data["is_dynamic_list"] = True
+            
+            elif widget_type == "sample_paths_list":
+                # Dynamic list of multi-file selectors - each sample can have multiple files
+                count_source = widget_spec.get("count_source", "num_samples")
+                count = int(func_config.get(count_source, 1))
+                
+                # Container frame for all sample entries
+                list_frame = ttk.Frame(input_container)
+                list_frame.pack(anchor=tk.W, padx=20, pady=(0, 5), fill=tk.X)
+                
+                sample_widgets = []  # List of (entry_widget, files_list) tuples
+                current_values = func_config.get(name, [])
+                if isinstance(current_values, str):
+                    # Parse semicolon-separated samples, where each sample has comma-separated files
+                    current_values = []
+                
+                for i in range(count):
+                    item_frame = ttk.Frame(list_frame)
+                    item_frame.pack(anchor=tk.W, pady=(0, 4), fill=tk.X)
+                    
+                    item_label = ttk.Label(item_frame, text=f"  Sample {i+1}:", width=10)
+                    item_label.pack(side=tk.LEFT)
+                    
+                    # Entry to display selected files (read-only display)
+                    file_entry = ttk.Entry(item_frame, width=40)
+                    if i < len(current_values) and current_values[i]:
+                        # current_values[i] should be a list of file paths
+                        if isinstance(current_values[i], list):
+                            file_entry.insert(0, "; ".join(current_values[i]))
+                        else:
+                            file_entry.insert(0, str(current_values[i]))
+                    file_entry.pack(side=tk.LEFT, padx=(5, 5))
+                    
+                    # Store the files list separately
+                    files_list = current_values[i] if i < len(current_values) and isinstance(current_values[i], list) else []
+                    sample_widgets.append({"entry": file_entry, "files": files_list})
+                    
+                    # Browse button for multiple files
+                    def browse_multiple_files(idx, f_widget, widgets=sample_widgets, n=name, a=instance_alias, lbl=label_text):
+                        files = filedialog.askopenfilenames(title=f"Select files for Sample {idx+1}")
+                        if files:
+                            # Update the entry display
+                            f_widget.delete(0, tk.END)
+                            f_widget.insert(0, "; ".join(files))
+                            # Update the stored files list
+                            widgets[idx]["files"] = list(files)
+                            # Save all sample paths
+                            values_list = [w["files"] for w in widgets]
+                            self._save_widget_value(a, n, values_list)
+                    
+                    browse_btn = ttk.Button(item_frame, text="Browse...", 
+                                           command=lambda idx=i, fw=file_entry: browse_multiple_files(idx, fw), width=10)
+                    browse_btn.pack(side=tk.LEFT)
+                    
+                    # Focus out handler to parse manually entered paths
+                    def on_sample_focus_out(event, idx=i, f_widget=file_entry, widgets=sample_widgets, n=name, a=instance_alias):
+                        # Parse the entry text as semicolon-separated paths
+                        text = f_widget.get()
+                        if text.strip():
+                            parsed_files = [f.strip() for f in text.split(';') if f.strip()]
+                            widgets[idx]["files"] = parsed_files
+                        else:
+                            widgets[idx]["files"] = []
+                        values_list = [w["files"] for w in widgets]
+                        self._save_widget_value(a, n, values_list)
+                    file_entry.bind("<FocusOut>", on_sample_focus_out)
+                
+                # Save initial values
+                initial_values = [w["files"] for w in sample_widgets]
+                self._save_widget_value(instance_alias, name, initial_values)
+                
+                widget_data["widget"] = sample_widgets
+                widget_data["list_frame"] = list_frame
+                widget_data["count_source"] = count_source
+                widget_data["is_dynamic_list"] = True
         
         # Initial visibility update
         self._update_field_visibility(instance_alias, visible_widgets, category_headers)
@@ -1237,6 +1312,7 @@ class ChemometricsGUI:
                 should_show = False
             elif visible_if:
                 # visible_if is a dict like {"method": "moving_average"} or {"input_type": "user"}
+                # Also supports operator format: {"nway_flag": {"operator": ">=", "value": 3}}
                 # Check if ALL conditions are met
                 for condition_field, condition_value in visible_if.items():
                     # Special handling for input_type meta-condition
@@ -1255,10 +1331,43 @@ class ChemometricsGUI:
                             # It's a checkbutton
                             current_value = widget_data_for_condition["variable"].get()
                         
-                        # Compare values
-                        if current_value != condition_value:
-                            should_show = False
-                            break
+                        # Check if condition_value is an operator dict
+                        if isinstance(condition_value, dict) and "operator" in condition_value:
+                            operator = condition_value.get("operator", "==")
+                            expected_value = condition_value.get("value")
+                            
+                            # Try to convert to numeric for comparison
+                            try:
+                                current_val = int(current_value) if current_value is not None else 0
+                                expected_val = int(expected_value) if expected_value is not None else 0
+                            except (ValueError, TypeError):
+                                current_val = str(current_value) if current_value is not None else ""
+                                expected_val = str(expected_value) if expected_value is not None else ""
+                            
+                            # Evaluate based on operator
+                            if operator == "==":
+                                condition_met = current_val == expected_val
+                            elif operator == "!=":
+                                condition_met = current_val != expected_val
+                            elif operator == ">":
+                                condition_met = current_val > expected_val
+                            elif operator == "<":
+                                condition_met = current_val < expected_val
+                            elif operator == ">=":
+                                condition_met = current_val >= expected_val
+                            elif operator == "<=":
+                                condition_met = current_val <= expected_val
+                            else:
+                                condition_met = True
+                            
+                            if not condition_met:
+                                should_show = False
+                                break
+                        else:
+                            # Simple equality comparison
+                            if current_value != condition_value:
+                                should_show = False
+                                break
             
             # Show or hide the container using grid with stored parameters
             if should_show:
@@ -1315,7 +1424,11 @@ class ChemometricsGUI:
             if isinstance(current_widgets, list):
                 for w in current_widgets:
                     try:
-                        current_values.append(w.get())
+                        # For sample_paths_list, widgets are dicts with "files" key
+                        if isinstance(w, dict) and "files" in w:
+                            current_values.append(w["files"])
+                        else:
+                            current_values.append(w.get())
                     except:
                         current_values.append("")
             
@@ -1333,6 +1446,9 @@ class ChemometricsGUI:
             elif widget_type == "entry_list":
                 self._rebuild_entry_list(func_alias, field_name, widget_data, widget_spec,
                                         list_frame, new_count, current_values, visible_widgets)
+            elif widget_type == "sample_paths_list":
+                self._rebuild_sample_paths_list(func_alias, field_name, widget_data, widget_spec,
+                                               list_frame, new_count, current_values, visible_widgets)
     
     def _rebuild_combobox_list(self, func_alias: str, field_name: str, widget_data: Dict, 
                                 widget_spec: Dict, list_frame, count: int, current_values: list,
@@ -1471,6 +1587,67 @@ class ChemometricsGUI:
         
         # Update widget_data
         widget_data["widget"] = entry_widgets
+
+    def _rebuild_sample_paths_list(self, func_alias: str, field_name: str, widget_data: Dict,
+                                    widget_spec: Dict, list_frame, count: int, current_values: list,
+                                    visible_widgets: Dict):
+        """Rebuild a sample_paths_list widget with new count."""
+        label_text = widget_spec.get("label", field_name)
+        
+        sample_widgets = []
+        
+        for i in range(count):
+            item_frame = ttk.Frame(list_frame)
+            item_frame.pack(anchor=tk.W, pady=(0, 4), fill=tk.X)
+            
+            item_label = ttk.Label(item_frame, text=f"  Sample {i+1}:", width=10)
+            item_label.pack(side=tk.LEFT)
+            
+            # Entry to display selected files
+            file_entry = ttk.Entry(item_frame, width=40)
+            if i < len(current_values) and current_values[i]:
+                if isinstance(current_values[i], list):
+                    file_entry.insert(0, "; ".join(current_values[i]))
+                else:
+                    file_entry.insert(0, str(current_values[i]))
+            file_entry.pack(side=tk.LEFT, padx=(5, 5))
+            
+            # Store the files list separately
+            files_list = current_values[i] if i < len(current_values) and isinstance(current_values[i], list) else []
+            sample_widgets.append({"entry": file_entry, "files": files_list})
+            
+            # Browse button for multiple files
+            def browse_multiple_files(idx, f_widget, widgets=sample_widgets, n=field_name, a=func_alias):
+                files = filedialog.askopenfilenames(title=f"Select files for Sample {idx+1}")
+                if files:
+                    f_widget.delete(0, tk.END)
+                    f_widget.insert(0, "; ".join(files))
+                    widgets[idx]["files"] = list(files)
+                    values_list = [w["files"] for w in widgets]
+                    self._save_widget_value(a, n, values_list)
+            
+            browse_btn = ttk.Button(item_frame, text="Browse...", 
+                                   command=lambda idx=i, fw=file_entry: browse_multiple_files(idx, fw), width=10)
+            browse_btn.pack(side=tk.LEFT)
+            
+            # Focus out handler
+            def on_sample_focus_out(event, idx=i, f_widget=file_entry, widgets=sample_widgets, n=field_name, a=func_alias):
+                text = f_widget.get()
+                if text.strip():
+                    parsed_files = [f.strip() for f in text.split(';') if f.strip()]
+                    widgets[idx]["files"] = parsed_files
+                else:
+                    widgets[idx]["files"] = []
+                values_list = [w["files"] for w in widgets]
+                self._save_widget_value(a, n, values_list)
+            file_entry.bind("<FocusOut>", on_sample_focus_out)
+        
+        # Save initial values
+        initial_values = [w["files"] for w in sample_widgets]
+        self._save_widget_value(func_alias, field_name, initial_values)
+        
+        # Update widget_data
+        widget_data["widget"] = sample_widgets
 
     def _show_routing_tab(self):
         """Show Routing tab with visual connection drawing using canvas."""

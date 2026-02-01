@@ -153,3 +153,6 @@ test_load_data_params.py
 ANALYSIS_CONFIG_IMPLEMENTATION_SUMMARY.txt
 model.json
 model_log.txt
+
+# Test folder
+tests/
