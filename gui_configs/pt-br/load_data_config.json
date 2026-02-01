@@ -122,11 +122,12 @@
       {
         "name": "dim_labels",
         "label": "Nomes das Dimensões (Opcional)",
-        "widget": "entry",
+        "widget": "entry_list",
+        "count_source": "nway_flag",
         "default": "",
         "required": false,
         "input_type": "user",
-        "tooltip": "Nomes separados por vírgula para cada dimensão (ex: 'comprimento_de_onda,tempo'). Valores vazios usarão o índice da posição."
+        "tooltip": "Nome para cada dimensão. Valores vazios usarão o índice da posição."
       },
       {
         "name": "scale_type",

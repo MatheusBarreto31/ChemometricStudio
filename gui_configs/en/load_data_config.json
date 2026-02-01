@@ -133,11 +133,12 @@
         "name": "dim_labels",
         "label": "Dimension Names (Optional)",
         "category": "Multiway Configuration",
-        "widget": "entry",
+        "widget": "entry_list",
+        "count_source": "nway_flag",
         "default": "",
         "required": false,
         "input_type": "user",
-        "tooltip": "Comma-separated names for each dimension (e.g., 'wavelength,time'). Empty values will use position index."
+        "tooltip": "Name for each dimension. Empty values will use position index."
       },
       {
         "name": "scale_type",

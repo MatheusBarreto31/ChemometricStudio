@@ -505,12 +505,12 @@ def _check_if_numeric(content: List[str]) -> Tuple[bool, Optional[np.ndarray]]:
         return False, None
 
 
-def _generate_dim_labels(dim_labels: Optional[str], nway_flag: int) -> List[str]:
+def _generate_dim_labels(dim_labels, nway_flag: int) -> List[str]:
     """
     Generate dimension labels from user input.
     
     Args:
-        dim_labels: Comma-separated dimension names (e.g., "wavelength,time")
+        dim_labels: List of dimension names or comma-separated string (e.g., "wavelength,time")
         nway_flag: Number of dimensions (excluding samples)
         
     Returns:
@@ -520,10 +520,14 @@ def _generate_dim_labels(dim_labels: Optional[str], nway_flag: int) -> List[str]
     # Start with "Samples" as the first label
     result = ["Samples"]
     
-    # Parse user input if provided
+    # Normalize dim_labels to list (handle both string and list inputs)
     user_labels = []
-    if dim_labels and dim_labels.strip():
-        user_labels = [label.strip() for label in dim_labels.split(',')]
+    if dim_labels:
+        if isinstance(dim_labels, str):
+            # Parse from comma-separated string
+            user_labels = [label.strip() for label in dim_labels.split(',') if label.strip()]
+        elif isinstance(dim_labels, list):
+            user_labels = [label.strip() if isinstance(label, str) else label for label in dim_labels]
     
     # Build labels for each dimension
     for i in range(nway_flag):
