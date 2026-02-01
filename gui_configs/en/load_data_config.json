@@ -68,11 +68,12 @@
         "name": "d_specs_dimensions",
         "label": "Data Dimensions",
         "category": "Multiway Configuration",
-        "widget": "entry",
+        "widget": "entry_list",
+        "count_source": "nway_flag",
         "default": "",
         "required": false,
         "input_type": "user",
-        "tooltip": "Specify dimensions for reshaping superior-order data (e.g., '100,500,10')"
+        "tooltip": "Dimension size for each axis (numeric values, one per dimension)"
       },
       {
         "name": "data_path",

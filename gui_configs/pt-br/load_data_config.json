@@ -63,11 +63,12 @@
       {
         "name": "d_specs_dimensions",
         "label": "Dimensões dos Dados",
-        "widget": "entry",
+        "widget": "entry_list",
+        "count_source": "nway_flag",
         "default": "",
         "required": false,
         "input_type": "user",
-        "tooltip": "Especifique dimensões para remodelar dados de ordem superior (ex: '100,500,10')"
+        "tooltip": "Tamanho da dimensão para cada eixo (valores numéricos, um por dimensão)"
       },
       {
         "name": "data_path",

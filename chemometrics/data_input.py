@@ -50,11 +50,11 @@ def _load_file(path: str, separator: Optional[str], num_headlines: int) -> np.nd
             return np.loadtxt(path, delimiter=separator, skiprows=num_headlines)
 
 
-def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str, d_specs_dimensions: Optional[str] = None,
+def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str, d_specs_dimensions: Optional[List[str]] = None,
               data_path: Optional[List[str]] = None, nway_flag: int = 1, y_path: Optional[str] = None,
               var_path: Optional[List[str]] = None, smp_path: Optional[str] = None,
               transpose: bool = False, axis_info: Optional[List[str]] = None, reshape_order: str = 'F',
-              dim_labels: Optional[str] = None, scale_type: Optional[List[str]] = None) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[List[List[str]]], List[str], Optional[List[np.ndarray]], List[str]]:
+              dim_labels: Optional[List[str]] = None, scale_type: Optional[List[str]] = None) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[List[List[str]]], List[str], Optional[List[np.ndarray]], List[str]]:
     """
     Load and organize chemometrics data.
 
@@ -64,7 +64,7 @@ def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str,
         d_specs_separator: Separator type ('comma', 'tabs', 'spaces')
         d_specs_headlines: Number of header rows to skip
         d_specs_type: Data type ('x_vector', 'xy_vector', 'x_matrix', etc.)
-        d_specs_dimensions: Dimensions for reshaping (optional, defaults to None)
+        d_specs_dimensions: List of dimensions for reshaping (or comma-separated string)
         data_path: List of paths to X data files (text or Excel, defaults to None)
         nway_flag: Number of ways (1 for 1D/2D, 2+ for multi-way, defaults to 1)
         y_path: Optional path to Y data file (text or Excel)
@@ -73,7 +73,7 @@ def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str,
         transpose: Whether to transpose data (defaults to False)
         axis_info: Optional list of axis ranges (e.g., ["100 200", "1 10"]) or semicolon-separated string
         reshape_order: Reshape order for multiway data - 'F' (Fortran/MATLAB column-major, default) or 'C' (C row-major)
-        dim_labels: Optional comma-separated dimension names (e.g., "wavelength,time")
+        dim_labels: Optional list of dimension names or comma-separated string
         scale_type: Optional list of scale types for axis generation ('Linear', 'Log10', 'Log2', 'Ln')
 
     Returns:
@@ -89,7 +89,16 @@ def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str,
     separator = separator_map.get(d_specs_separator, ",")
     num_headlines = int(d_specs_headlines)
     data_type = d_specs_type
-    dimensions = d_specs_dimensions if d_specs_dimensions and d_specs_dimensions.strip() else None
+    
+    # Normalize d_specs_dimensions to string (handle both string and list inputs)
+    dimensions = None
+    if d_specs_dimensions:
+        if isinstance(d_specs_dimensions, str):
+            dimensions = d_specs_dimensions if d_specs_dimensions.strip() else None
+        elif isinstance(d_specs_dimensions, list):
+            # Join list with commas to create comma-separated string
+            dims = [str(d).strip() for d in d_specs_dimensions if d]
+            dimensions = ",".join(dims) if dims else None
 
     # Normalize var_path to list (handle both string and list inputs)
     var_path_list = None
