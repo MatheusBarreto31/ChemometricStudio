@@ -91,6 +91,10 @@
       "no_config": "Nenhuma configuração disponível para esta função"
     }
   },
+  "data": {
+    "samples": "Amostras",
+    "dim_labels_prefix": "Amostras"
+  },
   "menu": {
     "file": "Arquivo",
     "load_model": "Carregar Modelo",

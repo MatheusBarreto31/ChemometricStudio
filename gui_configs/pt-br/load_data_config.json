@@ -10,16 +10,19 @@
     "data_path": "Arquivos de Dados X",
     "nway_flag": "Dimensionalidade dos Dados",
     "y_path": "Arquivo de Dados Y",
-    "var_path": "Rótulos de Variáveis",
+    "var_path": "Arquivos de Rótulos de Eixo",
     "smp_path": "Rótulos de Amostras",
-    "transpose": "Transpor"
+    "transpose": "Transpor",
+    "dim_labels": "Nomes das Dimensões",
+    "scale_type": "Tipo de Escala"
   },
   "output_aliases": {
     "X_cal": "Dados X",
     "Y_cal": "Dados Y",
-    "var_label": "Rótulos de Variáveis",
+    "axis_t_info": "Rótulos de Texto dos Eixos",
     "smp_cal": "Rótulos de Amostras",
-    "axis_n_info": "Vetores de Eixo"
+    "axis_n_info": "Vetores de Eixo",
+    "dim_labels": "Rótulos de Dimensões"
   },
   "short_description": "Carrega dados espectroscópicos e de resposta de arquivos",
   "long_description": "Esta etapa carrega seu conjunto de dados de calibração, incluindo dados espectroscópicos (X), variáveis de resposta (Y) e metadados opcionais.\n\nComponentes de Dados de Entrada:\n- Dados X (Espectros): Principais medições espectroscópicas (obrigatório)\n- Dados Y (Respostas): Variáveis alvo/dependentes (opcional)\n- Rótulos de Variáveis: Comprimentos de onda, frequências ou nomes de variáveis (opcional)\n- Rótulos de Amostras: IDs de amostra ou identificadores (opcional)\n\nFormatos de Dados:\n- Arquivos CSV com delimitadores configuráveis (vírgula, tabulações, espaços)\n- Formato de matriz: amostras (linhas) x variáveis (colunas)\n- Formatos de vetor para tipos de dados especializados\n- Suporte para múltiplos arquivos via seleção de arquivo\n\nConfiguração:\n- Especifique o tipo de delimitador para seus arquivos\n- Defina o número de linhas de cabeçalho para pular\n- Escolha a estrutura de tipo de dados apropriada\n- Transponha se necessário (amostras em colunas em vez de linhas)\n\nOs dados carregados se tornam entrada para etapas de pré-processamento e validação.",
@@ -98,12 +101,12 @@
       },
       {
         "name": "var_path",
-        "label": "Rótulos de Variáveis (Opcional)",
-        "widget": "file_selector",
-        "multiple": false,
+        "label": "Arquivos de Rótulos de Eixo (Opcional)",
+        "widget": "file_selector_list",
+        "count_source": "nway_flag",
         "required": false,
         "input_type": "user",
-        "tooltip": "Rótulos para variáveis/comprimentos de onda (ex: valores de número de onda)",
+        "tooltip": "Arquivos contendo rótulos de eixo para cada dimensão (um arquivo por dimensão, baseado na Ordem dos Dados)",
         "ispath": true
       },
       {
@@ -117,6 +120,26 @@
         "ispath": true
       },
       {
+        "name": "dim_labels",
+        "label": "Nomes das Dimensões (Opcional)",
+        "widget": "entry",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Nomes separados por vírgula para cada dimensão (ex: 'comprimento_de_onda,tempo'). Valores vazios usarão o índice da posição."
+      },
+      {
+        "name": "scale_type",
+        "label": "Tipo de Escala",
+        "widget": "combobox_list",
+        "count_source": "nway_flag",
+        "values": ["Linear", "Log10", "Log2", "Ln"],
+        "default": "Linear",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Tipo de escala para gerar vetores de eixo a partir de pontos inicial/final (um por dimensão)"
+      },
+      {
         "name": "transpose",
         "label": "Transpor Dados",
         "widget": "checkbutton",
@@ -128,11 +151,12 @@
       {
         "name": "axis_info",
         "label": "Informação de Eixo (Opcional)",
-        "widget": "entry",
+        "widget": "entry_list",
+        "count_source": "nway_flag",
         "default": "",
         "required": false,
         "input_type": "user",
-        "tooltip": "Informação de intervalo de eixo (ex: '100 200' para 1D ou '100 200; 1 10' para dados 2D)"
+        "tooltip": "Intervalo de eixo para cada dimensão como 'início fim' (ex: '100 200'). Uma entrada por dimensão."
       }
     ]
   },

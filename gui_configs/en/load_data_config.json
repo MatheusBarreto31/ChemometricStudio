@@ -10,16 +10,19 @@
     "data_path": "X Data Files",
     "nway_flag": "Data Dimensionality",
     "y_path": "Y Data File",
-    "var_path": "Variable Labels",
+    "var_path": "Axis Labels Files",
     "smp_path": "Sample Labels",
-    "transpose": "Transpose"
+    "transpose": "Transpose",
+    "dim_labels": "Dimension Names",
+    "scale_type": "Scale Type"
   },
   "output_aliases": {
     "X_cal": "X Data",
     "Y_cal": "Y Data",
-    "var_label": "Variable Labels",
+    "axis_t_info": "Axis Text Labels",
     "smp_cal": "Sample Labels",
-    "axis_n_info": "Axis Vectors"
+    "axis_n_info": "Axis Vectors",
+    "dim_labels": "Dimension Labels"
   },
   "short_description": "Loads spectroscopic and response data from files",
   "long_description": "This step loads your calibration dataset including spectroscopic data (X), response variables (Y), and optional metadata.\n\nInput Data Components:\n- X Data (Spectra): Main spectroscopic measurements (required)\n- Y Data (Responses): Target/dependent variables (optional)\n- Variable Labels: Wavelengths, frequencies, or variable names (optional)\n- Sample Labels: Sample IDs or identifiers (optional)\n\nData Formats:\n- CSV files with configurable delimiters (comma, tabs, spaces)\n- Matrix format: samples (rows) x variables (columns)\n- Vector formats for specialized data types\n- Support for multiple files via file selection\n\nConfiguration:\n- Specify delimiter type for your files\n- Set number of header rows to skip\n- Choose appropriate data type structure\n- Transpose if needed (samples in columns instead of rows)\n\nThe loaded data becomes input for preprocessing and validation steps.",
@@ -106,13 +109,13 @@
       },
       {
         "name": "var_path",
-        "label": "Variable Labels (Optional)",
+        "label": "Axis Labels Files (Optional)",
         "category": "Optional Data",
-        "widget": "file_selector",
-        "multiple": false,
+        "widget": "file_selector_list",
+        "count_source": "nway_flag",
         "required": false,
         "input_type": "user",
-        "tooltip": "Labels for variables/wavelengths (e.g., wavenumber values)",
+        "tooltip": "Files containing axis labels for each dimension (one file per dimension, based on Data Order)",
         "ispath": true
       },
       {
@@ -125,6 +128,28 @@
         "input_type": "user",
         "tooltip": "Labels for samples (e.g., sample IDs)",
         "ispath": true
+      },
+      {
+        "name": "dim_labels",
+        "label": "Dimension Names (Optional)",
+        "category": "Multiway Configuration",
+        "widget": "entry",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Comma-separated names for each dimension (e.g., 'wavelength,time'). Empty values will use position index."
+      },
+      {
+        "name": "scale_type",
+        "label": "Scale Type",
+        "category": "Multiway Configuration",
+        "widget": "combobox_list",
+        "count_source": "nway_flag",
+        "values": ["Linear", "Log10", "Log2", "Ln"],
+        "default": "Linear",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Scale type for generating axis vectors from start/end points (one per dimension)"
       },
       {
         "name": "transpose",
@@ -152,11 +177,12 @@
         "name": "axis_info",
         "label": "Axis Information (Optional)",
         "category": "Optional Data",
-        "widget": "entry",
+        "widget": "entry_list",
+        "count_source": "nway_flag",
         "default": "",
         "required": false,
         "input_type": "user",
-        "tooltip": "Axis range information (e.g., '100 200' for 1D or '100 200; 1 10' for 2D data)"
+        "tooltip": "Axis range for each dimension as 'start end' (e.g., '100 200'). One entry per dimension."
       }
     ]
   },

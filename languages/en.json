@@ -91,6 +91,10 @@
       "no_config": "No configuration available for this function"
     }
   },
+  "data": {
+    "samples": "Samples",
+    "dim_labels_prefix": "Samples"
+  },
   "menu": {
     "file": "File",
     "load_model": "Load Model",

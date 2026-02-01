@@ -998,6 +998,170 @@ class ChemometricsGUI:
                 browse_btn.pack(side=tk.LEFT)
                 
                 widget_data["widget"] = file_entry
+            
+            elif widget_type == "combobox_list":
+                # Dynamic list of comboboxes based on count_source parameter
+                count_source = widget_spec.get("count_source", "nway_flag")
+                count = int(func_config.get(count_source, 1))
+                values = widget_spec.get("values", [])
+                value_aliases = widget_spec.get("value_aliases", values)
+                default_value = widget_spec.get("default", values[0] if values else "")
+                
+                # Create mapping from alias to actual value
+                alias_to_value = dict(zip(value_aliases, values))
+                value_to_alias = dict(zip(values, value_aliases))
+                
+                # Container frame for all comboboxes
+                list_frame = ttk.Frame(input_container)
+                list_frame.pack(anchor=tk.W, padx=20, pady=(0, 5), fill=tk.X)
+                
+                combo_widgets = []
+                current_values = func_config.get(name, [])
+                if isinstance(current_values, str):
+                    current_values = [v.strip() for v in current_values.split(',') if v.strip()]
+                
+                for i in range(count):
+                    item_frame = ttk.Frame(list_frame)
+                    item_frame.pack(anchor=tk.W, pady=(0, 2), fill=tk.X)
+                    
+                    item_label = ttk.Label(item_frame, text=f"  [{i+1}]:", width=6)
+                    item_label.pack(side=tk.LEFT)
+                    
+                    combo = ttk.Combobox(item_frame, values=value_aliases, width=30, state="readonly")
+                    
+                    # Set current or default value
+                    if i < len(current_values) and current_values[i]:
+                        display_text = value_to_alias.get(current_values[i], current_values[i])
+                        combo.set(display_text)
+                    else:
+                        display_text = value_to_alias.get(default_value, default_value)
+                        combo.set(display_text)
+                    
+                    combo.pack(side=tk.LEFT, padx=(5, 0))
+                    combo_widgets.append(combo)
+                    
+                    # Binding to save all combobox values as a list
+                    def on_combo_list_selected(event, widgets=combo_widgets, n=name, a=instance_alias, a2v=alias_to_value):
+                        values_list = []
+                        for w in widgets:
+                            selected_alias = w.get()
+                            actual_value = a2v.get(selected_alias, selected_alias)
+                            values_list.append(actual_value)
+                        self._save_widget_value(a, n, values_list)
+                    combo.bind("<<ComboboxSelected>>", on_combo_list_selected)
+                
+                # Save initial values
+                initial_values = []
+                for w in combo_widgets:
+                    selected_alias = w.get()
+                    actual_value = alias_to_value.get(selected_alias, selected_alias)
+                    initial_values.append(actual_value)
+                self._save_widget_value(instance_alias, name, initial_values)
+                
+                widget_data["widget"] = combo_widgets
+                widget_data["list_frame"] = list_frame
+                widget_data["count_source"] = count_source
+                widget_data["is_dynamic_list"] = True
+            
+            elif widget_type == "file_selector_list":
+                # Dynamic list of file selectors based on count_source parameter
+                count_source = widget_spec.get("count_source", "nway_flag")
+                count = int(func_config.get(count_source, 1))
+                
+                # Container frame for all file selectors
+                list_frame = ttk.Frame(input_container)
+                list_frame.pack(anchor=tk.W, padx=20, pady=(0, 5), fill=tk.X)
+                
+                file_widgets = []
+                current_values = func_config.get(name, [])
+                if isinstance(current_values, str):
+                    current_values = [v.strip() for v in current_values.split(';') if v.strip()]
+                
+                for i in range(count):
+                    item_frame = ttk.Frame(list_frame)
+                    item_frame.pack(anchor=tk.W, pady=(0, 2), fill=tk.X)
+                    
+                    item_label = ttk.Label(item_frame, text=f"  [{i+1}]:", width=6)
+                    item_label.pack(side=tk.LEFT)
+                    
+                    file_entry = ttk.Entry(item_frame, width=34)
+                    if i < len(current_values) and current_values[i]:
+                        file_entry.insert(0, current_values[i])
+                    file_entry.pack(side=tk.LEFT, padx=(5, 5))
+                    file_widgets.append(file_entry)
+                    
+                    # Save on focus out
+                    def on_file_focus_out(event, widgets=file_widgets, n=name, a=instance_alias):
+                        values_list = [w.get() for w in widgets]
+                        self._save_widget_value(a, n, values_list)
+                    file_entry.bind("<FocusOut>", on_file_focus_out)
+                    
+                    # Browse button for this entry
+                    def browse_single(idx, f_widget, widgets=file_widgets, n=name, a=instance_alias, lbl=label_text):
+                        file = filedialog.askopenfilename(title=f"Select file for {lbl} [{idx+1}]")
+                        if file:
+                            f_widget.delete(0, tk.END)
+                            f_widget.insert(0, file)
+                            values_list = [w.get() for w in widgets]
+                            self._save_widget_value(a, n, values_list)
+                    
+                    browse_btn = ttk.Button(item_frame, text="Browse", 
+                                           command=lambda idx=i, fw=file_entry: browse_single(idx, fw), width=8)
+                    browse_btn.pack(side=tk.LEFT)
+                
+                # Save initial values
+                initial_values = [w.get() for w in file_widgets]
+                self._save_widget_value(instance_alias, name, initial_values)
+                
+                widget_data["widget"] = file_widgets
+                widget_data["list_frame"] = list_frame
+                widget_data["count_source"] = count_source
+                widget_data["is_dynamic_list"] = True
+            
+            elif widget_type == "entry_list":
+                # Dynamic list of entry fields based on count_source parameter
+                count_source = widget_spec.get("count_source", "nway_flag")
+                count = int(func_config.get(count_source, 1))
+                default_value = widget_spec.get("default", "")
+                
+                # Container frame for all entries
+                list_frame = ttk.Frame(input_container)
+                list_frame.pack(anchor=tk.W, padx=20, pady=(0, 5), fill=tk.X)
+                
+                entry_widgets = []
+                current_values = func_config.get(name, [])
+                if isinstance(current_values, str):
+                    current_values = [v.strip() for v in current_values.split(';') if v.strip()]
+                
+                for i in range(count):
+                    item_frame = ttk.Frame(list_frame)
+                    item_frame.pack(anchor=tk.W, pady=(0, 2), fill=tk.X)
+                    
+                    item_label = ttk.Label(item_frame, text=f"  [{i+1}]:", width=6)
+                    item_label.pack(side=tk.LEFT)
+                    
+                    entry = ttk.Entry(item_frame, width=38)
+                    if i < len(current_values) and current_values[i]:
+                        entry.insert(0, current_values[i])
+                    elif default_value:
+                        entry.insert(0, default_value)
+                    entry.pack(side=tk.LEFT, padx=(5, 0))
+                    entry_widgets.append(entry)
+                    
+                    # Save on focus out
+                    def on_entry_focus_out(event, widgets=entry_widgets, n=name, a=instance_alias):
+                        values_list = [w.get() for w in widgets]
+                        self._save_widget_value(a, n, values_list)
+                    entry.bind("<FocusOut>", on_entry_focus_out)
+                
+                # Save initial values
+                initial_values = [w.get() for w in entry_widgets]
+                self._save_widget_value(instance_alias, name, initial_values)
+                
+                widget_data["widget"] = entry_widgets
+                widget_data["list_frame"] = list_frame
+                widget_data["count_source"] = count_source
+                widget_data["is_dynamic_list"] = True
         
         # Initial visibility update
         self._update_field_visibility(instance_alias, visible_widgets, category_headers)
@@ -1052,6 +1216,9 @@ class ChemometricsGUI:
     def _update_field_visibility(self, func_alias: str, visible_widgets: Dict, category_headers: Dict = None):
         """Update visibility of fields based on visible_if conditions and hide empty categories."""
         func_config = self.function_configs.get(func_alias, {})
+        
+        # First, check and rebuild any dynamic list widgets whose count has changed
+        self._update_dynamic_list_widgets(func_alias, visible_widgets, func_config)
         
         # Track which categories have visible content
         visible_categories = set()
@@ -1113,6 +1280,198 @@ class ChemometricsGUI:
                 else:
                     cat_header.grid_remove()  # Hide but keep grid position
     
+    def _update_dynamic_list_widgets(self, func_alias: str, visible_widgets: Dict, func_config: Dict):
+        """Rebuild dynamic list widgets (combobox_list, file_selector_list) when their count source changes."""
+        for field_name, widget_data in visible_widgets.items():
+            if not widget_data.get("is_dynamic_list"):
+                continue
+            
+            count_source = widget_data.get("count_source")
+            if not count_source:
+                continue
+            
+            # Get current count from config
+            new_count = int(func_config.get(count_source, 1))
+            
+            # Get current widget count
+            current_widgets = widget_data.get("widget", [])
+            current_count = len(current_widgets) if isinstance(current_widgets, list) else 0
+            
+            # If count hasn't changed, skip rebuild
+            if new_count == current_count:
+                continue
+            
+            # Rebuild the widget
+            widget_spec = widget_data.get("widget_spec", {})
+            widget_type = widget_spec.get("widget")
+            list_frame = widget_data.get("list_frame")
+            container = widget_data.get("container")
+            
+            if not list_frame:
+                continue
+            
+            # Preserve current values
+            current_values = []
+            if isinstance(current_widgets, list):
+                for w in current_widgets:
+                    try:
+                        current_values.append(w.get())
+                    except:
+                        current_values.append("")
+            
+            # Clear the list frame
+            for child in list_frame.winfo_children():
+                child.destroy()
+            
+            # Rebuild based on widget type
+            if widget_type == "combobox_list":
+                self._rebuild_combobox_list(func_alias, field_name, widget_data, widget_spec, 
+                                           list_frame, new_count, current_values, visible_widgets)
+            elif widget_type == "file_selector_list":
+                self._rebuild_file_selector_list(func_alias, field_name, widget_data, widget_spec,
+                                                 list_frame, new_count, current_values, visible_widgets)
+            elif widget_type == "entry_list":
+                self._rebuild_entry_list(func_alias, field_name, widget_data, widget_spec,
+                                        list_frame, new_count, current_values, visible_widgets)
+    
+    def _rebuild_combobox_list(self, func_alias: str, field_name: str, widget_data: Dict, 
+                                widget_spec: Dict, list_frame, count: int, current_values: list,
+                                visible_widgets: Dict):
+        """Rebuild a combobox_list widget with new count."""
+        values = widget_spec.get("values", [])
+        value_aliases = widget_spec.get("value_aliases", values)
+        default_value = widget_spec.get("default", values[0] if values else "")
+        label_text = widget_spec.get("label", field_name)
+        
+        alias_to_value = dict(zip(value_aliases, values))
+        value_to_alias = dict(zip(values, value_aliases))
+        
+        combo_widgets = []
+        
+        for i in range(count):
+            item_frame = ttk.Frame(list_frame)
+            item_frame.pack(anchor=tk.W, pady=(0, 2), fill=tk.X)
+            
+            item_label = ttk.Label(item_frame, text=f"  [{i+1}]:", width=6)
+            item_label.pack(side=tk.LEFT)
+            
+            combo = ttk.Combobox(item_frame, values=value_aliases, width=30, state="readonly")
+            
+            # Set current or default value
+            if i < len(current_values) and current_values[i]:
+                display_text = value_to_alias.get(current_values[i], current_values[i])
+                combo.set(display_text)
+            else:
+                display_text = value_to_alias.get(default_value, default_value)
+                combo.set(display_text)
+            
+            combo.pack(side=tk.LEFT, padx=(5, 0))
+            combo_widgets.append(combo)
+            
+            # Binding to save all combobox values as a list
+            def on_combo_list_selected(event, widgets=combo_widgets, n=field_name, a=func_alias, a2v=alias_to_value):
+                values_list = []
+                for w in widgets:
+                    selected_alias = w.get()
+                    actual_value = a2v.get(selected_alias, selected_alias)
+                    values_list.append(actual_value)
+                self._save_widget_value(a, n, values_list)
+            combo.bind("<<ComboboxSelected>>", on_combo_list_selected)
+        
+        # Save values
+        new_values = []
+        for w in combo_widgets:
+            selected_alias = w.get()
+            actual_value = alias_to_value.get(selected_alias, selected_alias)
+            new_values.append(actual_value)
+        self._save_widget_value(func_alias, field_name, new_values)
+        
+        # Update widget_data
+        widget_data["widget"] = combo_widgets
+    
+    def _rebuild_file_selector_list(self, func_alias: str, field_name: str, widget_data: Dict,
+                                     widget_spec: Dict, list_frame, count: int, current_values: list,
+                                     visible_widgets: Dict):
+        """Rebuild a file_selector_list widget with new count."""
+        label_text = widget_spec.get("label", field_name)
+        
+        file_widgets = []
+        
+        for i in range(count):
+            item_frame = ttk.Frame(list_frame)
+            item_frame.pack(anchor=tk.W, pady=(0, 2), fill=tk.X)
+            
+            item_label = ttk.Label(item_frame, text=f"  [{i+1}]:", width=6)
+            item_label.pack(side=tk.LEFT)
+            
+            file_entry = ttk.Entry(item_frame, width=34)
+            if i < len(current_values) and current_values[i]:
+                file_entry.insert(0, current_values[i])
+            file_entry.pack(side=tk.LEFT, padx=(5, 5))
+            file_widgets.append(file_entry)
+            
+            # Save on focus out
+            def on_file_focus_out(event, widgets=file_widgets, n=field_name, a=func_alias):
+                values_list = [w.get() for w in widgets]
+                self._save_widget_value(a, n, values_list)
+            file_entry.bind("<FocusOut>", on_file_focus_out)
+            
+            # Browse button for this entry
+            def browse_single(idx, f_widget, widgets=file_widgets, n=field_name, a=func_alias, lbl=label_text):
+                file = filedialog.askopenfilename(title=f"Select file for {lbl} [{idx+1}]")
+                if file:
+                    f_widget.delete(0, tk.END)
+                    f_widget.insert(0, file)
+                    values_list = [w.get() for w in widgets]
+                    self._save_widget_value(a, n, values_list)
+            
+            browse_btn = ttk.Button(item_frame, text="Browse", 
+                                   command=lambda idx=i, fw=file_entry: browse_single(idx, fw), width=8)
+            browse_btn.pack(side=tk.LEFT)
+        
+        # Save initial values
+        initial_values = [w.get() for w in file_widgets]
+        self._save_widget_value(func_alias, field_name, initial_values)
+        
+        # Update widget_data
+        widget_data["widget"] = file_widgets
+
+    def _rebuild_entry_list(self, func_alias: str, field_name: str, widget_data: Dict,
+                            widget_spec: Dict, list_frame, count: int, current_values: list,
+                            visible_widgets: Dict):
+        """Rebuild an entry_list widget with new count."""
+        default_value = widget_spec.get("default", "")
+        
+        entry_widgets = []
+        
+        for i in range(count):
+            item_frame = ttk.Frame(list_frame)
+            item_frame.pack(anchor=tk.W, pady=(0, 2), fill=tk.X)
+            
+            item_label = ttk.Label(item_frame, text=f"  [{i+1}]:", width=6)
+            item_label.pack(side=tk.LEFT)
+            
+            entry = ttk.Entry(item_frame, width=38)
+            if i < len(current_values) and current_values[i]:
+                entry.insert(0, current_values[i])
+            elif default_value:
+                entry.insert(0, default_value)
+            entry.pack(side=tk.LEFT, padx=(5, 0))
+            entry_widgets.append(entry)
+            
+            # Save on focus out
+            def on_entry_focus_out(event, widgets=entry_widgets, n=field_name, a=func_alias):
+                values_list = [w.get() for w in widgets]
+                self._save_widget_value(a, n, values_list)
+            entry.bind("<FocusOut>", on_entry_focus_out)
+        
+        # Save initial values
+        initial_values = [w.get() for w in entry_widgets]
+        self._save_widget_value(func_alias, field_name, initial_values)
+        
+        # Update widget_data
+        widget_data["widget"] = entry_widgets
+
     def _show_routing_tab(self):
         """Show Routing tab with visual connection drawing using canvas."""
         self._clear_tab()
