@@ -7,6 +7,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import json
 import os
+import copy
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Any
 import subprocess
@@ -1622,8 +1623,9 @@ class ChemometricsGUI:
             
             if analysis_config:
                 # Use analysis config from function's JSON
+                # Deep copy pages to prevent modifications from affecting gui_configs
                 self.analysis_data[instance_alias] = {
-                    'pages': analysis_config.get('pages', [{'title': 'Default', 'layout': 'fp', 'sections': [{'type': None}]}]),
+                    'pages': copy.deepcopy(analysis_config.get('pages', [{'title': 'Default', 'layout': 'fp', 'sections': [{'type': None}]}])),
                     'current_page': analysis_config.get('current_page', 0)
                 }
             else:
@@ -3871,19 +3873,28 @@ Count:
         # Create dialog
         dialog = tk.Toplevel(self.root)
         dialog.title("Remove Section")
-        dialog.geometry("300x200")
+        dialog.geometry("350x250")
         dialog.resizable(False, False)
         
         label = ttk.Label(dialog, text="Select section to remove:", font=("Arial", 10))
         label.pack(padx=10, pady=10)
         
-        # Section list
-        listbox = tk.Listbox(dialog, height=8)
-        listbox.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+        # Section list frame
+        listbox_frame = ttk.Frame(dialog)
+        listbox_frame.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+        
+        listbox = tk.Listbox(listbox_frame, height=6)
+        listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        scrollbar = ttk.Scrollbar(listbox_frame, orient=tk.VERTICAL, command=listbox.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        listbox.config(yscrollcommand=scrollbar.set)
         
         for idx, section in enumerate(sections):
             section_type = section.get('type', 'Empty')
-            listbox.insert(tk.END, f"Section {idx + 1} ({section_type})")
+            config = section.get('config', {})
+            section_title = config.get('title', f'Section {idx + 1}')
+            listbox.insert(tk.END, f"{section_title} ({section_type})")
         
         # Buttons
         button_frame = ttk.Frame(dialog)
@@ -3898,10 +3909,10 @@ Count:
                 self._show_analysis_tab()
         
         ok_btn = ttk.Button(button_frame, text="Remove", command=remove_selected)
-        ok_btn.pack(side=tk.LEFT, padx=5)
+        ok_btn.pack(padx=5)
         
         cancel_btn = ttk.Button(button_frame, text="Cancel", command=dialog.destroy)
-        cancel_btn.pack(side=tk.LEFT, padx=5)
+        cancel_btn.pack(padx=5)
     
     def _show_add_page_dialog(self, instance_alias: str):
         """Show dialog to add a new page."""
@@ -4678,6 +4689,9 @@ Count:
         # Clear any cached execution results and graphs to ensure fresh data
         self._clear_execution_cache()
         
+        # Reload GUI configs to ensure fresh state (prevents stale modifications)
+        self._load_gui_configs()
+        
         # Clean tempfiles before loading
         self._clean_tempfiles()
         
@@ -4730,6 +4744,9 @@ Count:
         self.function_base_aliases = []
         self.function_configs = {}
         self.routing_lines = {}
+        # Reset analysis_data completely when loading a new model
+        # This ensures previous model's analysis changes don't persist
+        self.analysis_data = {}
         
         try:
             with open(model_path, encoding='utf-8') as f:
@@ -4800,14 +4817,17 @@ Count:
             self._deserialize_analysis_data(analysis_config)
     
     def _clear_execution_cache(self):
-        """Clear all cached execution results, graphs, and analysis structures.
+        """Clear all cached execution results and graphs, preserving analysis structure.
         
         This ensures that when a model is run, loaded, or a function is executed,
         the analysis displays fresh results without stale cached values.
-        Completely resets analysis_data so page configurations are rebuilt from JSON.
+        Preserves the analysis_data structure (pages, current_page) while clearing execution_results.
         """
-        # Completely reset analysis_data to force fresh rebuild from configs
-        self.analysis_data = {}
+        # Clear execution_results while preserving analysis structure
+        if hasattr(self, 'analysis_data') and self.analysis_data:
+            for instance_alias in self.analysis_data:
+                if 'execution_results' in self.analysis_data[instance_alias]:
+                    del self.analysis_data[instance_alias]['execution_results']
     
     def _refresh_gui_from_config(self):
         """Refresh GUI to reflect loaded configuration."""
@@ -4882,17 +4902,18 @@ Count:
             for idx, instance_alias in enumerate(self.methodology_list):
                 base_alias = self.function_base_aliases[idx]
                 
-                # Load analysis configuration from function's gui_config if available
-                analysis_config = None
-                if base_alias in self.gui_configs:
-                    analysis_config = self.gui_configs[base_alias].get('analysis')
-                
-                # Initialize analysis data structure if needed
+                # Initialize analysis data structure if not already present
+                # If analysis_data already exists (from a loaded model), preserve it
                 if instance_alias not in self.analysis_data:
+                    # Load analysis configuration from function's gui_config if available
+                    analysis_config = None
+                    if base_alias in self.gui_configs:
+                        analysis_config = self.gui_configs[base_alias].get('analysis')
+                    
                     if analysis_config:
                         # Use analysis config from function's JSON
                         self.analysis_data[instance_alias] = {
-                            'pages': analysis_config.get('pages', [{'title': 'Default', 'layout': 'fp', 'sections': [{'type': None}]}]),
+                            'pages': copy.deepcopy(analysis_config.get('pages', [{'title': 'Default', 'layout': 'fp', 'sections': [{'type': None}]}])),
                             'current_page': analysis_config.get('current_page', 0)
                         }
                     else:

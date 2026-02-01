@@ -1,7 +1,7 @@
 {
   "metadata": {
     "version": "1.0",
-    "created": "2026-01-31T18:57:43.340932",
+    "created": "2026-01-31T22:13:02.033619",
     "description": "CM Studio Model Configuration"
   },
   "functions": [
@@ -29,5 +29,266 @@
       }
     }
   ],
-  "routing": []
+  "routing": [],
+  "analysis": {
+    "load_data": {
+      "pages": [
+        {
+          "title": "Data Overview",
+          "layout": "ed",
+          "condition": {
+            "parameter": "nway_flag",
+            "operator": "==",
+            "value": "1"
+          },
+          "sections": [
+            {
+              "type": "table",
+              "config": {
+                "data_source": "X_cal",
+                "decimal_places": 4,
+                "max_rows": 50,
+                "max_cols": 15,
+                "title": "X Data (Spectra)"
+              }
+            },
+            {
+              "type": "graph",
+              "config": {
+                "graph_type": "line",
+                "x_axis": {
+                  "data_source": "axis_n_info",
+                  "index": 1,
+                  "label": "Variables"
+                },
+                "y_axis": {
+                  "data_source": "X_cal",
+                  "label": "Intensity"
+                },
+                "title": "Spectral Data Overview",
+                "data_slicing": [
+                  {
+                    "name": "Sample",
+                    "dimension": 0,
+                    "axis": "y",
+                    "show_navigation_menu": true
+                  }
+                ]
+              }
+            },
+            {
+              "type": "graph",
+              "config": {
+                "graph_type": "scatter",
+                "x_axis": {
+                  "data_source": "X_cal",
+                  "label": "Variables"
+                },
+                "y_axis": {
+                  "data_source": "X_cal",
+                  "label": "Intensity"
+                },
+                "graph_title": "Scatter test",
+                "data_slicing": [
+                  {
+                    "name": "Sample",
+                    "dimension": 1,
+                    "axis": "x",
+                    "show_navigation_menu": true
+                  },
+                  {
+                    "name": "Sam",
+                    "dimension": 1,
+                    "axis": "y",
+                    "show_navigation_menu": true
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "title": "Data Overview",
+          "layout": "fd",
+          "condition": {
+            "parameter": "nway_flag",
+            "operator": "==",
+            "value": "2"
+          },
+          "sections": [
+            {
+              "type": "table",
+              "config": {
+                "data_source": "X_cal",
+                "decimal_places": 4,
+                "max_rows": 30,
+                "max_cols": 15,
+                "title": "Single Sample Slice",
+                "data_slicing": [
+                  {
+                    "name": "Sample",
+                    "dimension": 0,
+                    "default": 0,
+                    "show_navigation_menu": true
+                  }
+                ]
+              }
+            },
+            {
+              "type": "graph",
+              "config": {
+                "graph_type": "contour",
+                "x_axis": {
+                  "data_source": "axis_n_info",
+                  "index": 2,
+                  "label": "Variables 2"
+                },
+                "y_axis": {
+                  "data_source": "axis_n_info",
+                  "index": 1,
+                  "label": "Variables 1"
+                },
+                "z_axis": {
+                  "data_source": "X_cal",
+                  "label": "Intensity"
+                },
+                "title": "Spectral Data Heatmap",
+                "data_slicing": [
+                  {
+                    "name": "Sample",
+                    "dimension": 0,
+                    "default": 0,
+                    "axis": "z",
+                    "show_navigation_menu": true
+                  }
+                ]
+              }
+            },
+            {
+              "type": "graph",
+              "config": {
+                "graph_type": "3d_surf",
+                "x_axis": {
+                  "data_source": "axis_n_info",
+                  "index": 2,
+                  "label": "Variables 2"
+                },
+                "y_axis": {
+                  "data_source": "axis_n_info",
+                  "index": 1,
+                  "label": "Variables 1"
+                },
+                "z_axis": {
+                  "data_source": "X_cal",
+                  "label": "Intensity"
+                },
+                "title": "Spectral Data 3D Surface",
+                "cmap": "jet",
+                "use_wireframeccc": true,
+                "data_slicing": [
+                  {
+                    "name": "Sample",
+                    "dimension": 0,
+                    "default": 0,
+                    "axis": "z",
+                    "show_navigation_menu": true
+                  }
+                ]
+              }
+            },
+            {
+              "type": "graph",
+              "config": {
+                "graph_type": "3d_surf",
+                "x_axis": {
+                  "data_source": "axis_n_info",
+                  "index": 2,
+                  "label": "Variables 2"
+                },
+                "y_axis": {
+                  "data_source": "axis_n_info",
+                  "index": 1,
+                  "label": "Variables 1"
+                },
+                "z_axis": {
+                  "data_source": "X_cal",
+                  "label": "Intensity"
+                },
+                "title": "Spectral Data 3D Surface",
+                "cmap": "terrain",
+                "data_slicing": [
+                  {
+                    "name": "Sample",
+                    "dimension": 0,
+                    "default": 0,
+                    "axis": "z",
+                    "show_navigation_menu": true
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "title": "Data Overview",
+          "layout": "ew",
+          "condition": {
+            "parameter": "nway_flag",
+            "operator": ">",
+            "value": "2"
+          },
+          "sections": [
+            {
+              "type": "graph",
+              "config": {
+                "graph_type": "heatmap",
+                "aux_axis": {
+                  "data_source": "axis_n_info"
+                },
+                "z_axis": {
+                  "data_source": "X_cal",
+                  "label": "Intensity"
+                },
+                "title": "Spectral Data Heatmap (4D+)",
+                "cmap": "jet",
+                "data_slicing": [
+                  {
+                    "name": "Sample",
+                    "dimension": 0,
+                    "default": 0,
+                    "axis": "z",
+                    "show_navigation_menu": true
+                  }
+                ],
+                "show_md_menu": true
+              }
+            },
+            {
+              "type": "graph",
+              "config": {
+                "graph_type": "heatmap",
+                "aux_axis": {
+                  "data_source": "axis_n_info"
+                },
+                "z_axis": {
+                  "data_source": "X_cal",
+                  "label": "Intensity"
+                },
+                "title": "Spectral Data Heatmap (4D+)",
+                "cmap": "jet",
+                "data_slicing": [
+                  {
+                    "name": "Sample",
+                    "axis": "z"
+                  }
+                ],
+                "show_md_menu": true
+              }
+            }
+          ]
+        }
+      ],
+      "current_page": 0
+    }
+  }
 }
