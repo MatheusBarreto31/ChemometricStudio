@@ -84,8 +84,7 @@
         "required": true,
         "input_type": "user",
         "tooltip": "Spectroscopic data files (spectra/X data)",
-        "ispath": true,
-        "visible_if": {"multi_file_per_sample": false}
+        "ispath": true
       },
       {
         "name": "nway_flag",
@@ -106,7 +105,7 @@
         "default": false,
         "required": false,
         "input_type": "user",
-        "tooltip": "Enable when each sample consists of multiple data files (only for 3+ dimensional data)",
+        "tooltip": "Enable when each sample consists of multiple data files (files will be divided equally among samples)",
         "visible_if": {"nway_flag": {"operator": ">=", "value": 3}}
       },
       {
@@ -118,19 +117,7 @@
         "default": "1",
         "required": false,
         "input_type": "user",
-        "tooltip": "Number of samples to load (each sample has multiple files)",
-        "visible_if": {"multi_file_per_sample": true}
-      },
-      {
-        "name": "sample_paths",
-        "label": "Sample Paths",
-        "category": "Data Files",
-        "widget": "sample_paths_list",
-        "count_source": "num_samples",
-        "required": false,
-        "input_type": "user",
-        "tooltip": "Files for each sample - each entry contains a list of files for one sample",
-        "ispath": true,
+        "tooltip": "Number of samples (files will be divided equally into groups)",
         "visible_if": {"multi_file_per_sample": true}
       },
       {
@@ -341,7 +328,6 @@
               },
               "z_axis": {"data_source": "X_cal", "label": "Intensity"},
               "title": "Spectral Data Heatmap (4D+)",
-              "cmap": "jet",
               "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}],
               "show_md_menu": true
             }
@@ -355,7 +341,6 @@
               },
               "z_axis": {"data_source": "X_cal", "label": "Intensity"},
               "title": "Spectral Data Heatmap (4D+)",
-              "cmap": "jet",
               "data_slicing": [{"name": "Sample", "axis": "z"}],
               "show_md_menu": true
             }

@@ -233,8 +233,18 @@ def update_embedded_figure(fig: Figure, instance_alias: str, section_id: int,
             
             # Get current widget size to maintain dimensions
             old_widget = old_canvas.get_tk_widget()
+            
+            # Force geometry update to get accurate dimensions
+            old_widget.update_idletasks()
+            
             current_width = old_widget.winfo_width()
             current_height = old_widget.winfo_height()
+            
+            # If dimensions are too small (not yet rendered), use requested dimensions
+            if current_width <= 1:
+                current_width = old_widget.winfo_reqwidth()
+            if current_height <= 1:
+                current_height = old_widget.winfo_reqheight()
             
             # Destroy old canvas widget
             old_widget.destroy()

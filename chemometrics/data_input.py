@@ -55,8 +55,7 @@ def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str,
               var_path: Optional[List[str]] = None, smp_path: Optional[str] = None,
               transpose: bool = False, axis_info: Optional[List[str]] = None, reshape_order: str = 'F',
               dim_labels: Optional[List[str]] = None, scale_type: Optional[List[str]] = None,
-              multi_file_per_sample: bool = False, num_samples: Optional[int] = None,
-              sample_paths: Optional[List[List[str]]] = None) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[List[List[str]]], List[str], Optional[List[np.ndarray]], List[str]]:
+              multi_file_per_sample: bool = False, num_samples: Optional[int] = None) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[List[List[str]]], List[str], Optional[List[np.ndarray]], List[str]]:
     """
     Load and organize chemometrics data.
 
@@ -78,8 +77,7 @@ def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str,
         dim_labels: Optional list of dimension names or comma-separated string
         scale_type: Optional list of scale types for axis generation ('Linear', 'Log10', 'Log2', 'Ln')
         multi_file_per_sample: If True, each sample consists of multiple files (only for nway_flag >= 3)
-        num_samples: Number of samples when using multi_file_per_sample mode
-        sample_paths: List of file lists, where each inner list contains files for one sample
+        num_samples: Number of samples when using multi_file_per_sample mode (files divided equally)
 
     Returns:
         X_cal: X data array
@@ -133,14 +131,23 @@ def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str,
             axis_info_list = [a.strip() if isinstance(a, str) else a for a in axis_info if a]
 
     # Load X data - check if multi_file_per_sample mode is enabled
-    if multi_file_per_sample and nway_flag >= 3 and sample_paths:
-        # Multi-file per sample mode: each sample consists of multiple files
+    if multi_file_per_sample and nway_flag >= 3 and data_path and num_samples:
+        # Multi-file per sample mode: divide files equally among samples
+        file_list = _normalize_data_path(data_path)
+        
+        if len(file_list) % num_samples != 0:
+            raise ValueError(f"Cannot divide {len(file_list)} files equally among {num_samples} samples")
+        
+        files_per_sample = len(file_list) // num_samples
+        sample_paths = [file_list[i * files_per_sample:(i + 1) * files_per_sample] 
+                        for i in range(num_samples)]
+        
         X = _load_x_multifile_per_sample(sample_paths, separator, num_headlines, data_type, 
                                          dimensions, nway_flag, transpose, reshape_order)
         row_counts = []
         # Generate sample labels from sample indices if no smp_path provided
         if smp_path is None:
-            smp_labels = [f"Sample_{i+1}" for i in range(len(sample_paths))]
+            smp_labels = [f"Sample_{i+1}" for i in range(num_samples)]
         else:
             smp_labels = _load_labels(smp_path)
     else:
@@ -401,6 +408,37 @@ def _load_x_multifile_per_sample(sample_paths: List[List[str]], separator: Optio
     # Stack all samples into final tensor with sample dimension first
     X = np.array(samples)
     return X
+
+
+def _normalize_data_path(data_path) -> List[str]:
+    """
+    Normalize data_path to a list of file paths.
+    
+    Args:
+        data_path: Can be a list of paths, a semicolon-separated string, or a single path
+        
+    Returns:
+        List of file path strings
+    """
+    if data_path is None:
+        return []
+    
+    if isinstance(data_path, str):
+        # Could be semicolon-separated or a single path
+        if ';' in data_path:
+            return [p.strip() for p in data_path.split(';') if p.strip()]
+        else:
+            return [data_path.strip()] if data_path.strip() else []
+    elif isinstance(data_path, list):
+        result = []
+        for item in data_path:
+            if isinstance(item, str):
+                result.append(item.strip())
+            else:
+                result.append(str(item))
+        return [p for p in result if p]
+    else:
+        return [str(data_path)]
 
 
 def _load_y_data(y_path: str, separator: Optional[str] = None, num_headlines: int = 0) -> np.ndarray:

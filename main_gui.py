@@ -2420,6 +2420,10 @@ class ChemometricsGUI:
                 section_data = sections[section_idx]
                 section_idx += 1
                 
+                # Skip removed sections (type is None)
+                if section_data.get('type') is None:
+                    continue  # Skip this section, try next
+                
                 # Check if section has a condition
                 if section_data.get('condition'):
                     if not self._evaluate_condition(instance_alias, section_data.get('condition')):
@@ -4235,156 +4239,6 @@ Count:
             graph_renderer.update_embedded_figure(fig, instance_alias, section_id, 
                                                  self.analysis_data, None)
             
-            # Create new matplotlib figure
-            fig = Figure(figsize=(6, 4), dpi=100)
-            
-            # Check if z_axis is defined for 3D scatter or 3d_surf
-            z_axis_config = config.get('z_axis', {})
-            use_3d = (graph_type == 'scatter' or graph_type == '3d_surf') and z_axis_config and z_data is not None
-            
-            if use_3d:
-                # Create 3D plot
-                ax = fig.add_subplot(111, projection='3d')
-            else:
-                ax = fig.add_subplot(111)
-            
-            # Render based on graph type
-            if graph_type == 'scatter':
-                if x_data is not None and y_data is not None:
-                    if use_3d:
-                        # 3D scatter
-                        ax.scatter(x_data, y_data, z_data, alpha=0.6)
-                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
-                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
-                        ax.set_zlabel(config.get('z_axis', {}).get('label', 'Z'))
-                    else:
-                        # 2D scatter
-                        ax.scatter(x_data, y_data, alpha=0.6)
-                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
-                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
-                    
-            elif graph_type == 'line':
-                if x_data is not None and y_data is not None:
-                    marker = config.get('marker')  # None if absent, defaults to line only
-                    # Handle 2D arrays (matrices) by plotting each row as a separate line
-                    if isinstance(y_data, np.ndarray) and y_data.ndim == 2:
-                        for i, row in enumerate(y_data):
-                            ax.plot(row, marker=marker, label=f'Row {i+1}')
-                        # Show legend if enabled (default: False)
-                        if config.get('show_legend', False):
-                            ax.legend()
-                    else:
-                        ax.plot(x_data, y_data, marker=marker)
-                    ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
-                    ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
-                    
-            elif graph_type == 'bar':
-                if x_data is not None and y_data is not None:
-                    if isinstance(x_data, np.ndarray) and x_data.ndim == 1:
-                        ax.bar(range(len(y_data)), y_data)
-                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Value'))
-                    else:
-                        ax.bar(x_data, y_data)
-                        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
-                        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
-                        
-            elif graph_type == 'histogram':
-                if y_data is not None:
-                    ax.hist(y_data, bins=30, alpha=0.7, edgecolor='black')
-                    ax.set_xlabel(config.get('x_axis', {}).get('label', 'Value'))
-                    ax.set_ylabel('Frequency')
-                    
-            elif graph_type == 'heatmap':
-                if x_data is not None and y_data is not None and z_data is not None:
-                    if isinstance(x_data, np.ndarray) and isinstance(y_data, np.ndarray) and isinstance(z_data, np.ndarray):
-                        # Create mesh grids from x and y data
-                        X, Y = np.meshgrid(x_data, y_data)
-                        # Use pcolormesh for proper axis mapping
-                        cmap = config.get('cmap', 'viridis')
-                        im = ax.pcolormesh(X, Y, z_data.T, cmap=cmap, shading='nearest')
-                        fig.colorbar(im, ax=ax)
-                        # Use dynamic axis configs if available (for aux_axis), else fallback to config
-                        x_label = x_axis_config.get('label', 'X') if x_axis_config else config.get('x_axis', {}).get('label', 'X')
-                        y_label = y_axis_config.get('label', 'Y') if y_axis_config else config.get('y_axis', {}).get('label', 'Y')
-                        ax.set_xlabel(x_label)
-                        ax.set_ylabel(y_label)
-            
-            elif graph_type == '3d_surf':
-                if x_data is not None and y_data is not None and z_data is not None:
-                    if isinstance(x_data, np.ndarray) and isinstance(y_data, np.ndarray) and isinstance(z_data, np.ndarray):
-                        # Create mesh grids from x and y data
-                        X, Y = np.meshgrid(x_data, y_data)
-                        # Use plot_surface or plot_wireframe for 3D surface plot
-                        use_wireframe = config.get('use_wireframe', False)
-                        cmap = config.get('cmap', 'viridis')
-                        if use_wireframe:
-                            ax.plot_wireframe(X, Y, z_data, cmap=cmap)
-                        else:
-                            ax.plot_surface(X, Y, z_data, cmap=cmap)
-                        # Use dynamic axis configs if available (for aux_axis), else fallback to config
-                        x_label = x_axis_config.get('label', 'X') if x_axis_config else config.get('x_axis', {}).get('label', 'X')
-                        y_label = y_axis_config.get('label', 'Y') if y_axis_config else config.get('y_axis', {}).get('label', 'Y')
-                        ax.set_xlabel(x_label)
-                        ax.set_ylabel(y_label)
-                        ax.set_zlabel(config.get('z_axis', {}).get('label', 'Z'))
-                    
-            elif graph_type == 'contour':
-                if x_data is not None and y_data is not None and z_data is not None:
-                    if isinstance(x_data, np.ndarray) and isinstance(y_data, np.ndarray):
-                        X, Y = np.meshgrid(x_data, y_data)
-                        contour_type = config.get('contour_type', 'contourf')
-                        if contour_type == 'contourf':
-                            ax.contourf(X, Y, z_data, levels=10)
-                        else:
-                            ax.contour(X, Y, z_data, levels=10)
-                        # Use dynamic axis configs if available (for aux_axis), else fallback to config
-                        x_label = x_axis_config.get('label', 'X') if x_axis_config else config.get('x_axis', {}).get('label', 'X')
-                        y_label = y_axis_config.get('label', 'Y') if y_axis_config else config.get('y_axis', {}).get('label', 'Y')
-                        ax.set_xlabel(x_label)
-                        ax.set_ylabel(y_label)
-            
-            # Add graph title only if graph_title is provided
-            graph_title = config.get('graph_title')
-            if graph_title:
-                slice_info = config.get('slice_info', {})
-                if slice_info.get('description'):
-                    graph_title += f" - {slice_info.get('description')} {list(base_indices.values())}"
-                ax.set_title(graph_title)
-            
-            # Apply tight layout with padding inside the plot area
-            fig.tight_layout()
-            # Add internal margins around the plot (increased top margin to prevent title clipping)
-            fig.subplots_adjust(left=0.15, right=0.95, top=0.92, bottom=0.15)
-            
-            # Get the stored canvas reference and update it
-            if 'graph_canvases' in self.analysis_data[instance_alias]:
-                canvas_data = self.analysis_data[instance_alias]['graph_canvases'].get(section_id)
-                if canvas_data:
-                    old_canvas, canvas_frame = canvas_data
-                    
-                    # Get current widget size to maintain dimensions and prevent resize flash
-                    old_widget = old_canvas.get_tk_widget()
-                    current_width = old_widget.winfo_width()
-                    current_height = old_widget.winfo_height()
-                    
-                    # Destroy old canvas widget
-                    old_widget.destroy()
-                    
-                    # Resize figure to match container dimensions to prevent flash
-                    if current_width > 1 and current_height > 1:
-                        dpi = fig.get_dpi()
-                        fig.set_size_inches(current_width / dpi, current_height / dpi)
-                    
-                    # Create and embed new canvas with updated figure
-                    new_canvas = FigureCanvasTkAgg(fig, master=canvas_frame)
-                    canvas_widget = new_canvas.get_tk_widget()
-                    # Use grid for consistent sizing to prevent resize flash
-                    canvas_widget.grid(row=0, column=0, sticky='nsew')
-                    new_canvas.draw_idle()  # Use draw_idle for smoother updates
-                    
-                    # Update stored reference
-                    self.analysis_data[instance_alias]['graph_canvases'][section_id] = (new_canvas, canvas_frame)
-            
         except Exception as e:
             print(f"Error updating graph with slice: {str(e)}")
     
@@ -4582,7 +4436,7 @@ Count:
                 if analysis_config:
                     # Use analysis config from function's JSON
                     self.analysis_data[instance_alias] = {
-                        'pages': analysis_config.get('pages', [{'title': 'Default', 'layout': 'fp', 'sections': [{'type': None}]}]),
+                        'pages': copy.deepcopy(analysis_config.get('pages', [{'title': 'Default', 'layout': 'fp', 'sections': [{'type': None}]}])),
                         'current_page': analysis_config.get('current_page', 0)
                     }
                 else:
@@ -4591,12 +4445,9 @@ Count:
                         'pages': [{'title': 'Default', 'layout': 'fp', 'sections': [{'type': None}]}],
                         'current_page': 0
                     }
-            else:
-                # Update pages if config exists but keep execution results
-                if analysis_config and 'execution_results' in self.analysis_data[instance_alias]:
-                    # Preserve execution results but update page structure from config
-                    self.analysis_data[instance_alias]['pages'] = analysis_config.get('pages', self.analysis_data[instance_alias]['pages'])
-                    self.analysis_data[instance_alias]['current_page'] = analysis_config.get('current_page', self.analysis_data[instance_alias]['current_page'])
+            # Note: When analysis_data already exists, we preserve the user's modifications
+            # (like removed sections). The condition evaluation will use fresh inputs from
+            # execution_results which is updated below.
             
             # Get input parameters from function_configs
             input_parameters = self.function_configs.get(instance_alias, {}).copy()
@@ -4613,11 +4464,8 @@ Count:
                 'inputs': input_parameters  # Store the input parameters for condition evaluation
             }
             
-            # Clear cached graphs so they are re-rendered with updated settings (e.g., colormap)
-            if 'graph_canvases' in self.analysis_data[instance_alias]:
-                del self.analysis_data[instance_alias]['graph_canvases']
-            if 'graph_slices' in self.analysis_data[instance_alias]:
-                del self.analysis_data[instance_alias]['graph_slices']
+            # Note: graph_canvases, graph_slices, and table_slices are already cleared
+            # by _clear_execution_cache() at the start of this method
             
             # Show success message
             messagebox.showinfo("Success", f"Model executed up to {instance_alias}\n\nResults loaded for analysis.")
@@ -4994,19 +4842,35 @@ Count:
                     for param_name in path_params:
                         if param_name in params:
                             param_value = params[param_name]
-                            # Handle both list and string values
+                            # Handle nested lists, simple lists, and string values
                             if isinstance(param_value, list):
                                 new_paths = []
-                                for file_path in param_value:
-                                    src_file = Path(file_path)
-                                    if src_file.exists():
-                                        files_to_copy.append(src_file)
-                                        new_path = f"tempfiles/{src_file.name}"
-                                        new_paths.append(new_path)
+                                for item in param_value:
+                                    if isinstance(item, list):
+                                        # Nested list (e.g., sample_paths: list of lists)
+                                        nested_paths = []
+                                        for file_path in item:
+                                            if isinstance(file_path, str) and file_path:
+                                                src_file = Path(file_path)
+                                                if src_file.exists():
+                                                    files_to_copy.append(src_file)
+                                                    nested_paths.append(f"tempfiles/{src_file.name}")
+                                                else:
+                                                    nested_paths.append(file_path)
+                                            else:
+                                                nested_paths.append(file_path)
+                                        new_paths.append(nested_paths)
+                                    elif isinstance(item, str) and item:
+                                        src_file = Path(item)
+                                        if src_file.exists():
+                                            files_to_copy.append(src_file)
+                                            new_paths.append(f"tempfiles/{src_file.name}")
+                                        else:
+                                            new_paths.append(item)
                                     else:
-                                        new_paths.append(file_path)
+                                        new_paths.append(item)
                                 params[param_name] = new_paths
-                            elif isinstance(param_value, str):
+                            elif isinstance(param_value, str) and param_value:
                                 src_file = Path(param_value)
                                 if src_file.exists():
                                     files_to_copy.append(src_file)
@@ -5152,19 +5016,35 @@ Count:
                     for param_name in path_params:
                         if param_name in params:
                             param_value = params[param_name]
-                            # Handle both list and string values
+                            # Handle nested lists, simple lists, and string values
                             if isinstance(param_value, list):
                                 new_paths = []
-                                for file_path in param_value:
-                                    src_file = Path(file_path)
-                                    if src_file.exists():
-                                        files_to_copy.append(src_file)
-                                        new_path = f"tempfiles/{src_file.name}"
-                                        new_paths.append(new_path)
+                                for item in param_value:
+                                    if isinstance(item, list):
+                                        # Nested list (e.g., sample_paths: list of lists)
+                                        nested_paths = []
+                                        for file_path in item:
+                                            if isinstance(file_path, str) and file_path:
+                                                src_file = Path(file_path)
+                                                if src_file.exists():
+                                                    files_to_copy.append(src_file)
+                                                    nested_paths.append(f"tempfiles/{src_file.name}")
+                                                else:
+                                                    nested_paths.append(file_path)
+                                            else:
+                                                nested_paths.append(file_path)
+                                        new_paths.append(nested_paths)
+                                    elif isinstance(item, str) and item:
+                                        src_file = Path(item)
+                                        if src_file.exists():
+                                            files_to_copy.append(src_file)
+                                            new_paths.append(f"tempfiles/{src_file.name}")
+                                        else:
+                                            new_paths.append(item)
                                     else:
-                                        new_paths.append(file_path)
+                                        new_paths.append(item)
                                 params[param_name] = new_paths
-                            elif isinstance(param_value, str):
+                            elif isinstance(param_value, str) and param_value:
                                 src_file = Path(param_value)
                                 if src_file.exists():
                                     files_to_copy.append(src_file)
@@ -5358,12 +5238,26 @@ Count:
         This ensures that when a model is run, loaded, or a function is executed,
         the analysis displays fresh results without stale cached values.
         Preserves the analysis_data structure (pages, current_page) while clearing execution_results.
+        Also clears graph_slices and table_slices to prevent stale slice indices from causing errors when
+        data dimensions change (e.g., nway_flag changes).
         """
-        # Clear execution_results while preserving analysis structure
+        # Clear execution_results and slice states while preserving analysis structure
         if hasattr(self, 'analysis_data') and self.analysis_data:
             for instance_alias in self.analysis_data:
                 if 'execution_results' in self.analysis_data[instance_alias]:
                     del self.analysis_data[instance_alias]['execution_results']
+                # Clear graph_slices to prevent stale dimension indices
+                if 'graph_slices' in self.analysis_data[instance_alias]:
+                    del self.analysis_data[instance_alias]['graph_slices']
+                # Clear table_slices to prevent stale dimension indices for tables
+                if 'table_slices' in self.analysis_data[instance_alias]:
+                    del self.analysis_data[instance_alias]['table_slices']
+                # Clear cached graph canvases as well
+                if 'graph_canvases' in self.analysis_data[instance_alias]:
+                    del self.analysis_data[instance_alias]['graph_canvases']
+                # Clear control frame references
+                if 'graph_control_frames' in self.analysis_data[instance_alias]:
+                    del self.analysis_data[instance_alias]['graph_control_frames']
     
     def _refresh_gui_from_config(self):
         """Refresh GUI to reflect loaded configuration."""
