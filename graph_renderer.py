@@ -75,7 +75,7 @@ def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarr
     # Apply tight layout with padding inside the plot area
     fig.tight_layout()
     # Add internal margins around the plot 
-    fig.subplots_adjust(left=0.15, right=0.95, top=0.86, bottom=0.15)
+    fig.subplots_adjust(left=0.15, right=0.95, top=0.86, bottom=0.30)
     
     return fig, ax
 

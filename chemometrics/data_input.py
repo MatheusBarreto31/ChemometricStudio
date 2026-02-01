@@ -618,16 +618,16 @@ def _load_axis_text_info(var_path: Optional[List[str]], smp_labels: List[str], n
         var_path: List of file paths for axis labels (one per dimension)
         smp_labels: Sample labels (used for position 0)
         nway_flag: Number of dimensions (excluding samples)
-        axis_n_info: Axis numerical vectors (may be overridden if file contains numerical data)
+        axis_n_info: Axis numerical vectors (used for fallback label generation)
         
     Returns:
         List of string lists, where position 0 is sample labels and subsequent positions
-        are from loaded files or empty lists if not provided
+        are from loaded files, or fallback "V1, V2, ..." labels if not provided
     """
     # Initialize axis_t_info with sample labels as first element
     axis_t_info = [smp_labels.copy() if smp_labels else []]
     
-    # Initialize remaining positions based on nway_flag
+    # Initialize remaining positions with empty lists (will be filled or get fallback)
     for i in range(nway_flag):
         axis_t_info.append([])
     
@@ -642,7 +642,7 @@ def _load_axis_text_info(var_path: Optional[List[str]], smp_labels: List[str], n
                     # Try to load the file content
                     file_content = _load_axis_file_content(path)
                     
-                    if file_content is not None:
+                    if file_content is not None and len(file_content) > 0:
                         is_numeric, values = _check_if_numeric(file_content)
                         
                         if is_numeric and axis_n_info is not None:
@@ -650,14 +650,24 @@ def _load_axis_text_info(var_path: Optional[List[str]], smp_labels: List[str], n
                             # Position in axis_n_info is i+1 (0 is samples)
                             if i + 1 < len(axis_n_info):
                                 axis_n_info[i + 1] = values
-                            # Store empty list in axis_t_info for this position
-                            axis_t_info[i + 1] = []
-                        else:
-                            # Store as text labels
-                            axis_t_info[i + 1] = file_content
+                        
+                        # Always store as text labels (numeric values become strings)
+                        axis_t_info[i + 1] = file_content
                 except Exception as e:
                     print(f"Warning: Could not load axis labels from '{path}': {e}")
                     axis_t_info[i + 1] = []
+    
+    # Generate fallback labels for any dimension that has empty list
+    for i in range(1, len(axis_t_info)):
+        if not axis_t_info[i]:  # Empty list
+            # Determine size from axis_n_info if available
+            dim_size = 0
+            if axis_n_info is not None and i < len(axis_n_info) and axis_n_info[i] is not None:
+                dim_size = len(axis_n_info[i])
+            
+            if dim_size > 0:
+                # Generate V1, V2, V3, ... labels
+                axis_t_info[i] = [f"V{j + 1}" for j in range(dim_size)]
     
     return axis_t_info
 

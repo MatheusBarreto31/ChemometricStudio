@@ -2601,6 +2601,152 @@ class ChemometricsGUI:
             label = ttk.Label(parent, text="[Empty]", foreground="gray")
             label.pack(expand=True)
     
+    def _resolve_axis_label(self, axis_config: dict, outputs: dict) -> str:
+        """Resolve an axis label from axis configuration.
+        
+        The label configuration supports:
+        - Direct string: "label": "My Axis"
+        - Variable reference: "label": "variable_name"
+        - Variable with index: "label": "variable_name", "l_index": 0
+        
+        If the variable is a list and l_index is provided, returns the value at that index.
+        Otherwise, returns the variable value as a string.
+        
+        Args:
+            axis_config: Axis configuration dict with 'label' field
+            outputs: Dictionary of execution outputs
+            
+        Returns:
+            Resolved label as string, or empty string if not found
+        """
+        if not axis_config:
+            return ""
+        
+        label_config = axis_config.get('label')
+        if not label_config:
+            return ""
+        
+        # First try to resolve as variable reference
+        if isinstance(label_config, str):
+            if label_config in outputs:
+                # It's a variable name
+                data = outputs[label_config]
+                l_index = axis_config.get('l_index')
+                
+                if l_index is not None and isinstance(data, (list, np.ndarray)):
+                    # Use index to select from list
+                    try:
+                        result = str(data[l_index])
+                        return result
+                    except (IndexError, TypeError):
+                        return str(data) if not isinstance(data, (list, np.ndarray)) else label_config
+                elif isinstance(data, str):
+                    return data
+                elif isinstance(data, (int, float)):
+                    return str(data)
+                elif isinstance(data, (list, np.ndarray)) and len(data) > 0:
+                    # If no l_index but it's a list, return first element or joined string
+                    return str(data[0]) if len(data) == 1 else label_config
+                else:
+                    return str(data)
+            else:
+                # It's a literal string label
+                return label_config
+        else:
+            return str(label_config)
+    
+    def _get_variable_label(self, outputs: dict, var_name: str, dimension: int, index: int, fallback: bool = True) -> Optional[str]:
+        """Get a label from a multi-dimensional variable labels configuration.
+        
+        Variable should be a list of lists (one list per dimension).
+        For dimension D, position P, returns the label from lists[D][P].
+        
+        Args:
+            outputs: Dictionary of execution outputs
+            var_name: Name of variable containing lists of labels
+            dimension: Which dimension/list to access
+            index: Index within that dimension's list
+            fallback: If True, return "V{index+1}" when data is missing/empty
+            
+        Returns:
+            Label string, fallback "V{index+1}" if fallback=True, or None
+        """
+        fallback_label = f"V{index + 1}" if fallback else None
+        
+        if var_name not in outputs:
+            return fallback_label
+        
+        data = outputs[var_name]
+        if isinstance(data, (list, np.ndarray)):
+            try:
+                # Check if dimension index is valid
+                if dimension >= len(data):
+                    return fallback_label
+                    
+                dim_list = data[dimension]
+                
+                # Check if dimension list is empty or None
+                if dim_list is None or (isinstance(dim_list, (list, np.ndarray)) and len(dim_list) == 0):
+                    return fallback_label
+                
+                if isinstance(dim_list, (list, np.ndarray)):
+                    if index >= len(dim_list):
+                        return fallback_label
+                    value = dim_list[index]
+                    return str(value) if value is not None else fallback_label
+                else:
+                    # Single dimension - data itself is the list
+                    if index >= len(data):
+                        return fallback_label
+                    value = data[index]
+                    return str(value) if value is not None else fallback_label
+            except (IndexError, TypeError):
+                return fallback_label
+        return fallback_label
+    
+    def _get_dimension_labels(self, outputs: dict, config: dict) -> dict:
+        """Get dimension labels from config or outputs.
+        
+        Returns a dict mapping dimension index to label string.
+        Checks 'dimension_labels' in config which can be:
+        - A variable name referencing a list in outputs
+        - A direct list of labels
+        
+        Args:
+            outputs: Dictionary of execution outputs
+            config: Graph configuration dict
+            
+        Returns:
+            Dict mapping dimension index to label string
+        """
+        dim_labels = {}
+        labels_config = config.get('dimension_labels')
+        
+        if labels_config is None:
+            return dim_labels
+        
+        if isinstance(labels_config, str) and labels_config in outputs:
+            # Variable reference
+            data = outputs[labels_config]
+            if isinstance(data, (list, np.ndarray)):
+                for i, label in enumerate(data):
+                    if label:
+                        dim_labels[i] = str(label)
+        elif isinstance(labels_config, (list, np.ndarray)):
+            # Direct list
+            for i, label in enumerate(labels_config):
+                if label:
+                    dim_labels[i] = str(label)
+        elif isinstance(labels_config, dict):
+            # Direct mapping
+            for k, v in labels_config.items():
+                try:
+                    dim_labels[int(k)] = str(v)
+                except (ValueError, TypeError):
+                    pass
+        
+        return dim_labels
+    
     def _render_graph_section(self, parent: ttk.Frame, instance_alias: str, section_data: dict, section_idx: int = 0):
         """Render a graph using matplotlib with optional navigation controls."""
         try:
@@ -2821,6 +2967,27 @@ class ChemometricsGUI:
                 x_axis_config = config.get('x_axis', {})
                 y_axis_config = config.get('y_axis', {})
             
+            # Resolve axis labels from variables if needed
+            # Make copies to avoid modifying original configs
+            x_axis_config = x_axis_config.copy() if x_axis_config else {}
+            y_axis_config = y_axis_config.copy() if y_axis_config else {}
+            
+            resolved_x_label = self._resolve_axis_label(x_axis_config, outputs)
+            if resolved_x_label:
+                x_axis_config['label'] = resolved_x_label
+            
+            resolved_y_label = self._resolve_axis_label(y_axis_config, outputs)
+            if resolved_y_label:
+                y_axis_config['label'] = resolved_y_label
+            
+            # Also resolve z-axis label if present
+            z_axis_config = config.get('z_axis', {})
+            if z_axis_config:
+                z_axis_config = z_axis_config.copy()
+                resolved_z_label = self._resolve_axis_label(z_axis_config, outputs)
+                if resolved_z_label:
+                    z_axis_config['label'] = resolved_z_label
+            
             # Merge axis indices for x (base + md + axis-specific)
             x_indices = base_indices.copy()
             x_indices.update(md_slice_indices)  # Add multi-dimensional slices
@@ -2862,9 +3029,16 @@ class ChemometricsGUI:
                 self._create_navigation_controls(control_frame, instance_alias, section_id, 
                                                  outputs, config, current_slice)
             
+            # Create a copy of config with resolved axis labels for rendering
+            render_config = config.copy()
+            render_config['x_axis'] = x_axis_config
+            render_config['y_axis'] = y_axis_config
+            if z_axis_config:
+                render_config['z_axis'] = z_axis_config
+            
             # Render graph using graph_renderer module
             fig, ax = graph_renderer.render_graph_figure(
-                graph_type, config, x_data, y_data, z_data, x_axis_config, y_axis_config,
+                graph_type, render_config, x_data, y_data, z_data, x_axis_config, y_axis_config,
                 default_cmap=self.settings_manager.get('colormap', 'viridis')
             )
             
@@ -3713,10 +3887,20 @@ Count:
                         
                         ttk.Label(combo_select_frame, text="Dimension Combination:", width=20).pack(side=tk.LEFT, padx=5)
                         
-                        # Create combo box with dimension combinations
+                        # Get dimension labels from config
+                        dim_labels = self._get_dimension_labels(outputs, config)
+                        
+                        # Create combo box with dimension combinations (use labels if available)
                         combo_options = []
                         for combo in md_combinations:
-                            combo_str = f"Dims: {', '.join(str(d) for d in combo)}"
+                            # Use dimension labels if available, otherwise use dimension index
+                            combo_parts = []
+                            for d in combo:
+                                if d in dim_labels:
+                                    combo_parts.append(dim_labels[d])
+                                else:
+                                    combo_parts.append(str(d))
+                            combo_str = f"Dims: {', '.join(combo_parts)}"
                             combo_options.append(combo_str)
                         
                         current_combo_idx = slice_state.get('md_combo_index', 0)
@@ -3747,8 +3931,9 @@ Count:
                                 # Get current index
                                 current_index = slice_state.get('md_slice_indices', {}).get(dim, 0)
                                 
-                                # Dimension label
-                                label_text = f"Dimension {dim}: {current_index + 1}/{max_index + 1}"
+                                # Dimension label - use dimension labels if available
+                                dim_name = dim_labels.get(dim, f"Dimension {dim}")
+                                label_text = f"{dim_name}: {current_index + 1}/{max_index + 1}"
                                 label = ttk.Label(dim_frame, text=label_text, width=20)
                                 label.pack(side=tk.LEFT, padx=5)
                                 
@@ -3778,11 +3963,24 @@ Count:
                                 )
                                 next_btn.pack(side=tk.LEFT, padx=2)
                                 
+                                # Variable labels - show current value label between buttons if configured
+                                var_labels_config = config.get('variable_labels')
+                                if var_labels_config:
+                                    var_label_text = self._get_variable_label(outputs, var_labels_config, dim, current_index)
+                                    if var_label_text:
+                                        var_label = ttk.Label(dim_frame, text=f"[{var_label_text}]", foreground="gray")
+                                        var_label.pack(side=tk.LEFT, padx=5)
+                                        # Store reference for updates
+                                        if not hasattr(self, '_var_labels'):
+                                            self._var_labels = {}
+                                        var_label_key = (instance_alias, section_id, dim, 'md')
+                                        self._var_labels[var_label_key] = (var_label, var_labels_config, dim)
+                                
                                 # Store reference for updates
                                 if not hasattr(self, '_md_nav_labels'):
                                     self._md_nav_labels = {}
                                 label_key = (instance_alias, section_id, dim)
-                                self._md_nav_labels[label_key] = (index_label, label)
+                                self._md_nav_labels[label_key] = (index_label, label, dim_labels.get(dim))
             
             # For each navigable axis, create controls if enabled for that item
             for nav_item in nav_axes:
@@ -3867,6 +4065,19 @@ Count:
                 )
                 next_btn.pack(side=tk.LEFT, padx=2)
                 
+                # Variable labels - show current value label after buttons if configured
+                var_labels_config = config.get('variable_labels')
+                if var_labels_config:
+                    var_label_text = self._get_variable_label(outputs, var_labels_config, dimension, current_index)
+                    if var_label_text:
+                        var_label = ttk.Label(axis_frame, text=f"[{var_label_text}]", foreground="gray")
+                        var_label.pack(side=tk.LEFT, padx=5)
+                        # Store reference for updates
+                        if not hasattr(self, '_var_labels'):
+                            self._var_labels = {}
+                        var_label_key = (instance_alias, section_id, dimension, axis_name, target_axis)
+                        self._var_labels[var_label_key] = (var_label, var_labels_config, dimension)
+                
                 # Store reference to index label for updates
                 if not hasattr(self, '_nav_labels'):
                     self._nav_labels = {}
@@ -3939,6 +4150,19 @@ Count:
                         index_label, full_label = self._nav_labels[key]
                         index_label.config(text=str(new_index + 1))
                         full_label.config(text=f"{axis_name}: {new_index + 1}/{max_index + 1}")
+                
+                # Update variable label if it exists
+                if hasattr(self, '_var_labels'):
+                    var_key = (instance_alias, section_id, dimension, axis_name, target_axis)
+                    if var_key in self._var_labels:
+                        var_label, var_labels_config, dim = self._var_labels[var_key]
+                        # Get outputs to resolve variable label
+                        outputs = self.analysis_data[instance_alias].get('execution_results', {}).get('outputs', {})
+                        var_label_text = self._get_variable_label(outputs, var_labels_config, dim, new_index)
+                        if var_label_text:
+                            var_label.config(text=f"[{var_label_text}]")
+                        else:
+                            var_label.config(text="")
                 
                 # Refresh the graph with new slice/axis
                 self._update_graph_with_slice(instance_alias, section_id, dimension)
@@ -4098,9 +4322,27 @@ Count:
                 if hasattr(self, '_md_nav_labels'):
                     key = (instance_alias, section_id, dimension)
                     if key in self._md_nav_labels:
-                        index_label, full_label = self._md_nav_labels[key]
+                        stored = self._md_nav_labels[key]
+                        index_label, full_label = stored[0], stored[1]
+                        dim_name = stored[2] if len(stored) > 2 else None
                         index_label.config(text=str(new_index + 1))
-                        full_label.config(text=f"Dimension {dimension}: {new_index + 1}/{max_index + 1}")
+                        if dim_name:
+                            full_label.config(text=f"{dim_name}: {new_index + 1}/{max_index + 1}")
+                        else:
+                            full_label.config(text=f"Dimension {dimension}: {new_index + 1}/{max_index + 1}")
+                
+                # Update variable label if it exists
+                if hasattr(self, '_var_labels'):
+                    var_key = (instance_alias, section_id, dimension, 'md')
+                    if var_key in self._var_labels:
+                        var_label, var_labels_config, dim = self._var_labels[var_key]
+                        # Get outputs to resolve variable label
+                        outputs = self.analysis_data[instance_alias].get('execution_results', {}).get('outputs', {})
+                        var_label_text = self._get_variable_label(outputs, var_labels_config, dim, new_index)
+                        if var_label_text:
+                            var_label.config(text=f"[{var_label_text}]")
+                        else:
+                            var_label.config(text="")
                 
                 # Refresh the graph with new multi-dimensional slice
                 self._update_graph_with_slice(instance_alias, section_id, dimension)
@@ -4203,6 +4445,27 @@ Count:
                 x_axis_config = config.get('x_axis', {})
                 y_axis_config = config.get('y_axis', {})
             
+            # Resolve axis labels from variables if needed
+            # Make copies to avoid modifying original configs
+            x_axis_config = x_axis_config.copy() if x_axis_config else {}
+            y_axis_config = y_axis_config.copy() if y_axis_config else {}
+            
+            resolved_x_label = self._resolve_axis_label(x_axis_config, outputs)
+            if resolved_x_label:
+                x_axis_config['label'] = resolved_x_label
+            
+            resolved_y_label = self._resolve_axis_label(y_axis_config, outputs)
+            if resolved_y_label:
+                y_axis_config['label'] = resolved_y_label
+            
+            # Also resolve z-axis label if present
+            z_axis_config = config.get('z_axis', {})
+            if z_axis_config:
+                z_axis_config = z_axis_config.copy()
+                resolved_z_label = self._resolve_axis_label(z_axis_config, outputs)
+                if resolved_z_label:
+                    z_axis_config['label'] = resolved_z_label
+            
             # Merge axis indices for x (base + md + axis-specific)
             x_indices = base_indices.copy()
             x_indices.update(md_slice_indices)  # Add multi-dimensional slices
@@ -4229,9 +4492,16 @@ Count:
                     z_indices.pop(dim, None)  # Remove if present
             z_data = self._extract_axis_data(outputs, config.get('z_axis', {}), z_indices)
             
+            # Create a copy of config with resolved axis labels for rendering
+            render_config = config.copy()
+            render_config['x_axis'] = x_axis_config
+            render_config['y_axis'] = y_axis_config
+            if z_axis_config:
+                render_config['z_axis'] = z_axis_config
+            
             # Render graph using graph_renderer module
             fig, ax = graph_renderer.render_graph_figure(
-                graph_type, config, x_data, y_data, z_data, x_axis_config, y_axis_config,
+                graph_type, render_config, x_data, y_data, z_data, x_axis_config, y_axis_config,
                 default_cmap=self.settings_manager.get('colormap', 'viridis')
             )
             
