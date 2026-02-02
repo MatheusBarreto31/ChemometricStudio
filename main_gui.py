@@ -2579,7 +2579,7 @@ class ChemometricsGUI:
         
         return containers
     
-    def _render_section(self, parent: ttk.Frame, instance_alias: str, section_data: dict, section_idx: int = 0):
+    def _render_section(self, parent: ttk.Frame, instance_alias: str, section_data: dict, section_idx: int = 0, is_popup: bool = False):
         """Render a section (either graph or table)."""
         section_type = section_data.get('type')
         
@@ -2600,6 +2600,10 @@ class ChemometricsGUI:
             # Empty section
             label = ttk.Label(parent, text="[Empty]", foreground="gray")
             label.pack(expand=True)
+        
+        # Add popup button AFTER content is rendered (only if not already in a popup)
+        if not is_popup:
+            self._create_section_popup_button(parent, instance_alias, section_idx, section_data)
     
     def _resolve_axis_label(self, axis_config: dict, outputs: dict) -> str:
         """Resolve an axis label from axis configuration.
@@ -3743,6 +3747,98 @@ Count:
             print(f"Error refreshing table: {str(e)}")
             import traceback
             traceback.print_exc()
+    
+    def _show_section_popup(self, instance_alias: str, section_idx: int, section_data: dict):
+        """Show a popup window with the same content as a section."""
+        try:
+            # Create a new popup window
+            popup = tk.Toplevel(self.root)
+            popup.title(f"Section: {section_data.get('config', {}).get('title', 'Section')}")
+            popup.geometry("900x700")
+            
+            # Add button frame at top for action buttons
+            button_frame = ttk.Frame(popup)
+            button_frame.pack(fill=tk.X, padx=10, pady=(10, 0))
+            
+            # Add "Save as Image" button if this is a graph section
+            if section_data.get('type') == 'graph':
+                save_btn = ttk.Button(
+                    button_frame,
+                    text="💾 Save as Image",
+                    command=lambda: self._save_section_graph_as_image(instance_alias, section_idx)
+                )
+                save_btn.pack(side=tk.LEFT, padx=5)
+            
+            # Add close button on the right
+            close_btn = ttk.Button(button_frame, text="Close", command=popup.destroy)
+            close_btn.pack(side=tk.RIGHT, padx=5)
+            
+            # Create a frame for the content
+            content_frame = ttk.Frame(popup)
+            content_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+            
+            # Render the section in the popup (with is_popup=True to skip popup button)
+            self._render_section(content_frame, instance_alias, section_data, section_idx, is_popup=True)
+        
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open section popup: {str(e)}")
+    
+    def _save_section_graph_as_image(self, instance_alias: str, section_idx: int):
+        """Save a graph section as an image file (PNG, JPEG, or TIFF)."""
+        try:
+            # Get the canvas and figure from stored references
+            if instance_alias not in self.analysis_data:
+                messagebox.showerror("Error", "Analysis data not found")
+                return
+            
+            graph_canvases = self.analysis_data[instance_alias].get('graph_canvases', {})
+            if section_idx not in graph_canvases:
+                messagebox.showerror("Error", "Graph not found for this section")
+                return
+            
+            canvas, canvas_frame = graph_canvases[section_idx]
+            fig = canvas.figure
+            
+            # Open file save dialog
+            file_path = filedialog.asksaveasfilename(
+                defaultextension=".png",
+                filetypes=[
+                    ("PNG Image", "*.png"),
+                    ("JPEG Image", "*.jpg"),
+                    ("TIFF Image", "*.tiff"),
+                    ("All Files", "*.*")
+                ]
+            )
+            
+            if file_path:
+                # Save the figure
+                fig.savefig(file_path, dpi=300, bbox_inches='tight')
+                messagebox.showinfo("Success", f"Graph saved successfully to:\n{file_path}")
+        
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save graph: {str(e)}")
+    
+    def _create_section_popup_button(self, parent: ttk.Frame, instance_alias: str, section_idx: int, section_data: dict):
+        """Create a small floating button in the upper right corner of a section (hovering over content)."""
+        try:
+            # Defer button creation to allow content to render first
+            def create_button():
+                # Create a small popup button using ttk.Button for consistent styling
+                popup_btn = ttk.Button(
+                    parent, 
+                    text="🗗",  # Icon to indicate opening in a new window
+                    width=2,
+                    command=lambda: self._show_section_popup(instance_alias, section_idx, section_data)
+                )
+                # Position in upper right corner using place()
+                popup_btn.place(relx=1.0, rely=0.0, anchor="ne", x=5, y=-10)
+                popup_btn.lift()
+            
+            # Schedule button creation for after all packing/rendering is done
+            parent.after(100, create_button)
+        
+        except Exception as e:
+            print(f"Error creating section popup button: {str(e)}")
     
     def _create_navigation_controls(self, parent_frame: ttk.Frame, instance_alias: str, 
                                    section_id: int, outputs: dict, config: dict, 

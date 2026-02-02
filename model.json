@@ -1,7 +1,7 @@
 {
   "metadata": {
     "version": "1.0",
-    "created": "2026-02-01T16:55:43.651001",
+    "created": "2026-02-02T09:42:22.761591",
     "description": "CM Studio Model Configuration"
   },
   "functions": [
@@ -12,29 +12,42 @@
       "parameters": {
         "d_specs_separator": "comma",
         "d_specs_headlines": "0",
-        "d_specs_type": "x_matrix",
-        "nway_flag": "1",
+        "d_specs_type": "x_vector",
+        "nway_flag": "3",
         "transpose": false,
         "multi_file_per_sample": false,
         "num_samples": "1",
         "var_path": [
+          "D:/cm-studio/tempfiles/ax1.txt",
+          "D:/cm-studio/tempfiles/ax2.txt",
           ""
         ],
         "axis_info": [
+          "",
+          "",
           ""
         ],
         "d_specs_dimensions": [
-          ""
+          "103",
+          "35",
+          "3"
         ],
         "dim_labels": [
-          "wavel"
+          "wave",
+          "",
+          "pot"
         ],
         "scale_type": [
+          "Linear",
+          "Linear",
           "Linear"
         ],
         "reshape_order": "F",
         "data_path": [
-          "D:/cm-studio/tempfiles/x.txt"
+          "D:/cm-studio/tempfiles/S1.csv",
+          "D:/cm-studio/tempfiles/S2.csv",
+          "D:/cm-studio/tempfiles/S3.csv",
+          "D:/cm-studio/tempfiles/S4.csv"
         ]
       },
       "parameter_types": {
@@ -75,8 +88,7 @@
                 "decimal_places": 4,
                 "max_rows": 50,
                 "max_cols": 15,
-                "title": "X Data (Spectra)",
-                "slice_info": {}
+                "title": "X Data (Spectra)"
               }
             },
             {
