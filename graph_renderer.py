@@ -32,7 +32,10 @@ def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarr
     Returns:
         Tuple of (Figure, axes) - the matplotlib figure and axes
     """
-    fig = Figure(figsize=(6, 4), dpi=100)
+    # Use constrained_layout for automatic tight bounds that adapt to container size
+    # This prevents clipping when section geometry changes while keeping tight margins
+    # Add slight padding (w_pad/h_pad) for visual comfort around the plot area
+    fig = Figure(figsize=(6, 4), dpi=100, constrained_layout={'w_pad': 0.1, 'h_pad': 0.1})
     
     # Make a copy of config to avoid modifying the original (which persists between runs)
     config = config.copy()
@@ -72,10 +75,8 @@ def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarr
     if graph_title:
         ax.set_title(graph_title)
     
-    # Apply tight layout with padding inside the plot area
-    fig.tight_layout()
-    # Add internal margins around the plot 
-    fig.subplots_adjust(left=0.15, right=0.95, top=0.86, bottom=0.30)
+    # constrained_layout handles margins automatically - no manual adjustment needed
+    # This ensures tight bounds that adapt to any section geometry without clipping
     
     return fig, ax
 
@@ -168,6 +169,18 @@ def _render_3d_surface(ax, x_data: Optional[np.ndarray], y_data: Optional[np.nda
             ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
             ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
             ax.set_zlabel(config.get('z_axis', {}).get('label', 'Z'))
+            
+            # Apply section aspect ratio to match X and Y data dimensions
+            x_range = np.ptp(x_data)  # Peak-to-peak (max - min)
+            y_range = np.ptp(y_data)
+            
+            # Calculate aspect ratio for X vs Y (the section/horizontal plane)
+            # Keep Z at a fixed reasonable scale (1/3 of the max X-Y range)
+            if x_range > 0 and y_range > 0:
+                max_xy_range = max(x_range, y_range)
+                z_scale = max_xy_range / 3  # Z gets 1/3 the scale of the larger X-Y dimension
+                aspect_ratio = (x_range, y_range, z_scale)
+                ax.set_box_aspect(aspect_ratio)
 
 
 def _render_contour(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],
@@ -197,9 +210,9 @@ def embed_figure_in_tkinter(fig: Figure, parent_frame: ttk.Frame) -> Tuple[Figur
         Tuple of (canvas, canvas_frame) for later updates
     """
     # Create a frame to hold the canvas for better geometry management
-    # Add padding to prevent borders from being clipped
-    canvas_frame = ttk.Frame(parent_frame, padding=2)
-    canvas_frame.pack(fill=tk.BOTH, expand=True, padx=3, pady=3)
+    # Minimal padding - constrained_layout handles figure margins automatically
+    canvas_frame = ttk.Frame(parent_frame, padding=1)
+    canvas_frame.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)
     
     canvas = FigureCanvasTkAgg(fig, master=canvas_frame)
     canvas_widget = canvas.get_tk_widget()

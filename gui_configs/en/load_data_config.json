@@ -317,7 +317,7 @@
               "cmap": "terrain",
               "dimension_labels": "dim_labels",
               "variable_labels": "axis_t_info",
-              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}]
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": false}]
             }
           }
         ]

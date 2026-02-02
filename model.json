@@ -1,7 +1,7 @@
 {
   "metadata": {
     "version": "1.0",
-    "created": "2026-02-02T09:42:22.761591",
+    "created": "2026-02-02T10:28:23.867048",
     "description": "CM Studio Model Configuration"
   },
   "functions": [
@@ -12,42 +12,34 @@
       "parameters": {
         "d_specs_separator": "comma",
         "d_specs_headlines": "0",
-        "d_specs_type": "x_vector",
-        "nway_flag": "3",
+        "d_specs_type": "x_matrix",
+        "nway_flag": "2",
         "transpose": false,
         "multi_file_per_sample": false,
         "num_samples": "1",
         "var_path": [
-          "D:/cm-studio/tempfiles/ax1.txt",
-          "D:/cm-studio/tempfiles/ax2.txt",
+          "",
           ""
         ],
         "axis_info": [
           "",
-          "",
           ""
         ],
         "d_specs_dimensions": [
-          "103",
-          "35",
-          "3"
+          "",
+          ""
         ],
         "dim_labels": [
-          "wave",
           "",
-          "pot"
+          ""
         ],
         "scale_type": [
-          "Linear",
           "Linear",
           "Linear"
         ],
         "reshape_order": "F",
         "data_path": [
-          "D:/cm-studio/tempfiles/S1.csv",
-          "D:/cm-studio/tempfiles/S2.csv",
-          "D:/cm-studio/tempfiles/S3.csv",
-          "D:/cm-studio/tempfiles/S4.csv"
+          "D:/cm-studio/.venv/DataforTesting/x.txt"
         ]
       },
       "parameter_types": {
@@ -68,285 +60,5 @@
       }
     }
   ],
-  "routing": [],
-  "analysis": {
-    "load_data": {
-      "pages": [
-        {
-          "title": "Data Overview",
-          "layout": "ed",
-          "condition": {
-            "parameter": "nway_flag",
-            "operator": "==",
-            "value": "1"
-          },
-          "sections": [
-            {
-              "type": "table",
-              "config": {
-                "data_source": "X_cal",
-                "decimal_places": 4,
-                "max_rows": 50,
-                "max_cols": 15,
-                "title": "X Data (Spectra)"
-              }
-            },
-            {
-              "type": "graph",
-              "config": {
-                "graph_type": "line",
-                "x_axis": {
-                  "data_source": "axis_n_info",
-                  "index": 1,
-                  "label": "dim_labels",
-                  "l_index": 1
-                },
-                "y_axis": {
-                  "data_source": "X_cal",
-                  "label": "Intensity"
-                },
-                "title": "Spectral Data Overview",
-                "dimension_labels": "dim_labels",
-                "variable_labels": "axis_t_info",
-                "data_slicing": [
-                  {
-                    "name": "Sample",
-                    "dimension": 0,
-                    "axis": "y",
-                    "show_navigation_menu": true
-                  }
-                ]
-              }
-            },
-            {
-              "type": "graph",
-              "config": {
-                "graph_type": "scatter",
-                "x_axis": {
-                  "data_source": "X_cal",
-                  "label": "Variables"
-                },
-                "y_axis": {
-                  "data_source": "X_cal",
-                  "label": "Intensity"
-                },
-                "graph_title": "Scatter test",
-                "data_slicing": [
-                  {
-                    "name": "Sample",
-                    "dimension": 1,
-                    "axis": "x",
-                    "show_navigation_menu": true
-                  },
-                  {
-                    "name": "Sam",
-                    "dimension": 1,
-                    "axis": "y",
-                    "show_navigation_menu": true
-                  }
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "title": "Data Overview",
-          "layout": "fd",
-          "condition": {
-            "parameter": "nway_flag",
-            "operator": "==",
-            "value": "2"
-          },
-          "sections": [
-            {
-              "type": "table",
-              "config": {
-                "data_source": "X_cal",
-                "decimal_places": 4,
-                "max_rows": 30,
-                "max_cols": 15,
-                "title": "Single Sample Slice",
-                "data_slicing": [
-                  {
-                    "name": "Sample",
-                    "dimension": 0,
-                    "default": 0,
-                    "show_navigation_menu": true
-                  }
-                ]
-              }
-            },
-            {
-              "type": "graph",
-              "config": {
-                "graph_type": "contour",
-                "x_axis": {
-                  "data_source": "axis_n_info",
-                  "index": 2,
-                  "label": "dim_labels",
-                  "l_index": 2
-                },
-                "y_axis": {
-                  "data_source": "axis_n_info",
-                  "index": 1,
-                  "label": "dim_labels",
-                  "l_index": 1
-                },
-                "z_axis": {
-                  "data_source": "X_cal",
-                  "label": "Intensity"
-                },
-                "title": "Spectral Data Heatmap",
-                "dimension_labels": "dim_labels",
-                "variable_labels": "axis_t_info",
-                "data_slicing": [
-                  {
-                    "name": "Sample",
-                    "dimension": 0,
-                    "default": 0,
-                    "axis": "z",
-                    "show_navigation_menu": true
-                  }
-                ]
-              }
-            },
-            {
-              "type": "graph",
-              "config": {
-                "graph_type": "3d_surf",
-                "x_axis": {
-                  "data_source": "axis_n_info",
-                  "index": 2,
-                  "label": "dim_labels",
-                  "l_index": 2
-                },
-                "y_axis": {
-                  "data_source": "axis_n_info",
-                  "index": 1,
-                  "label": "dim_labels",
-                  "l_index": 1
-                },
-                "z_axis": {
-                  "data_source": "X_cal",
-                  "label": "Intensity"
-                },
-                "title": "Spectral Data 3D Surface",
-                "cmap": "jet",
-                "use_wireframeccc": true,
-                "dimension_labels": "dim_labels",
-                "variable_labels": "axis_t_info",
-                "data_slicing": [
-                  {
-                    "name": "Sample",
-                    "dimension": 0,
-                    "default": 0,
-                    "axis": "z",
-                    "show_navigation_menu": true
-                  }
-                ]
-              }
-            },
-            {
-              "type": "graph",
-              "config": {
-                "graph_type": "3d_surf",
-                "x_axis": {
-                  "data_source": "axis_n_info",
-                  "index": 2,
-                  "label": "dim_labels",
-                  "l_index": 2
-                },
-                "y_axis": {
-                  "data_source": "axis_n_info",
-                  "index": 1,
-                  "label": "dim_labels",
-                  "l_index": 1
-                },
-                "z_axis": {
-                  "data_source": "X_cal",
-                  "label": "Intensity"
-                },
-                "title": "Spectral Data 3D Surface",
-                "cmap": "terrain",
-                "dimension_labels": "dim_labels",
-                "variable_labels": "axis_t_info",
-                "data_slicing": [
-                  {
-                    "name": "Sample",
-                    "dimension": 0,
-                    "default": 0,
-                    "axis": "z",
-                    "show_navigation_menu": true
-                  }
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "title": "Data Overview",
-          "layout": "ew",
-          "condition": {
-            "parameter": "nway_flag",
-            "operator": ">",
-            "value": "2"
-          },
-          "sections": [
-            {
-              "type": "graph",
-              "config": {
-                "graph_type": "heatmap",
-                "aux_axis": {
-                  "data_source": "axis_n_info",
-                  "labels": "dim_labels"
-                },
-                "z_axis": {
-                  "data_source": "X_cal",
-                  "label": "Intensity"
-                },
-                "title": "Spectral Data Heatmap (4D+)",
-                "dimension_labels": "dim_labels",
-                "variable_labels": "axis_t_info",
-                "data_slicing": [
-                  {
-                    "name": "Sample",
-                    "dimension": 0,
-                    "default": 0,
-                    "axis": "z",
-                    "show_navigation_menu": true
-                  }
-                ],
-                "show_md_menu": true
-              }
-            },
-            {
-              "type": "graph",
-              "config": {
-                "graph_type": "heatmap",
-                "aux_axis": {
-                  "data_source": "axis_n_info",
-                  "labels": "dim_labels"
-                },
-                "z_axis": {
-                  "data_source": "X_cal",
-                  "label": "Intensity"
-                },
-                "title": "Spectral Data Heatmap (4D+)",
-                "dimension_labels": "dim_labels",
-                "variable_labels": "axis_t_info",
-                "data_slicing": [
-                  {
-                    "name": "Sample",
-                    "axis": "z"
-                  }
-                ],
-                "show_md_menu": true
-              }
-            }
-          ]
-        }
-      ],
-      "current_page": 0
-    }
-  }
+  "routing": []
 }
