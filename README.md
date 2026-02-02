@@ -1,17 +1,21 @@
 # Chemometric Studio
 
-A comprehensive Tkinter-based GUI application for chemometrics analysis, data preprocessing, and calibration modeling.
+A comprehensive GUI application for chemometric analysis. Chemometric Studio provides an intuitive interface for building data analysis pipelines with automatic parameter routing and visual workflow management.
+
+As of now it is still in early development, with the vast majority of its intended features missing.
 
 ## Features
 
-- **Interactive Pipeline Builder**: Function selection with automatic parameter routing
-- **Visual Data Flow**: Configure connections between functions with live visualization
-- **Rich Parameter Configuration**: JSON-based function configs with tooltips, help text, and conditional visibility
-- **Multi-format Data Support**: Load CSV, tab-separated, space-separated data
-- **Preprocessing Functions**: Baseline correction, smoothing, center & normalize
-- **Calibration Tools**: Univariate and multivariate calibration methods
-- **Validation Support**: Automatic or manual validation set creation
+- **Interactive Pipeline Builder**: Modular function selection with automatic parameter routing between steps
+- **Visual Data Flow**: Configure connections between analysis functions with live routing visualization
+- **Rich Parameter Configuration**: JSON-based function configs with tooltips, help text, and conditional parameter visibility
+- **Multi-format & Multi-dimensional Data Support**: Load CSV, tab-separated, space-separated data with support for N-way arrays
+- **Preprocessing Functions**: Baseline correction, smoothing, center & normalize with multi-dimensional support
+- **Calibration Tools**: Univariate calibration methods with polynomial modeling
+- **Validation Support**: Automatic or manual validation set creation with multiple selection strategies
+- **Advanced Data Handling**: Multi-dimensional slicing, sample-wise operations, and flexible data reshaping
 - **Help System**: Integrated tooltips and detailed help for all functions
+- **Export Capabilities**: Generate reports with analysis results and visualizations
 
 ## Install
 
@@ -45,23 +49,33 @@ For detailed usage instructions, see [Documentation](Documentation/).
 ## Project Structure
 
 ```
-ChemometricsTool/
-├── chemometrics/              # Core Python package
+cm-studio/
+├── chemometrics/                   # Core Python package
 │   ├── __init__.py
-│   ├── data_input.py
-│   ├── data_processing.py
-│   ├── reporting.py
-│   ├── univ_calibration.py
-│   └── validation_data_input.py
-├── gui_configs/               # Function-specific GUI configurations (JSON)
-├── Documentation/             # User-facing documentation
-├── Generated Notes/           # Development notes and summaries
-├── tests/                     # Test suite
-├── main_gui.py               # Main GUI application
-├── launcher.py               # Application launcher
-├── function_specs.json       # Metadata registry for functions
-├── requirements.txt          # Python dependencies
-└── pyproject.toml           # Project metadata
+│   ├── data_input.py              # Data loading and parsing
+│   ├── data_processing.py         # Preprocessing functions
+│   ├── processing.py              # Additional processing utilities
+│   ├── reporting.py               # Report generation
+│   ├── univ_calibration.py        # Univariate calibration methods
+│   └── validation_data_input.py   # Validation set handling
+├── gui_configs/                    # Function-specific GUI configurations (JSON)
+├── languages/                      # Internationalization files
+├── Settings/                       # User settings and configuration
+├── Graphics/                       # Application icons and graphics
+├── Documentation/                  # User-facing documentation
+├── main_gui.py                     # Main GUI application
+├── launcher.py                     # Application launcher
+├── graph_renderer.py              # Graph rendering utilities
+├── language_manager.py            # Language/localization management
+├── routing_map_window.py          # Routing visualization window
+├── analyst.py                     # Analysis utilities
+├── user.py                        # User management
+├── settings.py                    # Settings management
+├── function_specs.json            # Metadata registry for functions
+├── about_us.json                  # Application metadata
+├── requirements.txt               # Python dependencies
+├── pyproject.toml                 # Project metadata
+└── README.md                      # This file
 ```
 
 ## Documentation
@@ -76,9 +90,18 @@ ChemometricsTool/
 - Python 3.8+
 - tkinter (included with most Python distributions)
 - Dependencies listed in [requirements.txt](requirements.txt):
-  - numpy
-  - scipy
-  - scikit-learn
+  - numpy 2.3.5
+  - scipy 1.15.0
+  - scikit-learn 1.5.2
+  - matplotlib 3.10.8
+  - tensorly 0.9.0
+  - pylatex 1.4.2
+  - pandas 2.3.3
 
 ## Development
+
+For detailed development and contribution guidelines, see the [Documentation](Documentation/) folder which contains:
+- Implementation guides
+- API references
+- Architecture documentation
 
