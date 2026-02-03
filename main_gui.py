@@ -1364,10 +1364,17 @@ class ChemometricsGUI:
                                 should_show = False
                                 break
                         else:
-                            # Simple equality comparison
-                            if current_value != condition_value:
-                                should_show = False
-                                break
+                            # Simple equality or list membership comparison
+                            if isinstance(condition_value, list):
+                                # Check if current_value is in the list
+                                if current_value not in condition_value:
+                                    should_show = False
+                                    break
+                            else:
+                                # Simple equality comparison
+                                if current_value != condition_value:
+                                    should_show = False
+                                    break
             
             # Show or hide the container using grid with stored parameters
             if should_show:
