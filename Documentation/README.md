@@ -1,51 +1,55 @@
 # Documentation Index
 
-Welcome! This folder contains organized documentation for CM-Studio, grouped by feature and functionality.
+Welcome to CM-Studio documentation. Start with the feature that interests you.
 
 ---
 
-## 📚 Folder Structure
+## 🔄 Cross-Validation (CV)
 
-All documentation is organized into topic-specific subfolders for easier navigation:
+**[CV_PIPELINE.md](CV_PIPELINE.md)** ⭐ **START HERE FOR CV**
 
-### 🔄 CV Pipeline & Analytics Features
+Complete CV pipeline documentation covering:
+- Quick start (3 steps to integrate your model)
+- Reference modes (input and output)
+- All 9 CV strategies
+- Multiway data support
+- Advanced usage
 
-#### [CV_SINGLE_FIT_REFERENCE_MODE/](CV_SINGLE_FIT_REFERENCE_MODE/)
-Single-fit reference mode for CV validation stability assessment.
-- *README.md* - Overview and quick navigation
-- *SINGLE_FIT_REFERENCE_MODE.md* - Complete feature reference
-- *SINGLE_FIT_REFERENCE_COMPLETE_FEATURE.md* - Feature implementation details
-- *SINGLE_FIT_REFERENCE_QUICK_REF.md* - Quick reference with code examples
-- *UNIVARIATE_CALIBRATION_SINGLE_FIT_REFERENCE.md* - Univariate calibration integration
+### Quick Example
+```python
+from chemometrics.cv_pipeline import cv_configuration, CVPipeline
 
-#### [CV_FOLD_OUTPUT_HANDLING/](CV_FOLD_OUTPUT_HANDLING/)
-Fold output reconstruction and segregation strategies with index-based access.
-- *README.md* - Overview and quick navigation
-- *INDEX_BASED_FOLD_ACCESS.md* - FoldSegregatedOutput class and index access patterns
-- *SEGREGATED_OUTPUTS_EXPLAINED.md* - Design rationale and comparison with averaging
-- *INDEX_BASED_FOLD_ACCESS_UPDATE_SUMMARY.md* - Implementation details and changes
+cv_cfg = cv_configuration(use_cv=True, cv_strategy='kfold', n_splits=5)
+pipeline = CVPipeline(cv_cfg['cv_config'])
+results = pipeline.run(my_model, X=X, Y=Y, 
+                      reference_input_key='Y',
+                      comparison_output_key='y_pred')
+```
+
+### Subfolders
 
 #### [CV_INTEGRATION_GUIDES/](CV_INTEGRATION_GUIDES/)
-Integration guides and implementation summaries for CV features.
-- *README.md* - Overview and quick navigation
-- *CV_INTEGRATION_GUIDE.md* - How to integrate features into your pipelines
-- *CV_OUTPUT_CAPTURE_QUICK_REF.md* - Quick reference for output capture
-- *IMPLEMENTATION_COMPLETE_DELIVERABLE.md* - Complete deliverable summary
+How to integrate your models with CV pipeline.
 
-### 📊 Analysis & Calibration
+#### [CV_FOLD_OUTPUT_HANDLING/](CV_FOLD_OUTPUT_HANDLING/)
+How reconstructed outputs are organized (sample-based vs non-sample-based).
+
+#### [CV_SINGLE_FIT_REFERENCE_MODE/](CV_SINGLE_FIT_REFERENCE_MODE/)
+Using single-fit outputs as reference for stability assessment.
+
+---
+
+## 📊 Analysis & Calibration
 
 #### [UNIVARIATE_CALIBRATION/](UNIVARIATE_CALIBRATION/)
-Univariate calibration module documentation with single-fit reference mode.
-- *README.md* - Overview and module guide
-- *UNIVARIATE_CALIBRATION_SINGLE_FIT_REFERENCE.md* - Complete usage guide
+Univariate calibration module (polynomial fitting with CV support).
 
 ### 💻 User Interface
 
 #### [GUI/](GUI/)
 Graphical User Interface documentation for CM-Studio.
-- *README.md* - Overview and quick navigation
-- *GUI_DOCUMENTATION.md* - Comprehensive GUI feature documentation
-- *GUI_QUICKSTART.md* - Quick start guide for new users
+- GUI feature documentation
+- Quick start guide for new users
 
 ### 📈 Data Handling
 

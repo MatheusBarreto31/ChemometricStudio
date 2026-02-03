@@ -147,19 +147,9 @@ def univariate_calibration(
         if fold == 0 and not _is_cv_fold_call():
             pipeline = CVPipeline(cv_config)
             
-            # Set up output_metrics for CV: we want to capture RMSE across models
-            config_with_metrics = cv_config
-            if not config_with_metrics.output_metrics:
-                config_with_metrics.output_metrics = ['rmse']
-            if not config_with_metrics.capture_outputs:
-                config_with_metrics.capture_outputs = ['y_cal_pred', 'metrics']
-            
-            # Update pipeline config
-            pipeline.config = config_with_metrics
-            
-            # For univariate calibration, we don't use single-fit reference mode
-            # because y_cal_pred is a dict of predictions per model, not a single array.
-            # Instead, we use traditional CV mode which aggregates metrics per fold.
+            # For univariate calibration, y_cal_pred is a dict, not a single array.
+            # We need to run CV differently - aggregate metrics per model key.
+            # Use input reference mode: compare predictions against actual Y_cal
             cv_results = pipeline.run(
                 _univariate_calibration_single_fit,
                 X_cal=X_cal,
@@ -168,6 +158,9 @@ def univariate_calibration(
                 Y_val=Y_val,
                 degree=degree,
                 intercept=intercept,
+                reference_input_key='Y_cal',
+                comparison_output_key='y_cal_pred_matrix',
+                capture_output_keys=['y_cal_pred_matrix'],
             )
             
             # Also compute single fit on full data
@@ -213,6 +206,9 @@ def _univariate_calibration_single_fit(
     for CVPipeline compatibility.
     """
     # Handle CVPipeline split format: X_cal_train/X_cal_test, Y_cal_train/Y_cal_test
+    X_cal_test = kwargs.get('X_cal_test')
+    Y_cal_test = kwargs.get('Y_cal_test')
+    
     if X_cal is None and 'X_cal_train' in kwargs:
         X_cal = kwargs['X_cal_train']
     if Y_cal is None and 'Y_cal_train' in kwargs:
@@ -224,6 +220,12 @@ def _univariate_calibration_single_fit(
     
     Xc = _ensure_2d_matrix(X_cal)
     Yc = _ensure_2d_matrix(Y_cal)
+    
+    # For CV: also handle test set
+    if X_cal_test is not None:
+        Xc_test = _ensure_2d_matrix(X_cal_test)
+    else:
+        Xc_test = None
 
     if X_val is not None:
         Xv = _ensure_2d_matrix(X_val)
@@ -250,11 +252,27 @@ def _univariate_calibration_single_fit(
     y_cal_pred: Dict[str, Any] = {}
     y_val_pred: Dict[str, Any] = {}
     metrics: Dict[str, Any] = {}
+    
+    # Matrix to store predictions for CV (samples x responses)
+    # For CV: use test set predictions; for single fit: use train predictions
+    # Shape matches the appropriate set
+    if Xc_test is not None:
+        n_pred_samples = Xc_test.shape[0]
+    else:
+        n_pred_samples = n_samples
+    Yc_pred_matrix = np.zeros((n_pred_samples, n_y), dtype=np.float64)
 
     for i in range(n_x):
         x_col_cal = Xc[:, i]
-        # build design matrix for calibration
+        # build design matrix for calibration (training)
         X_design_cal = _design_matrix(x_col_cal, degree, intercept)
+        
+        # prepare test design for CV if provided
+        if Xc_test is not None:
+            x_col_test = Xc_test[:, i] if i < Xc_test.shape[1] else None
+            X_design_test = _design_matrix(x_col_test, degree, intercept) if x_col_test is not None else None
+        else:
+            X_design_test = None
 
         # prepare validation design if provided
         if Xv is not None:
@@ -265,7 +283,6 @@ def _univariate_calibration_single_fit(
 
         for j in range(n_y):
             y_col_cal = Yc[:, j]
-
             model_key = f'X{i}_Y{j}'
 
             fit = _fit_ols(X_design_cal, y_col_cal, fit_intercept=intercept)
@@ -357,10 +374,26 @@ def _univariate_calibration_single_fit(
                 'metrics_cal': metrics_cal,
                 'metrics_val': metrics_val,
             }
+            
+            # Store predictions in matrix form for CV comparison
+            # For CV: predict on test set; for single fit: predict on train set
+            if i == 0:
+                if X_design_test is not None:
+                    # CV mode: predict on test set
+                    if intercept:
+                        Xtest_mat = np.hstack([np.ones((X_design_test.shape[0], 1)), X_design_test])
+                    else:
+                        Xtest_mat = X_design_test
+                    y_hat_test = Xtest_mat.dot(fit['beta'])
+                    Yc_pred_matrix[:, j] = y_hat_test
+                else:
+                    # Single fit: use train predictions
+                    Yc_pred_matrix[:, j] = fit['y_hat']
 
     return {
         'y_cal_pred': y_cal_pred,
         'y_val_pred': y_val_pred,
+        'y_cal_pred_matrix': Yc_pred_matrix,  # Matrix form for CV comparison
         'models': results['models'],
         'metrics': metrics,
     }

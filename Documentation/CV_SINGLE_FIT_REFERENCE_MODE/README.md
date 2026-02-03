@@ -1,118 +1,82 @@
-# CV Single-Fit Reference Mode Documentation
+# Single-Fit Reference Mode
 
-This folder contains all documentation for the **single-fit reference mode** feature - the ability to run a function's single fit as a reference and compare CV fold outputs against it.
+Compare CV folds against a single fit on full data for stability assessment.
 
-## 📖 Files in This Folder
+## Concept
 
-### Quick Start
-- **SINGLE_FIT_REFERENCE_QUICK_REF.md** ⭐ **START HERE**
-  - Copy-paste code examples
-  - Quick reference for parameters
-  - Common analysis patterns
-  - (5 minute read)
+1. **Single Fit**: Train on all data
+2. **CV Folds**: Train on each fold separately
+3. **Comparison**: How different are fold outputs from single fit?
+4. **Result**: Low RMSE = stable (consistent across data subsets)
 
-### Complete Understanding
-- **SINGLE_FIT_REFERENCE_COMPLETE_FEATURE.md**
-  - Your original request + what was built
-  - Complete feature overview
-  - Real-world examples
-  - (10 minute read)
-
-- **SINGLE_FIT_REFERENCE_MODE.md**
-  - Full technical reference guide
-  - All parameters explained
-  - Use cases and advanced usage
-  - (20 minute read)
-
-### Technical Details
-- **SINGLE_FIT_REFERENCE_SUMMARY.md**
-  - How it works internally
-  - Architecture and flow
-  - Design decisions
-  - (15 minute read)
-
-- **SINGLE_FIT_REFERENCE_COMPLETE.md**
-  - Implementation summary
-  - Technical deep dive
-  - (10 minute read)
-
-### Reference
-- **SINGLE_FIT_REFERENCE_INDEX.md**
-  - Original feature index
-  - Navigation guide
-
----
-
-## 🎯 Reading Guide
-
-### "I just want to use it" (5 min)
-1. Read: SINGLE_FIT_REFERENCE_QUICK_REF.md
-2. Run: `python tests/test_single_fit_reference.py`
-3. Copy pattern to your function
-
-### "I want to understand it" (20 min)
-1. Read: SINGLE_FIT_REFERENCE_COMPLETE_FEATURE.md
-2. Read: SINGLE_FIT_REFERENCE_MODE.md
-3. Check: SINGLE_FIT_REFERENCE_SUMMARY.md
-
-### "I want complete reference" (30 min)
-1. Read: SINGLE_FIT_REFERENCE_MODE.md
-2. Read: SINGLE_FIT_REFERENCE_SUMMARY.md
-3. Skim: SINGLE_FIT_REFERENCE_COMPLETE.md
-
----
-
-## ✨ Feature Highlights
-
-✅ **Flexible**: Use any function output as reference  
-✅ **Sample-based**: Full-size array reconstruction  
-✅ **Non-sample-based**: Segregated fold outputs  
-✅ **Scalable**: Index-based fold access  
-✅ **Compatible**: Fully backward compatible  
-✅ **Tested**: Working examples included  
-
----
-
-## 🚀 Quick Example
+## Example: PCA Stability
 
 ```python
-from chemometrics.cv_pipeline import CVPipeline
+from sklearn.decomposition import PCA
 
+def pca_model(X_train=None, X_test=None, fold=0, **kwargs):
+    pca = PCA(n_components=3)
+    pca.fit(X_train)
+    return {'scores': pca.transform(X_test)}
+
+# Run CV with output reference
 results = pipeline.run(
-    pca_function,
-    X=X,
-    reference_output_key='scores',
-    capture_output_keys=['scores', 'loadings']
+    pca_model, X=X,
+    reference_output_key='scores',  # Use single-fit scores as reference
+    comparison_output_key='scores'  # Compare fold scores (defaults to same)
 )
 
-# Results
-print(f"Stability: {results['scores_rmse']:.4f}")
-print(f"Per-fold: {results['scores_rmse_per_fold']}")
-
-# Sample-based: full array
-scores_cv = results['scores_cv']  # (100, 3)
-
-# Non-sample-based: index access
-loadings_cv = results['loadings_cv']
-for i in range(len(loadings_cv)):
-    fold_loadings = loadings_cv[i]
+# Lower RMSE = more stable scores
+print(f"Score stability (RMSE): {results['rmse_mean']:.4f}")
 ```
 
----
+## Example: Regression Stability
 
-## 📚 Related Documentation
+```python
+def regression_model(X_train=None, X_test=None, Y_train=None, Y_test=None, fold=0, **kwargs):
+    from sklearn.linear_model import Ridge
+    model = Ridge()
+    model.fit(X_train, Y_train)
+    return {
+        'y_pred': model.predict(X_test),
+        'coefficients': model.coef_
+    }
 
-- **[../CV_FOLD_OUTPUT_HANDLING/](../CV_FOLD_OUTPUT_HANDLING/)** - How fold outputs are handled
-- **[../UNIVARIATE_CALIBRATION/](../UNIVARIATE_CALIBRATION/)** - Univariate calibration with single-fit reference
-- **[../CV_INTEGRATION_GUIDES/](../CV_INTEGRATION_GUIDES/)** - Integration guides and master index
+# Compare fold predictions to single-fit
+results = pipeline.run(
+    regression_model, X=X, Y=Y,
+    reference_output_key='y_pred',  # Single-fit predictions as reference
+    capture_output_keys=['y_pred', 'coefficients']
+)
 
----
+print(f"Prediction stability: {results['rmse_mean']:.4f}")
+print(f"Coefficient stability across folds: {results['coefficients_cv']}")
+```
 
-## 📂 Implementation Files
+## Use Cases
 
-- **Core**: `chemometrics/cv_pipeline.py`
-- **Test**: `tests/test_single_fit_reference.py`
+✓ **Assess model robustness**: Does model change with different training data?  
+✓ **Feature stability**: Do PCA loadings vary across folds?  
+✓ **Parameter consistency**: Do coefficients differ significantly by fold?  
+✓ **Debug overfitting**: Large RMSE suggests data-dependent behavior  
 
----
+## Output Reference vs Input Reference
 
-**Status**: ✅ Complete and ready to use
+| Mode | Reference | Use Case |
+|------|-----------|----------|
+| **Output** | Single-fit output | Stability assessment |
+| **Input** | Ground truth (Y) | Accuracy evaluation |
+
+```python
+# Output reference: fold vs single fit
+results = pipeline.run(func, X=X, reference_output_key='scores')
+
+# Input reference: fold vs actual Y
+results = pipeline.run(func, X=X, Y=Y, reference_input_key='Y')
+```
+
+## See Also
+
+- [Main CV Pipeline Documentation](../CV_PIPELINE.md)
+- [CV Integration Guide](../CV_INTEGRATION_GUIDES/)
+- [Fold Output Handling](../CV_FOLD_OUTPUT_HANDLING/)

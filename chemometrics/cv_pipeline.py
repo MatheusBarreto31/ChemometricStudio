@@ -112,8 +112,11 @@ class CVConfig:
     window_size: Optional[int] = None  # For moving_window and venetian_windows strategies
     n_repeats: Optional[int] = None  # For repeated_kfold strategy (default: 10)
     test_size: Optional[float] = None  # For shuffle_split strategy (default: 0.2)
-    output_metrics: Optional[List[str]] = None
-    capture_outputs: Optional[List[str]] = None  # NEW: outputs to preserve from each fold
+    output_metrics: Optional[List[str]] = None  # Which metrics to compute (e.g., ['rmse', 'r2'])
+    capture_outputs: Optional[List[str]] = None  # Outputs to preserve from each fold
+    reference_input_key: Optional[str] = None  # Input key to use as reference (e.g., 'Y_cal')
+    reference_output_key: Optional[str] = None  # Output key for single-fit reference mode
+    comparison_output_key: Optional[str] = None  # Output key to compare against reference
 
     def __post_init__(self):
         if self.output_metrics is None:
@@ -490,97 +493,132 @@ class CVPipeline:
             raise ValueError("Fold outputs must be numpy arrays for reconstruction")
 
     def run(
-        self, func: Callable, reference_output_key: Optional[str] = None, 
-        capture_output_keys: Optional[List[str]] = None, **kwargs
+        self, func: Callable, 
+        reference_input_key: Optional[str] = None,
+        reference_output_key: Optional[str] = None, 
+        comparison_output_key: Optional[str] = None,
+        capture_output_keys: Optional[List[str]] = None, 
+        **kwargs
     ) -> Dict[str, Any]:
         """
-        Execute function across CV folds.
+        Execute function across CV folds with unified reference-based metrics.
 
         Supports univariate (1D/2D) and multiway (3D/4D/etc) array data. Splitting 
         always occurs along the sample dimension (axis 0), preserving all other 
         dimensions.
+        
+        Reference Modes (mutually exclusive):
+        1. Input Reference Mode (reference_input_key): Uses an input array (e.g., Y_cal)
+           as the ground truth. Each fold's output is compared against the corresponding
+           portion of this input. This is the standard CV use case.
+           
+        2. Output Reference Mode (reference_output_key): Runs single fit on full data first,
+           then compares each fold's output against the single-fit output. Useful for
+           assessing model stability across folds.
 
         Args:
             func: callable that accepts **kwargs including fold=<int> parameter
-                  and returns dict with metric keys specified in config.output_metrics
-            reference_output_key: If specified, run single fit first, then CV compares 
-                                fold outputs against single fit outputs. Metrics computed
-                                as differences between fold outputs and single-fit reference.
-                                (overrides config.output_metrics for metric computation)
+                  and returns dict with output arrays
+            reference_input_key: Input kwarg key to use as reference (e.g., 'Y_cal').
+                                The reference array is indexed by test_idx for each fold.
+                                Takes precedence over reference_output_key.
+            reference_output_key: Output key from single fit to use as reference.
+                                Only used if reference_input_key is None.
+            comparison_output_key: Which output key from function to compare against reference.
+                                  Required when using reference_input_key or reference_output_key.
+                                  For matrix outputs (e.g., PCA scores), comparison is element-wise.
             capture_output_keys: List of output keys to capture and reconstruct from folds.
-                                If None, uses config.capture_outputs. Can be same or different
-                                from reference_output_key.
-            **kwargs: parameters for func; first array-like parameter will be used for splitting.
+                                If None, uses config.capture_outputs.
+            **kwargs: parameters for func; array-like parameters will be split.
                       Arrays can be any shape (1D, 2D, 3D, 4D, etc.); splitting on axis 0.
 
         Returns:
             Dictionary with:
-            - If reference_output_key specified:
-              - metric (scalar): Overall metric comparing reconstructed vs single fit
-              - metric_per_fold (list): Metric per fold
-              - {output_key}_cv (array): Reconstructed full-size output from CV folds
-              - {output_key}_single (array): Single fit output as reference
-              - For all capture_output_keys: {output_key}_cv, {output_key}_single
-            - Otherwise (traditional CV):
-              - Aggregated metrics: {metric_mean, metric_std, metric_min, metric_max, metric_folds}
-              - Captured outputs per fold: {output_fold_0, output_fold_1, ...}
+            - {metric}_mean, {metric}_std, {metric}_min, {metric}_max: Aggregated metrics
+            - {metric}_folds: List of per-fold metrics
+            - {output_key}_cv: Reconstructed full-size output from CV folds (sample-based)
+            - {output_key}_cv: FoldSegregatedOutput for non-sample outputs (e.g., loadings)
+            - reference: The reference array used (input or single-fit output)
+            - n_folds: Number of folds executed
         
-        Example - Assess stability of PCA scores across folds:
-            # Setup: Configure CV to capture scores
-            cv_config = CVConfig(
-                use_cv=True, 
-                cv_strategy='kfold', 
-                n_splits=5,
-                output_metrics=['rmse'],
-                capture_outputs=['scores']  # NEW: Capture PCA scores per fold
-            )
-            
-            # Run PCA through CV
+        Example 1 - Standard CV with input reference (compare predictions to actual Y):
+            cv_config = CVConfig(use_cv=True, cv_strategy='kfold', n_splits=5)
             pipeline = CVPipeline(cv_config)
-            results = pipeline.run(_pca_fit, X=X)
+            results = pipeline.run(
+                my_model_func,
+                X_cal=X, Y_cal=Y,
+                reference_input_key='Y_cal',      # Use actual Y as reference
+                comparison_output_key='y_pred',   # Compare predictions to Y
+                capture_output_keys=['y_pred']
+            )
+            # Results: rmse_mean, rmse_folds, y_pred_cv (reconstructed), reference
             
-            # Results now contains:
-            # - 'rmse_folds': [0.88, 0.92, 0.85, 0.87, 0.90]  (metrics per fold)
-            # - 'rmse_mean': 0.884, 'rmse_std': 0.028  (aggregated)
-            # - 'scores_fold_0': array of shape (20, 3)  (scores from fold 0)
-            # - 'scores_fold_1': array of shape (20, 3)  (scores from fold 1)
-            # - ... (one per fold)
+        Example 2 - Stability assessment with output reference (PCA scores):
+            results = pipeline.run(
+                pca_func,
+                X=X,
+                reference_output_key='scores',    # Single-fit scores as reference
+                comparison_output_key='scores',   # Compare fold scores to single-fit
+                capture_output_keys=['scores', 'loadings']
+            )
+            # Results: rmse_mean (stability metric), scores_cv, loadings_cv (segregated)
             
-            # Assess stability: Check if scores vary by fold
-            import numpy as np
-            scores_list = [results[f'scores_fold_{i}'] for i in range(5)]
-            std_across_folds = np.std(scores_list, axis=0)  # Std per score column
-            
-        Multiway data support:
-            X: (n_samples, n_wavelengths, n_time_points)
-            Y: (n_samples, n_responses)
-            Both split to:
-            X_train: (n_train, n_wavelengths, n_time_points)
-            X_test: (n_test, n_wavelengths, n_time_points)
+        Example 3 - Matrix reference (multi-response Y):
+            # Y_cal shape: (100, 3) - 3 response variables
+            # y_pred shape: (n_test, 3) - predictions for all 3 responses
+            results = pipeline.run(
+                multi_response_model,
+                X_cal=X, Y_cal=Y,
+                reference_input_key='Y_cal',
+                comparison_output_key='y_pred'
+            )
+            # RMSE computed across all elements of the matrix
         """
-        # Determine which outputs to capture
+        # Get config values with parameter overrides
+        ref_input = reference_input_key or self.config.reference_input_key
+        ref_output = reference_output_key or self.config.reference_output_key
         capture_keys = capture_output_keys if capture_output_keys is not None else (self.config.capture_outputs or [])
         
-        # Find first array-like input (X) and its size
+        # comparison_output_key defaults to reference_output_key if not specified
+        # (in most cases they're the same - e.g., compare 'scores' to 'scores')
+        comp_output = comparison_output_key or self.config.comparison_output_key
+        if comp_output is None:
+            comp_output = ref_output  # Default: compare same output as reference
+        
+        # Find first array-like input (X) and its size for splitting
         X = None
         y = None
         n_samples = None
+        input_arrays = {}  # Store all input arrays for reference_input_key lookup
+        
         for key, val in kwargs.items():
             if isinstance(val, (np.ndarray, pd.DataFrame)):
+                input_arrays[key] = val
                 if X is None:
                     X = val
                     n_samples = len(val)
                 elif key.lower() in ["y", "y_cal"]:
                     y = val
-                    break
 
         if X is None:
             raise ValueError("No array-like input found in kwargs for splitting")
 
-        # ==================== MODE 1: Single-Fit Reference ====================
-        if reference_output_key is not None:
-            # Run single fit on full data to get reference
-            single_fit_kwargs = {"fold": -1}  # Special fold marker for single fit
+        # Determine reference source
+        reference_array = None
+        single_fit_result = None
+        
+        if ref_input is not None:
+            # Input reference mode: use input array directly
+            if ref_input not in input_arrays:
+                raise ValueError(f"reference_input_key '{ref_input}' not found in inputs. "
+                               f"Available: {list(input_arrays.keys())}")
+            reference_array = input_arrays[ref_input]
+            if isinstance(reference_array, pd.DataFrame):
+                reference_array = reference_array.values
+                
+        elif ref_output is not None:
+            # Output reference mode: run single fit first
+            single_fit_kwargs = {"fold": -1}
             for key, data in kwargs.items():
                 if isinstance(data, np.ndarray):
                     single_fit_kwargs[f"{key}_train"] = data
@@ -591,150 +629,138 @@ class CVPipeline:
                 else:
                     single_fit_kwargs[key] = data
             
-            # Get single fit output
             single_fit_result = func(**single_fit_kwargs)
-            if reference_output_key not in single_fit_result:
-                raise ValueError(f"Single fit result does not contain '{reference_output_key}'")
+            if ref_output not in single_fit_result:
+                raise ValueError(f"reference_output_key '{ref_output}' not found in function output. "
+                               f"Available: {list(single_fit_result.keys())}")
+            reference_array = single_fit_result[ref_output]
+
+        # Initialize storage
+        fold_metrics = {metric: [] for metric in self.config.output_metrics}
+        fold_outputs_dict = {key: [] for key in capture_keys}
+        test_indices_list = []
+        fold_count = 0
+
+        # Run CV folds
+        for fold_idx, (train_idx, test_idx) in enumerate(self.splitter.get_splits(X, y)):
+            fold_kwargs = {"fold": fold_idx}
+            test_indices_list.append(test_idx)
             
-            reference_output = single_fit_result[reference_output_key]
+            # Split data
+            for key, data in kwargs.items():
+                if isinstance(data, np.ndarray):
+                    train_data, test_data = self._split_array_on_samples(data, train_idx, test_idx)
+                    fold_kwargs[f"{key}_train"] = train_data
+                    fold_kwargs[f"{key}_test"] = test_data
+                elif isinstance(data, pd.DataFrame):
+                    fold_kwargs[f"{key}_train"] = data.iloc[train_idx]
+                    fold_kwargs[f"{key}_test"] = data.iloc[test_idx]
+                else:
+                    fold_kwargs[key] = data
             
-            # Initialize storage for fold outputs and metrics
-            fold_metrics = []
-            fold_outputs_dict = {key: [] for key in capture_keys}
-            test_indices_list = []
+            # Run function
+            fold_result = func(**fold_kwargs)
             
-            # Run CV folds
-            for fold_idx, (train_idx, test_idx) in enumerate(self.splitter.get_splits(X, y)):
-                fold_kwargs = {"fold": fold_idx}
-                test_indices_list.append(test_idx)
-                
-                # Split data
-                for key, data in kwargs.items():
-                    if isinstance(data, np.ndarray):
-                        train_data, test_data = self._split_array_on_samples(data, train_idx, test_idx)
-                        fold_kwargs[f"{key}_train"] = train_data
-                        fold_kwargs[f"{key}_test"] = test_data
-                    elif isinstance(data, pd.DataFrame):
-                        fold_kwargs[f"{key}_train"] = data.iloc[train_idx]
-                        fold_kwargs[f"{key}_test"] = data.iloc[test_idx]
-                    else:
-                        fold_kwargs[key] = data
-                
-                # Run function
-                fold_result = func(**fold_kwargs)
-                
-                if fold_result is not None:
-                    # Get fold output for metric computation (only the reference output)
-                    if reference_output_key in fold_result:
-                        fold_output = fold_result[reference_output_key]
+            if fold_result is not None:
+                # Compute metrics if we have a reference and comparison output
+                if reference_array is not None and comp_output is not None:
+                    if comp_output in fold_result:
+                        fold_output = fold_result[comp_output]
                         
-                        # Compute metric: compare fold output against reference (same indices)
-                        fold_reference = reference_output[test_idx]
+                        # Get corresponding portion of reference
+                        # For input reference: index by test_idx
+                        # For output reference: also index by test_idx
+                        fold_reference = reference_array[test_idx]
                         
-                        # Metric: RMSE between fold and reference
-                        metric = float(np.sqrt(np.mean((fold_output - fold_reference) ** 2)))
-                        fold_metrics.append(metric)
-                    
-                    # Capture specified outputs
-                    for output_key in capture_keys:
-                        if output_key in fold_result:
-                            fold_outputs_dict[output_key].append(fold_result[output_key])
+                        # Compute requested metrics
+                        self._compute_fold_metrics(
+                            fold_output, fold_reference, fold_metrics, len(test_idx)
+                        )
+                
+                # Capture specified outputs
+                for output_key in capture_keys:
+                    if output_key in fold_result:
+                        fold_outputs_dict[output_key].append(fold_result[output_key])
             
-            # Build results for single-fit reference mode
-            aggregated = {}
-            
-            # Overall metric and per-fold metrics
-            if fold_metrics:
-                aggregated[f"{reference_output_key}_rmse"] = float(np.mean(fold_metrics))
-                aggregated[f"{reference_output_key}_rmse_per_fold"] = fold_metrics
-                aggregated[f"{reference_output_key}_rmse_std"] = float(np.std(fold_metrics))
-            
-            # Reconstruct full-size arrays from fold outputs
-            for output_key, fold_outputs_list in fold_outputs_dict.items():
-                if fold_outputs_list:
-                    reconstructed = self._reconstruct_from_folds(
-                        fold_outputs_list, n_samples, test_indices_list
-                    )
-                    
-                    # Handle both sample-based (full array) and non-sample-based (segregated dict) outputs
-                    if isinstance(reconstructed, dict):
-                        # Non-sample-based: segregated by fold
-                        # Wrap in FoldSegregatedOutput for index-based access
-                        fold_output_dict = {k.replace('fold_', f'fold_'): v 
-                                           for k, v in reconstructed.items()}
-                        aggregated[f"{output_key}_cv"] = FoldSegregatedOutput(fold_output_dict)
-                    else:
-                        # Sample-based: full reconstructed array
-                        aggregated[f"{output_key}_cv"] = reconstructed
-                    
-                    aggregated[f"{output_key}_single"] = reference_output if output_key == reference_output_key else single_fit_result.get(output_key)
-            
-            aggregated["n_folds"] = len(test_indices_list)
-            
-            self.results = aggregated
-            return aggregated
+            fold_count += 1
+
+        # Build aggregated results
+        aggregated = {}
         
-        # ==================== MODE 2: Traditional CV (no reference) ====================
-        else:
-            output_keys = self.config.output_metrics or []
-            if not output_keys:
-                raise ValueError("config.output_metrics must be specified")
-
-            fold_results = {key: [] for key in output_keys}
-            fold_outputs = {}
-            fold_count = 0
-
-            # Run across folds
-            for fold_idx, (train_idx, test_idx) in enumerate(self.splitter.get_splits(X, y)):
-                fold_kwargs = {"fold": fold_idx}
-
-                # Split each array-like input
-                for key, data in kwargs.items():
-                    if isinstance(data, np.ndarray):
-                        train_data, test_data = self._split_array_on_samples(data, train_idx, test_idx)
-                        fold_kwargs[f"{key}_train"] = train_data
-                        fold_kwargs[f"{key}_test"] = test_data
-                    elif isinstance(data, pd.DataFrame):
-                        fold_kwargs[f"{key}_train"] = data.iloc[train_idx]
-                        fold_kwargs[f"{key}_test"] = data.iloc[test_idx]
-                    else:
-                        fold_kwargs[key] = data
-
-                # Call function
-                fold_output = func(**fold_kwargs)
-
-                # Collect results
-                if fold_output is not None:
-                    # Collect metrics
-                    for key in output_keys:
-                        if key in fold_output:
-                            fold_results[key].append(fold_output[key])
-                    
-                    # Capture specified non-metric outputs per fold
-                    if self.config.capture_outputs:
-                        for output_key in self.config.capture_outputs:
-                            if output_key in fold_output:
-                                fold_outputs[f"{output_key}_fold_{fold_idx}"] = fold_output[output_key]
-
-                fold_count += 1
-
-            # Aggregate metrics
-            aggregated = {}
-            for key, values in fold_results.items():
-                if values:
-                    aggregated[f"{key}_folds"] = values
-                    aggregated[f"{key}_mean"] = float(np.mean(values))
-                    aggregated[f"{key}_std"] = float(np.std(values))
-                    aggregated[f"{key}_min"] = float(np.min(values))
-                    aggregated[f"{key}_max"] = float(np.max(values))
-
-            aggregated["n_folds"] = fold_count
+        # Aggregate metrics
+        for metric_name, values in fold_metrics.items():
+            if values:
+                aggregated[f"{metric_name}_folds"] = values
+                aggregated[f"{metric_name}_mean"] = float(np.mean(values))
+                aggregated[f"{metric_name}_std"] = float(np.std(values))
+                aggregated[f"{metric_name}_min"] = float(np.min(values))
+                aggregated[f"{metric_name}_max"] = float(np.max(values))
+        
+        # Reconstruct outputs from folds
+        for output_key, fold_outputs_list in fold_outputs_dict.items():
+            if fold_outputs_list:
+                reconstructed = self._reconstruct_from_folds(
+                    fold_outputs_list, n_samples, test_indices_list
+                )
+                
+                if isinstance(reconstructed, dict):
+                    # Non-sample-based: segregated by fold
+                    aggregated[f"{output_key}_cv"] = FoldSegregatedOutput(reconstructed)
+                else:
+                    # Sample-based: full reconstructed array
+                    aggregated[f"{output_key}_cv"] = reconstructed
+                
+                # Include single-fit output if available
+                if single_fit_result is not None and output_key in single_fit_result:
+                    aggregated[f"{output_key}_single"] = single_fit_result[output_key]
+        
+        # Include reference info
+        if reference_array is not None:
+            aggregated["reference"] = reference_array
+            aggregated["reference_source"] = "input" if ref_input else "output"
+        
+        aggregated["n_folds"] = fold_count
+        
+        self.results = aggregated
+        return aggregated
+    
+    def _compute_fold_metrics(
+        self, 
+        fold_output: np.ndarray, 
+        fold_reference: np.ndarray, 
+        fold_metrics: Dict[str, List[float]],
+        n_samples: int
+    ) -> None:
+        """Compute requested metrics for a fold, supporting vector and matrix outputs."""
+        fold_output = np.asarray(fold_output)
+        fold_reference = np.asarray(fold_reference)
+        
+        # Flatten for element-wise comparison (works for vectors and matrices)
+        diff = fold_output.flatten() - fold_reference.flatten()
+        
+        for metric_name in fold_metrics.keys():
+            metric_lower = metric_name.lower()
             
-            # Add captured outputs to results
-            aggregated.update(fold_outputs)
-
-            self.results = aggregated
-            return aggregated
+            if metric_lower == 'rmse':
+                value = float(np.sqrt(np.mean(diff ** 2)))
+            elif metric_lower == 'mse':
+                value = float(np.mean(diff ** 2))
+            elif metric_lower == 'mae':
+                value = float(np.mean(np.abs(diff)))
+            elif metric_lower == 'r2':
+                ss_res = np.sum(diff ** 2)
+                ss_tot = np.sum((fold_reference.flatten() - np.mean(fold_reference)) ** 2)
+                value = float(1.0 - ss_res / ss_tot) if ss_tot != 0 else np.nan
+            elif metric_lower == 'bias':
+                value = float(np.mean(diff))
+            elif metric_lower == 'sep':  # Standard Error of Prediction
+                bias = np.mean(diff)
+                value = float(np.sqrt(np.mean((diff - bias) ** 2)))
+            else:
+                # Unknown metric, skip
+                continue
+            
+            fold_metrics[metric_name].append(value)
 
 
 def cv_configuration(
@@ -748,6 +774,9 @@ def cv_configuration(
     test_size: Optional[float] = None,
     output_metrics: Optional[List[str]] = None,
     capture_outputs: Optional[List[str]] = None,
+    reference_input_key: Optional[str] = None,
+    reference_output_key: Optional[str] = None,
+    comparison_output_key: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Create a CV configuration object to be routed to modeling functions.
@@ -764,13 +793,43 @@ def cv_configuration(
                     If None, auto-calculated as n_samples // n_splits
         n_repeats: Number of repetitions for repeated_kfold strategy (default: 10)
         test_size: Test set proportion for shuffle_split strategy (default: 0.2 = 20%)
-        output_metrics: Which metrics to compute and aggregate (e.g., ['rmse', 'r2'])
-        capture_outputs: Which function outputs to capture per-fold for stability assessment
-                        (e.g., ['scores', 'loadings'] for PCA). Captured outputs appear
-                        in results as 'output_name_fold_0', 'output_name_fold_1', etc.
+        output_metrics: Which metrics to compute (e.g., ['rmse', 'r2', 'mae', 'bias', 'sep'])
+        capture_outputs: Which function outputs to capture per-fold
+                        (e.g., ['y_pred', 'scores']). Captured outputs appear
+                        in results as '{output_key}_cv' (reconstructed).
+        reference_input_key: Input key to use as ground truth reference (e.g., 'Y_cal').
+                            Each fold's output is compared against reference[test_idx].
+                            This is the standard CV use case.
+        reference_output_key: Output key from single fit to use as reference.
+                             Only used if reference_input_key is None.
+                             Useful for stability assessment.
+        comparison_output_key: Which function output to compare against the reference.
+                              Required when using reference_input_key or reference_output_key.
 
     Returns:
         dict with 'cv_config' key containing CVConfig object
+        
+    Example - Standard CV (predictions vs actual Y):
+        cv_config = cv_configuration(
+            use_cv=True,
+            cv_strategy='kfold',
+            n_splits=5,
+            output_metrics=['rmse', 'r2'],
+            reference_input_key='Y_cal',      # Compare against actual Y
+            comparison_output_key='y_pred',   # The model's predictions
+            capture_outputs=['y_pred']
+        )
+        
+    Example - Stability assessment (PCA scores vs single fit):
+        cv_config = cv_configuration(
+            use_cv=True,
+            cv_strategy='kfold',
+            n_splits=5,
+            output_metrics=['rmse'],
+            reference_output_key='scores',    # Single-fit scores as reference
+            comparison_output_key='scores',   # Fold scores to compare
+            capture_outputs=['scores', 'loadings']
+        )
     """
     config = CVConfig(
         use_cv=use_cv,
@@ -783,6 +842,9 @@ def cv_configuration(
         test_size=test_size,
         output_metrics=output_metrics or ["rmse", "r2"],
         capture_outputs=capture_outputs or [],
+        reference_input_key=reference_input_key,
+        reference_output_key=reference_output_key,
+        comparison_output_key=comparison_output_key,
     )
 
     return {"cv_config": config}
