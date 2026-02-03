@@ -1,21 +1,24 @@
 {
   "return_specs": {
+    "cv_configuration": ["cv_config"],
     "load_data": ["X_cal", "Y_cal", "axis_t_info", "smp_cal", "axis_n_info", "dim_labels"],
     "validation_data_main": ["X_cal", "Y_cal", "X_val", "Y_val", "smp_cal", "smp_val"],
     "baseline_correction": ["X_cal", "X_val"],
     "smoothing": ["X_cal", "X_val"],
     "center_and_normalize": ["X_cal", "X_val"],
-    "univariate_calibration": ["y_cal_pred", "y_val_pred", "models", "metrics"]
+    "univariate_calibration": ["y_cal_pred", "y_val_pred", "models", "metrics", "cv_results"]
   },
   "input_specs": {
+    "cv_configuration": ["use_cv", "cv_strategy", "n_splits", "random_state", "shuffle", "window_size", "n_repeats", "test_size", "output_metrics"],
     "load_data": ["d_specs_separator", "d_specs_headlines", "d_specs_type", "d_specs_dimensions", "data_path", "nway_flag", "y_path", "var_path", "smp_path", "transpose", "axis_info", "reshape_order", "multi_file_per_sample", "num_samples", "dim_labels", "scale_type"],
     "validation_data_main": ["X_cal", "Y_cal", "smp_cal", "validation_mode", "createVal", "creationMethod", "calProportion", "selection_file", "X_val_path", "Y_val_path", "val_labels_path", "d_specs_separator", "d_specs_headlines", "d_specs_type", "d_specs_dimensions", "data_path", "y_path", "var_path", "smp_path", "transpose", "nway_flag", "reshape_order"],
     "baseline_correction": ["X_cal", "method", "X_val", "nway_flag", "direction", "window_size"],
     "smoothing": ["X_cal", "method", "X_val", "nway_flag", "direction", "window_size", "polyorder"],
     "center_and_normalize": ["X_cal", "X_val", "center", "normalize", "nway_flag", "direction"],
-    "univariate_calibration": ["X_cal", "Y_cal", "X_val", "Y_val", "degree", "intercept"]
+    "univariate_calibration": ["X_cal", "Y_cal", "X_val", "Y_val", "degree", "intercept", "cv_config"]
   },
   "import_map": {
+    "cv_configuration": ["chemometrics.cv_pipeline", "cv_configuration"],
     "load_data": ["chemometrics.data_input", "load_data"],
     "validation_data_main": ["chemometrics.validation_data_input", "validation_data_main"],
     "baseline_correction": ["chemometrics.data_processing", "baseline_correction"],
@@ -24,6 +27,9 @@
     "univariate_calibration": ["chemometrics.univ_calibration", "univariate_calibration"]
   },
   "gui_listing": {
+    "cv_configuration": {
+      "config_path": "gui_configs/cv_configuration_config.json"
+    },
     "load_data": {
       "config_path": "gui_configs/load_data_config.json"
     },
@@ -44,6 +50,17 @@
     }
   },
   "parameter_types": {
+    "cv_configuration": {
+      "use_cv": "bool",
+      "cv_strategy": "str",
+      "n_splits": "int",
+      "random_state": "int",
+      "shuffle": "bool",
+      "window_size": "int",
+      "n_repeats": "int",
+      "test_size": "float",
+      "output_metrics": "list"
+    },
     "load_data": {
       "d_specs_separator": "str",
       "d_specs_headlines": "int",
@@ -115,7 +132,8 @@
       "X_val": "ndarray",
       "Y_val": "ndarray",
       "degree": "int",
-      "intercept": "bool"
+      "intercept": "bool",
+      "cv_config": "CVConfig"
     }
   }
 }

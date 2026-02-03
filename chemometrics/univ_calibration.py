@@ -4,6 +4,13 @@ from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression
 from scipy import stats
 
+# Import CV pipeline
+try:
+    from chemometrics.cv_pipeline import CVPipeline, CVConfig
+    HAS_CV = True
+except ImportError:
+    HAS_CV = False
+
 
 def _ensure_2d_matrix(X: np.ndarray) -> np.ndarray:
     X = np.asarray(X)
@@ -94,7 +101,11 @@ def univariate_calibration(
     Y_val: Optional[np.ndarray] = None,
     degree: int = 1,
     intercept: bool = True,
-) -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+    cv_config: Optional[Any] = None,
+    fold: int = 0,
+    reference_output_key: Optional[str] = None,
+    capture_output_keys: Optional[List[str]] = None,
+) -> Dict[str, Any]:
     """Build univariate polynomial calibration models for all column combinations.
 
     Args:
@@ -104,14 +115,113 @@ def univariate_calibration(
         Y_val: optional validation Y (samples x responses)
         degree: polynomial degree (required)
         intercept: whether to fit an intercept (set False to force zero intercept)
+        cv_config: optional CVConfig object from cv_configuration() function.
+                   If provided and use_cv=True, runs cross-validation.
+                   Otherwise runs single fit.
+        fold: fold index (passed by CVPipeline, not user-set)
+        reference_output_key: (NEW) Which output to use as reference for single-fit comparison
+                              e.g., 'y_cal_pred' to use calibration predictions as reference
+        capture_output_keys: (NEW) Which outputs to capture per fold
+                             e.g., ['y_cal_pred', 'metrics'] 
 
     Returns:
-        Tuple of (y_cal_pred, y_val_pred, models, metrics) where:
+        Dict with keys:
         - y_cal_pred: dict mapping model_key -> calibration predicted values
         - y_val_pred: dict mapping model_key -> validation predicted values (or None)
         - models: dict with full model details (coefficients, stats, residuals, etc.)
         - metrics: dict aggregating RMSEC, RMSEV, R2 for each model
+        - cv_results: (optional, if CV enabled) aggregated CV metrics across folds
+        
+    Example - Single-fit reference mode:
+        results = univariate_calibration(
+            X_cal, Y_cal,
+            cv_config=my_config,
+            reference_output_key='y_cal_pred',
+            capture_output_keys=['y_cal_pred', 'metrics']
+        )
+        # Results now include per-fold comparisons to single fit
     """
+    # Handle CV routing
+    if cv_config is not None and HAS_CV and cv_config.is_enabled():
+        # If this is the initial call (fold=0 and not from pipeline), run CV
+        if fold == 0 and not _is_cv_fold_call():
+            pipeline = CVPipeline(cv_config)
+            
+            # Set up output_metrics for CV: we want to capture RMSE across models
+            config_with_metrics = cv_config
+            if not config_with_metrics.output_metrics:
+                config_with_metrics.output_metrics = ['rmse']
+            if not config_with_metrics.capture_outputs:
+                config_with_metrics.capture_outputs = ['y_cal_pred', 'metrics']
+            
+            # Update pipeline config
+            pipeline.config = config_with_metrics
+            
+            # For univariate calibration, we don't use single-fit reference mode
+            # because y_cal_pred is a dict of predictions per model, not a single array.
+            # Instead, we use traditional CV mode which aggregates metrics per fold.
+            cv_results = pipeline.run(
+                _univariate_calibration_single_fit,
+                X_cal=X_cal,
+                Y_cal=Y_cal,
+                X_val=X_val,
+                Y_val=Y_val,
+                degree=degree,
+                intercept=intercept,
+            )
+            
+            # Also compute single fit on full data
+            single_results = _univariate_calibration_single_fit(
+                X_cal, Y_cal, X_val, Y_val, degree, intercept, fold=-1
+            )
+            return {
+                **single_results,
+                'cv_results': cv_results,
+            }
+    
+    # Single fit (no CV or CV disabled)
+    return _univariate_calibration_single_fit(
+        X_cal, Y_cal, X_val, Y_val, degree, intercept, fold=fold
+    )
+
+
+def _is_cv_fold_call() -> bool:
+    """Check if we're being called from CVPipeline (hacky but works)."""
+    import inspect
+    stack = inspect.stack()
+    for frame_info in stack:
+        if 'CVPipeline' in str(frame_info.filename) or 'cv_pipeline' in str(frame_info.filename):
+            return True
+    return False
+
+
+def _univariate_calibration_single_fit(
+    X_cal: Optional[np.ndarray] = None,
+    Y_cal: Optional[np.ndarray] = None,
+    X_val: Optional[np.ndarray] = None,
+    Y_val: Optional[np.ndarray] = None,
+    degree: int = 1,
+    intercept: bool = True,
+    fold: int = 0,
+    reference_output_key: Optional[str] = None,
+    capture_output_keys: Optional[List[str]] = None,
+    **kwargs
+) -> Dict[str, Any]:
+    """Internal: single fit (used both standalone and by CVPipeline).
+    
+    Accepts both direct format (X_cal, Y_cal) and split format (X_cal_train, X_cal_test)
+    for CVPipeline compatibility.
+    """
+    # Handle CVPipeline split format: X_cal_train/X_cal_test, Y_cal_train/Y_cal_test
+    if X_cal is None and 'X_cal_train' in kwargs:
+        X_cal = kwargs['X_cal_train']
+    if Y_cal is None and 'Y_cal_train' in kwargs:
+        Y_cal = kwargs['Y_cal_train']
+    if X_val is None and 'X_val_train' in kwargs:
+        X_val = kwargs['X_val_train']
+    if Y_val is None and 'Y_val_train' in kwargs:
+        Y_val = kwargs['Y_val_train']
+    
     Xc = _ensure_2d_matrix(X_cal)
     Yc = _ensure_2d_matrix(Y_cal)
 
@@ -248,4 +358,9 @@ def univariate_calibration(
                 'metrics_val': metrics_val,
             }
 
-    return y_cal_pred, y_val_pred, results['models'], metrics
+    return {
+        'y_cal_pred': y_cal_pred,
+        'y_val_pred': y_val_pred,
+        'models': results['models'],
+        'metrics': metrics,
+    }

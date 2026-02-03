@@ -8,13 +8,17 @@
     "d_specs_type": "Data Type",
     "d_specs_dimensions": "Data Dimensions",
     "data_path": "X Data Files",
-    "nway_flag": "Data Dimensionality",
+    "nway_flag": "Data Order",
+    "multi_file_per_sample": "Multiple files per sample",
+    "num_samples": "Number of Samples",
     "y_path": "Y Data File",
     "var_path": "Axis Labels Files",
     "smp_path": "Sample Labels",
-    "transpose": "Transpose",
     "dim_labels": "Dimension Names",
-    "scale_type": "Scale Type"
+    "scale_type": "Scale Type",
+    "transpose": "Transpose",
+    "reshape_order": "Reshape Order",
+    "axis_info": "Axis Generation Info"
   },
   "output_aliases": {
     "X_cal": "X Data",
@@ -22,12 +26,12 @@
     "axis_t_info": "Axis Text Labels",
     "smp_cal": "Sample Labels",
     "axis_n_info": "Axis Vectors",
-    "dim_labels": "Dimension Labels"
+    "dim_labels": "Axis Titles"
   },
   "short_description": "Loads spectroscopic and response data from files",
   "long_description": "This step loads your calibration dataset including spectroscopic data (X), response variables (Y), and optional metadata.\n\nInput Data Components:\n- X Data (Spectra): Main spectroscopic measurements (required)\n- Y Data (Responses): Target/dependent variables (optional)\n- Variable Labels: Wavelengths, frequencies, or variable names (optional)\n- Sample Labels: Sample IDs or identifiers (optional)\n\nData Formats:\n- CSV files with configurable delimiters (comma, tabs, spaces)\n- Matrix format: samples (rows) x variables (columns)\n- Vector formats for specialized data types\n- Support for multiple files via file selection\n\nConfiguration:\n- Specify delimiter type for your files\n- Set number of header rows to skip\n- Choose appropriate data type structure\n- Transpose if needed (samples in columns instead of rows)\n\nThe loaded data becomes input for preprocessing and validation steps.",
   "setup": {
-    "categories": ["File Format", "Data Configuration", "Data Files", "Optional Data", "Multiway Configuration"],
+    "categories": ["Data Dimensionality","Data Files","File Format", "Axis Configuration","Additional Options"],
     "layout": [
       {
         "name": "d_specs_separator",
@@ -67,7 +71,7 @@
       {
         "name": "d_specs_dimensions",
         "label": "Data Dimensions",
-        "category": "Multiway Configuration",
+        "category": "File Format",
         "widget": "entry_list",
         "count_source": "nway_flag",
         "default": "",
@@ -89,7 +93,7 @@
       {
         "name": "nway_flag",
         "label": "Data Order",
-        "category": "Data Configuration",
+        "category": "Data Dimensionality",
         "widget": "entry",
         "type": "int",
         "default": "1",
@@ -122,7 +126,7 @@
       },
       {
         "name": "y_path",
-        "label": "Y Data File (Optional)",
+        "label": "Y Data File",
         "category": "Data Files",
         "widget": "file_selector",
         "multiple": false,
@@ -133,8 +137,8 @@
       },
       {
         "name": "var_path",
-        "label": "Axis Labels Files (Optional)",
-        "category": "Optional Data",
+        "label": "Axis Labels Files",
+        "category": "Axis Configuration",
         "widget": "file_selector_list",
         "count_source": "nway_flag",
         "required": false,
@@ -144,8 +148,8 @@
       },
       {
         "name": "smp_path",
-        "label": "Sample Labels (Optional)",
-        "category": "Optional Data",
+        "label": "Sample Labels",
+        "category": "Data Files",
         "widget": "file_selector",
         "multiple": false,
         "required": false,
@@ -155,8 +159,8 @@
       },
       {
         "name": "dim_labels",
-        "label": "Dimension Names (Optional)",
-        "category": "Multiway Configuration",
+        "label": "Axis Titles",
+        "category": "Axis Configuration",
         "widget": "entry_list",
         "count_source": "nway_flag",
         "default": "",
@@ -167,7 +171,7 @@
       {
         "name": "scale_type",
         "label": "Scale Type",
-        "category": "Multiway Configuration",
+        "category": "Axis Configuration",
         "widget": "combobox_list",
         "count_source": "nway_flag",
         "values": ["Linear", "Log10", "Log2", "Ln"],
@@ -179,7 +183,7 @@
       {
         "name": "transpose",
         "label": "Transpose Data",
-        "category": "Data Configuration",
+        "category": "Additional Options",
         "widget": "checkbutton",
         "default": false,
         "required": false,
@@ -188,8 +192,8 @@
       },
       {
         "name": "reshape_order",
-        "label": "Reshape Order (Multiway)",
-        "category": "Multiway Configuration",
+        "label": "Reshape Order",
+        "category": "Additional Options",
         "widget": "combobox",
         "values": ["F", "C"],
         "value_aliases": ["Fortran/MATLAB", "C/NumPy"],
@@ -200,8 +204,8 @@
       },
       {
         "name": "axis_info",
-        "label": "Axis Information (Optional)",
-        "category": "Optional Data",
+        "label": "Axis Generation Info",
+        "category": "Axis Configuration",
         "widget": "entry_list",
         "count_source": "nway_flag",
         "default": "",
@@ -300,7 +304,7 @@
               "z_axis": {"data_source": "X_cal", "label": "Intensity"},
               "title": "Spectral Data 3D Surface",
               "cmap": "jet",
-              "use_wireframeccc": true,
+              "use_wireframe": true,
               "dimension_labels": "dim_labels",
               "variable_labels": "axis_t_info",
               "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}]
