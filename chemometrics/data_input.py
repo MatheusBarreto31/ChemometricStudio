@@ -37,12 +37,7 @@ def _load_file(path: str, separator: Optional[str], num_headlines: int) -> np.nd
             # Convert to numeric, replacing any remaining non-numeric values
             df = df.apply(pd.to_numeric, errors='coerce')
             
-            # Check for NaN values (from conversion errors or empty cells)
-            if df.isna().any().any():
-                # Drop columns or rows with NaN if appropriate, or fill with 0
-                # For now, replace NaN with 0
-                df = df.fillna(0)
-            
+            # Keep NaN values as-is for later handling by preprocessing functions
             return df.values
         except Exception as e:
             # Fallback to numpy loadtxt
