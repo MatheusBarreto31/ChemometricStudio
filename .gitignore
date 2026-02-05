@@ -129,6 +129,7 @@ Chemometric_Studio.egg-info/
 
 # Generated documentation and notes
 Generated Notes/
+Documentation/
 COMPLETION_SUMMARY.md
 DELIVERABLES_MANIFEST.md
 IMPLEMENTATION_CHECKLIST.md
@@ -155,4 +156,5 @@ model.json
 model_log.txt
 
 # Test folder
-tests/
+tests/Documentation/
+Documentation/
