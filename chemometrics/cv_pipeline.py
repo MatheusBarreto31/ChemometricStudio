@@ -630,10 +630,20 @@ class CVPipeline:
                     single_fit_kwargs[key] = data
             
             single_fit_result = func(**single_fit_kwargs)
-            if ref_output not in single_fit_result:
-                raise ValueError(f"reference_output_key '{ref_output}' not found in function output. "
-                               f"Available: {list(single_fit_result.keys())}")
-            reference_array = single_fit_result[ref_output]
+            # Normalize single_fit_result to dict format (handle both dict and tuple returns)
+            if isinstance(single_fit_result, dict):
+                single_fit_result_dict = single_fit_result
+            elif isinstance(single_fit_result, (tuple, list)):
+                single_fit_result_dict = {}
+            else:
+                single_fit_result_dict = {}
+                
+            if ref_output is not None:
+                if isinstance(single_fit_result_dict, dict) and ref_output not in single_fit_result_dict:
+                    raise ValueError(f"reference_output_key '{ref_output}' not found in function output. "
+                                   f"Available: {list(single_fit_result_dict.keys())}")
+                if isinstance(single_fit_result_dict, dict):
+                    reference_array = single_fit_result_dict[ref_output]
 
         # Initialize storage
         fold_metrics = {metric: [] for metric in self.config.output_metrics}
@@ -662,10 +672,22 @@ class CVPipeline:
             fold_result = func(**fold_kwargs)
             
             if fold_result is not None:
+                # Normalize fold_result to dict format
+                # (handle both dict and tuple returns)
+                if isinstance(fold_result, dict):
+                    fold_result_dict = fold_result
+                elif isinstance(fold_result, (tuple, list)):
+                    # Tuple/list result - only process if we have specific capture keys
+                    # Otherwise skip (tuples from analyst-style functions)
+                    fold_result_dict = {}
+                else:
+                    # Single value result
+                    fold_result_dict = {}
+                
                 # Compute metrics if we have a reference and comparison output
                 if reference_array is not None and comp_output is not None:
-                    if comp_output in fold_result:
-                        fold_output = fold_result[comp_output]
+                    if isinstance(fold_result_dict, dict) and comp_output in fold_result_dict:
+                        fold_output = fold_result_dict[comp_output]
                         
                         # Get corresponding portion of reference
                         # For input reference: index by test_idx
@@ -679,8 +701,8 @@ class CVPipeline:
                 
                 # Capture specified outputs
                 for output_key in capture_keys:
-                    if output_key in fold_result:
-                        fold_outputs_dict[output_key].append(fold_result[output_key])
+                    if isinstance(fold_result_dict, dict) and output_key in fold_result_dict:
+                        fold_outputs_dict[output_key].append(fold_result_dict[output_key])
             
             fold_count += 1
 
@@ -711,8 +733,9 @@ class CVPipeline:
                     aggregated[f"{output_key}_cv"] = reconstructed
                 
                 # Include single-fit output if available
-                if single_fit_result is not None and output_key in single_fit_result:
-                    aggregated[f"{output_key}_single"] = single_fit_result[output_key]
+                if single_fit_result is not None:
+                    if isinstance(single_fit_result, dict) and output_key in single_fit_result:
+                        aggregated[f"{output_key}_single"] = single_fit_result[output_key]
         
         # Include reference info
         if reference_array is not None:
@@ -731,36 +754,78 @@ class CVPipeline:
         fold_metrics: Dict[str, List[float]],
         n_samples: int
     ) -> None:
-        """Compute requested metrics for a fold, supporting vector and matrix outputs."""
+        """Compute requested metrics for a fold, supporting vector and matrix outputs.
+        
+        For matrix data (2D), returns a vector with one metric value per column.
+        For vector data, computes metrics on the entire array.
+        """
         fold_output = np.asarray(fold_output)
         fold_reference = np.asarray(fold_reference)
         
-        # Flatten for element-wise comparison (works for vectors and matrices)
-        diff = fold_output.flatten() - fold_reference.flatten()
+        # Check if data is 2D (matrix) or 1D (vector)
+        is_matrix = fold_output.ndim == 2
         
-        for metric_name in fold_metrics.keys():
-            metric_lower = metric_name.lower()
+        if is_matrix:
+            # Compute metrics per column and return as vector
+            n_cols = fold_output.shape[1]
+            col_metrics = {metric_name: [] for metric_name in fold_metrics.keys()}
             
-            if metric_lower == 'rmse':
-                value = float(np.sqrt(np.mean(diff ** 2)))
-            elif metric_lower == 'mse':
-                value = float(np.mean(diff ** 2))
-            elif metric_lower == 'mae':
-                value = float(np.mean(np.abs(diff)))
-            elif metric_lower == 'r2':
-                ss_res = np.sum(diff ** 2)
-                ss_tot = np.sum((fold_reference.flatten() - np.mean(fold_reference)) ** 2)
-                value = float(1.0 - ss_res / ss_tot) if ss_tot != 0 else np.nan
-            elif metric_lower == 'bias':
-                value = float(np.mean(diff))
-            elif metric_lower == 'sep':  # Standard Error of Prediction
-                bias = np.mean(diff)
-                value = float(np.sqrt(np.mean((diff - bias) ** 2)))
-            else:
-                # Unknown metric, skip
-                continue
+            for col in range(n_cols):
+                diff = fold_output[:, col] - fold_reference[:, col]
+                
+                for metric_name in fold_metrics.keys():
+                    metric_lower = metric_name.lower()
+                    
+                    if metric_lower == 'rmse':
+                        value = float(np.sqrt(np.mean(diff ** 2)))
+                    elif metric_lower == 'mse':
+                        value = float(np.mean(diff ** 2))
+                    elif metric_lower == 'mae':
+                        value = float(np.mean(np.abs(diff)))
+                    elif metric_lower == 'r2':
+                        ss_res = np.sum(diff ** 2)
+                        ss_tot = np.sum((fold_reference[:, col] - np.mean(fold_reference[:, col])) ** 2)
+                        value = float(1.0 - ss_res / ss_tot) if ss_tot != 0 else np.nan
+                    elif metric_lower == 'bias':
+                        value = float(np.mean(diff))
+                    elif metric_lower == 'sep':  # Standard Error of Prediction
+                        bias = np.mean(diff)
+                        value = float(np.sqrt(np.mean((diff - bias) ** 2)))
+                    else:
+                        continue
+                    
+                    col_metrics[metric_name].append(value)
             
-            fold_metrics[metric_name].append(value)
+            # Store as vectors (one value per column)
+            for metric_name in fold_metrics.keys():
+                fold_metrics[metric_name].append(np.array(col_metrics[metric_name]))
+        else:
+            # Vector data: compute metrics on entire array
+            diff = fold_output.flatten() - fold_reference.flatten()
+            
+            for metric_name in fold_metrics.keys():
+                metric_lower = metric_name.lower()
+                
+                if metric_lower == 'rmse':
+                    value = float(np.sqrt(np.mean(diff ** 2)))
+                elif metric_lower == 'mse':
+                    value = float(np.mean(diff ** 2))
+                elif metric_lower == 'mae':
+                    value = float(np.mean(np.abs(diff)))
+                elif metric_lower == 'r2':
+                    ss_res = np.sum(diff ** 2)
+                    ss_tot = np.sum((fold_reference.flatten() - np.mean(fold_reference)) ** 2)
+                    value = float(1.0 - ss_res / ss_tot) if ss_tot != 0 else np.nan
+                elif metric_lower == 'bias':
+                    value = float(np.mean(diff))
+                elif metric_lower == 'sep':  # Standard Error of Prediction
+                    bias = np.mean(diff)
+                    value = float(np.sqrt(np.mean((diff - bias) ** 2)))
+                else:
+                    # Unknown metric, skip
+                    continue
+                
+                fold_metrics[metric_name].append(value)
 
 
 def cv_configuration(

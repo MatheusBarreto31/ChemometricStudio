@@ -1,0 +1,208 @@
+{
+  "display_name": "PCA Analysis",
+  "category": "Dimensionality Reduction",
+  "data_type": "firstorder",
+  "input_aliases": {
+    "X_cal": "X Calibration",
+    "X_val": "X Validation",
+    "n_components": "Number of Components",
+    "cv_config": "CV Configuration",
+    "axis_n_info": "Variable Labels",
+    "class_data_cal": "Calibration Classes",
+    "class_data_val": "Validation Classes"
+  },
+  "output_aliases": {
+    "model_scores": "Model Scores",
+    "model_loadings": "Model Loadings",
+    "val_scores": "Validation Scores",
+    "model_scores_cv": "CV Scores",
+    "model_loadings_cv": "CV Loadings",
+    "metrics": "Metrics",
+    "cv_results": "CV Results",
+    "data_shape": "Original Data Shape",
+    "data_shape_val": "Validation Data Shape",
+    "class_data_cal": "Calibration Classes",
+    "class_data_val": "Validation Classes"
+  },
+  "short_description": "Principal Component Analysis for dimensionality reduction (supports multiway data via U-PCA)",
+  "long_description": "Performs Principal Component Analysis (PCA) to reduce data dimensionality while retaining maximum variance. Supports both univariate (2D) and multiway (3D+) data using U-PCA (Unfolded-PCA). PCA transforms correlated variables into a set of uncorrelated principal components.\n\nHow It Works:\n- Calibration data (X_cal) is used to compute principal components\n- Components are ordered by variance explained (highest first)\n- Loadings show how original variables contribute to each component\n- Scores are the transformed data in the new component space\n- Validation data (X_val) is projected using the same loadings\n\nMultiway Data (U-PCA):\n- For 3D+ data: keeps sample dimension (axis 0) intact\n- Unfolds all other dimensions into single variable dimension\n- Example: (100 samples, 50x10 variables) -> treated as (100, 500)\n- Returns 'data_shape' field for reference: (100, 50, 10)\n- Loadings in unfolded space: (500, n_components)\n- Allows PCA on spectroscopic imaging or multi-sensor data\n\nKey Concepts:\n\n1. Principal Components\n   - Orthogonal (uncorrelated) directions of maximum variance\n   - First component captures most variance, second next most, etc.\n   - Ordered by importance\n\n2. Loadings\n   - Weights showing contribution of original variables to each component\n   - Reveal which variables drive each component\n   - Shape: (n_variables x n_components) or (unfolded_vars x n_components) for multiway\n\n3. Scores\n   - Data projected onto principal components\n   - New representation of samples in component space\n   - Shape: (n_samples x n_components)\n\n4. Variance Explained\n   - Percentage of total variance captured by each component\n   - Helps decide how many components to retain\n   - Cumulative variance shows total explained by selected components\n\n5. Reconstruction Error\n   - RMSE when reconstructing original data from scores and loadings\n   - Indicates information loss from dimensionality reduction\n   - Lower values mean better reconstruction\n\nNumber of Components:\n- Start with 2-3 for initial exploration\n- Use scree plot to identify \"elbow\" point\n- Consider cumulative variance explained (typically 80-95%)\n- More components = better reconstruction but less dimensionality reduction\n- Fewer components = more reduction but more information loss\n\nCross-Validation Mode:\n- With CV enabled: calculates per-fold components and scores\n- Useful for assessing model stability\n- Helps select optimal number of components\n- Without CV: Single fit on full calibration data\n\nAdvantages:\n- Unsupervised (doesn't require response variable)\n- Interpretable through loadings and score plots\n- Removes collinearity among variables\n- Can preprocess data for downstream modeling\n- Useful for data visualization (2-3 components)\n- Computationally efficient\n- Works with multiway data (U-PCA)\n\nLimitations:\n- Components are linear combinations (nonlinear PCA available separately)\n- May not find components relevant to prediction task\n- Sensitive to data scaling (consider centering/normalization)\n- Interpretation requires domain knowledge\n- May require many components for complex data\n\nUse When:\n- Exploring data structure and relationships\n- Reducing computational load for downstream models\n- Addressing multicollinearity issues\n- Visualizing high-dimensional data\n- Preprocessing for other models (PCR, PLS)\n- Identifying key variables (via loadings)\n- Analyzing spectroscopic imaging data (multiway via U-PCA)\n\nNext Steps:\n- Use scores as input to regression models (PCR)\n- Plot scores to visualize samples\n- Analyze loadings to identify important variables\n- Compare with PLS for supervised dimensionality reduction\n- For multiway: reshape loadings back to original variable structure\n\nTip: Center and normalize data before PCA to ensure all variables contribute fairly to components.",
+  "setup": {
+    "categories": ["Model Parameters", "Data Inputs", "Cross-Validation"],
+    "layout": [
+      {
+        "name": "n_components",
+        "label": "Number of Principal Components",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "2",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Number of principal components to retain (typically 2-10)"
+      },
+      {
+        "name": "cv_config",
+        "label": "CV Configuration",
+        "category": "Cross-Validation",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed from CV Configuration function; leave empty for single fit"
+      },
+      {
+        "name": "X_cal",
+        "label": "X Calibration Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": true,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed from previous function output"
+      },
+      {
+        "name": "X_val",
+        "label": "X Validation Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed from previous function output (optional)"      },
+      {
+        "name": "axis_n_info",
+        "label": "Variable Labels",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed from load_data output for loadings plot labels"
+      },
+      {
+        "name": "class_data_cal",
+        "label": "Calibration Class Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed from validation_data_main output for class coloring on plots"
+      },
+      {
+        "name": "class_data_val",
+        "label": "Validation Class Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed from validation_data_main output for class coloring on plots"
+      }
+    ]
+  },
+  "analysis": {
+    "pages": [
+      {
+        "title": "Score Plots",
+        "layout": "fd",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "x_axis": {"data_source": "model_scores", "axis_labels": "pc_labels"},
+              "y_axis": {"data_source": "model_scores", "axis_labels": "pc_labels"},
+              "class_labels": "class_data_cal",
+              "title": "Calibration Scores",
+              "data_slicing": [
+                {"name": "PC-X", "dimension": 1, "axis": "x", "show_navigation_menu": true},
+                {"name": "PC-Y", "dimension": 1, "axis": "y", "show_navigation_menu": true}
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "x_axis": {"data_source": "val_scores", "axis_labels": "pc_labels"},
+              "y_axis": {"data_source": "val_scores", "axis_labels": "pc_labels"},
+              "class_labels": "class_data_val",
+              "title": "Validation Scores",
+              "condition": {"parameter": "val_scores", "operator": "not_none"},
+              "data_slicing": [
+                {"name": "PC-X", "dimension": 1, "axis": "x", "show_navigation_menu": true},
+                {"name": "PC-Y", "dimension": 1, "axis": "y", "show_navigation_menu": true}
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {"data_source": "metrics", "nested_key": "pct_variance_explained", "label": "Component"},
+              "y_axis": {"data_source": "metrics", "nested_key": "pct_variance_explained", "label": "Variance Explained (%)"},
+              "title": "Explained Variance by Component",
+              "line_style": "lines+markers"
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {"data_source": "axis_n_info", "index":1, "label": "Variable"},
+              "y_axis": {"data_source": "model_loadings", "axis_labels": "pc_labels"},
+              "title": "PCA Loadings",
+              "data_slicing": [
+                {"name": "PC", "dimension": 1, "axis": "y", "show_navigation_menu": true}
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Multi-Dataset Comparison",
+        "layout": "ns",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Calibration vs CV vs Validation Scores (Overlapped)",
+              "datasets": [
+                {
+                  "x_axis": {"data_source": "model_scores"},
+                  "y_axis": {"data_source": "model_scores"},
+                  "class_labels": "class_data_cal",
+                  "label": "Calibration",
+                  "marker": "o",
+                  "color": "#1f77b4"
+                },
+                {
+                  "x_axis": {"data_source": "model_scores_cv"},
+                  "y_axis": {"data_source": "model_scores_cv"},
+                  "class_labels": "class_data_cal",
+                  "label": "CV Calibration",
+                  "marker": "s",
+                  "color": "#ff7f0e"
+                },
+                {
+                  "x_axis": {"data_source": "val_scores"},
+                  "y_axis": {"data_source": "val_scores"},
+                  "class_labels": "class_data_val",
+                  "label": "Validation",
+                  "marker": "^",
+                  "color": "#2ca02c"
+                }
+              ],
+              "data_slicing": [
+                {"name": "PC-X", "dimension": 1, "axis": "x", "show_navigation_menu": true},
+                {"name": "PC-Y", "dimension": 1, "axis": "y", "show_navigation_menu": true}
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

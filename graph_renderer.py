@@ -6,17 +6,20 @@ including support for multiple graph types (scatter, line, bar, histogram, heatm
 3D surface, contour) and data slicing/navigation.
 """
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List, Dict, Any
 import numpy as np
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib import cm
 import tkinter as tk
 from tkinter import ttk
 
 
 def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarray],
                        y_data: Optional[np.ndarray], z_data: Optional[np.ndarray],
-                       x_axis_config: dict, y_axis_config: dict, default_cmap: str = 'viridis') -> Tuple[Figure, any]:
+                       x_axis_config: dict, y_axis_config: dict, default_cmap: str = 'viridis',
+                       datasets: Optional[List[Dict[str, Any]]] = None, 
+                       qualitative_cmap: str = 'tab10') -> Tuple[Figure, any]:
     """Create and render a matplotlib figure for the specified graph type.
     
     Args:
@@ -28,6 +31,8 @@ def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarr
         x_axis_config: Configuration for x-axis
         y_axis_config: Configuration for y-axis
         default_cmap: Default colormap to use (can be overridden by config['cmap'])
+        datasets: Optional list of dataset dicts for multi-dataset scatter plots
+        qualitative_cmap: Qualitative colormap for class-based coloring
     
     Returns:
         Tuple of (Figure, axes) - the matplotlib figure and axes
@@ -56,7 +61,7 @@ def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarr
     
     # Render based on graph type
     if graph_type == 'scatter':
-        _render_scatter(ax, x_data, y_data, z_data, config, use_3d)
+        _render_scatter(ax, x_data, y_data, z_data, config, use_3d, datasets, qualitative_cmap)
     elif graph_type == 'line':
         _render_line(ax, x_data, y_data, config)
     elif graph_type == 'bar':
@@ -82,9 +87,21 @@ def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarr
 
 
 def _render_scatter(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],
-                   z_data: Optional[np.ndarray], config: dict, use_3d: bool) -> None:
-    """Render a scatter plot (2D or 3D)."""
-    if x_data is not None and y_data is not None:
+                   z_data: Optional[np.ndarray], config: dict, use_3d: bool,
+                   datasets: Optional[List[Dict[str, Any]]] = None,
+                   qualitative_cmap: str = 'tab10') -> None:
+    """Render a scatter plot (2D or 3D), supporting single or multiple datasets with class coloring.
+    
+    For multiple datasets with class information:
+    - Each dataset uses a unique marker type
+    - Each class within a dataset uses a unique color from the qualitative colormap
+    - Legend shows dataset-class combinations
+    """
+    # If datasets provided, use multi-dataset rendering with class support
+    if datasets and len(datasets) > 0:
+        _render_scatter_multi_dataset(ax, datasets, config, use_3d, qualitative_cmap)
+    # Otherwise use traditional single dataset rendering
+    elif x_data is not None and y_data is not None:
         if use_3d:
             # 3D scatter
             ax.scatter(x_data, y_data, z_data, alpha=0.6)
@@ -96,6 +113,125 @@ def _render_scatter(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarra
             ax.scatter(x_data, y_data, alpha=0.6)
             ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
             ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+
+
+def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: dict, 
+                                 use_3d: bool, qualitative_cmap: str) -> None:
+    """Render multiple datasets on the same scatter plot with class-based coloring.
+    
+    Each dataset uses a unique marker. Classes within datasets use colors from the qualitative colormap.
+    Dataset color (if provided) is used as fallback when no class_data is available.
+    
+    Args:
+        ax: Matplotlib axes
+        datasets: List of dataset dicts, each containing:
+            - 'x_data': numpy array
+            - 'y_data': numpy array
+            - 'z_data': numpy array (optional, for 3D)
+            - 'label': str (dataset name)
+            - 'marker': str (marker type, e.g., 'o', 's', '^')
+            - 'class_data': numpy array of class labels (optional)
+            - 'color': str (fallback color if no class_data, e.g., '#808080')
+        config: Graph configuration
+        use_3d: Whether to render as 3D scatter
+        qualitative_cmap: Name of qualitative colormap
+    """
+    # Get colormap
+    try:
+        cmap = cm.get_cmap(qualitative_cmap)
+    except ValueError:
+        cmap = cm.get_cmap('tab10')  # Fallback to tab10
+    
+    # Extract discrete color list from qualitative colormap
+    # Qualitative colormaps have a fixed set of colors (e.g., tab10 has 10)
+    if hasattr(cmap, 'colors'):
+        cmap_colors = list(cmap.colors)
+    else:
+        # Fallback: sample N colors evenly from the colormap
+        n_sample = getattr(cmap, 'N', 10)
+        cmap_colors = [cmap(i / n_sample) for i in range(n_sample)]
+    
+    # Collect all unique classes across all datasets to ensure consistent coloring
+    all_classes = set()
+    for dataset in datasets:
+        if 'class_data' in dataset and dataset['class_data'] is not None:
+            unique_classes = np.unique(dataset['class_data'])
+            all_classes.update(unique_classes)
+    
+    # Sort classes for consistent color assignment
+    all_classes = sorted(list(all_classes))
+    
+    # Create class-to-color mapping using discrete colormap colors
+    class_to_color = {}
+    if all_classes:
+        for idx, cls in enumerate(all_classes):
+            class_to_color[cls] = cmap_colors[idx % len(cmap_colors)]
+    
+    # Track plotted items for legend
+    legend_entries = []
+    
+    # Plot each dataset
+    for dataset in datasets:
+        x_data = dataset.get('x_data')
+        y_data = dataset.get('y_data')
+        z_data = dataset.get('z_data')
+        dataset_label = dataset.get('label', 'Dataset')
+        marker = dataset.get('marker', 'o')
+        class_data = dataset.get('class_data')
+        fallback_color = dataset.get('color')  # Optional explicit color for non-class mode
+        
+        if x_data is None or y_data is None:
+            continue
+        
+        # If no class data, plot all points with same color (explicit or default)
+        if class_data is None:
+            scatter_kwargs = {
+                'marker': marker,
+                'label': dataset_label,
+                'alpha': 0.6,
+                's': 30
+            }
+            if fallback_color:
+                scatter_kwargs['color'] = fallback_color
+            
+            if use_3d and z_data is not None:
+                ax.scatter(x_data, y_data, z_data, **scatter_kwargs)
+            else:
+                ax.scatter(x_data, y_data, **scatter_kwargs)
+            legend_entries.append(dataset_label)
+        else:
+            # Plot by class with different colors (class coloring takes precedence over fallback_color)
+            unique_classes = np.unique(class_data)
+            for cls in unique_classes:
+                mask = class_data == cls
+                x_subset = x_data[mask]
+                y_subset = y_data[mask]
+                
+                # Get color for this class
+                color = class_to_color.get(cls, 'C0')
+                
+                # Create label combining dataset and class
+                label = f"{dataset_label}-{cls}"
+                
+                if use_3d and z_data is not None:
+                    z_subset = z_data[mask]
+                    ax.scatter(x_subset, y_subset, z_subset, marker=marker, label=label, 
+                             color=color, alpha=0.6, s=30)
+                else:
+                    ax.scatter(x_subset, y_subset, marker=marker, label=label, 
+                             color=color, alpha=0.6, s=30)
+                
+                legend_entries.append(label)
+    
+    # Set axis labels
+    ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+    ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+    if use_3d:
+        ax.set_zlabel(config.get('z_axis', {}).get('label', 'Z'))
+    
+    # Add legend if we have multiple entries
+    if len(legend_entries) > 1 or (len(legend_entries) == 1 and config.get('show_legend', False)):
+        ax.legend(loc='best', fontsize='small')
 
 
 def _render_line(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],
@@ -223,9 +359,9 @@ def embed_figure_in_tkinter(fig: Figure, parent_frame: ttk.Frame) -> Tuple[Figur
     canvas.draw()
     
     return canvas, canvas_frame
+from typing import Union, Tuple
 
-
-def update_embedded_figure(fig: Figure, instance_alias: str, section_id: int,
+def update_embedded_figure(fig: Figure, instance_alias: str, section_id: Union[int, Tuple[int, int]],
                           analysis_data: dict, canvas_frame: ttk.Frame) -> None:
     """Update an already-embedded matplotlib figure with new data.
     

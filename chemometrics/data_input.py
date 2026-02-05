@@ -50,7 +50,8 @@ def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str,
               var_path: Optional[List[str]] = None, smp_path: Optional[str] = None,
               transpose: bool = False, axis_info: Optional[List[str]] = None, reshape_order: str = 'F',
               dim_labels: Optional[List[str]] = None, scale_type: Optional[List[str]] = None,
-              multi_file_per_sample: bool = False, num_samples: Optional[int] = None) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[List[List[str]]], List[str], Optional[List[np.ndarray]], List[str]]:
+              multi_file_per_sample: bool = False, num_samples: Optional[int] = None,
+              cdata_path: Optional[str] = None) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[List[List[str]]], List[str], Optional[List[np.ndarray]], List[str], Optional[List[str]]]:
     """
     Load and organize chemometrics data.
 
@@ -73,6 +74,7 @@ def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str,
         scale_type: Optional list of scale types for axis generation ('Linear', 'Log10', 'Log2', 'Ln')
         multi_file_per_sample: If True, each sample consists of multiple files (only for nway_flag >= 3)
         num_samples: Number of samples when using multi_file_per_sample mode (files divided equally)
+        cdata_path: Optional path to classification data file (one class label per line)
 
     Returns:
         X_cal: X data array
@@ -81,6 +83,7 @@ def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str,
         smp_cal: Sample labels
         axis_n_info: List of axis vectors matching data dimensions or None
         dim_labels: List of dimension labels
+        class_data_cal: List of class labels or None
     """
     # Parse d_specs parameters
     separator_map = {"comma": ",", "spaces": None, "tabs": "\t"}
@@ -160,6 +163,9 @@ def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str,
     # Load Y data (using same separator as X for consistency)
     Y = _load_y_data(y_path, separator, 0) if y_path else None
 
+    # Load classification data (strings, one per line)
+    class_data = _load_class_data(cdata_path) if cdata_path else None
+
     # Generate axis information (numerical vectors)
     if axis_info_list:
         # Use provided axis information with scale types
@@ -174,7 +180,7 @@ def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str,
     # Generate dimension labels
     processed_dim_labels = _generate_dim_labels(dim_labels, nway_flag)
 
-    return X, Y, axis_t_info, smp_labels, axis_n_info, processed_dim_labels
+    return X, Y, axis_t_info, smp_labels, axis_n_info, processed_dim_labels, class_data
 
 
 def _load_x_data(data_path: List[str], separator: Optional[str], num_headlines: int,
@@ -443,6 +449,13 @@ def _load_y_data(y_path: str, separator: Optional[str] = None, num_headlines: in
     if data.ndim == 1:
         return data.reshape(-1, 1)
     return data
+
+
+def _load_class_data(cdata_path: str) -> List[str]:
+    """Load classification data as list of strings, one per line."""
+    with open(cdata_path, 'r') as f:
+        class_data = [line.strip() for line in f if line.strip()]
+    return class_data
 
 
 def _load_labels(label_path: str) -> List[str]:

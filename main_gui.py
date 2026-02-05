@@ -261,7 +261,7 @@ class ChemometricsGUI:
         qualitative_menu = tk.Menu(colormap_menu, tearoff=0)
         colormap_menu.add_cascade(label=self.language_manager.translate("menu.colormap_qualitative", "Qualitative"), menu=qualitative_menu)
         for cmap in colormaps_data.get("qualitative", []):
-            qualitative_menu.add_command(label=cmap, command=lambda cm=cmap: self._change_colormap(cm))
+            qualitative_menu.add_command(label=cmap, command=lambda cm=cmap: self._change_qualitative_colormap(cm))
         
         # Help Menu
         help_menu = tk.Menu(menubar, tearoff=0)
@@ -275,10 +275,16 @@ class ChemometricsGUI:
         self._refresh_ui_text()
     
     def _change_colormap(self, colormap_name: str):
-        """Change the default colormap and save setting."""
+        """Change the default continuous colormap and save setting."""
         self.settings_manager.set("colormap", colormap_name)
         messagebox.showinfo(self.language_manager.translate("ui.dialogs.info", "Information"),
                           f"Colormap changed to '{colormap_name}'.\nThis will be used for new plots.")
+    
+    def _change_qualitative_colormap(self, colormap_name: str):
+        """Change the qualitative colormap and save setting."""
+        self.settings_manager.set("qualitative_colormap", colormap_name)
+        messagebox.showinfo(self.language_manager.translate("ui.dialogs.info", "Information"),
+                          f"Qualitative colormap changed to '{colormap_name}'.\nThis will be used for new plots.")
     
     def _show_about_dialog(self):
         """Show the About dialog with program information."""
@@ -2612,26 +2618,41 @@ class ChemometricsGUI:
         if not is_popup:
             self._create_section_popup_button(parent, instance_alias, section_idx, section_data)
     
-    def _resolve_axis_label(self, axis_config: dict, outputs: dict) -> str:
+    def _resolve_axis_label(self, axis_config: dict, outputs: dict, axis_index: Optional[int] = None) -> str:
         """Resolve an axis label from axis configuration.
         
         The label configuration supports:
         - Direct string: "label": "My Axis"
         - Variable reference: "label": "variable_name"
         - Variable with index: "label": "variable_name", "l_index": 0
+        - Dynamic labels from array: "axis_labels": "pc_labels" (uses axis_index if provided)
         
         If the variable is a list and l_index is provided, returns the value at that index.
+        For axis_labels with dynamic indexing, uses the axis_index parameter if provided.
         Otherwise, returns the variable value as a string.
         
         Args:
-            axis_config: Axis configuration dict with 'label' field
+            axis_config: Axis configuration dict with 'label' or 'axis_labels' field
             outputs: Dictionary of execution outputs
+            axis_index: Optional current axis index for dynamic label selection
             
         Returns:
             Resolved label as string, or empty string if not found
         """
         if not axis_config:
             return ""
+        
+        # Check for axis_labels (dynamic labels based on current index)
+        axis_labels_config = axis_config.get('axis_labels')
+        if axis_labels_config and axis_index is not None:
+            # axis_labels points to a variable containing an array of labels
+            if axis_labels_config in outputs:
+                labels_data = outputs[axis_labels_config]
+                if isinstance(labels_data, (list, np.ndarray)):
+                    try:
+                        return str(labels_data[axis_index])
+                    except (IndexError, TypeError):
+                        pass
         
         label_config = axis_config.get('label')
         if not label_config:
@@ -2784,8 +2805,9 @@ class ChemometricsGUI:
             outputs = execution_results.get('outputs', {})
             
             # Initialize slice state if needed
-            # Use section_idx as the key to ensure each graph (even in same section) has unique state
-            section_id = section_idx
+            # Use (page_index, section_idx) tuple as key to ensure each graph has unique state per page
+            current_page = self.analysis_data[instance_alias].get('current_page', 0)
+            section_id = (current_page, section_idx)
             if instance_alias not in self.analysis_data:
                 self.analysis_data[instance_alias] = {}
             if 'graph_slices' not in self.analysis_data[instance_alias]:
@@ -2983,11 +3005,43 @@ class ChemometricsGUI:
             x_axis_config = x_axis_config.copy() if x_axis_config else {}
             y_axis_config = y_axis_config.copy() if y_axis_config else {}
             
-            resolved_x_label = self._resolve_axis_label(x_axis_config, outputs)
+            # For axis selection mode, get the current axis indices
+            # axis_indices structure: {'x': {dimension: index}, 'y': {dimension: index}}
+            # We need to extract the actual index value for each axis
+            x_axis_idx = None
+            y_axis_idx = None
+            z_axis_idx = None
+            
+            # Find dimension for each axis from data_slicing config
+            nav_axes = config.get('data_slicing', [])
+            x_dimension = None
+            y_dimension = None
+            z_dimension = None
+            
+            for nav_item in nav_axes:
+                if isinstance(nav_item, dict):
+                    target_axis = nav_item.get('axis')
+                    dimension = nav_item.get('dimension')
+                    if target_axis == 'x' and dimension is not None:
+                        x_dimension = dimension
+                    elif target_axis == 'y' and dimension is not None:
+                        y_dimension = dimension
+                    elif target_axis == 'z' and dimension is not None:
+                        z_dimension = dimension
+            
+            # Extract the actual index values from axis_indices
+            if 'x' in axis_indices and x_dimension is not None:
+                x_axis_idx = axis_indices['x'].get(x_dimension)
+            if 'y' in axis_indices and y_dimension is not None:
+                y_axis_idx = axis_indices['y'].get(y_dimension)
+            if 'z' in axis_indices and z_dimension is not None:
+                z_axis_idx = axis_indices['z'].get(z_dimension)
+            
+            resolved_x_label = self._resolve_axis_label(x_axis_config, outputs, axis_index=x_axis_idx)
             if resolved_x_label:
                 x_axis_config['label'] = resolved_x_label
             
-            resolved_y_label = self._resolve_axis_label(y_axis_config, outputs)
+            resolved_y_label = self._resolve_axis_label(y_axis_config, outputs, axis_index=y_axis_idx)
             if resolved_y_label:
                 y_axis_config['label'] = resolved_y_label
             
@@ -2995,7 +3049,7 @@ class ChemometricsGUI:
             z_axis_config = config.get('z_axis', {})
             if z_axis_config:
                 z_axis_config = z_axis_config.copy()
-                resolved_z_label = self._resolve_axis_label(z_axis_config, outputs)
+                resolved_z_label = self._resolve_axis_label(z_axis_config, outputs, axis_index=z_axis_idx)
                 if resolved_z_label:
                     z_axis_config['label'] = resolved_z_label
             
@@ -3047,10 +3101,106 @@ class ChemometricsGUI:
             if z_axis_config:
                 render_config['z_axis'] = z_axis_config
             
+            # Handle multiple datasets if configured
+            datasets_config = config.get('datasets')
+            extracted_datasets = None
+            if datasets_config and isinstance(datasets_config, list):
+                extracted_datasets = []
+                for dataset_idx, dataset_cfg in enumerate(datasets_config):
+                    dataset_label = dataset_cfg.get('label', f'Dataset {dataset_idx + 1}')
+                    
+                    # Check dataset condition if provided (optional filtering)
+                    if 'condition' in dataset_cfg:
+                        condition = dataset_cfg['condition']
+                        param_name = condition.get('parameter')
+                        operator = condition.get('operator')
+                        expected_value = condition.get('value')
+                        
+                        # Evaluate condition against execution inputs
+                        exec_inputs = execution_results.get('inputs', {})
+                        if param_name and param_name in exec_inputs:
+                            actual_value = exec_inputs[param_name]
+                            include_dataset = self._evaluate_condition(actual_value, operator, expected_value)
+                            if not include_dataset:
+                                # Dataset filtered by condition - skip it
+                                continue
+                    
+                    # Extract data for this dataset using same indices as main axes
+                    ds_x_axis = dataset_cfg.get('x_axis', {})
+                    ds_y_axis = dataset_cfg.get('y_axis', {})
+                    ds_z_axis = dataset_cfg.get('z_axis', {})
+                    
+                    # Use same indices for consistency with main plot
+                    ds_x_data = self._extract_axis_data(outputs, ds_x_axis, x_indices)
+                    ds_y_data = self._extract_axis_data(outputs, ds_y_axis, y_indices)
+                    ds_z_data = self._extract_axis_data(outputs, ds_z_axis, z_indices) if ds_z_axis else None
+                    
+                    # Skip if required data sources don't exist (normal for optional datasets)
+                    if ds_x_data is None or ds_y_data is None:
+                        continue
+                    
+                    # Extract class labels if specified
+                    ds_class_data = None
+                    if 'class_labels' in dataset_cfg:
+                        class_source = dataset_cfg['class_labels']
+                        if class_source in outputs:
+                            class_val = outputs[class_source]
+                            if isinstance(class_val, (list, np.ndarray)):
+                                ds_class_data = np.array(class_val)
+                    
+                    # Dataset is valid and will be rendered
+                    dataset_entry = {
+                        'x_data': ds_x_data,
+                        'y_data': ds_y_data,
+                        'label': dataset_label,
+                        'marker': dataset_cfg.get('marker', 'o')
+                    }
+                    if ds_z_data is not None:
+                        dataset_entry['z_data'] = ds_z_data
+                    if ds_class_data is not None:
+                        dataset_entry['class_data'] = ds_class_data
+                    # Include color if specified (used as fallback when no class_data)
+                    if 'color' in dataset_cfg:
+                        dataset_entry['color'] = dataset_cfg['color']
+                    extracted_datasets.append(dataset_entry)
+            
+            # If main plot has class_labels config, treat it as a dataset for proper class coloring with qualitative colormap
+            if 'class_labels' in config and graph_type == 'scatter' and x_data is not None and y_data is not None:
+                class_source = config['class_labels']
+                if class_source in outputs:
+                    class_val = outputs[class_source]
+                    if isinstance(class_val, (list, np.ndarray)):
+                        main_class_data = np.array(class_val)
+                        
+                        # Create extracted_datasets if it doesn't exist
+                        if extracted_datasets is None:
+                            extracted_datasets = []
+                        
+                        # Build main dataset with class data
+                        main_dataset = {
+                            'x_data': x_data,
+                            'y_data': y_data,
+                            'label': 'Main Dataset',
+                            'marker': 'o',
+                            'class_data': main_class_data
+                        }
+                        if z_data is not None:
+                            main_dataset['z_data'] = z_data
+                        
+                        # Add main dataset at the beginning of the list
+                        extracted_datasets.insert(0, main_dataset)
+                        
+                        # Clear x/y/z data so they won't conflict with multi-dataset rendering
+                        x_data = None
+                        y_data = None
+                        z_data = None
+            
             # Render graph using graph_renderer module
             fig, ax = graph_renderer.render_graph_figure(
                 graph_type, render_config, x_data, y_data, z_data, x_axis_config, y_axis_config,
-                default_cmap=self.settings_manager.get('colormap', 'viridis')
+                default_cmap=self.settings_manager.get('colormap', 'viridis'),
+                datasets=extracted_datasets,
+                qualitative_cmap=self.settings_manager.get('qualitative_colormap', 'tab10')
             )
             
             # Embed figure in tkinter within a managed frame
@@ -3326,7 +3476,7 @@ class ChemometricsGUI:
         except Exception as e:
             print(f"Error creating table navigation controls: {str(e)}")
     
-    def _on_table_navigate_slice(self, instance_alias: str, section_id: int, direction: int,
+    def _on_table_navigate_slice(self, instance_alias: str, section_id: tuple, direction: int,
                                  dimension: int, axis_name: str, max_index: int) -> None:
         """Handle table navigation button click to change slice index."""
         try:
@@ -3404,8 +3554,9 @@ class ChemometricsGUI:
                 data = np.array(data)
             
             # Initialize table slices state for data slicing support
-            # Use data_source as stable section ID instead of id(section_data) which changes each call
-            section_id = f"{instance_alias}_{data_source}_{section_idx}"
+            # Use (page, section_idx) tuple as section ID to ensure unique state per page
+            current_page = self.analysis_data[instance_alias].get('current_page', 0)
+            section_id = (current_page, section_idx)
             if 'table_slices' not in self.analysis_data[instance_alias]:
                 self.analysis_data[instance_alias]['table_slices'] = {}
             
@@ -3848,7 +3999,7 @@ Count:
             print(f"Error creating section popup button: {str(e)}")
     
     def _create_navigation_controls(self, parent_frame: ttk.Frame, instance_alias: str, 
-                                   section_id: int, outputs: dict, config: dict, 
+                                   section_id: tuple, outputs: dict, config: dict, 
                                    slice_state: dict) -> None:
         """Create navigation controls (arrow buttons) for multi-dimensional data slicing and axis selection.
         
@@ -3873,6 +4024,18 @@ Count:
             elif graph_type in ('heatmap', 'contour', '3d_surf'):
                 # For 3D visualization types, z_axis contains the actual multi-dimensional data
                 data_source = config.get('z_axis', {}).get('data_source')
+            elif 'datasets' in config:
+                # Multi-dataset scatter plots: use first available dataset's data source
+                datasets_cfg = config.get('datasets', [])
+                for ds_cfg in datasets_cfg:
+                    ds_y_source = ds_cfg.get('y_axis', {}).get('data_source')
+                    if ds_y_source and ds_y_source in outputs:
+                        data_source = ds_y_source
+                        break
+                    ds_x_source = ds_cfg.get('x_axis', {}).get('data_source')
+                    if ds_x_source and ds_x_source in outputs:
+                        data_source = ds_x_source
+                        break
             else:
                 # Traditional configs - use y_axis or x_axis
                 axis_config = config.get('y_axis', {}) or config.get('x_axis', {})
@@ -4191,7 +4354,7 @@ Count:
         except Exception as e:
             print(f"Error creating navigation controls: {str(e)}")
     
-    def _on_navigate_slice(self, instance_alias: str, section_id: int, direction: int,
+    def _on_navigate_slice(self, instance_alias: str, section_id: tuple, direction: int,
                           dimension: int, axis_name: str, max_index: int, target_axis: str = None) -> None:
         """Handle navigation button click to change slice index or axis selection.
         
@@ -4273,7 +4436,7 @@ Count:
         except Exception as e:
             print(f"Error navigating slice: {str(e)}")
     
-    def _on_md_combo_changed(self, instance_alias: str, section_id: int, 
+    def _on_md_combo_changed(self, instance_alias: str, section_id: tuple, 
                             combo_index: int, combinations: List[Tuple[int, ...]]) -> None:
         """Handle multi-dimensional combination dropdown change.
         
@@ -4374,7 +4537,7 @@ Count:
             import traceback
             traceback.print_exc()
     
-    def _on_md_navigate(self, instance_alias: str, section_id: int, direction: int,
+    def _on_md_navigate(self, instance_alias: str, section_id: tuple, direction: int,
                        dimension: int, max_index: int) -> None:
         """Handle multi-dimensional slice navigation button click.
         
@@ -4453,7 +4616,7 @@ Count:
         except Exception as e:
             print(f"Error navigating MD slice: {str(e)}")
     
-    def _update_graph_with_slice(self, instance_alias: str, section_id: int, 
+    def _update_graph_with_slice(self, instance_alias: str, section_id: tuple, 
                                 dimension: int) -> None:
         """Update the graph display with the new slice index for a specific dimension."""
         try:
@@ -4468,7 +4631,9 @@ Count:
                 return
             
             current_state = slice_state[section_id]
-            outputs = current_state.get('outputs', {})
+            # Get fresh outputs from execution_results, not from stale cached version
+            execution_results = self.analysis_data[instance_alias].get('execution_results', {})
+            outputs = execution_results.get('outputs', {})
             config = current_state.get('config', {})
             graph_type = current_state.get('graph_type', 'scatter')
             
@@ -4553,11 +4718,43 @@ Count:
             x_axis_config = x_axis_config.copy() if x_axis_config else {}
             y_axis_config = y_axis_config.copy() if y_axis_config else {}
             
-            resolved_x_label = self._resolve_axis_label(x_axis_config, outputs)
+            # For axis selection mode, get the current axis indices
+            # axis_indices structure: {'x': {dimension: index}, 'y': {dimension: index}}
+            # We need to extract the actual index value for each axis
+            x_axis_idx = None
+            y_axis_idx = None
+            z_axis_idx = None
+            
+            # Find dimension for each axis from data_slicing config
+            nav_axes = config.get('data_slicing', [])
+            x_dimension = None
+            y_dimension = None
+            z_dimension = None
+            
+            for nav_item in nav_axes:
+                if isinstance(nav_item, dict):
+                    target_axis = nav_item.get('axis')
+                    dimension = nav_item.get('dimension')
+                    if target_axis == 'x' and dimension is not None:
+                        x_dimension = dimension
+                    elif target_axis == 'y' and dimension is not None:
+                        y_dimension = dimension
+                    elif target_axis == 'z' and dimension is not None:
+                        z_dimension = dimension
+            
+            # Extract the actual index values from axis_indices
+            if 'x' in axis_indices and x_dimension is not None:
+                x_axis_idx = axis_indices['x'].get(x_dimension)
+            if 'y' in axis_indices and y_dimension is not None:
+                y_axis_idx = axis_indices['y'].get(y_dimension)
+            if 'z' in axis_indices and z_dimension is not None:
+                z_axis_idx = axis_indices['z'].get(z_dimension)
+            
+            resolved_x_label = self._resolve_axis_label(x_axis_config, outputs, axis_index=x_axis_idx)
             if resolved_x_label:
                 x_axis_config['label'] = resolved_x_label
             
-            resolved_y_label = self._resolve_axis_label(y_axis_config, outputs)
+            resolved_y_label = self._resolve_axis_label(y_axis_config, outputs, axis_index=y_axis_idx)
             if resolved_y_label:
                 y_axis_config['label'] = resolved_y_label
             
@@ -4565,7 +4762,7 @@ Count:
             z_axis_config = config.get('z_axis', {})
             if z_axis_config:
                 z_axis_config = z_axis_config.copy()
-                resolved_z_label = self._resolve_axis_label(z_axis_config, outputs)
+                resolved_z_label = self._resolve_axis_label(z_axis_config, outputs, axis_index=z_axis_idx)
                 if resolved_z_label:
                     z_axis_config['label'] = resolved_z_label
             
@@ -4602,10 +4799,106 @@ Count:
             if z_axis_config:
                 render_config['z_axis'] = z_axis_config
             
+            # Handle multiple datasets if configured
+            datasets_config = config.get('datasets')
+            extracted_datasets = None
+            if datasets_config and isinstance(datasets_config, list):
+                extracted_datasets = []
+                for dataset_idx, dataset_cfg in enumerate(datasets_config):
+                    dataset_label = dataset_cfg.get('label', f'Dataset {dataset_idx + 1}')
+                    
+                    # Check dataset condition if provided (optional filtering)
+                    if 'condition' in dataset_cfg:
+                        condition = dataset_cfg['condition']
+                        param_name = condition.get('parameter')
+                        operator = condition.get('operator')
+                        expected_value = condition.get('value')
+                        
+                        # Evaluate condition against execution inputs
+                        exec_inputs = execution_results.get('inputs', {})
+                        if param_name and param_name in exec_inputs:
+                            actual_value = exec_inputs[param_name]
+                            include_dataset = self._evaluate_condition(actual_value, operator, expected_value)
+                            if not include_dataset:
+                                # Dataset filtered by condition - skip it
+                                continue
+                    
+                    # Extract data for this dataset using same indices as main axes
+                    ds_x_axis = dataset_cfg.get('x_axis', {})
+                    ds_y_axis = dataset_cfg.get('y_axis', {})
+                    ds_z_axis = dataset_cfg.get('z_axis', {})
+                    
+                    # Use same indices for consistency with main plot
+                    ds_x_data = self._extract_axis_data(outputs, ds_x_axis, x_indices)
+                    ds_y_data = self._extract_axis_data(outputs, ds_y_axis, y_indices)
+                    ds_z_data = self._extract_axis_data(outputs, ds_z_axis, z_indices) if ds_z_axis else None
+                    
+                    # Skip if required data sources don't exist (normal for optional datasets)
+                    if ds_x_data is None or ds_y_data is None:
+                        continue
+                    
+                    # Extract class labels if specified
+                    ds_class_data = None
+                    if 'class_labels' in dataset_cfg:
+                        class_source = dataset_cfg['class_labels']
+                        if class_source in outputs:
+                            class_val = outputs[class_source]
+                            if isinstance(class_val, (list, np.ndarray)):
+                                ds_class_data = np.array(class_val)
+                    
+                    # Dataset is valid and will be rendered
+                    dataset_entry = {
+                        'x_data': ds_x_data,
+                        'y_data': ds_y_data,
+                        'label': dataset_label,
+                        'marker': dataset_cfg.get('marker', 'o')
+                    }
+                    if ds_z_data is not None:
+                        dataset_entry['z_data'] = ds_z_data
+                    if ds_class_data is not None:
+                        dataset_entry['class_data'] = ds_class_data
+                    # Include color if specified (used as fallback when no class_data)
+                    if 'color' in dataset_cfg:
+                        dataset_entry['color'] = dataset_cfg['color']
+                    extracted_datasets.append(dataset_entry)
+            
+            # If main plot has class_labels config, treat it as a dataset for proper class coloring with qualitative colormap
+            if 'class_labels' in config and graph_type == 'scatter' and x_data is not None and y_data is not None:
+                class_source = config['class_labels']
+                if class_source in outputs:
+                    class_val = outputs[class_source]
+                    if isinstance(class_val, (list, np.ndarray)):
+                        main_class_data = np.array(class_val)
+                        
+                        # Create extracted_datasets if it doesn't exist
+                        if extracted_datasets is None:
+                            extracted_datasets = []
+                        
+                        # Build main dataset with class data
+                        main_dataset = {
+                            'x_data': x_data,
+                            'y_data': y_data,
+                            'label': 'Main Dataset',
+                            'marker': 'o',
+                            'class_data': main_class_data
+                        }
+                        if z_data is not None:
+                            main_dataset['z_data'] = z_data
+                        
+                        # Add main dataset at the beginning of the list
+                        extracted_datasets.insert(0, main_dataset)
+                        
+                        # Clear x/y/z data so they won't conflict with multi-dataset rendering
+                        x_data = None
+                        y_data = None
+                        z_data = None
+            
             # Render graph using graph_renderer module
             fig, ax = graph_renderer.render_graph_figure(
                 graph_type, render_config, x_data, y_data, z_data, x_axis_config, y_axis_config,
-                default_cmap=self.settings_manager.get('colormap', 'viridis')
+                default_cmap=self.settings_manager.get('colormap', 'viridis'),
+                datasets=extracted_datasets,
+                qualitative_cmap=self.settings_manager.get('qualitative_colormap', 'tab10')
             )
             
             # Update existing canvas with new figure

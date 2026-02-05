@@ -18,7 +18,8 @@
     "scale_type": "Scale Type",
     "transpose": "Transpose",
     "reshape_order": "Reshape Order",
-    "axis_info": "Axis Generation Info"
+    "axis_info": "Axis Generation Info",
+    "cdata_path": "Classification Data File"
   },
   "output_aliases": {
     "X_cal": "X Data",
@@ -26,7 +27,8 @@
     "axis_t_info": "Axis Text Labels",
     "smp_cal": "Sample Labels",
     "axis_n_info": "Axis Vectors",
-    "dim_labels": "Axis Titles"
+    "dim_labels": "Axis Titles",
+    "class_data_cal": "Classification Data"
   },
   "short_description": "Loads spectroscopic and response data from files",
   "long_description": "This step loads your calibration dataset including spectroscopic data (X), response variables (Y), and optional metadata.\n\nInput Data Components:\n- X Data (Spectra): Main spectroscopic measurements (required)\n- Y Data (Responses): Target/dependent variables (optional)\n- Variable Labels: Wavelengths, frequencies, or variable names (optional)\n- Sample Labels: Sample IDs or identifiers (optional)\n\nData Formats:\n- CSV files with configurable delimiters (comma, tabs, spaces)\n- Matrix format: samples (rows) x variables (columns)\n- Vector formats for specialized data types\n- Support for multiple files via file selection\n\nConfiguration:\n- Specify delimiter type for your files\n- Set number of header rows to skip\n- Choose appropriate data type structure\n- Transpose if needed (samples in columns instead of rows)\n\nThe loaded data becomes input for preprocessing and validation steps.",
@@ -133,6 +135,17 @@
         "required": false,
         "input_type": "user",
         "tooltip": "Response variable(s) file",
+        "ispath": true
+      },
+      {
+        "name": "cdata_path",
+        "label": "Classification Data File",
+        "category": "Data Files",
+        "widget": "file_selector",
+        "multiple": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Classification data file (one class label per line)",
         "ispath": true
       },
       {

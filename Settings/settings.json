@@ -1,4 +1,5 @@
 {
   "language": "en",
-  "colormap": "jet"
+  "colormap": "Greens",
+  "qualitative_colormap": "Set1"
 }

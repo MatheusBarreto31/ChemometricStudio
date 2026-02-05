@@ -141,6 +141,10 @@ def univariate_calibration(
         )
         # Results now include per-fold comparisons to single fit
     """
+    # Handle CV routing - unwrap cv_config if it's been wrapped in a dict by routing
+    if cv_config is not None and isinstance(cv_config, dict) and 'cv_config' in cv_config:
+        cv_config = cv_config['cv_config']
+    
     # Handle CV routing
     if cv_config is not None and HAS_CV and cv_config.is_enabled():
         # If this is the initial call (fold=0 and not from pipeline), run CV

@@ -6,6 +6,7 @@
     "X_cal": "X Data",
     "Y_cal": "Y Data",
     "smp_cal": "Sample Labels",
+    "class_data_cal": "Class Data",
     "createVal": "Create Validation",
     "creationMethod": "Method",
     "calProportion": "Cal. Proportion",
@@ -14,7 +15,8 @@
     "d_specs_headlines": "Header Rows",
     "d_specs_type": "Data Type",
     "d_specs_dimensions": "Data Dimensions",
-    "nway_flag": "Data Dimensionality"
+    "nway_flag": "Data Dimensionality",
+    "cdata_path": "Class Data File"
   },
   "output_aliases": {
     "X_cal": "X Calibration",
@@ -22,7 +24,9 @@
     "X_val": "X Validation",
     "Y_val": "Y Validation",
     "smp_cal": "Cal Samples",
-    "smp_val": "Val Samples"
+    "smp_val": "Val Samples",
+    "class_data_cal": "Cal Class",
+    "class_data_val": "Val Class"
   },
   "short_description": "Creates or loads validation data for model assessment",
   "long_description": "Validation data is essential for unbiased assessment of model performance. This step creates validation sets by splitting calibration data or loads external validation data.\n\nCreating Validation Sets from Calibration Data:\n\n1. Random Splitting\n   - Randomly selects samples for validation\n   - Fastest and simplest approach\n   - Suitable for large, diverse datasets\n   - May not ensure representative distribution\n\n2. Kennard-Stone Algorithm\n   - Selects samples that span the data space\n   - Ensures good representation of data range\n   - Better for small or clustered datasets\n   - More computationally expensive\n\n3. File-Based Selection\n   - Uses external index file for sample selection\n   - Allows custom selection criteria\n   - Requires pre-prepared selection file\n\nCalibration Proportion:\n- Typical value: 0.7 (70% calibration, 30% validation)\n- Larger sets: can use 0.8-0.9 for better calibration\n- Smaller datasets: may use 0.6-0.7 for more validation samples\n\nLoading External Validation Sets:\n- Load completely independent validation data\n- Useful for temporal or spatial validation\n- Provides most realistic performance estimate\n- Separate X and Y files required\n- Optional sample labels file\n\nBest Practices:\n- Validation set should be independent of calibration\n- Ensure both sets cover similar data ranges\n- Document how validation sets were selected\n- Use appropriate set size for statistical reliability\n\nUsage:\n- Create internal set OR load external set\n- Both can be used simultaneously for comprehensive validation\n- Settings applied automatically during model building.",
@@ -115,6 +119,18 @@
         "ispath": true
       },
       {
+        "name": "cdata_path",
+        "label": "Validation Classification Data File",
+        "category": "External Data Files",
+        "widget": "file_selector",
+        "multiple": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Classification data file for external validation (one class label per line)",
+        "visible_if": {"validation_mode": "Load"},
+        "ispath": true
+      },
+      {
         "name": "X_cal",
         "label": "X Calibration Data",
         "category": "Data Inputs",
@@ -137,6 +153,16 @@
       {
         "name": "smp_cal",
         "label": "Calibration Sample Labels",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed from previous function output"
+      },
+      {
+        "name": "class_data_cal",
+        "label": "Calibration Classification Data",
         "category": "Data Inputs",
         "widget": "data_input",
         "required": false,

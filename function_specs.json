@@ -1,21 +1,23 @@
 {
   "return_specs": {
     "cv_configuration": ["cv_config"],
-    "load_data": ["X_cal", "Y_cal", "axis_t_info", "smp_cal", "axis_n_info", "dim_labels"],
-    "validation_data_main": ["X_cal", "Y_cal", "X_val", "Y_val", "smp_cal", "smp_val"],
+    "load_data": ["X_cal", "Y_cal", "axis_t_info", "smp_cal", "axis_n_info", "dim_labels", "class_data_cal"],
+    "validation_data_main": ["X_cal", "Y_cal", "X_val", "Y_val", "smp_cal", "smp_val", "class_data_cal", "class_data_val"],
     "baseline_correction": ["X_cal", "X_val"],
     "smoothing": ["X_cal", "X_val"],
     "center_and_normalize": ["X_cal", "X_val"],
-    "univariate_calibration": ["y_cal_pred", "y_val_pred", "models", "metrics", "cv_results"]
+    "univariate_calibration": ["y_cal_pred", "y_val_pred", "models", "metrics", "cv_results"],
+    "pca_analysis": ["model_scores", "model_loadings", "val_scores", "model_scores_cv", "model_loadings_cv", "metrics", "cv_results", "data_shape", "data_shape_val", "axis_n_info", "pc_labels", "class_data_cal", "class_data_val"]
   },
   "input_specs": {
     "cv_configuration": ["use_cv", "cv_strategy", "n_splits", "random_state", "shuffle", "window_size", "n_repeats", "test_size"],
-    "load_data": ["d_specs_separator", "d_specs_headlines", "d_specs_type", "d_specs_dimensions", "data_path", "nway_flag", "y_path", "var_path", "smp_path", "transpose", "axis_info", "reshape_order", "multi_file_per_sample", "num_samples", "dim_labels", "scale_type"],
-    "validation_data_main": ["X_cal", "Y_cal", "smp_cal", "validation_mode", "createVal", "creationMethod", "calProportion", "selection_file", "X_val_path", "Y_val_path", "val_labels_path", "d_specs_separator", "d_specs_headlines", "d_specs_type", "d_specs_dimensions", "data_path", "y_path", "var_path", "smp_path", "transpose", "nway_flag", "reshape_order"],
+    "load_data": ["d_specs_separator", "d_specs_headlines", "d_specs_type", "d_specs_dimensions", "data_path", "nway_flag", "y_path", "var_path", "smp_path", "transpose", "axis_info", "reshape_order", "multi_file_per_sample", "num_samples", "dim_labels", "scale_type", "cdata_path"],
+    "validation_data_main": ["X_cal", "Y_cal", "smp_cal", "class_data_cal", "validation_mode", "createVal", "creationMethod", "calProportion", "selection_file", "X_val_path", "Y_val_path", "val_labels_path", "cdata_path", "d_specs_separator", "d_specs_headlines", "d_specs_type", "d_specs_dimensions", "data_path", "y_path", "var_path", "smp_path", "transpose", "nway_flag", "reshape_order"],
     "baseline_correction": ["X_cal", "method", "X_val", "nway_flag", "direction", "window_size"],
     "smoothing": ["X_cal", "method", "X_val", "nway_flag", "direction", "window_size", "polyorder"],
     "center_and_normalize": ["X_cal", "X_val", "center", "normalize", "nway_flag", "direction"],
-    "univariate_calibration": ["X_cal", "Y_cal", "X_val", "Y_val", "degree", "intercept", "cv_config"]
+    "univariate_calibration": ["X_cal", "Y_cal", "X_val", "Y_val", "degree", "intercept", "cv_config"],
+    "pca_analysis": ["X_cal", "X_val", "n_components", "cv_config", "axis_n_info", "class_data_cal", "class_data_val"]
   },
   "import_map": {
     "cv_configuration": ["chemometrics.cv_pipeline", "cv_configuration"],
@@ -24,7 +26,8 @@
     "baseline_correction": ["chemometrics.data_processing", "baseline_correction"],
     "smoothing": ["chemometrics.data_processing", "smoothing"],
     "center_and_normalize": ["chemometrics.data_processing", "center_and_normalize"],
-    "univariate_calibration": ["chemometrics.univ_calibration", "univariate_calibration"]
+    "univariate_calibration": ["chemometrics.univ_calibration", "univariate_calibration"],
+    "pca_analysis": ["chemometrics.pca_analysis", "pca_analysis"]
   },
   "gui_listing": {
     "cv_configuration": {
@@ -47,6 +50,9 @@
     },
     "univariate_calibration": {
       "config_path": "gui_configs/univariate_calibration_config.json"
+    },
+    "pca_analysis": {
+      "config_path": "gui_configs/pca_analysis_config.json"
     }
   },
   "parameter_types": {
@@ -132,6 +138,12 @@
       "Y_val": "ndarray",
       "degree": "int",
       "intercept": "bool",
+      "cv_config": "CVConfig"
+    },
+    "pca_analysis": {
+      "X_cal": "ndarray",
+      "X_val": "ndarray",
+      "n_components": "int",
       "cv_config": "CVConfig"
     }
   }
