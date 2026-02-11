@@ -3272,6 +3272,22 @@ class ChemometricsGUI:
                 self.analysis_data[instance_alias]['graph_canvases'] = {}
             self.analysis_data[instance_alias]['graph_canvases'][section_id] = (canvas, canvas_frame)
             
+            # Store graph data metadata for CSV export
+            if 'graph_data_metadata' not in self.analysis_data[instance_alias]:
+                self.analysis_data[instance_alias]['graph_data_metadata'] = {}
+            
+            self.analysis_data[instance_alias]['graph_data_metadata'][section_id] = {
+                'x_data': x_data.copy() if isinstance(x_data, np.ndarray) else x_data,
+                'y_data': y_data.copy() if isinstance(y_data, np.ndarray) else y_data,
+                'z_data': z_data.copy() if isinstance(z_data, np.ndarray) else z_data,
+                'x_axis_config': x_axis_config.copy() if x_axis_config else {},
+                'y_axis_config': y_axis_config.copy() if y_axis_config else {},
+                'z_axis_config': z_axis_config.copy() if z_axis_config else {},
+                'extracted_datasets': extracted_datasets,  # Could contain references but will be used as-is
+                'graph_type': graph_type,
+                'graph_title': config.get('graph_title', config.get('title', 'Graph'))
+            }
+            
         except Exception as e:
             label = ttk.Label(parent, text=f"Error rendering graph: {str(e)}", foreground="red")
             label.pack(expand=True)
@@ -4133,12 +4149,20 @@ Count:
             
             # Add "Save as Image" button if this is a graph section
             if section_data.get('type') == 'graph':
-                save_btn = ttk.Button(
+                save_img_btn = ttk.Button(
                     button_frame,
                     text="💾 Save as Image",
                     command=lambda: self._save_section_graph_as_image(instance_alias, section_idx)
                 )
-                save_btn.pack(side=tk.LEFT, padx=5)
+                save_img_btn.pack(side=tk.LEFT, padx=5)
+                
+                # Add "Save data" button
+                save_data_btn = ttk.Button(
+                    button_frame,
+                    text="💾 Save Data",
+                    command=lambda: self._save_section_graph_as_csv(instance_alias, section_idx)
+                )
+                save_data_btn.pack(side=tk.LEFT, padx=5)
             
             # Add close button on the right
             close_btn = ttk.Button(button_frame, text="Close", command=popup.destroy)
@@ -4162,12 +4186,16 @@ Count:
                 messagebox.showerror("Error", "Analysis data not found")
                 return
             
+            # Get current page to build the correct section_id tuple
+            current_page = self.analysis_data[instance_alias].get('current_page', 0)
+            section_id = (current_page, section_idx)
+            
             graph_canvases = self.analysis_data[instance_alias].get('graph_canvases', {})
-            if section_idx not in graph_canvases:
+            if section_id not in graph_canvases:
                 messagebox.showerror("Error", "Graph not found for this section")
                 return
             
-            canvas, canvas_frame = graph_canvases[section_idx]
+            canvas, canvas_frame = graph_canvases[section_id]
             fig = canvas.figure
             
             # Open file save dialog
@@ -4188,6 +4216,142 @@ Count:
         
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save graph: {str(e)}")
+    
+    def _save_section_graph_as_csv(self, instance_alias: str, section_idx: int):
+        """Save all data used in a graph section as CSV file(s)."""
+        import pandas as pd
+        
+        try:
+            # Get the metadata stored during graph rendering
+            if instance_alias not in self.analysis_data:
+                messagebox.showerror("Error", "Analysis data not found")
+                return
+            
+            # Get current page to build the correct section_id tuple
+            current_page = self.analysis_data[instance_alias].get('current_page', 0)
+            section_id = (current_page, section_idx)
+            
+            graph_data_metadata = self.analysis_data[instance_alias].get('graph_data_metadata', {})
+            if section_id not in graph_data_metadata:
+                messagebox.showerror("Error", "Graph metadata not found for this section")
+                return
+            
+            metadata = graph_data_metadata[section_id]
+            
+            # Open directory save dialog
+            dir_path = filedialog.askdirectory(
+                title="Select directory to save graph data",
+                mustexist=True
+            )
+            
+            if not dir_path:
+                return
+            
+            # Get graph title for file naming
+            graph_title = metadata.get('graph_title', 'graph_data')
+            # Sanitize title for use in filename
+            safe_title = "".join(c for c in graph_title if c.isalnum() or c in ('-', '_', ' ')).rstrip()
+            safe_title = safe_title.replace(' ', '_') if safe_title else 'graph_data'
+            
+            # Counter for files created
+            files_created = []
+            
+            # Extract and save data
+            x_data = metadata.get('x_data')
+            y_data = metadata.get('y_data')
+            z_data = metadata.get('z_data')
+            x_axis_config = metadata.get('x_axis_config', {})
+            y_axis_config = metadata.get('y_axis_config', {})
+            z_axis_config = metadata.get('z_axis_config', {})
+            extracted_datasets = metadata.get('extracted_datasets')
+            graph_type = metadata.get('graph_type', 'unknown')
+            
+            # Get axis labels
+            x_label = x_axis_config.get('label', 'X')
+            y_label = y_axis_config.get('label', 'Y')
+            z_label = z_axis_config.get('label', 'Z')
+            
+            # Handle different graph types
+            if extracted_datasets:
+                # Multi-dataset scatter plots
+                for dataset_idx, dataset in enumerate(extracted_datasets):
+                    dataset_label = dataset.get('label', f'Dataset_{dataset_idx}')
+                    safe_dataset_label = "".join(c for c in dataset_label if c.isalnum() or c in ('-', '_', ' ')).rstrip()
+                    safe_dataset_label = safe_dataset_label.replace(' ', '_') if safe_dataset_label else f'dataset_{dataset_idx}'
+                    
+                    ds_x_data = dataset.get('x_data')
+                    ds_y_data = dataset.get('y_data')
+                    ds_z_data = dataset.get('z_data')
+                    
+                    # Get axis info from dataset
+                    ds_x_axis = dataset.get('x_axis', {})
+                    ds_y_axis = dataset.get('y_axis', {})
+                    ds_x_label = ds_x_axis.get('label', 'X')
+                    ds_y_label = ds_y_axis.get('label', 'Y')
+                    
+                    # Build dataframe
+                    data_dict = {}
+                    if ds_x_data is not None:
+                        data_dict[ds_x_label] = ds_x_data.flatten() if isinstance(ds_x_data, np.ndarray) else ds_x_data
+                    if ds_y_data is not None:
+                        data_dict[ds_y_label] = ds_y_data.flatten() if isinstance(ds_y_data, np.ndarray) else ds_y_data
+                    if ds_z_data is not None:
+                        z_label_ds = 'Z'
+                        data_dict[z_label_ds] = ds_z_data.flatten() if isinstance(ds_z_data, np.ndarray) else ds_z_data
+                    
+                    if data_dict:
+                        df = pd.DataFrame(data_dict)
+                        filename = f"{safe_title}_{safe_dataset_label}.csv"
+                        file_path = Path(dir_path) / filename
+                        df.to_csv(file_path, index=False)
+                        files_created.append(filename)
+            else:
+                # Single dataset graph
+                data_dict = {}
+                
+                if x_data is not None:
+                    data_dict[x_label] = x_data.flatten() if isinstance(x_data, np.ndarray) else x_data
+                if y_data is not None:
+                    data_dict[y_label] = y_data.flatten() if isinstance(y_data, np.ndarray) else y_data
+                if z_data is not None:
+                    data_dict[z_label] = z_data.flatten() if isinstance(z_data, np.ndarray) else z_data
+                
+                if data_dict:
+                    # For multi-dimensional data (heatmap, 3D), include shape info
+                    if graph_type in ('heatmap', '3d_surf', 'contour') and z_data is not None:
+                        if isinstance(z_data, np.ndarray) and z_data.ndim > 1:
+                            # For 2D data, save as-is with row/col headers
+                            df = pd.DataFrame(z_data)
+                            # Add row/col indices if x and y data exist
+                            if x_data is not None and y_data is not None:
+                                df.columns = [f"{x_label}_{val}" for val in x_data] if hasattr(x_data, '__len__') else [f"{x_label}_{i}" for i in range(z_data.shape[1])]
+                                df.index = [f"{y_label}_{val}" for val in y_data] if hasattr(y_data, '__len__') else [f"{y_label}_{i}" for i in range(z_data.shape[0])]
+                        else:
+                            df = pd.DataFrame(data_dict)
+                    else:
+                        df = pd.DataFrame(data_dict)
+                    
+                    filename = f"{safe_title}.csv"
+                    file_path = Path(dir_path) / filename
+                    df.to_csv(file_path, index=False)
+                    files_created.append(filename)
+            
+            # Show success message
+            if files_created:
+                message = f"Data saved successfully!\n\nFiles created:\n"
+                for fname in files_created:
+                    message += f"  • {fname}\n"
+                message += f"\nLocation: {dir_path}"
+                messagebox.showinfo("Success", message)
+            else:
+                messagebox.showwarning("No Data", "No data found to save for this graph.")
+        
+        except ImportError:
+            messagebox.showerror("Error", "pandas library is required to save data as CSV.\n\nPlease install it using: pip install pandas")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save graph data: {str(e)}")
+            import traceback
+            traceback.print_exc()
     
     def _create_section_popup_button(self, parent: ttk.Frame, instance_alias: str, section_idx: int, section_data: dict):
         """Create a small floating button in the upper right corner of a section (hovering over content)."""
