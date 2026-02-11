@@ -2269,9 +2269,6 @@ class ChemometricsGUI:
         else:
             page_info = "No pages available"
         
-        page_label = ttk.Label(nav_frame, text=page_info, font=("Arial", 9))
-        page_label.pack(side=tk.LEFT, padx=10)
-        
         # Previous page button
         prev_btn = ttk.Button(nav_frame, text="← Previous", width=10,
                              command=lambda: self._switch_analysis_page_relative(instance_alias, -1))
@@ -2281,6 +2278,9 @@ class ChemometricsGUI:
         next_btn = ttk.Button(nav_frame, text="Next →", width=10,
                              command=lambda: self._switch_analysis_page_relative(instance_alias, 1))
         next_btn.pack(side=tk.LEFT, padx=2)
+        
+        page_label = ttk.Label(nav_frame, text=page_info, font=("Arial", 9))
+        page_label.pack(side=tk.LEFT, padx=10)
         
         # Main content area - PACK THIS AFTER so it expands into remaining space
         content_frame = ttk.Frame(self.tab_content_frame)
@@ -2644,10 +2644,12 @@ class ChemometricsGUI:
         
         # Check for axis_labels (dynamic labels based on current index)
         axis_labels_config = axis_config.get('axis_labels')
+        axis_labels_nested = axis_config.get('axis_labels_nested')
         if axis_labels_config and axis_index is not None:
             # axis_labels points to a variable containing an array of labels
-            if axis_labels_config in outputs:
-                labels_data = outputs[axis_labels_config]
+            # Use helper to support nested dictionary access
+            labels_data = self._get_data_from_source(outputs, axis_labels_config, axis_labels_nested)
+            if labels_data is not None:
                 if isinstance(labels_data, (list, np.ndarray)):
                     try:
                         return str(labels_data[axis_index])
@@ -3064,19 +3066,21 @@ class ChemometricsGUI:
                 if resolved_z_label:
                     z_axis_config['label'] = resolved_z_label
             
-            # Merge axis indices for x (base + md + axis-specific)
-            x_indices = base_indices.copy()
-            x_indices.update(md_slice_indices)  # Add multi-dimensional slices
-            if 'x' in axis_indices:
-                x_indices.update(axis_indices['x'])
-            x_data = self._extract_axis_data(outputs, x_axis_config, x_indices)
-            
             # Merge axis indices for y (base + md + axis-specific)
+            # Extract y FIRST so __index__ on x-axis can use y_data as reference
             y_indices = base_indices.copy()
             y_indices.update(md_slice_indices)  # Add multi-dimensional slices
             if 'y' in axis_indices:
                 y_indices.update(axis_indices['y'])
             y_data = self._extract_axis_data(outputs, y_axis_config, y_indices)
+            
+            # Merge axis indices for x (base + md + axis-specific)
+            x_indices = base_indices.copy()
+            x_indices.update(md_slice_indices)  # Add multi-dimensional slices
+            if 'x' in axis_indices:
+                x_indices.update(axis_indices['x'])
+            # Pass y_data as reference for row index generation if needed
+            x_data = self._extract_axis_data(outputs, x_axis_config, x_indices, ref_data=y_data)
             
             # Merge axis indices for z (base + md + axis-specific)
             z_indices = base_indices.copy()
@@ -3088,7 +3092,8 @@ class ChemometricsGUI:
             if md_active_dims:
                 for dim in md_active_dims:
                     z_indices.pop(dim, None)  # Remove if present
-            z_data = self._extract_axis_data(outputs, config.get('z_axis', {}), z_indices)
+            # Pass x_data or y_data as reference for row index generation if needed
+            z_data = self._extract_axis_data(outputs, config.get('z_axis', {}), z_indices, ref_data=x_data if x_data is not None else y_data)
             
             # Create container with navigation controls on top
             control_frame = ttk.Frame(parent)
@@ -3143,8 +3148,10 @@ class ChemometricsGUI:
                     
                     # Use same indices for consistency with main plot
                     ds_x_data = self._extract_axis_data(outputs, ds_x_axis, x_indices)
-                    ds_y_data = self._extract_axis_data(outputs, ds_y_axis, y_indices)
-                    ds_z_data = self._extract_axis_data(outputs, ds_z_axis, z_indices) if ds_z_axis else None
+                    # Pass ds_x_data as reference for row index generation if needed
+                    ds_y_data = self._extract_axis_data(outputs, ds_y_axis, y_indices, ref_data=ds_x_data)
+                    # Pass ds_x_data or ds_y_data as reference for row index generation if needed
+                    ds_z_data = self._extract_axis_data(outputs, ds_z_axis, z_indices, ref_data=ds_x_data if ds_x_data is not None else ds_y_data) if ds_z_axis else None
                     
                     # Skip if required data sources don't exist (normal for optional datasets)
                     if ds_x_data is None or ds_y_data is None:
@@ -3164,7 +3171,9 @@ class ChemometricsGUI:
                         'x_data': ds_x_data,
                         'y_data': ds_y_data,
                         'label': dataset_label,
-                        'marker': dataset_cfg.get('marker', 'o')
+                        'marker': dataset_cfg.get('marker', 'o'),
+                        'x_axis': ds_x_axis,  # Preserve axis config for label extraction
+                        'y_axis': ds_y_axis   # Preserve axis config for label extraction
                     }
                     if ds_z_data is not None:
                         dataset_entry['z_data'] = ds_z_data
@@ -3267,14 +3276,74 @@ class ChemometricsGUI:
             label = ttk.Label(parent, text=f"Error rendering graph: {str(e)}", foreground="red")
             label.pack(expand=True)
     
-    def _extract_axis_data(self, outputs: dict, axis_config: dict, indices: dict = None) -> Optional[np.ndarray]:
-        """Extract data for an axis from execution outputs.
+    def _get_data_from_source(self, outputs: dict, data_source: str, nested_key: str = None) -> Any:
+        """Extract data from a source, supporting nested dictionary access and special markers.
+        
+        Args:
+            outputs: Dictionary of execution outputs
+            data_source: Key to access in outputs (e.g., 'metrics', 'model_results')
+                        Can also be special markers:
+                        - "__index__": Auto-generated row indices (requires reference_source)
+                        - "row_index": Alias for __index__
+            nested_key: Optional key for nested dictionary access (e.g., 'pct_variance_explained')
+                       Can be a single key or dot-separated path (e.g., 'stats.mean')
+        
+        Returns:
+            The extracted data, or None if not found
+        """
+        # Handle special index markers
+        if data_source in ("__index__", "row_index"):
+            # This will be handled specially - return marker to caller
+            return "__index__"
+        
+        # Get the base data from outputs
+        if data_source not in outputs:
+            return None
+        
+        data = outputs[data_source]
+        
+        # If no nested key, return the base data
+        if not nested_key:
+            return data
+        
+        # Handle nested access for dictionaries
+        if isinstance(data, dict):
+            # Support dot notation for nested paths (e.g., "stats.mean")
+            keys_path = nested_key.split('.') if '.' in nested_key else [nested_key]
+            
+            try:
+                for key in keys_path:
+                    if isinstance(data, dict) and key in data:
+                        data = data[key]
+                    else:
+                        return None
+                return data
+            except (KeyError, TypeError, AttributeError):
+                return None
+        
+        # If data isn't a dict but nested_key was specified, try list/array indexing
+        if isinstance(nested_key, str) and nested_key.isdigit():
+            try:
+                idx = int(nested_key)
+                if isinstance(data, (list, np.ndarray)) and 0 <= idx < len(data):
+                    return data[idx]
+            except (ValueError, TypeError, IndexError):
+                pass
+        
+        return None
+    
+    def _extract_axis_data(self, outputs: dict, axis_config: dict, indices: dict = None, ref_data: np.ndarray = None) -> Optional[np.ndarray]:
+        """Extract data for an axis from execution outputs, supporting nested dictionary access and row indices.
         
         Args:
             outputs: Dictionary of output data
-            axis_config: Config for this axis (including data_source)
+            axis_config: Config for this axis (including data_source and optional nested_key)
+                        Special data_source values:
+                        - "__index__": Auto-generate row indices (0, 1, 2, ...)
+                        - "row_index": Alias for __index__
             indices: Dictionary mapping dimension to index for slicing (e.g., {0: 5, 1: 2})
                     or an integer for backward compatibility
+            ref_data: Optional reference data to infer length from (used for __index__ if no reference_source)
         """
         if not axis_config:
             return None
@@ -3282,19 +3351,63 @@ class ChemometricsGUI:
         data_source = axis_config.get('data_source')
         if not data_source:
             return None
-            
-        # Check if data source exists
-        if data_source not in outputs:
-            return None
-            
-        data = outputs[data_source]
         
-        # Handle None values
-        if data is None:
-            return None
+        # Handle special row index marker
+        if data_source in ("__index__", "row_index"):
+            # Get length from reference_data, or reference_source, or explicit reference_length
+            length = None
+            
+            # Try reference_data first (passed from calling function)
+            if ref_data is not None:
+                # Convert to numpy array if needed to safely get length
+                if not isinstance(ref_data, np.ndarray):
+                    try:
+                        ref_data = np.array(ref_data)
+                    except (ValueError, TypeError):
+                        ref_data = None
+                
+                # Get length from ref_data if it's a valid array
+                if ref_data is not None and hasattr(ref_data, 'shape'):
+                    if ref_data.ndim > 0:  # Must be at least 1D
+                        length = ref_data.shape[0]
+            
+            # If still no length, try reference_source from config
+            if length is None:
+                reference_source = axis_config.get('reference_source')
+                if reference_source:
+                    reference_nested = axis_config.get('reference_nested_key')
+                    ref_data = self._get_data_from_source(outputs, reference_source, reference_nested)
+                    if ref_data is not None:
+                        if not isinstance(ref_data, np.ndarray):
+                            ref_data = np.array(ref_data)
+                        length = ref_data.shape[0]
+                else:
+                    # Try to get length from axis_config reference_length field
+                    if 'reference_length' in axis_config:
+                        length = axis_config.get('reference_length')
+            
+            if length is None:
+                # No length information provided
+                return None
+            
+            # Generate row indices: [1, 2, 3, ..., length] (1-based for user-friendliness)
+            data = np.arange(1, length + 1)
+        else:
+            # Use helper to get data, supporting nested_key for dict access
+            nested_key = axis_config.get('nested_key')
+            data = self._get_data_from_source(outputs, data_source, nested_key)
+            
+            if data is None:
+                return None
         
         # Track if this is a list source (coordinates/axes) vs array source (data)
-        is_list_source = isinstance(data, list) and len(data) > 0
+        # A list source contains multiple arrays (one per axis/dimension)
+        # A data source is a flat list or array of values
+        is_list_source = False
+        if isinstance(data, list) and len(data) > 0:
+            # Check if first element is itself an array or list (list of arrays)
+            first_elem = data[0]
+            is_list_source = isinstance(first_elem, (list, np.ndarray))
         
         # Handle list data (list of arrays like axis vectors)
         if is_list_source:
@@ -3592,18 +3705,66 @@ class ChemometricsGUI:
                 return
             
             outputs = execution_results.get('outputs', {})
-            data_source = config.get('data_source')
             
-            if not data_source or data_source not in outputs:
-                label = ttk.Label(parent, text="Data source not found", foreground="red")
-                label.pack(expand=True)
-                return
+            # Initialize col_headers - will be set based on configuration
+            col_headers = None
             
-            data = outputs[data_source]
-            
-            # Convert to numpy array if needed
-            if not isinstance(data, np.ndarray):
-                data = np.array(data)
+            # Check if using multi-column configuration (new feature)
+            columns_config = config.get('columns')
+            if columns_config:
+                # Extract multiple columns from different sources/keys
+                data_columns = []
+                col_headers = []
+                
+                for col_spec in columns_config:
+                    col_data_source = col_spec.get('data_source')
+                    col_nested_key = col_spec.get('nested_key')
+                    col_name = col_spec.get('name', col_data_source)
+                    
+                    # Extract column data
+                    col_data = self._get_data_from_source(outputs, col_data_source, col_nested_key)
+                    
+                    if col_data is None:
+                        label = ttk.Label(parent, text=f"Column data source '{col_data_source}' not found", foreground="red")
+                        label.pack(expand=True)
+                        return
+                    
+                    # Convert to numpy array if needed
+                    if not isinstance(col_data, np.ndarray):
+                        col_data = np.array(col_data)
+                    
+                    # Ensure 1D
+                    col_data = col_data.flatten()
+                    
+                    data_columns.append(col_data)
+                    col_headers.append(col_name)
+                
+                # Stack columns into a 2D array
+                try:
+                    data = np.column_stack(data_columns)
+                except ValueError:
+                    label = ttk.Label(parent, text="Column lengths do not match - all columns must have same length", foreground="red")
+                    label.pack(expand=True)
+                    return
+            else:
+                # Original single-column extraction
+                data_source = config.get('data_source')
+                nested_key = config.get('nested_key')
+                
+                # Use helper to extract data, supporting nested dictionary access
+                data = self._get_data_from_source(outputs, data_source, nested_key)
+                
+                if data is None:
+                    label = ttk.Label(parent, text="Data source not found", foreground="red")
+                    label.pack(expand=True)
+                    return
+                
+                # Convert to numpy array if needed
+                if not isinstance(data, np.ndarray):
+                    data = np.array(data)
+                
+                # Get col_headers from config if provided
+                col_headers = config.get('column_headers')
             
             # Initialize table slices state for data slicing support
             # Use (page, section_idx) tuple as section ID to ensure unique state per page
@@ -3668,7 +3829,6 @@ class ChemometricsGUI:
             decimal_places = config.get('decimal_places', 4)
             max_rows = config.get('max_rows', 50)
             max_cols = config.get('max_cols', 15)
-            col_headers = config.get('column_headers', None)
             row_headers = config.get('row_headers', None)
             
             # Initialize table state if needed
@@ -3776,9 +3936,10 @@ class ChemometricsGUI:
             # Create treeview
             tree = ttk.Treeview(tree_frame, columns=columns)
             
-            # Configure row header column
+            # Configure row header column with configurable label
+            row_label_header = config.get('row_label', 'Row')  # Default to 'Row' if not specified
             tree.column('#0', width=50, anchor='center')
-            tree.heading('#0', text='Row')
+            tree.heading('#0', text=row_label_header)
             
             # Configure data columns
             col_width = max(50, min(150, 800 // num_cols))
@@ -3791,7 +3952,7 @@ class ChemometricsGUI:
                 if row_headers is not None and row_idx < len(row_headers):
                     row_label = str(row_headers[row_idx])
                 else:
-                    row_label = str(row_idx)
+                    row_label = str(row_idx + 1)  # Display 1-based index for user
                 
                 # Format values
                 values = []
@@ -4069,13 +4230,16 @@ Count:
             # aux_axis points to axis vectors (e.g., axis_n_info) which is a list
             # For 3D graph types (heatmap, contour, 3d_surf), use z_axis as it contains the actual data
             data_source = None
+            nested_key = None  # Initialize to None for all code paths
             graph_type = config.get('graph_type', '')
             if 'aux_axis' in config:
                 # Use z_axis to get the actual data array
                 data_source = config.get('z_axis', {}).get('data_source')
+                nested_key = config.get('z_axis', {}).get('nested_key')
             elif graph_type in ('heatmap', 'contour', '3d_surf'):
                 # For 3D visualization types, z_axis contains the actual multi-dimensional data
                 data_source = config.get('z_axis', {}).get('data_source')
+                nested_key = config.get('z_axis', {}).get('nested_key')
             elif 'datasets' in config:
                 # Multi-dataset scatter plots: use first available dataset's data source
                 datasets_cfg = config.get('datasets', [])
@@ -4083,20 +4247,24 @@ Count:
                     ds_y_source = ds_cfg.get('y_axis', {}).get('data_source')
                     if ds_y_source and ds_y_source in outputs:
                         data_source = ds_y_source
+                        nested_key = ds_cfg.get('y_axis', {}).get('nested_key')
                         break
                     ds_x_source = ds_cfg.get('x_axis', {}).get('data_source')
                     if ds_x_source and ds_x_source in outputs:
                         data_source = ds_x_source
+                        nested_key = ds_cfg.get('x_axis', {}).get('nested_key')
                         break
             else:
                 # Traditional configs - use y_axis or x_axis
                 axis_config = config.get('y_axis', {}) or config.get('x_axis', {})
                 data_source = axis_config.get('data_source')
+                nested_key = axis_config.get('nested_key')
             
-            if not data_source or data_source not in outputs:
+            if not data_source:
                 return
             
-            data = outputs[data_source]
+            # Use helper to support nested dictionary access
+            data = self._get_data_from_source(outputs, data_source, nested_key)
             if not isinstance(data, np.ndarray):
                 try:
                     data = np.array(data)
@@ -4526,14 +4694,18 @@ Count:
                 
                 # Get data source - support both aux_axis and traditional configs
                 data_source = None
+                nested_key = None
                 if 'aux_axis' in config:
                     data_source = config.get('z_axis', {}).get('data_source')
+                    nested_key = config.get('z_axis', {}).get('nested_key')
                 else:
                     axis_config = config.get('y_axis', {}) or config.get('x_axis', {})
                     data_source = axis_config.get('data_source')
+                    nested_key = axis_config.get('nested_key')
                 
-                if data_source and data_source in outputs:
-                    data = outputs[data_source]
+                if data_source:
+                    # Use helper to support nested dictionary access
+                    data = self._get_data_from_source(outputs, data_source, nested_key)
                     if isinstance(data, np.ndarray):
                         # Find specified dimensions
                         specified_dims = set()
@@ -4818,19 +4990,21 @@ Count:
                 if resolved_z_label:
                     z_axis_config['label'] = resolved_z_label
             
-            # Merge axis indices for x (base + md + axis-specific)
-            x_indices = base_indices.copy()
-            x_indices.update(md_slice_indices)  # Add multi-dimensional slices
-            if 'x' in axis_indices:
-                x_indices.update(axis_indices['x'])
-            x_data = self._extract_axis_data(outputs, x_axis_config, x_indices)
-            
             # Merge axis indices for y (base + md + axis-specific)
+            # Extract y FIRST so __index__ on x-axis can use y_data as reference
             y_indices = base_indices.copy()
             y_indices.update(md_slice_indices)  # Add multi-dimensional slices
             if 'y' in axis_indices:
                 y_indices.update(axis_indices['y'])
             y_data = self._extract_axis_data(outputs, y_axis_config, y_indices)
+            
+            # Merge axis indices for x (base + md + axis-specific)
+            x_indices = base_indices.copy()
+            x_indices.update(md_slice_indices)  # Add multi-dimensional slices
+            if 'x' in axis_indices:
+                x_indices.update(axis_indices['x'])
+            # Pass y_data as reference for row index generation if needed
+            x_data = self._extract_axis_data(outputs, x_axis_config, x_indices, ref_data=y_data)
             
             # Merge axis indices for z (base + md + axis-specific)
             z_indices = base_indices.copy()
@@ -4842,7 +5016,8 @@ Count:
             if md_active_dims:
                 for dim in md_active_dims:
                     z_indices.pop(dim, None)  # Remove if present
-            z_data = self._extract_axis_data(outputs, config.get('z_axis', {}), z_indices)
+            # Pass x_data or y_data as reference for row index generation if needed
+            z_data = self._extract_axis_data(outputs, config.get('z_axis', {}), z_indices, ref_data=x_data if x_data is not None else y_data)
             
             # Create a copy of config with resolved axis labels for rendering
             render_config = config.copy()
@@ -4907,8 +5082,10 @@ Count:
                     
                     # Use same indices for consistency with main plot
                     ds_x_data = self._extract_axis_data(outputs, ds_x_axis, x_indices)
-                    ds_y_data = self._extract_axis_data(outputs, ds_y_axis, y_indices)
-                    ds_z_data = self._extract_axis_data(outputs, ds_z_axis, z_indices) if ds_z_axis else None
+                    # Pass ds_x_data as reference for row index generation if needed
+                    ds_y_data = self._extract_axis_data(outputs, ds_y_axis, y_indices, ref_data=ds_x_data)
+                    # Pass ds_x_data or ds_y_data as reference for row index generation if needed
+                    ds_z_data = self._extract_axis_data(outputs, ds_z_axis, z_indices, ref_data=ds_x_data if ds_x_data is not None else ds_y_data) if ds_z_axis else None
                     
                     # Skip if required data sources don't exist (normal for optional datasets)
                     if ds_x_data is None or ds_y_data is None:
@@ -4928,7 +5105,9 @@ Count:
                         'x_data': ds_x_data,
                         'y_data': ds_y_data,
                         'label': dataset_label,
-                        'marker': dataset_cfg.get('marker', 'o')
+                        'marker': dataset_cfg.get('marker', 'o'),
+                        'x_axis': ds_x_axis,  # Preserve axis config for label extraction
+                        'y_axis': ds_y_axis   # Preserve axis config for label extraction
                     }
                     if ds_z_data is not None:
                         dataset_entry['z_data'] = ds_z_data
