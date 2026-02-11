@@ -5207,46 +5207,48 @@ Count:
                 sys.stdout = old_stdout
                 sys.stderr = old_stderr
             
-            # Store execution results in analysis data
-            # Extract base function alias to handle both "load_data" and "load_data#2" cases
-            base_alias = instance_alias.split('#')[0] if '#' in instance_alias else instance_alias
-            
-            # Load analysis configuration from function's gui_config if available
-            analysis_config = None
-            if base_alias in self.gui_configs:
-                analysis_config = self.gui_configs[base_alias].get('analysis')
-            
-            if instance_alias not in self.analysis_data:
-                if analysis_config:
-                    # Use analysis config from function's JSON
-                    self.analysis_data[instance_alias] = {
-                        'pages': copy.deepcopy(analysis_config.get('pages', [{'title': 'Default', 'layout': 'fp', 'sections': [{'type': None}]}])),
-                        'current_page': analysis_config.get('current_page', 0)
-                    }
-                else:
-                    # Fallback to default structure
-                    self.analysis_data[instance_alias] = {
-                        'pages': [{'title': 'Default', 'layout': 'fp', 'sections': [{'type': None}]}],
-                        'current_page': 0
-                    }
-            # Note: When analysis_data already exists, we preserve the user's modifications
-            # (like removed sections). The condition evaluation will use fresh inputs from
-            # execution_results which is updated below.
-            
-            # Get input parameters from function_configs
-            input_parameters = self.function_configs.get(instance_alias, {}).copy()
-            
-            # Get outputs for this function instance
-            function_outputs = outputs.get(instance_alias, {}) if outputs else {}
-            
-            # Store the outputs from the execution
-            self.analysis_data[instance_alias]['execution_results'] = {
-                'status': 'success',
-                'timestamp': datetime.now().isoformat(),
-                'execution_time': 0,  # TODO: measure execution time
-                'outputs': function_outputs,
-                'inputs': input_parameters  # Store the input parameters for condition evaluation
-            }
+            # Store execution results in analysis data for ALL executed functions
+            # (not just the selected one), so functions before it can also display their results
+            for idx in range(stop_at_idx + 1):
+                func_instance_alias = self.methodology_list[idx]
+                func_base_alias = self.function_base_aliases[idx] if idx < len(self.function_base_aliases) else func_instance_alias
+                
+                # Load analysis configuration from function's gui_config if available
+                analysis_config = None
+                if func_base_alias in self.gui_configs:
+                    analysis_config = self.gui_configs[func_base_alias].get('analysis')
+                
+                if func_instance_alias not in self.analysis_data:
+                    if analysis_config:
+                        # Use analysis config from function's JSON
+                        self.analysis_data[func_instance_alias] = {
+                            'pages': copy.deepcopy(analysis_config.get('pages', [{'title': 'Default', 'layout': 'fp', 'sections': [{'type': None}]}])),
+                            'current_page': analysis_config.get('current_page', 0)
+                        }
+                    else:
+                        # Fallback to default structure
+                        self.analysis_data[func_instance_alias] = {
+                            'pages': [{'title': 'Default', 'layout': 'fp', 'sections': [{'type': None}]}],
+                            'current_page': 0
+                        }
+                # Note: When analysis_data already exists, we preserve the user's modifications
+                # (like removed sections). The condition evaluation will use fresh inputs from
+                # execution_results which is updated below.
+                
+                # Get input parameters from function_configs
+                input_parameters = self.function_configs.get(func_instance_alias, {}).copy()
+                
+                # Get outputs for this function instance
+                function_outputs = outputs.get(func_instance_alias, {}) if outputs else {}
+                
+                # Store the outputs from the execution
+                self.analysis_data[func_instance_alias]['execution_results'] = {
+                    'status': 'success',
+                    'timestamp': datetime.now().isoformat(),
+                    'execution_time': 0,  # TODO: measure execution time
+                    'outputs': function_outputs,
+                    'inputs': input_parameters  # Store the input parameters for condition evaluation
+                }
             
             # Note: graph_canvases, graph_slices, and table_slices are already cleared
             # by _clear_execution_cache() at the start of this method

@@ -151,6 +151,10 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
     Dataset color (if provided) is used as fallback when no class_data is available.
     Sample labels enable tooltip display on hover.
     
+    Legend shows two separate groups:
+    - Datasets: Each dataset as a separate entry with its marker and a muted color
+    - Classes: Each class as a separate entry with a standard marker and class color
+    
     Args:
         ax: Matplotlib axes
         datasets: List of dataset dicts, each containing:
@@ -166,6 +170,8 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
         qualitative_cmap: Name of qualitative colormap
         sample_labels_by_dataset: Optional dict mapping dataset labels to their sample labels
     """
+    from matplotlib.lines import Line2D
+    
     # Get colormap
     try:
         cmap = cm.get_cmap(qualitative_cmap)
@@ -197,11 +203,11 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
         for idx, cls in enumerate(all_classes):
             class_to_color[cls] = cmap_colors[idx % len(cmap_colors)]
     
-    # Track plotted items for legend
-    legend_entries = []
-    
     # Check if we have only one dataset (for cleaner legend)
     is_single_dataset = len(datasets) == 1
+    
+    # Track legend items for later construction
+    dataset_legend_items = []  # List of (label, marker, muted_color) for datasets
     
     # Plot each dataset
     for dataset in datasets:
@@ -220,7 +226,6 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
         if class_data is None:
             scatter_kwargs = {
                 'marker': marker,
-                'label': dataset_label,
                 'alpha': 0.6,
                 's': 30,
                 'picker': 5  # Enable picking for tooltips
@@ -239,7 +244,8 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
                 scatter.x_data = x_data
                 scatter.y_data = y_data
             
-            legend_entries.append(dataset_label)
+            # Track for legend
+            dataset_legend_items.append((dataset_label, marker, fallback_color or 'gray'))
         else:
             # Plot by class with different colors (class coloring takes precedence over fallback_color)
             unique_classes = np.unique(class_data)
@@ -251,18 +257,13 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
                 # Get color for this class
                 color = class_to_color.get(cls, 'C0')
                 
-                # Create label for legend - exclude dataset name if single dataset
-                if is_single_dataset:
-                    label = str(cls)
-                else:
-                    label = f"{dataset_label}-{cls}"
-                
+                # Plot without label - we'll use custom legend entries instead
                 if use_3d and z_data is not None:
                     z_subset = z_data[mask]
-                    scatter = ax.scatter(x_subset, y_subset, z_subset, marker=marker, label=label, 
+                    scatter = ax.scatter(x_subset, y_subset, z_subset, marker=marker, 
                              color=color, alpha=0.6, s=30, picker=5)
                 else:
-                    scatter = ax.scatter(x_subset, y_subset, marker=marker, label=label, 
+                    scatter = ax.scatter(x_subset, y_subset, marker=marker, 
                              color=color, alpha=0.6, s=30, picker=5)
                 
                 # Store sample labels on scatter object if provided
@@ -275,8 +276,9 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
                         scatter.sample_labels = labels_subset
                         scatter.x_data = x_subset
                         scatter.y_data = y_subset
-                
-                legend_entries.append(label)
+            
+            # Track dataset for legend
+            dataset_legend_items.append((dataset_label, marker, 'gray'))  # muted/gray color for dataset marker
     
     # Set axis labels
     ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
@@ -284,9 +286,41 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
     if use_3d:
         ax.set_zlabel(config.get('z_axis', {}).get('label', 'Z'))
     
-    # Add legend if we have multiple entries
-    if len(legend_entries) > 1 or (len(legend_entries) == 1 and config.get('show_legend', False)):
-        ax.legend(loc='best', fontsize='small')
+    # Build custom legend with two groups: Datasets and Classes
+    legend_handles = []
+    legend_labels = []
+    
+    # Add dataset entries only if multiple datasets (single dataset is implicit)
+    if len(dataset_legend_items) > 1:
+        # Add section header or separator (using an invisible entry)
+        if all_classes:  # Only add if we also have classes
+            legend_handles.append(Line2D([0], [0], marker='', color='none', linewidth=0))
+            legend_labels.append('Datasets:')
+        
+        for dataset_label, marker, color in dataset_legend_items:
+            handle = Line2D([0], [0], marker=marker, color='none', markerfacecolor=color, 
+                           markeredgecolor='gray', markersize=6, alpha=0.6, linewidth=0)
+            legend_handles.append(handle)
+            legend_labels.append(dataset_label)
+    
+    # Add class entries (only if we have classes)
+    if all_classes:
+        # Add section header
+        if dataset_legend_items:  # Only add if we also have datasets
+            legend_handles.append(Line2D([0], [0], marker='', color='none', linewidth=0))
+            legend_labels.append('Classes:')
+        
+        # Add one entry per class with standard marker (circle) and class color
+        for cls in all_classes:
+            color = class_to_color.get(cls, 'C0')
+            handle = Line2D([0], [0], marker='o', color='none', markerfacecolor=color, 
+                           markeredgecolor='darkgray', markersize=6, alpha=0.6, linewidth=0)
+            legend_handles.append(handle)
+            legend_labels.append(str(cls))
+    
+    # Add legend if we have entries to show
+    if legend_handles:
+        ax.legend(legend_handles, legend_labels, loc='best', fontsize='small')
 
 
 def _render_line(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],
