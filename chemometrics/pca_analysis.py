@@ -103,6 +103,8 @@ def pca_analysis(
     axis_n_info: Optional[List[str]] = None,
     class_data_cal: Optional[List[str]] = None,
     class_data_val: Optional[List[str]] = None,
+    smp_cal: Optional[List[str]] = None,
+    smp_val: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """Principal Component Analysis with cross-validation and U-PCA support.
     
@@ -123,6 +125,8 @@ def pca_analysis(
         axis_n_info: optional axis information for variable labels
         class_data_cal: optional list of class labels for calibration samples
         class_data_val: optional list of class labels for validation samples
+        smp_cal: optional list of sample labels for calibration samples
+        smp_val: optional list of sample labels for validation samples
 
     Returns:
         Dict with keys:
@@ -136,6 +140,8 @@ def pca_analysis(
         - metrics_cv: per-fold metrics (if CV enabled)
         - cv_results: aggregated CV metrics (if CV enabled)
         - data_shape: original shape of input data (for multiway reference)
+        - smp_cal: sample labels for calibration samples
+        - smp_val: sample labels for validation samples
         
     Note on Multiway Data:
         When X_cal has ndim >= 3 (e.g., shape (100, 50, 10)):
@@ -187,7 +193,7 @@ def pca_analysis(
                 return_keys = ['model_scores', 'model_loadings', 'val_scores', 
                              'model_scores_cv', 'model_loadings_cv', 'metrics', 'cv_results',
                              'data_shape', 'data_shape_val', 'axis_n_info', 'pc_labels',
-                             'class_data_cal', 'class_data_val']
+                             'class_data_cal', 'class_data_val', 'smp_cal', 'smp_val']
                 result_dict = dict(zip(return_keys, result))
                 # Collect loadings per fold for tensor stacking
                 _fold_loadings_collector.append(result_dict['model_loadings'])
@@ -215,10 +221,11 @@ def pca_analysis(
             # Also compute single fit on full data (with X_val for projection)
             single_results = _pca_analysis_single_fit(
                 X_cal, X_val, n_components, fold=-1, axis_n_info=axis_n_info,
-                class_data_cal=class_data_cal, class_data_val=class_data_val
+                class_data_cal=class_data_cal, class_data_val=class_data_val,
+                smp_cal=smp_cal, smp_val=smp_val
             )
             # single_results is a tuple, extract it
-            model_scores, model_loadings, val_scores, scores_cv, loadings_cv, metrics, _, cal_shape, val_shape, axis_labels, pc_labels, _, _ = single_results
+            model_scores, model_loadings, val_scores, scores_cv, loadings_cv, metrics, cv_results, cal_shape, val_shape, axis_labels, pc_labels, class_data_cal, class_data_val, smp_cal, smp_val = single_results
             
             # Extract CV scores from pipeline (reconstructed array: n_samples × n_components)
             cv_model_scores = cv_results_dict.get('model_scores_cv', None)
@@ -248,12 +255,15 @@ def pca_analysis(
                 pc_labels,
                 class_data_cal,  # calibration class data
                 class_data_val,  # validation class data
+                smp_cal,  # calibration sample labels
+                smp_val,  # validation sample labels
             )
     
     # Single fit (no CV or CV disabled)
     return _pca_analysis_single_fit(
         X_cal, X_val, n_components, fold=fold, axis_n_info=axis_n_info,
-        class_data_cal=class_data_cal, class_data_val=class_data_val
+        class_data_cal=class_data_cal, class_data_val=class_data_val,
+        smp_cal=smp_cal, smp_val=smp_val
     )
 
 
@@ -265,6 +275,8 @@ def _pca_analysis_single_fit(
     axis_n_info: Optional[List[str]] = None,
     class_data_cal: Optional[List[str]] = None,
     class_data_val: Optional[List[str]] = None,
+    smp_cal: Optional[List[str]] = None,
+    smp_val: Optional[List[str]] = None,
     **kwargs
 ) -> Dict[str, Any]:
     """Internal: single PCA fit (used both standalone and by CVPipeline).
@@ -349,4 +361,6 @@ def _pca_analysis_single_fit(
         pc_labels,  # component labels (e.g., ["PC 1", "PC 2", "PC 3"])
         class_data_cal,  # calibration class data
         class_data_val,  # validation class data
+        smp_cal,  # calibration sample labels
+        smp_val,  # validation sample labels
     )

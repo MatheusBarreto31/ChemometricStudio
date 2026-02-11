@@ -19,7 +19,9 @@ def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarr
                        y_data: Optional[np.ndarray], z_data: Optional[np.ndarray],
                        x_axis_config: dict, y_axis_config: dict, default_cmap: str = 'viridis',
                        datasets: Optional[List[Dict[str, Any]]] = None, 
-                       qualitative_cmap: str = 'tab10') -> Tuple[Figure, any]:
+                       qualitative_cmap: str = 'tab10',
+                       sample_labels: Optional[List[str]] = None,
+                       sample_labels_by_dataset: Optional[Dict[str, List[str]]] = None) -> Tuple[Figure, any]:
     """Create and render a matplotlib figure for the specified graph type.
     
     Args:
@@ -33,6 +35,8 @@ def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarr
         default_cmap: Default colormap to use (can be overridden by config['cmap'])
         datasets: Optional list of dataset dicts for multi-dataset scatter plots
         qualitative_cmap: Qualitative colormap for class-based coloring
+        sample_labels: Optional list of sample labels for tooltip display on scatter plots
+        sample_labels_by_dataset: Optional dict mapping dataset labels to their sample labels
     
     Returns:
         Tuple of (Figure, axes) - the matplotlib figure and axes
@@ -61,7 +65,8 @@ def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarr
     
     # Render based on graph type
     if graph_type == 'scatter':
-        _render_scatter(ax, x_data, y_data, z_data, config, use_3d, datasets, qualitative_cmap)
+        _render_scatter(ax, x_data, y_data, z_data, config, use_3d, datasets, qualitative_cmap, 
+                       sample_labels, sample_labels_by_dataset)
     elif graph_type == 'line':
         _render_line(ax, x_data, y_data, config)
     elif graph_type == 'bar':
@@ -89,38 +94,62 @@ def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarr
 def _render_scatter(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],
                    z_data: Optional[np.ndarray], config: dict, use_3d: bool,
                    datasets: Optional[List[Dict[str, Any]]] = None,
-                   qualitative_cmap: str = 'tab10') -> None:
+                   qualitative_cmap: str = 'tab10',
+                   sample_labels: Optional[List[str]] = None,
+                   sample_labels_by_dataset: Optional[Dict[str, List[str]]] = None) -> None:
     """Render a scatter plot (2D or 3D), supporting single or multiple datasets with class coloring.
     
     For multiple datasets with class information:
     - Each dataset uses a unique marker type
     - Each class within a dataset uses a unique color from the qualitative colormap
     - Legend shows dataset-class combinations
+    - Sample labels enable tooltip display on hover
+    
+    Args:
+        ax: Matplotlib axes
+        x_data: X-axis data
+        y_data: Y-axis data
+        z_data: Z-axis data (for 3D)
+        config: Graph configuration
+        use_3d: Whether to render as 3D scatter
+        datasets: Optional list of dataset dicts for multi-dataset rendering
+        qualitative_cmap: Name of qualitative colormap
+        sample_labels: Optional list of sample labels for single dataset
+        sample_labels_by_dataset: Optional dict mapping dataset labels to their sample labels
     """
     # If datasets provided, use multi-dataset rendering with class support
     if datasets and len(datasets) > 0:
-        _render_scatter_multi_dataset(ax, datasets, config, use_3d, qualitative_cmap)
+        _render_scatter_multi_dataset(ax, datasets, config, use_3d, qualitative_cmap, 
+                                     sample_labels_by_dataset)
     # Otherwise use traditional single dataset rendering
     elif x_data is not None and y_data is not None:
         if use_3d:
             # 3D scatter
-            ax.scatter(x_data, y_data, z_data, alpha=0.6)
+            scatter = ax.scatter(x_data, y_data, z_data, alpha=0.6, picker=5)
             ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
             ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
             ax.set_zlabel(config.get('z_axis', {}).get('label', 'Z'))
         else:
-            # 2D scatter
-            ax.scatter(x_data, y_data, alpha=0.6)
+            # 2D scatter with picker enabled for tooltips
+            scatter = ax.scatter(x_data, y_data, alpha=0.6, picker=5)
             ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
             ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+        
+        # Store sample labels on the scatter plot object for later retrieval
+        if sample_labels is not None:
+            scatter.sample_labels = sample_labels
+            scatter.x_data = x_data
+            scatter.y_data = y_data
 
 
 def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: dict, 
-                                 use_3d: bool, qualitative_cmap: str) -> None:
+                                 use_3d: bool, qualitative_cmap: str,
+                                 sample_labels_by_dataset: Optional[Dict[str, List[str]]] = None) -> None:
     """Render multiple datasets on the same scatter plot with class-based coloring.
     
     Each dataset uses a unique marker. Classes within datasets use colors from the qualitative colormap.
     Dataset color (if provided) is used as fallback when no class_data is available.
+    Sample labels enable tooltip display on hover.
     
     Args:
         ax: Matplotlib axes
@@ -135,6 +164,7 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
         config: Graph configuration
         use_3d: Whether to render as 3D scatter
         qualitative_cmap: Name of qualitative colormap
+        sample_labels_by_dataset: Optional dict mapping dataset labels to their sample labels
     """
     # Get colormap
     try:
@@ -170,6 +200,9 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
     # Track plotted items for legend
     legend_entries = []
     
+    # Check if we have only one dataset (for cleaner legend)
+    is_single_dataset = len(datasets) == 1
+    
     # Plot each dataset
     for dataset in datasets:
         x_data = dataset.get('x_data')
@@ -189,15 +222,23 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
                 'marker': marker,
                 'label': dataset_label,
                 'alpha': 0.6,
-                's': 30
+                's': 30,
+                'picker': 5  # Enable picking for tooltips
             }
             if fallback_color:
                 scatter_kwargs['color'] = fallback_color
             
             if use_3d and z_data is not None:
-                ax.scatter(x_data, y_data, z_data, **scatter_kwargs)
+                scatter = ax.scatter(x_data, y_data, z_data, **scatter_kwargs)
             else:
-                ax.scatter(x_data, y_data, **scatter_kwargs)
+                scatter = ax.scatter(x_data, y_data, **scatter_kwargs)
+            
+            # Store sample labels on scatter object if provided
+            if sample_labels_by_dataset and dataset_label in sample_labels_by_dataset:
+                scatter.sample_labels = sample_labels_by_dataset[dataset_label]
+                scatter.x_data = x_data
+                scatter.y_data = y_data
+            
             legend_entries.append(dataset_label)
         else:
             # Plot by class with different colors (class coloring takes precedence over fallback_color)
@@ -210,16 +251,30 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
                 # Get color for this class
                 color = class_to_color.get(cls, 'C0')
                 
-                # Create label combining dataset and class
-                label = f"{dataset_label}-{cls}"
+                # Create label for legend - exclude dataset name if single dataset
+                if is_single_dataset:
+                    label = str(cls)
+                else:
+                    label = f"{dataset_label}-{cls}"
                 
                 if use_3d and z_data is not None:
                     z_subset = z_data[mask]
-                    ax.scatter(x_subset, y_subset, z_subset, marker=marker, label=label, 
-                             color=color, alpha=0.6, s=30)
+                    scatter = ax.scatter(x_subset, y_subset, z_subset, marker=marker, label=label, 
+                             color=color, alpha=0.6, s=30, picker=5)
                 else:
-                    ax.scatter(x_subset, y_subset, marker=marker, label=label, 
-                             color=color, alpha=0.6, s=30)
+                    scatter = ax.scatter(x_subset, y_subset, marker=marker, label=label, 
+                             color=color, alpha=0.6, s=30, picker=5)
+                
+                # Store sample labels on scatter object if provided
+                # For class-colored datasets, subset the labels to match the masked data
+                if sample_labels_by_dataset and dataset_label in sample_labels_by_dataset:
+                    all_labels = sample_labels_by_dataset[dataset_label]
+                    # Apply same mask to subset the labels
+                    if mask is not None and len(all_labels) == len(mask):
+                        labels_subset = [all_labels[i] for i in range(len(all_labels)) if mask[i]]
+                        scatter.sample_labels = labels_subset
+                        scatter.x_data = x_subset
+                        scatter.y_data = y_subset
                 
                 legend_entries.append(label)
     
@@ -336,7 +391,7 @@ def _render_contour(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarra
 
 
 def embed_figure_in_tkinter(fig: Figure, parent_frame: ttk.Frame) -> Tuple[FigureCanvasTkAgg, ttk.Frame]:
-    """Embed a matplotlib figure in a tkinter widget.
+    """Embed a matplotlib figure in a tkinter widget with tooltip support.
     
     Args:
         fig: Matplotlib figure to embed
@@ -358,7 +413,99 @@ def embed_figure_in_tkinter(fig: Figure, parent_frame: ttk.Frame) -> Tuple[Figur
     canvas_frame.grid_columnconfigure(0, weight=1)
     canvas.draw()
     
+    # Set up tooltip display for scatter plots with sample labels
+    _setup_scatter_tooltips(canvas, fig)
+    
     return canvas, canvas_frame
+
+
+def _setup_scatter_tooltips(canvas: FigureCanvasTkAgg, fig: Figure) -> None:
+    """Set up hover tooltips for scatter plot data points.
+    
+    Args:
+        canvas: The matplotlib canvas
+        fig: The matplotlib figure
+    """
+    # Get axes from figure
+    ax = fig.axes[0] if fig.axes else None
+    if not ax:
+        return
+    
+    # Find scatter collections with sample labels
+    scatter_collections = [child for child in ax.collections 
+                          if hasattr(child, 'sample_labels')]
+    
+    if not scatter_collections:
+        return
+    
+    # Store state for hover tracking
+    tooltip_state = {'annotation': None, 'last_ind': None}
+    
+    def on_motion(event):
+        """Handle mouse motion to show/hide tooltips."""
+        if event.inaxes != ax:
+            # Mouse left the axes, hide tooltip
+            if tooltip_state['annotation']:
+                tooltip_state['annotation'].remove()
+                tooltip_state['annotation'] = None
+            canvas.draw_idle()
+            return
+        
+        # Check each scatter collection for nearby points
+        for scatter in scatter_collections:
+            if not hasattr(scatter, 'sample_labels'):
+                continue
+            
+            contains, inds = scatter.contains(event)
+            
+            if contains:
+                # Found a point near the cursor
+                ind = inds.get('ind', [None])[0] if isinstance(inds, dict) else (inds[0] if len(inds) > 0 else None)
+                
+                if ind is not None and ind != tooltip_state['last_ind']:
+                    # Remove old annotation if it exists
+                    if tooltip_state['annotation']:
+                        tooltip_state['annotation'].remove()
+                        tooltip_state['annotation'] = None
+                    
+                    # Get sample label
+                    sample_labels = scatter.sample_labels
+                    if ind < len(sample_labels):
+                        label = str(sample_labels[ind])
+                        
+                        # Get point coordinates
+                        if hasattr(scatter, 'x_data') and hasattr(scatter, 'y_data'):
+                            x_data = scatter.x_data
+                            y_data = scatter.y_data
+                            if ind < len(x_data) and ind < len(y_data):
+                                x = x_data[ind]
+                                y = y_data[ind]
+                                
+                                # Create annotation (tooltip)
+                                tooltip_state['annotation'] = ax.annotate(
+                                    label,
+                                    xy=(x, y),
+                                    xytext=(8, 8),
+                                    textcoords='offset points',
+                                    bbox=dict(boxstyle='round,pad=0.5', fc='yellow', alpha=0.7),
+                                    arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0', lw=1),
+                                    fontsize=9,
+                                    zorder=10
+                                )
+                                tooltip_state['last_ind'] = ind
+                                canvas.draw_idle()
+                                return
+            else:
+                # Mouse not over this scatter plot
+                if tooltip_state['last_ind'] is not None:
+                    # Remove tooltip if we were showing one from this scatter
+                    if tooltip_state['annotation']:
+                        tooltip_state['annotation'].remove()
+                        tooltip_state['annotation'] = None
+                    tooltip_state['last_ind'] = None
+    
+    # Connect the motion event
+    canvas.mpl_connect('motion_notify_event', on_motion)
 from typing import Union, Tuple
 
 def update_embedded_figure(fig: Figure, instance_alias: str, section_id: Union[int, Tuple[int, int]],
@@ -409,6 +556,9 @@ def update_embedded_figure(fig: Figure, instance_alias: str, section_id: Union[i
             # Use grid to maintain consistent sizing
             canvas_widget.grid(row=0, column=0, sticky='nsew')
             new_canvas.draw_idle()  # Use draw_idle for smoother updates
+            
+            # Set up tooltips for the updated figure
+            _setup_scatter_tooltips(new_canvas, fig)
             
             # Update stored reference
             analysis_data[instance_alias]['graph_canvases'][section_id] = (new_canvas, stored_canvas_frame)

@@ -7,7 +7,7 @@
     "smoothing": ["X_cal", "X_val"],
     "center_and_normalize": ["X_cal", "X_val"],
     "univariate_calibration": ["y_cal_pred", "y_val_pred", "models", "metrics", "cv_results"],
-    "pca_analysis": ["model_scores", "model_loadings", "val_scores", "model_scores_cv", "model_loadings_cv", "metrics", "cv_results", "data_shape", "data_shape_val", "axis_n_info", "pc_labels", "class_data_cal", "class_data_val"]
+    "pca_analysis": ["model_scores", "model_loadings", "val_scores", "model_scores_cv", "model_loadings_cv", "metrics", "cv_results", "data_shape", "data_shape_val", "axis_n_info", "pc_labels", "class_data_cal", "class_data_val", "smp_cal", "smp_val"]
   },
   "input_specs": {
     "cv_configuration": ["use_cv", "cv_strategy", "n_splits", "random_state", "shuffle", "window_size", "n_repeats", "test_size"],
@@ -17,7 +17,7 @@
     "smoothing": ["X_cal", "method", "X_val", "nway_flag", "direction", "window_size", "polyorder"],
     "center_and_normalize": ["X_cal", "X_val", "center", "normalize", "nway_flag", "direction"],
     "univariate_calibration": ["X_cal", "Y_cal", "X_val", "Y_val", "degree", "intercept", "cv_config"],
-    "pca_analysis": ["X_cal", "X_val", "n_components", "cv_config", "axis_n_info", "class_data_cal", "class_data_val"]
+    "pca_analysis": ["X_cal", "X_val", "n_components", "cv_config", "axis_n_info", "class_data_cal", "class_data_val", "smp_cal", "smp_val"]
   },
   "import_map": {
     "cv_configuration": ["chemometrics.cv_pipeline", "cv_configuration"],

@@ -2999,6 +2999,17 @@ class ChemometricsGUI:
                 # Traditional x_axis/y_axis config
                 x_axis_config = config.get('x_axis', {})
                 y_axis_config = config.get('y_axis', {})
+                
+                # For multi-dataset scatter plots with no top-level axes, get them from datasets
+                datasets_config = config.get('datasets')
+                if datasets_config and isinstance(datasets_config, list) and len(datasets_config) > 0:
+                    if not x_axis_config and not y_axis_config:
+                        # Get axis configs from first dataset that has them
+                        for dataset_cfg in datasets_config:
+                            if not x_axis_config and 'x_axis' in dataset_cfg:
+                                x_axis_config = dataset_cfg['x_axis']
+                            if not y_axis_config and 'y_axis' in dataset_cfg:
+                                y_axis_config = dataset_cfg['y_axis']
             
             # Resolve axis labels from variables if needed
             # Make copies to avoid modifying original configs
@@ -3162,6 +3173,9 @@ class ChemometricsGUI:
                     # Include color if specified (used as fallback when no class_data)
                     if 'color' in dataset_cfg:
                         dataset_entry['color'] = dataset_cfg['color']
+                    # Include sample_labels_source if specified per-dataset
+                    if 'sample_labels_source' in dataset_cfg:
+                        dataset_entry['sample_labels_source'] = dataset_cfg['sample_labels_source']
                     extracted_datasets.append(dataset_entry)
             
             # If main plot has class_labels config, treat it as a dataset for proper class coloring with qualitative colormap
@@ -3186,6 +3200,9 @@ class ChemometricsGUI:
                         }
                         if z_data is not None:
                             main_dataset['z_data'] = z_data
+                        # Include sample_labels_source if specified at config level
+                        if 'sample_labels_source' in config:
+                            main_dataset['sample_labels_source'] = config['sample_labels_source']
                         
                         # Add main dataset at the beginning of the list
                         extracted_datasets.insert(0, main_dataset)
@@ -3195,12 +3212,47 @@ class ChemometricsGUI:
                         y_data = None
                         z_data = None
             
+            # Extract sample labels for tooltip display from individual datasets
+            sample_labels = None
+            sample_labels_by_dataset = None
+            
+            # If we have extracted datasets, collect their sample_labels_source
+            if extracted_datasets and len(extracted_datasets) > 0:
+                sample_labels_by_dataset = {}
+                for dataset_entry in extracted_datasets:
+                    ds_label = dataset_entry.get('label')
+                    ds_source = dataset_entry.get('sample_labels_source')
+                    if ds_label and ds_source and ds_source in outputs:
+                        labels_data = outputs[ds_source]
+                        if isinstance(labels_data, (list, np.ndarray)):
+                            sample_labels_by_dataset[ds_label] = [str(lbl) for lbl in labels_data]
+            else:
+                # For single dataset, check for sample_labels_source in config
+                sample_labels_source = config.get('sample_labels_source')
+                if isinstance(sample_labels_source, str):
+                    # Single sample labels source
+                    if sample_labels_source in outputs:
+                        labels_data = outputs[sample_labels_source]
+                        if isinstance(labels_data, (list, np.ndarray)):
+                            sample_labels = [str(lbl) for lbl in labels_data]
+            
+            # Fall back to default names if no explicit source found
+            if not sample_labels and not sample_labels_by_dataset:
+                for label_key in ['smp_cal', 'sample_labels', 'smp_path', 'sample_names']:
+                    if label_key in outputs:
+                        labels_data = outputs[label_key]
+                        if isinstance(labels_data, (list, np.ndarray)):
+                            sample_labels = [str(lbl) for lbl in labels_data]
+                            break
+            
             # Render graph using graph_renderer module
             fig, ax = graph_renderer.render_graph_figure(
                 graph_type, render_config, x_data, y_data, z_data, x_axis_config, y_axis_config,
                 default_cmap=self.settings_manager.get('colormap', 'viridis'),
                 datasets=extracted_datasets,
-                qualitative_cmap=self.settings_manager.get('qualitative_colormap', 'tab10')
+                qualitative_cmap=self.settings_manager.get('qualitative_colormap', 'tab10'),
+                sample_labels=sample_labels,
+                sample_labels_by_dataset=sample_labels_by_dataset
             )
             
             # Embed figure in tkinter within a managed frame
@@ -4801,6 +4853,31 @@ Count:
             
             # Handle multiple datasets if configured
             datasets_config = config.get('datasets')
+            
+            # For multi-dataset scatter plots, if config has datasets but no top-level x/y axes,
+            # resolve the axis labels from the first dataset's axes (all datasets typically share same axis labels)
+            if datasets_config and isinstance(datasets_config, list) and len(datasets_config) > 0:
+                # Only override if main config doesn't have x_axis/y_axis
+                if not config.get('x_axis') or not config.get('y_axis'):
+                    # Get axis configs from first dataset that has them
+                    for dataset_cfg in datasets_config:
+                        if not config.get('x_axis') and 'x_axis' in dataset_cfg:
+                            temp_x_axis = dataset_cfg['x_axis'].copy()
+                            resolved_x_label = self._resolve_axis_label(temp_x_axis, outputs, axis_index=x_axis_idx)
+                            if resolved_x_label:
+                                temp_x_axis['label'] = resolved_x_label
+                            render_config['x_axis'] = temp_x_axis
+                            break
+                    
+                    for dataset_cfg in datasets_config:
+                        if not config.get('y_axis') and 'y_axis' in dataset_cfg:
+                            temp_y_axis = dataset_cfg['y_axis'].copy()
+                            resolved_y_label = self._resolve_axis_label(temp_y_axis, outputs, axis_index=y_axis_idx)
+                            if resolved_y_label:
+                                temp_y_axis['label'] = resolved_y_label
+                            render_config['y_axis'] = temp_y_axis
+                            break
+            
             extracted_datasets = None
             if datasets_config and isinstance(datasets_config, list):
                 extracted_datasets = []
@@ -4860,6 +4937,9 @@ Count:
                     # Include color if specified (used as fallback when no class_data)
                     if 'color' in dataset_cfg:
                         dataset_entry['color'] = dataset_cfg['color']
+                    # Include sample_labels_source if specified per-dataset
+                    if 'sample_labels_source' in dataset_cfg:
+                        dataset_entry['sample_labels_source'] = dataset_cfg['sample_labels_source']
                     extracted_datasets.append(dataset_entry)
             
             # If main plot has class_labels config, treat it as a dataset for proper class coloring with qualitative colormap
@@ -4884,6 +4964,9 @@ Count:
                         }
                         if z_data is not None:
                             main_dataset['z_data'] = z_data
+                        # Include sample_labels_source if specified at config level
+                        if 'sample_labels_source' in config:
+                            main_dataset['sample_labels_source'] = config['sample_labels_source']
                         
                         # Add main dataset at the beginning of the list
                         extracted_datasets.insert(0, main_dataset)
@@ -4893,12 +4976,47 @@ Count:
                         y_data = None
                         z_data = None
             
+            # Extract sample labels for tooltip display from individual datasets
+            sample_labels = None
+            sample_labels_by_dataset = None
+            
+            # If we have extracted datasets, collect their sample_labels_source
+            if extracted_datasets and len(extracted_datasets) > 0:
+                sample_labels_by_dataset = {}
+                for dataset_entry in extracted_datasets:
+                    ds_label = dataset_entry.get('label')
+                    ds_source = dataset_entry.get('sample_labels_source')
+                    if ds_label and ds_source and ds_source in outputs:
+                        labels_data = outputs[ds_source]
+                        if isinstance(labels_data, (list, np.ndarray)):
+                            sample_labels_by_dataset[ds_label] = [str(lbl) for lbl in labels_data]
+            else:
+                # For single dataset, check for sample_labels_source in config
+                sample_labels_source = config.get('sample_labels_source')
+                if isinstance(sample_labels_source, str):
+                    # Single sample labels source
+                    if sample_labels_source in outputs:
+                        labels_data = outputs[sample_labels_source]
+                        if isinstance(labels_data, (list, np.ndarray)):
+                            sample_labels = [str(lbl) for lbl in labels_data]
+            
+            # Fall back to default names if no explicit source found
+            if not sample_labels and not sample_labels_by_dataset:
+                for label_key in ['smp_cal', 'sample_labels', 'smp_path', 'sample_names']:
+                    if label_key in outputs:
+                        labels_data = outputs[label_key]
+                        if isinstance(labels_data, (list, np.ndarray)):
+                            sample_labels = [str(lbl) for lbl in labels_data]
+                            break
+            
             # Render graph using graph_renderer module
             fig, ax = graph_renderer.render_graph_figure(
                 graph_type, render_config, x_data, y_data, z_data, x_axis_config, y_axis_config,
                 default_cmap=self.settings_manager.get('colormap', 'viridis'),
                 datasets=extracted_datasets,
-                qualitative_cmap=self.settings_manager.get('qualitative_colormap', 'tab10')
+                qualitative_cmap=self.settings_manager.get('qualitative_colormap', 'tab10'),
+                sample_labels=sample_labels,
+                sample_labels_by_dataset=sample_labels_by_dataset
             )
             
             # Update existing canvas with new figure
