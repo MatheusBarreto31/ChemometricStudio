@@ -68,7 +68,7 @@ def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarr
         _render_scatter(ax, x_data, y_data, z_data, config, use_3d, datasets, qualitative_cmap, 
                        sample_labels, sample_labels_by_dataset)
     elif graph_type == 'line':
-        _render_line(ax, x_data, y_data, config)
+        _render_line(ax, x_data, y_data, config, datasets)
     elif graph_type == 'bar':
         _render_bar(ax, x_data, y_data, config)
     elif graph_type == 'histogram':
@@ -324,9 +324,13 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
 
 
 def _render_line(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],
-                config: dict) -> None:
-    """Render a line plot."""
-    if x_data is not None and y_data is not None:
+                config: dict, datasets: Optional[List[Dict[str, Any]]] = None) -> None:
+    """Render a line plot, supporting single or multiple datasets."""
+    # If datasets provided, use multi-dataset rendering
+    if datasets and len(datasets) > 0:
+        _render_line_multi_dataset(ax, datasets, config)
+    # Otherwise use traditional single dataset rendering
+    elif x_data is not None and y_data is not None:
         marker = config.get('marker')  # None if absent, defaults to line only
         # Handle 2D arrays (matrices) by plotting each row as a separate line
         if isinstance(y_data, np.ndarray) and y_data.ndim == 2:
@@ -339,6 +343,61 @@ def _render_line(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],
             ax.plot(x_data, y_data, marker=marker)
         ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
         ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+
+
+def _render_line_multi_dataset(ax, datasets: List[Dict[str, Any]], config: dict) -> None:
+    """Render multiple line datasets on the same plot.
+    
+    Args:
+        ax: Matplotlib axes
+        datasets: List of dataset dicts, each containing:
+            - 'x_data': numpy array
+            - 'y_data': numpy array
+            - 'x_axis': dict with axis config (for label extraction)
+            - 'y_axis': dict with axis config (for label extraction)
+            - 'label': str (dataset/line name)
+            - 'marker': str (optional marker type, e.g., 'o', 's', '^')
+            - 'color': str (optional, e.g., '#1f77b4')
+        config: Graph configuration
+    """
+    x_axis_label = None
+    y_axis_label = None
+    
+    # Plot each dataset
+    for dataset in datasets:
+        x_data = dataset.get('x_data')
+        y_data = dataset.get('y_data')
+        label = dataset.get('label', 'Dataset')
+        marker = dataset.get('marker')
+        color = dataset.get('color')
+        
+        # Extract axis labels from the first dataset
+        if x_axis_label is None and 'x_axis' in dataset:
+            x_axis_label = dataset['x_axis'].get('label')
+        if y_axis_label is None and 'y_axis' in dataset:
+            y_axis_label = dataset['y_axis'].get('label')
+        
+        if x_data is None or y_data is None:
+            continue
+        
+        # Plot the line with optional marker and color
+        plot_kwargs = {'label': label}
+        if marker is not None:
+            plot_kwargs['marker'] = marker
+        if color is not None:
+            plot_kwargs['color'] = color
+        
+        ax.plot(x_data, y_data, **plot_kwargs)
+    
+    # Set axis labels if found
+    if x_axis_label:
+        ax.set_xlabel(x_axis_label)
+    if y_axis_label:
+        ax.set_ylabel(y_axis_label)
+    
+    # Show legend automatically for multi-dataset
+    if len(datasets) > 1:
+        ax.legend()
 
 
 def _render_bar(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],
