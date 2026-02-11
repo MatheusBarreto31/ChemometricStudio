@@ -166,7 +166,7 @@
             "type": "graph",
             "config": {
               "graph_type": "line",
-              "x_axis": {"data_source": "metrics", "nested_key": "pct_variance_explained", "label": "Component"},
+              "x_axis": {"data_source": "__index__", "label": "PC", "reference_source": "metrics", "reference_nested_key": "pct_variance_explained"},
               "y_axis": {"data_source": "metrics", "nested_key": "pct_variance_explained", "label": "Variance Explained (%)"},
               "title": "Explained Variance by Component",
               "line_style": "lines+markers"
@@ -227,6 +227,121 @@
               "data_slicing": [
                 {"name": "PC-X", "dimension": 1, "axis": "x", "show_navigation_menu": true},
                 {"name": "PC-Y", "dimension": 1, "axis": "y", "show_navigation_menu": true}
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Metrics Summary",
+        "layout": "fp",
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "data_source": "metrics",
+              "nested_key": "pct_variance_explained",
+              "title": "Explained Variance Table",
+              "row_label": "PC",
+              "decimal_places": 4,
+              "max_rows": 50
+            }
+          }
+        ]
+      },
+      {
+        "title": "Multi-Column Comparison",
+        "layout": "fp",
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "title": "Component Variance Metrics",
+              "row_label": "PC",
+              "columns": [
+                {
+                  "data_source": "metrics",
+                  "nested_key": "pct_variance_explained",
+                  "name": "Individual Variance (%)"
+                },
+                {
+                  "data_source": "metrics",
+                  "nested_key": "calibration.cumsum_pct_variance",
+                  "name": "Cumulative Variance (%)"
+                }
+              ],
+              "decimal_places": 2,
+              "max_rows": 20
+            }
+          }
+        ]
+      },
+      {
+        "title": "Scree Plot with Row Index",
+        "layout": "fp",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "title": "Scree Plot - Component Variance",
+              "graph_type": "scatter",
+              "x_axis": {
+                "data_source": "__index__",
+                "label": "Principal Component",
+                "reference_source": "metrics",
+                "reference_nested_key": "pct_variance_explained"
+              },
+              "y_axis": {
+                "data_source": "metrics",
+                "nested_key": "pct_variance_explained",
+                "label": "Explained Variance (%)"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "title": "Scree Plot with Line",
+        "layout": "fp",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "title": "Scree Plot - Individual & Cumulative Variance",
+              "graph_type": "line",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "label": "Principal Component",
+                    "reference_source": "metrics",
+                    "reference_nested_key": "pct_variance_explained"
+                  },
+                  "y_axis": {
+                    "data_source": "metrics",
+                    "nested_key": "pct_variance_explained",
+                    "label": "Explained Variance (%)"
+                  },
+                  "label": "Individual Variance",
+                  "marker": "o",
+                  "color": "#1f77b4"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "label": "Principal Component",
+                    "reference_source": "metrics",
+                    "reference_nested_key": "pct_variance_explained"
+                  },
+                  "y_axis": {
+                    "data_source": "metrics",
+                    "nested_key": "calibration.cumsum_pct_variance",
+                    "label": "Cumulative Variance (%)"
+                  },
+                  "label": "Cumulative Variance",
+                  "marker": "s",
+                  "color": "#ff7f0e"
+                }
               ]
             }
           }
