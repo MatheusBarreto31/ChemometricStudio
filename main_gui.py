@@ -3276,16 +3276,26 @@ class ChemometricsGUI:
             if 'graph_data_metadata' not in self.analysis_data[instance_alias]:
                 self.analysis_data[instance_alias]['graph_data_metadata'] = {}
             
+            # For aux_axis configs, store the data source name so we can re-extract during export
+            z_data_source = None
+            if 'aux_axis' in config:
+                z_data_source = config.get('z_axis', {}).get('data_source')
+            elif config.get('graph_type') in ('heatmap', '3d_surf', 'contour'):
+                z_data_source = config.get('z_axis', {}).get('data_source')
+            
             self.analysis_data[instance_alias]['graph_data_metadata'][section_id] = {
                 'x_data': x_data.copy() if isinstance(x_data, np.ndarray) else x_data,
                 'y_data': y_data.copy() if isinstance(y_data, np.ndarray) else y_data,
                 'z_data': z_data.copy() if isinstance(z_data, np.ndarray) else z_data,
+                'z_data_source': z_data_source,  # Store source name for re-extraction during export
                 'x_axis_config': x_axis_config.copy() if x_axis_config else {},
                 'y_axis_config': y_axis_config.copy() if y_axis_config else {},
                 'z_axis_config': z_axis_config.copy() if z_axis_config else {},
                 'extracted_datasets': extracted_datasets,  # Could contain references but will be used as-is
                 'graph_type': graph_type,
-                'graph_title': config.get('graph_title', config.get('title', 'Graph'))
+                'graph_title': config.get('graph_title', config.get('title', 'Graph')),
+                'outputs': outputs,  # Store outputs for accessing any additional data sources
+                'config': config  # Store config for accessing class_labels and other metadata
             }
             
         except Exception as e:
@@ -4260,11 +4270,86 @@ Count:
             x_data = metadata.get('x_data')
             y_data = metadata.get('y_data')
             z_data = metadata.get('z_data')
+            z_data_source = metadata.get('z_data_source')
             x_axis_config = metadata.get('x_axis_config', {})
             y_axis_config = metadata.get('y_axis_config', {})
             z_axis_config = metadata.get('z_axis_config', {})
             extracted_datasets = metadata.get('extracted_datasets')
             graph_type = metadata.get('graph_type', 'unknown')
+            outputs = metadata.get('outputs', {})
+            config = metadata.get('config', {})
+            
+            # For aux_axis configs, re-extract z_data from the raw source to ensure we have full dimensional data
+            if 'aux_axis' in config and z_data_source and z_data_source in outputs:
+                z_data_raw = outputs[z_data_source]
+                if isinstance(z_data_raw, np.ndarray):
+                    z_data = z_data_raw  # Use the full raw data instead of the sliced version
+            
+            # For aux_axis configs, recompute x_data and y_data based on current dimension combination
+            if 'aux_axis' in config and z_data is not None and isinstance(z_data, np.ndarray) and z_data.ndim >= 4:
+                # Get current slice state to get md_combo_index
+                slice_state = None
+                if instance_alias in self.analysis_data:
+                    graph_slices = self.analysis_data[instance_alias].get('graph_slices', {})
+                    slice_state = graph_slices.get(section_id)
+                
+                if slice_state:
+                    # Compute which dimensions are active based on md_combo_index
+                    nav_axes = config.get('data_slicing', [])
+                    specified_dims = set()
+                    for nav_item in nav_axes:
+                        if isinstance(nav_item, dict):
+                            dim = nav_item.get('dimension')
+                            if dim is not None:
+                                specified_dims.add(dim)
+                    
+                    # Compute dimension combinations
+                    from itertools import combinations
+                    all_dims = set(range(z_data.ndim))
+                    remaining_dims = sorted(all_dims - specified_dims)
+                    combo_size = 2
+                    
+                    if remaining_dims and len(remaining_dims) >= combo_size:
+                        combos = list(combinations(remaining_dims, combo_size))
+                        md_combo_index = slice_state.get('md_combo_index', 0)
+                        if md_combo_index < len(combos):
+                            md_active_dims = list(combos[md_combo_index])
+                            
+                            # Now extract x_data and y_data from aux_axis based on active dims
+                            aux_axis_config = config['aux_axis']
+                            data_source = aux_axis_config.get('data_source')
+                            labels_config = aux_axis_config.get('labels', [])
+                            
+                            # Resolve labels
+                            labels = []
+                            if isinstance(labels_config, str):
+                                # labels is a variable name
+                                if labels_config in outputs:
+                                    label_data = outputs[labels_config]
+                                    if isinstance(label_data, (list, np.ndarray)):
+                                        labels = [str(lbl) for lbl in label_data]
+                            elif isinstance(labels_config, list):
+                                labels = labels_config
+                            
+                            # Extract axis data from data_source
+                            if data_source and data_source in outputs:
+                                axis_data_full = outputs[data_source]
+                                if isinstance(axis_data_full, list):
+                                    # x-axis uses first dimension in active combination
+                                    if len(md_active_dims) > 0:
+                                        dim_idx = md_active_dims[0]
+                                        if dim_idx < len(axis_data_full):
+                                            x_data = np.array(axis_data_full[dim_idx])
+                                            x_label = labels[dim_idx] if dim_idx < len(labels) else f"Axis {dim_idx}"
+                                            x_axis_config = {'label': x_label}
+                                    
+                                    # y-axis uses second dimension in active combination
+                                    if len(md_active_dims) > 1:
+                                        dim_idx = md_active_dims[1]
+                                        if dim_idx < len(axis_data_full):
+                                            y_data = np.array(axis_data_full[dim_idx])
+                                            y_label = labels[dim_idx] if dim_idx < len(labels) else f"Axis {dim_idx}"
+                                            y_axis_config = {'label': y_label}
             
             # Get axis labels
             x_label = x_axis_config.get('label', 'X')
@@ -4282,6 +4367,7 @@ Count:
                     ds_x_data = dataset.get('x_data')
                     ds_y_data = dataset.get('y_data')
                     ds_z_data = dataset.get('z_data')
+                    ds_class_data = dataset.get('class_data')
                     
                     # Get axis info from dataset
                     ds_x_axis = dataset.get('x_axis', {})
@@ -4298,6 +4384,8 @@ Count:
                     if ds_z_data is not None:
                         z_label_ds = 'Z'
                         data_dict[z_label_ds] = ds_z_data.flatten() if isinstance(ds_z_data, np.ndarray) else ds_z_data
+                    if ds_class_data is not None:
+                        data_dict['Class'] = ds_class_data.flatten() if isinstance(ds_class_data, np.ndarray) else ds_class_data
                     
                     if data_dict:
                         df = pd.DataFrame(data_dict)
@@ -4316,16 +4404,138 @@ Count:
                 if z_data is not None:
                     data_dict[z_label] = z_data.flatten() if isinstance(z_data, np.ndarray) else z_data
                 
+                # Try to get class data if not already in extracted_datasets
+                outputs = metadata.get('outputs', {})
+                config = metadata.get('config', {})
+                
+                # Check if config has class_labels field
+                class_labels_source = config.get('class_labels')
+                if class_labels_source and class_labels_source in outputs:
+                    class_val = outputs[class_labels_source]
+                    if isinstance(class_val, (list, np.ndarray)):
+                        class_data = np.array(class_val)
+                        if class_data.ndim > 1:
+                            class_data = class_data.flatten()
+                        data_dict['Class'] = class_data
+                else:
+                    # Try common class label sources
+                    for class_source in ['class_data_cal', 'class_data_val', 'class_labels', 'class_data']:
+                        if class_source in outputs:
+                            class_val = outputs[class_source]
+                            if isinstance(class_val, (list, np.ndarray)):
+                                class_data = np.array(class_val)
+                                if class_data.ndim > 1:
+                                    class_data = class_data.flatten()
+                                data_dict['Class'] = class_data
+                                break
+                
                 if data_dict:
                     # For multi-dimensional data (heatmap, 3D), include shape info
                     if graph_type in ('heatmap', '3d_surf', 'contour') and z_data is not None:
-                        if isinstance(z_data, np.ndarray) and z_data.ndim > 1:
+                        if isinstance(z_data, np.ndarray) and z_data.ndim > 2:
+                            # For 3D+ data, need to get the currently displayed 2D slice
+                            # Get the slice state from analysis_data
+                            slice_state = None
+                            if instance_alias in self.analysis_data:
+                                graph_slices = self.analysis_data[instance_alias].get('graph_slices', {})
+                                slice_state = graph_slices.get(section_id)
+                            
+                            if slice_state:
+                                # Check if this is an aux_axis config (4D+ with dimension combo)
+                                md_active_dims = None
+                                has_aux_axis = 'aux_axis' in config
+                                
+                                if has_aux_axis:
+                                    # For aux_axis configs, compute which dimensions are actively displayed
+                                    nav_axes = config.get('data_slicing', [])
+                                    specified_dims = set()
+                                    for nav_item in nav_axes:
+                                        if isinstance(nav_item, dict):
+                                            dim = nav_item.get('dimension')
+                                            if dim is not None:
+                                                specified_dims.add(dim)
+                                    
+                                    # Compute dimension combinations
+                                    from itertools import combinations
+                                    all_dims = set(range(z_data.ndim))
+                                    remaining_dims = sorted(all_dims - specified_dims)
+                                    combo_size = 2
+                                    
+                                    if remaining_dims and len(remaining_dims) >= combo_size:
+                                        combos = list(combinations(remaining_dims, combo_size))
+                                        md_combo_index = slice_state.get('md_combo_index', 0)
+                                        if md_combo_index < len(combos):
+                                            md_active_dims = list(combos[md_combo_index])
+                                
+                                # Extract the currently displayed 2D slice using the stored indices
+                                indices = slice_state.get('indices', {})
+                                md_slice_indices = slice_state.get('md_slice_indices', {})
+                                
+                                # Merge indices for slicing
+                                all_indices = indices.copy()
+                                all_indices.update(md_slice_indices)
+                                
+                                # For aux_axis configs, exclude active dimensions from slicing
+                                if md_active_dims:
+                                    for dim in md_active_dims:
+                                        all_indices.pop(dim, None)
+                                
+                                # Build proper indexing tuple
+                                index_list = []
+                                for dim in range(z_data.ndim):
+                                    if dim in all_indices:
+                                        idx = all_indices[dim]
+                                        max_idx = z_data.shape[dim] - 1
+                                        if idx > max_idx:
+                                            idx = max_idx
+                                        elif idx < 0:
+                                            idx = 0
+                                        index_list.append(idx)
+                                    else:
+                                        index_list.append(slice(None))
+                                
+                                # Apply slicing to get 2D data
+                                try:
+                                    z_data_2d = z_data[tuple(index_list)]
+                                    # If still not 2D, try to reshape
+                                    if z_data_2d.ndim > 2:
+                                        z_data_2d = z_data_2d.flatten().reshape(z_data.shape[0], -1)
+                                    df = pd.DataFrame(z_data_2d)
+                                    # Add row/col labels only if dimensions match exactly
+                                    if x_data is not None and y_data is not None:
+                                        try:
+                                            x_array = np.asarray(x_data).flatten() if hasattr(x_data, '__len__') else x_data
+                                            y_array = np.asarray(y_data).flatten() if hasattr(y_data, '__len__') else y_data
+                                            # Only apply labels if dimensions match
+                                            if len(x_array) == z_data_2d.shape[1]:
+                                                df.columns = [f"{x_label}_{i}_{val}" for i, val in enumerate(x_array)]
+                                            if len(y_array) == z_data_2d.shape[0]:
+                                                df.index = [f"{y_label}_{i}_{val}" for i, val in enumerate(y_array)]
+                                        except Exception:
+                                            pass  # Keep default integer indices if something fails
+                                except (IndexError, ValueError):
+                                    # Fallback: just use first 2D slice
+                                    z_data_2d = z_data[0] if z_data.ndim > 2 else z_data
+                                    df = pd.DataFrame(z_data_2d)
+                            else:
+                                # No slice state, use first 2D slice
+                                z_data_2d = z_data[0] if z_data.ndim > 2 else z_data
+                                df = pd.DataFrame(z_data_2d)
+                        elif isinstance(z_data, np.ndarray) and z_data.ndim == 2:
                             # For 2D data, save as-is with row/col headers
                             df = pd.DataFrame(z_data)
-                            # Add row/col indices if x and y data exist
+                            # Add row/col indices only if x and y data dimensions match
                             if x_data is not None and y_data is not None:
-                                df.columns = [f"{x_label}_{val}" for val in x_data] if hasattr(x_data, '__len__') else [f"{x_label}_{i}" for i in range(z_data.shape[1])]
-                                df.index = [f"{y_label}_{val}" for val in y_data] if hasattr(y_data, '__len__') else [f"{y_label}_{i}" for i in range(z_data.shape[0])]
+                                try:
+                                    x_array = np.asarray(x_data).flatten() if hasattr(x_data, '__len__') else x_data
+                                    y_array = np.asarray(y_data).flatten() if hasattr(y_data, '__len__') else y_data
+                                    # Only apply labels if dimensions match
+                                    if len(x_array) == z_data.shape[1]:
+                                        df.columns = [f"{x_label}_{i}_{val}" for i, val in enumerate(x_array)]
+                                    if len(y_array) == z_data.shape[0]:
+                                        df.index = [f"{y_label}_{i}_{val}" for i, val in enumerate(y_array)]
+                                except Exception:
+                                    pass  # Keep default integer indices if something fails
                         else:
                             df = pd.DataFrame(data_dict)
                     else:
@@ -4333,7 +4543,11 @@ Count:
                     
                     filename = f"{safe_title}.csv"
                     file_path = Path(dir_path) / filename
-                    df.to_csv(file_path, index=False)
+                    # For heatmaps, export just the data matrix without headers or index
+                    if graph_type in ('heatmap', 'contour', '3d_surf'):
+                        df.to_csv(file_path, index=False, header=False)
+                    else:
+                        df.to_csv(file_path, index=False)
                     files_created.append(filename)
             
             # Show success message
