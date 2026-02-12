@@ -34,6 +34,9 @@ from settings import get_settings_manager
 # Import graph renderer module
 import graph_renderer
 
+# Import add graph dialog
+from add_graph_dialog import show_add_graph_dialog
+
 # Import routing map window
 from routing_map_window import RoutingMapWindow
 
@@ -2204,7 +2207,7 @@ class ChemometricsGUI:
         
         # Add graph button
         add_graph_btn = ttk.Button(control_frame, text="Add graph", 
-                                   command=lambda: messagebox.showinfo("Info", "Add Graph feature is still in development"))
+                                   command=lambda: self._show_add_graph_dialog(instance_alias))
         add_graph_btn.pack(side=tk.LEFT, padx=5)
         
         # Add table button
@@ -5645,6 +5648,10 @@ Count:
         cancel_btn = ttk.Button(button_frame, text="Cancel", command=dialog.destroy)
         cancel_btn.pack(padx=5)
     
+    def _show_add_graph_dialog(self, instance_alias: str):
+        """Show the Add Graph dialog."""
+        show_add_graph_dialog(self.root, self, instance_alias)
+    
     def _show_add_page_dialog(self, instance_alias: str):
         """Show dialog to add a new page."""
         if instance_alias not in self.analysis_data:
@@ -5652,37 +5659,119 @@ Count:
         
         dialog = tk.Toplevel(self.root)
         dialog.title("Add Page")
-        dialog.geometry("350x250")
+        dialog.geometry("500x520")
         dialog.resizable(False, False)
         
-        # Page title
-        title_label = ttk.Label(dialog, text="Page Title:", font=("Arial", 10))
-        title_label.pack(padx=10, pady=(10, 5))
+        # Main content frame with scrolling
+        main_frame = ttk.Frame(dialog)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        title_entry = ttk.Entry(dialog, width=30)
-        title_entry.pack(padx=10, pady=(0, 10))
+        # Page title
+        title_label = ttk.Label(main_frame, text="Page Title:", font=("Arial", 10))
+        title_label.pack(anchor=tk.W, pady=(0, 5))
+        
+        title_entry = ttk.Entry(main_frame, width=30)
+        title_entry.pack(anchor=tk.W, pady=(0, 10))
         title_entry.insert(0, f"Page {len(self.analysis_data[instance_alias]['pages']) + 1}")
         
-        # Layout selection
-        layout_label = ttk.Label(dialog, text="Layout:", font=("Arial", 10))
-        layout_label.pack(padx=10, pady=(10, 5))
+        # Layout selection with visual buttons
+        layout_label = ttk.Label(main_frame, text="Layout:", font=("Arial", 11, "bold"))
+        layout_label.pack(anchor=tk.W, pady=(10, 10))
         
         layouts = [
-            ('fp', 'Full Page (1 section)'),
-            ('ns', 'North-South (2 sections)'),
-            ('ew', 'East-West (2 sections)'),
-            ('fd', 'Four Divisions (4 sections)'),
-            ('sd', 'South Division (3 sections)'),
+            ('fp', 'Full\nPage'),
+            ('ns', 'North-\nSouth'),
+            ('ew', 'East-\nWest'),
+            ('fd', 'Four\nSections'),
+            ('sd', 'South\nDivision'),
+            ('nd', 'North\nDivision'),
+            ('ed', 'East\nDivision'),
+            ('wd', 'West\nDivision'),
         ]
         
         layout_var = tk.StringVar(value='fp')
-        for layout_code, layout_desc in layouts:
-            radio = ttk.Radiobutton(dialog, text=layout_desc, variable=layout_var, value=layout_code)
-            radio.pack(anchor=tk.W, padx=30, pady=2)
+        button_map = {}
+        
+        def draw_layout_visualization(canvas, layout_code):
+            """Draw layout visualization on canvas."""
+            canvas.create_rectangle(2, 2, 78, 78, outline='black', fill='white', width=1)
+            
+            if layout_code == 'fp':
+                pass  # Just rectangle
+            elif layout_code == 'ns':
+                canvas.create_line(2, 39, 78, 39, width=2)  # Horizontal
+            elif layout_code == 'ew':
+                canvas.create_line(39, 2, 39, 78, width=2)  # Vertical
+            elif layout_code == 'fd':
+                canvas.create_line(39, 2, 39, 78, width=2)  # Vertical
+                canvas.create_line(2, 39, 78, 39, width=2)  # Horizontal
+            elif layout_code == 'sd':
+                canvas.create_line(2, 39, 78, 39, width=2)  # Horizontal
+                canvas.create_line(39, 39, 39, 78, width=2)  # Vertical in bottom
+            elif layout_code == 'nd':
+                canvas.create_line(2, 39, 78, 39, width=2)  # Horizontal
+                canvas.create_line(39, 2, 39, 39, width=2)  # Vertical in top
+            elif layout_code == 'ed':
+                canvas.create_line(39, 2, 39, 78, width=2)  # Vertical
+                canvas.create_line(39, 39, 78, 39, width=2)  # Horizontal in right
+            elif layout_code == 'wd':
+                canvas.create_line(39, 2, 39, 78, width=2)  # Vertical
+                canvas.create_line(2, 39, 39, 39, width=2)  # Horizontal in left
+        
+        def on_layout_select(layout_code, btn_frame):
+            """Handle layout button selection."""
+            layout_var.set(layout_code)
+            for btn in button_map.values():
+                btn.config(relief=tk.RAISED, bg='SystemButtonFace')
+            btn_frame.config(relief=tk.SUNKEN, bg='#D0E8FF')
+        
+        # Create layout buttons in grid (4 columns, 2 rows)
+        layouts_grid_frame = ttk.Frame(main_frame)
+        layouts_grid_frame.pack(fill=tk.BOTH, expand=True, pady=10, padx=5)
+        
+        for row in range(2):
+            row_frame = ttk.Frame(layouts_grid_frame)
+            row_frame.pack(fill=tk.BOTH, expand=True, pady=3, padx=2)
+            
+            for col in range(4):
+                idx = row * 4 + col
+                if idx < len(layouts):
+                    layout_code, layout_desc = layouts[idx]
+                    
+                    # Create button frame
+                    btn_frame = tk.Frame(row_frame, relief=tk.RAISED, borderwidth=2, width=95, height=125, bg='SystemButtonFace')
+                    btn_frame.pack_propagate(False)
+                    btn_frame.pack(side=tk.LEFT, padx=5, pady=0)
+                    
+                    # Canvas with layout visualization
+                    canvas = tk.Canvas(btn_frame, width=80, height=80, bg='white', highlightthickness=1, highlightbackground='#999999')
+                    canvas.pack(padx=3, pady=(3, 0))
+                    draw_layout_visualization(canvas, layout_code)
+                    
+                    # Label
+                    label = tk.Label(btn_frame, text=layout_desc, font=("Arial", 7), bg='SystemButtonFace', justify=tk.CENTER)
+                    label.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+                    
+                    # Store button reference
+                    button_map[layout_code] = btn_frame
+                    
+                    # Bind click events
+                    def make_click_handler(code, frame):
+                        def handler(event=None):
+                            on_layout_select(code, frame)
+                        return handler
+                    
+                    btn_frame.bind("<Button-1>", make_click_handler(layout_code, btn_frame))
+                    canvas.bind("<Button-1>", make_click_handler(layout_code, btn_frame))
+                    label.bind("<Button-1>", make_click_handler(layout_code, btn_frame))
+        
+        # Pre-select first button
+        first_btn = button_map['fp']
+        first_btn.config(relief=tk.SUNKEN, bg='#D0E8FF')
         
         # Buttons
         button_frame = ttk.Frame(dialog)
-        button_frame.pack(fill=tk.X, padx=10, pady=10)
+        button_frame.pack(fill=tk.X, padx=10, pady=10, side=tk.BOTTOM)
         
         def add_page():
             title = title_entry.get() or "New Page"
