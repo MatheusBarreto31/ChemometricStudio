@@ -19,6 +19,8 @@ import shutil
 import platform
 from datetime import datetime
 import tempfile
+import threading
+import time
 from PIL import Image, ImageTk
 import numpy as np
 import matplotlib.pyplot as plt
@@ -1121,7 +1123,50 @@ class ChemometricsGUI:
             self._position_execution_progress_popup()
             popup.deiconify()
             popup.lift()
+        self.root.update()
+
+    def _show_execution_progress_message(self, status_text: str):
+        """Show centered execution popup with an indeterminate progress message."""
+        self._ensure_execution_progress_popup()
+        if not self.execution_progress_bar:
+            return
+
+        if self.execution_progress_hide_after_id is not None:
+            try:
+                self.root.after_cancel(self.execution_progress_hide_after_id)
+            except Exception:
+                pass
+            self.execution_progress_hide_after_id = None
+
+        self.execution_progress_mode = ""
+        self.execution_progress_bar.stop()
+        self.execution_progress_bar.configure(mode="indeterminate")
+        self.execution_progress_bar.configure(maximum=100)
+        self.execution_progress_bar.configure(value=0)
+        self.execution_progress_bar.start(12)
+
+        if self.execution_progress_status_label:
+            self.execution_progress_status_label.configure(text=status_text)
+        if self.execution_progress_percent_label:
+            self.execution_progress_percent_label.configure(text="")
+
+        popup = self.execution_progress_popup
+        if popup is not None and popup.winfo_exists():
+            self._position_execution_progress_popup()
+            popup.deiconify()
+            popup.lift()
         self.root.update_idletasks()
+
+    def _stop_execution_progress_message(self):
+        """Stop indeterminate popup progress state and hide popup immediately."""
+        if self.execution_progress_bar:
+            try:
+                self.execution_progress_bar.stop()
+            except Exception:
+                pass
+            self.execution_progress_bar.configure(mode="determinate")
+            self.execution_progress_bar.configure(value=0)
+        self._hide_execution_progress()
 
     def _update_execution_progress(self, completed_steps: int, total_steps: int, instance_alias: str = "", base_alias: str = ""):
         """Update execution progress bar and status text."""
@@ -7941,7 +7986,50 @@ Count:
             self._build_report_footer_text()
         )
 
-        compile_result = compile_latex_to_pdf(latex_source, str(output_pdf))
+        self._show_execution_progress_message(
+            self.language_manager.translate(
+                "ui.messages.generating_pdf_wait",
+                "PDF is being generated. Please wait..."
+            )
+        )
+
+        compile_result_holder: Dict[str, Any] = {}
+        compile_exception_holder: Dict[str, str] = {}
+        compile_done = threading.Event()
+
+        def _compile_worker():
+            try:
+                compile_result_holder['result'] = compile_latex_to_pdf(latex_source, str(output_pdf))
+            except Exception as exc:
+                compile_exception_holder['error'] = str(exc)
+            finally:
+                compile_done.set()
+
+        compile_thread = threading.Thread(target=_compile_worker, daemon=True)
+        compile_thread.start()
+
+        try:
+            while not compile_done.is_set():
+                self.root.update()
+                time.sleep(0.03)
+
+            if compile_exception_holder.get('error'):
+                compile_result = {
+                    'success': False,
+                    'pdf_path': None,
+                    'tex_path': str(output_pdf.with_suffix('.tex')),
+                    'error': compile_exception_holder['error'],
+                }
+            else:
+                compile_result = compile_result_holder.get('result') or {
+                    'success': False,
+                    'pdf_path': None,
+                    'tex_path': str(output_pdf.with_suffix('.tex')),
+                    'error': self.language_manager.translate("ui.messages.report_compile_failed", "Report compilation failed."),
+                }
+        finally:
+            self._stop_execution_progress_message()
+
         if compile_result.get('success'):
             for suffix in ('.tex', '.aux', '.log', '.out', '.toc'):
                 artifact = output_pdf.with_suffix(suffix)

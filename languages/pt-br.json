@@ -242,6 +242,7 @@
       "report_compile_failed": "Falha na compilação do relatório.",
       "report_tex_saved": "Fonte LaTeX salva, mas a compilação do PDF falhou.",
       "report_tex_only": "Arquivo .tex salvo (compilação do PDF falhou).",
+      "generating_pdf_wait": "O PDF está sendo gerado. Aguarde...",
       "run_model_before_report": "Execute o modelo antes de pré-visualizar ou salvar o relatório.",
       "samples_c_title": "Amostras (C)",
       "samples_vt_title": "Amostras (V/T)",

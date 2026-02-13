@@ -242,6 +242,7 @@
       "report_compile_failed": "Report compilation failed.",
       "report_tex_saved": "LaTeX source saved, but PDF compilation failed.",
       "report_tex_only": "Saved .tex source (PDF compilation failed).",
+      "generating_pdf_wait": "PDF is being generated. Please wait...",
       "run_model_before_report": "Run the model before previewing or saving the report.",
       "samples_c_title": "Samples (C)",
       "samples_vt_title": "Samples (V/T)",
