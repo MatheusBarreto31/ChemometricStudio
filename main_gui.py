@@ -16,6 +16,7 @@ from io import StringIO
 import shlex
 import zipfile
 import shutil
+import platform
 from datetime import datetime
 import tempfile
 from PIL import Image, ImageTk
@@ -42,6 +43,7 @@ from add_table_dialog import show_add_table_dialog
 
 # Import routing map window
 from routing_map_window import RoutingMapWindow
+from chemometrics.reporting import build_latex_document, compile_latex_to_pdf
 
 # Load function specs
 SPECS_PATH = Path(__file__).parent / "function_specs.json"
@@ -143,6 +145,10 @@ class ChemometricsGUI:
         self.latest_timing_report: Optional[Dict[str, Any]] = None
         self.tools_menu = None
         self.timing_report_menu_index: Optional[int] = None
+        self.report_data: Dict[str, Any] = {
+            'elements': [],
+            'selected_index': None
+        }
         
         # Configure dark theme styles
         style = ttk.Style()
@@ -6617,13 +6623,1355 @@ Count:
 
     
     def _show_report_tab(self):
-        """Show Report tab (placeholder)."""
+        """Show Report tab with report composition controls and preview."""
         self._clear_tab()
         self.current_tab = "report"
-        
-        label = ttk.Label(self.tab_content_frame, text=self.language_manager.translate("ui.messages.report_tab", "Report Tab (Under Development)"), 
-                         font=("Arial", 12, "bold"))
-        label.pack(padx=20, pady=20)
+
+        if not hasattr(self, 'report_data') or not isinstance(self.report_data, dict):
+            self.report_data = {'elements': [], 'selected_index': None}
+        if 'elements' not in self.report_data:
+            self.report_data['elements'] = []
+        if 'selected_index' not in self.report_data:
+            self.report_data['selected_index'] = None
+
+        main_paned = ttk.PanedWindow(self.tab_content_frame, orient=tk.HORIZONTAL)
+        main_paned.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
+
+        sidebar_frame = ttk.Frame(main_paned, width=360)
+        sidebar_frame.pack_propagate(False)
+        main_paned.add(sidebar_frame, weight=0)
+
+        right_frame = ttk.Frame(main_paned)
+        main_paned.add(right_frame, weight=1)
+
+        preview_save_frame = ttk.LabelFrame(sidebar_frame, text=self.language_manager.translate("ui.labels.preview_save", "Preview / Save"), padding=8)
+        preview_save_frame.pack(fill=tk.X, padx=4, pady=(4, 8))
+
+        preview_save_buttons = ttk.Frame(preview_save_frame)
+        preview_save_buttons.pack(fill=tk.X)
+
+        preview_btn = ttk.Button(
+            preview_save_buttons,
+            text=self.language_manager.translate("ui.buttons.preview_report", "Preview"),
+            command=self._generate_report_preview,
+            width=14
+        )
+        preview_btn.pack(side=tk.LEFT, padx=(0, 4))
+
+        save_btn = ttk.Button(
+            preview_save_buttons,
+            text=self.language_manager.translate("ui.buttons.save_pdf_report", "Save PDF"),
+            command=self._save_pdf_report,
+            width=14
+        )
+        save_btn.pack(side=tk.LEFT, padx=(4, 0))
+
+        middle_frame = ttk.Frame(sidebar_frame)
+        middle_frame.pack(fill=tk.BOTH, expand=True, padx=4, pady=(0, 4))
+
+        vertical_split = ttk.PanedWindow(middle_frame, orient=tk.VERTICAL)
+        vertical_split.pack(fill=tk.BOTH, expand=True)
+
+        elements_frame = ttk.LabelFrame(vertical_split, text=self.language_manager.translate("ui.labels.elements", "Elements"), padding=8)
+        vertical_split.add(elements_frame, weight=1)
+
+        element_definitions = [
+            ("report_header", self._report_element_label("report_header")),
+            ("title", self._report_element_label("title")),
+            ("section", self._report_element_label("section")),
+            ("subsection", self._report_element_label("subsection")),
+            ("subsubsection", self._report_element_label("subsubsection")),
+            ("sample_name_cal", self._report_element_label("sample_name_cal")),
+            ("sample_name_val", self._report_element_label("sample_name_val")),
+            ("sample_metadata_cal", self._report_element_label("sample_metadata_cal")),
+            ("sample_metadata_val", self._report_element_label("sample_metadata_val")),
+            ("text", self._report_element_label("text")),
+            ("graph", self._report_element_label("graph")),
+            ("table", self._report_element_label("table")),
+            ("page_break", self._report_element_label("page_break")),
+        ]
+
+        elements_scroll_container = ttk.Frame(elements_frame)
+        elements_scroll_container.pack(fill=tk.BOTH, expand=True)
+
+        elements_scrollbar = tk.Scrollbar(elements_scroll_container, orient=tk.VERTICAL)
+        elements_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        elements_canvas = tk.Canvas(elements_scroll_container, highlightthickness=0, bg="#f0f0f0", yscrollcommand=elements_scrollbar.set)
+        elements_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        elements_scrollbar.configure(command=elements_canvas.yview)
+
+        elements_inner = ttk.Frame(elements_canvas)
+        elements_canvas.create_window((0, 0), window=elements_inner, anchor="nw")
+        elements_inner.bind("<Configure>", lambda e: elements_canvas.configure(scrollregion=elements_canvas.bbox("all")))
+
+        def _elements_mousewheel(event):
+            try:
+                elements_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            except Exception:
+                pass
+
+        elements_canvas.bind("<MouseWheel>", _elements_mousewheel)
+        elements_inner.bind("<MouseWheel>", _elements_mousewheel)
+
+        for element_type, label in element_definitions:
+            btn = ttk.Button(
+                elements_inner,
+                text=label,
+                command=lambda et=element_type: self._add_report_element(et)
+            )
+            btn.pack(fill=tk.X, pady=2)
+
+        structure_frame = ttk.LabelFrame(vertical_split, text=self.language_manager.translate("ui.labels.structure", "Structure"), padding=8)
+        vertical_split.add(structure_frame, weight=1)
+
+        structure_list_frame = ttk.Frame(structure_frame)
+        structure_list_frame.pack(fill=tk.BOTH, expand=True)
+
+        self.report_structure_listbox = tk.Listbox(structure_list_frame, height=12, selectmode=tk.SINGLE)
+        self.report_structure_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.report_structure_listbox.bind("<<ListboxSelect>>", self._on_report_structure_select)
+
+        structure_scroll = ttk.Scrollbar(structure_list_frame, orient=tk.VERTICAL, command=self.report_structure_listbox.yview)
+        structure_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.report_structure_listbox.configure(yscrollcommand=structure_scroll.set)
+
+        structure_btn_frame = ttk.Frame(structure_frame)
+        structure_btn_frame.pack(fill=tk.X, pady=(8, 0))
+
+        remove_btn = ttk.Button(
+            structure_btn_frame,
+            text=self.language_manager.translate("ui.buttons.remove_selected", "Remove Selected"),
+            command=self._remove_selected_report_element
+        )
+        remove_btn.pack(side=tk.LEFT, padx=(0, 4))
+
+        clear_btn = ttk.Button(
+            structure_btn_frame,
+            text=self.language_manager.translate("ui.buttons.clear_all", "Clear All"),
+            command=self._clear_report_elements
+        )
+        clear_btn.pack(side=tk.LEFT, padx=(4, 0))
+
+        reorder_btn_frame = ttk.Frame(structure_frame)
+        reorder_btn_frame.pack(fill=tk.X, pady=(6, 0))
+
+        up_btn = ttk.Button(
+            reorder_btn_frame,
+            text="↑",
+            width=4,
+            command=lambda: self._move_report_element(-1)
+        )
+        up_btn.pack(side=tk.LEFT, padx=2)
+
+        down_btn = ttk.Button(
+            reorder_btn_frame,
+            text="↓",
+            width=4,
+            command=lambda: self._move_report_element(1)
+        )
+        down_btn.pack(side=tk.LEFT, padx=2)
+
+        editor_frame = ttk.LabelFrame(right_frame, text=self.language_manager.translate("ui.labels.element_configuration", "Element Configuration"), padding=10)
+        editor_frame.pack(fill=tk.BOTH, expand=True, padx=4, pady=(4, 4))
+        self.report_editor_frame = editor_frame
+
+        preview_frame = ttk.LabelFrame(right_frame, text=self.language_manager.translate("ui.labels.report_preview", "Report Preview (LaTeX)"), padding=8)
+        preview_frame.pack(fill=tk.BOTH, expand=True, padx=4, pady=(0, 4))
+
+        preview_text = tk.Text(preview_frame, wrap=tk.WORD, font=("Consolas", 9), height=14)
+        preview_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        preview_scroll = ttk.Scrollbar(preview_frame, orient=tk.VERTICAL, command=preview_text.yview)
+        preview_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        preview_text.configure(yscrollcommand=preview_scroll.set)
+        self.report_preview_text = preview_text
+
+        status_label = ttk.Label(right_frame, text=self.language_manager.translate("ui.messages.report_ready", "Report editor ready."), font=("Arial", 9, "italic"))
+        status_label.pack(fill=tk.X, padx=8, pady=(0, 6))
+        self.report_status_label = status_label
+
+        self._update_report_structure_list()
+
+        selected_index = self.report_data.get('selected_index')
+        if isinstance(selected_index, int) and 0 <= selected_index < len(self.report_data.get('elements', [])):
+            self.report_structure_listbox.selection_clear(0, tk.END)
+            self.report_structure_listbox.selection_set(selected_index)
+            self.report_structure_listbox.see(selected_index)
+            self._show_report_element_editor(selected_index)
+        else:
+            self._show_report_element_editor(None)
+
+    def _add_report_element(self, element_type: str):
+        """Add a report element to the structure list."""
+        default_settings = {
+            'report_header': {'text': self.language_manager.translate("ui.messages.default_report_header", "Chemometric Studio Report"), 'font_size': 16, 'align': 'center', 'bold': True, 'italic': False, 'underline': False},
+            'title': {'text': self.language_manager.translate("ui.messages.default_title", "Title"), 'font_size': 16, 'align': 'left', 'bold': False, 'italic': False, 'underline': False},
+            'section': {'text': self.language_manager.translate("ui.messages.default_section", "Section"), 'font_size': 14, 'align': 'left', 'bold': False, 'italic': False, 'underline': False},
+            'subsection': {'text': self.language_manager.translate("ui.messages.default_subsection", "Subsection"), 'font_size': 13, 'align': 'left', 'bold': False, 'italic': False, 'underline': False},
+            'subsubsection': {'text': self.language_manager.translate("ui.messages.default_subsubsection", "Subsubsection"), 'font_size': 12, 'align': 'left', 'bold': False, 'italic': False, 'underline': False},
+            'sample_name_cal': {},
+            'sample_name_val': {},
+            'sample_metadata_cal': {},
+            'sample_metadata_val': {},
+            'text': {'text': '', 'font_size': 11, 'align': 'left', 'bold': False, 'italic': False, 'underline': False},
+            'graph': {'graph_ref': None, 'title': self.language_manager.translate("ui.messages.default_graph", "Graph"), 'width': 0.9},
+            'table': {
+                'table_ref': None,
+                'title': self.language_manager.translate("ui.messages.default_table", "Table"),
+                'max_rows': 50,
+                'omit_row_column': False,
+                'row_column_header': self.language_manager.translate('ui.labels.row', 'Row')
+            },
+            'page_break': {},
+        }
+
+        new_element = {
+            'type': element_type,
+            'settings': copy.deepcopy(default_settings.get(element_type, {'text': ''}))
+        }
+
+        self.report_data.setdefault('elements', []).append(new_element)
+        new_index = len(self.report_data['elements']) - 1
+        self.report_data['selected_index'] = new_index
+        self._update_report_structure_list()
+        if hasattr(self, 'report_structure_listbox'):
+            self.report_structure_listbox.selection_clear(0, tk.END)
+            self.report_structure_listbox.selection_set(new_index)
+            self.report_structure_listbox.see(new_index)
+        self._show_report_element_editor(new_index)
+
+    def _update_report_structure_list(self):
+        """Refresh report structure listbox from report_data."""
+        if not hasattr(self, 'report_structure_listbox'):
+            return
+
+        self.report_structure_listbox.delete(0, tk.END)
+        elements = self.report_data.get('elements', [])
+
+        for idx, element in enumerate(elements):
+            element_type = element.get('type', 'text')
+            settings = element.get('settings', {}) or {}
+            title_text = settings.get('text') or settings.get('title') or ''
+            title_text = str(title_text).strip()
+            base_label = self._report_element_label(element_type)
+            if title_text:
+                display = f"{idx + 1}. {base_label}: {title_text}"
+            else:
+                display = f"{idx + 1}. {base_label}"
+            self.report_structure_listbox.insert(tk.END, display)
+
+    def _report_element_label(self, element_type: str) -> str:
+        """Return localized display label for a report element type."""
+        key = f"ui.report_elements.{element_type}"
+        fallback_map = {
+            'report_header': 'Report Header',
+            'title': 'Title',
+            'section': 'Section',
+            'subsection': 'Subsection',
+            'subsubsection': 'Subsubsection',
+            'sample_name': 'Samples',
+            'sample_metadata': 'Metadata',
+            'sample_name_cal': 'Samples (C)',
+            'sample_name_val': 'Samples (V/T)',
+            'sample_metadata_cal': 'Metadata (C)',
+            'sample_metadata_val': 'Metadata (V/T)',
+            'text': 'Text',
+            'graph': 'Graph',
+            'table': 'Table',
+            'page_break': 'Page Break',
+        }
+        return self.language_manager.translate(key, fallback_map.get(element_type, element_type))
+
+    def _report_alignment_options(self) -> List[Tuple[str, str]]:
+        """Return localized alignment options as (value, label)."""
+        return [
+            ('left', self.language_manager.translate('ui.align.left', 'Left')),
+            ('center', self.language_manager.translate('ui.align.center', 'Center')),
+            ('right', self.language_manager.translate('ui.align.right', 'Right')),
+        ]
+
+    def _report_alignment_label(self, value: str) -> str:
+        """Convert stored alignment value to localized label."""
+        for option_value, option_label in self._report_alignment_options():
+            if option_value == value:
+                return option_label
+        return self.language_manager.translate('ui.align.left', 'Left')
+
+    def _report_alignment_value_from_label(self, label: str) -> str:
+        """Convert localized alignment label to stored value."""
+        for option_value, option_label in self._report_alignment_options():
+            if option_label == label:
+                return option_value
+        return 'left'
+
+    def _report_has_successful_execution(self) -> bool:
+        """Return True when at least one analysis instance has successful execution results."""
+        if not hasattr(self, 'analysis_data') or not isinstance(self.analysis_data, dict):
+            return False
+        for analysis_info in self.analysis_data.values():
+            execution_results = analysis_info.get('execution_results', {}) if isinstance(analysis_info, dict) else {}
+            if execution_results.get('status') == 'success':
+                return True
+        return False
+
+    def _is_report_page_visible(self, instance_alias: str, page: dict) -> bool:
+        """Determine whether a report page is currently visible based on analysis conditions."""
+        if not isinstance(page, dict):
+            return False
+        condition = page.get('condition')
+        if not condition:
+            return True
+        return self._evaluate_condition(instance_alias, condition)
+
+    def _is_report_section_visible(self, instance_alias: str, section: dict) -> bool:
+        """Determine whether a report section is currently visible based on analysis conditions."""
+        if not isinstance(section, dict):
+            return False
+        if section.get('type') is None:
+            return False
+        condition = section.get('condition')
+        if not condition:
+            return True
+        return self._evaluate_condition(instance_alias, condition)
+
+    def _normalize_report_vector(self, value: Any) -> List[str]:
+        """Normalize scalar/list/array values into a flat string list."""
+        if value is None:
+            return []
+        try:
+            if isinstance(value, np.ndarray):
+                arr = value
+            elif isinstance(value, (list, tuple)):
+                arr = np.array(value, dtype=object)
+            else:
+                return [str(value)]
+
+            if arr.ndim == 0:
+                return [str(arr.item())]
+            if arr.ndim == 1:
+                return [str(v) for v in arr.tolist()]
+
+            reshaped = arr.reshape(arr.shape[0], -1)
+            if reshaped.shape[1] == 1:
+                return [str(v) for v in reshaped[:, 0].tolist()]
+            return [", ".join(str(v) for v in row) for row in reshaped.tolist()]
+        except Exception:
+            return []
+
+    def _latest_report_outputs_map(self) -> Dict[str, Any]:
+        """Collect latest available output/input values in methodology order."""
+        merged: Dict[str, Any] = {}
+        if not hasattr(self, 'analysis_data'):
+            return merged
+
+        for instance_alias in self.methodology_list:
+            analysis_info = self.analysis_data.get(instance_alias, {})
+            execution_results = analysis_info.get('execution_results', {})
+            if execution_results.get('status') != 'success':
+                continue
+            sources = self._get_execution_data_sources(execution_results, instance_alias)
+            if isinstance(sources, dict):
+                merged.update(sources)
+        return merged
+
+    def _flatten_report_metadata_entry(self, value: Any, prefix: str = "") -> Dict[str, Any]:
+        """Flatten nested metadata entry dictionaries to dotted keys."""
+        if not isinstance(value, dict):
+            return {prefix or 'value': value}
+        flat: Dict[str, Any] = {}
+        for key, child in value.items():
+            child_key = f"{prefix}.{key}" if prefix else str(key)
+            if isinstance(child, dict):
+                flat.update(self._flatten_report_metadata_entry(child, child_key))
+            else:
+                flat[child_key] = child
+        return flat
+
+    def _build_report_sample_element(self, mode: str) -> Dict[str, Any]:
+        """Build a sample table element for calibration ('cal') or validation/test ('val')."""
+        outputs = self._latest_report_outputs_map()
+
+        def _first_existing(keys: List[str]) -> Any:
+            for key in keys:
+                if key in outputs:
+                    return outputs.get(key)
+            return None
+
+        sample_col_name = self.language_manager.translate('ui.labels.sample_name_column', 'Sample Name')
+        y_col_name = self.language_manager.translate('ui.labels.y_value_column', 'Y')
+        class_col_name = self.language_manager.translate('ui.labels.class_column', 'Class')
+        sample_row_header = self.language_manager.translate('ui.labels.sample', 'Sample')
+
+        if mode == 'cal':
+            samples = self._normalize_report_vector(_first_existing(['smp_cal']))
+            y_vals = self._normalize_report_vector(_first_existing(['Y_cal', 'y_cal']))
+            class_vals = self._normalize_report_vector(_first_existing(['class_data_cal']))
+            table_title = self.language_manager.translate('ui.messages.samples_c_title', 'Samples (C)')
+        else:
+            samples = self._normalize_report_vector(_first_existing(['smp_val']))
+            y_vals = self._normalize_report_vector(_first_existing(['Y_val', 'Yval', 'y_val']))
+            class_vals = self._normalize_report_vector(_first_existing(['class_data_val']))
+            table_title = self.language_manager.translate('ui.messages.samples_vt_title', 'Samples (V/T)')
+
+        active_headers: List[str] = [sample_col_name]
+        active_columns: List[List[str]] = [samples]
+        if len(y_vals) > 0:
+            active_headers.append(y_col_name)
+            active_columns.append(y_vals)
+        if len(class_vals) > 0:
+            active_headers.append(class_col_name)
+            active_columns.append(class_vals)
+
+        n_rows = max([len(col) for col in active_columns], default=0)
+        rows: List[List[str]] = []
+        row_labels: List[str] = []
+        for i in range(n_rows):
+            row = []
+            for col in active_columns:
+                row.append(col[i] if i < len(col) else '')
+            rows.append(row)
+            row_labels.append(str(i + 1))
+
+        return {
+            'type': 'table',
+            'settings': {
+                'title': table_title,
+                'headers': active_headers,
+                'rows': rows,
+                'row_labels': row_labels,
+                'omit_row_column': False,
+                'row_column_header': sample_row_header,
+            }
+        }
+
+    def _build_report_metadata_element(self, mode: str) -> Dict[str, Any]:
+        """Build a metadata table element for calibration ('cal') or validation/test ('val')."""
+        outputs = self._latest_report_outputs_map()
+        sample_row_header = self.language_manager.translate('ui.labels.sample', 'Sample')
+
+        def _build_table_from_metadata(meta_value: Any, title: str) -> Dict[str, Any]:
+            metadata = meta_value if isinstance(meta_value, dict) else {}
+
+            redundant_tail_keys = {
+                'file_name',
+                'filename',
+                'file_extension',
+                'extension',
+                'ext',
+            }
+
+            preferred_columns = [
+                ('index', 'Index'),
+                ('label', 'Label'),
+                ('source', 'Source'),
+                ('file', 'File'),
+                ('file_size_bytes', 'File Size (Bytes)'),
+                ('created', 'Created'),
+                ('modified', 'Modified'),
+                ('row_index', 'Row Index'),
+            ]
+
+            alias_map = {
+                'index': ['index', 'idx', 'sample_index'],
+                'label': ['label', 'name', 'sample_label', 'sample_name'],
+                'source': ['source', 'source_mode', 'origin', 'dataset', 'group', 'class'],
+                'file': ['file', 'path', 'filepath', 'file_path', 'source_file', 'filename', 'file_name'],
+                'file_size_bytes': ['file_size_bytes', 'size_bytes', 'filesize', 'file_size', 'size', 'bytes'],
+                'created': ['created', 'created_time', 'created_at', 'creation_date', 'date_created'],
+                'modified': ['modified', 'modified_time', 'modified_at', 'last_modified', 'date_modified', 'updated_at'],
+                'row_index': ['row_index', 'row', 'row_id', 'line', 'line_index'],
+            }
+
+            def _tail_key(key: str) -> str:
+                return str(key).split('.')[-1].strip().lower().replace(' ', '_')
+
+            def _find_value_by_alias(flat_item: Dict[str, Any], aliases: List[str]) -> Any:
+                for alias in aliases:
+                    for existing_key, existing_value in flat_item.items():
+                        if _tail_key(existing_key) == alias:
+                            return existing_value
+                return ''
+
+            def _is_redundant_metadata_header(header_key: str) -> bool:
+                tail = str(header_key).split('.')[-1].strip().lower().replace(' ', '_')
+                return tail in redundant_tail_keys
+
+            def _normalize_metadata_value(value: Any) -> str:
+                text = '' if value is None else str(value)
+                if ('\\' in text) or ('/' in text):
+                    candidate = os.path.basename(text.replace('\\', '/'))
+                    if candidate:
+                        return candidate
+                return text
+
+            def _strip_fractional_seconds(value: Any) -> str:
+                text = '' if value is None else str(value)
+                if '.' in text:
+                    head, tail = text.split('.', 1)
+                    suffix = ''
+                    if 'Z' in tail:
+                        suffix = 'Z'
+                        tail = tail.replace('Z', '', 1)
+                    if '+' in tail:
+                        tz = tail[tail.index('+'):]
+                        suffix = tz
+                    elif '-' in tail and 'T' in head:
+                        minus_pos = tail.find('-')
+                        if minus_pos > 0:
+                            suffix = tail[minus_pos:]
+                    text = head + suffix
+                return text.replace('T', ' ')
+
+            flattened_entries: List[Dict[str, Any]] = []
+            for _key, entry in metadata.items():
+                flattened_entries.append(self._flatten_report_metadata_entry(entry))
+
+            normalized_rows: List[Dict[str, str]] = []
+            for entry_idx, item in enumerate(flattened_entries):
+                normalized_item: Dict[str, str] = {}
+                for canonical_key, _display in preferred_columns:
+                    raw_value = _find_value_by_alias(item, alias_map.get(canonical_key, []))
+                    if canonical_key == 'index' and (raw_value is None or str(raw_value).strip() == ''):
+                        raw_value = item.get('sample_index', '')
+                    if canonical_key == 'label' and (raw_value is None or str(raw_value).strip() == ''):
+                        raw_value = item.get('sample_label', '')
+                    if canonical_key == 'row_index' and (raw_value is None or str(raw_value).strip() == ''):
+                        fallback_index = item.get('sample_index', '')
+                        raw_value = fallback_index if str(fallback_index).strip() != '' else (entry_idx + 1)
+                    if canonical_key == 'file':
+                        normalized_item[canonical_key] = _normalize_metadata_value(raw_value)
+                    elif canonical_key in ('created', 'modified'):
+                        normalized_item[canonical_key] = _strip_fractional_seconds(raw_value)
+                    else:
+                        normalized_item[canonical_key] = '' if raw_value is None else str(raw_value)
+                normalized_rows.append(normalized_item)
+
+            all_headers: List[str] = [display_name for _canonical_key, display_name in preferred_columns]
+
+            rows: List[List[str]] = []
+            row_labels: List[str] = []
+            for idx, normalized_item in enumerate(normalized_rows):
+                rows.append([normalized_item.get(canonical_key, '') for canonical_key, _display_name in preferred_columns])
+                row_labels.append(str(idx + 1))
+
+            return {
+                'type': 'table',
+                'settings': {
+                    'title': title,
+                    'headers': all_headers,
+                    'rows': rows,
+                    'row_labels': row_labels,
+                    'omit_row_column': True,
+                    'row_column_header': sample_row_header,
+                    'force_landscape': True,
+                    'is_metadata': True,
+                }
+            }
+
+        if mode == 'cal':
+            return _build_table_from_metadata(outputs.get('cal_metadata'), self.language_manager.translate('ui.messages.metadata_c_title', 'Metadata (C)'))
+        return _build_table_from_metadata(outputs.get('val_metadata'), self.language_manager.translate('ui.messages.metadata_vt_title', 'Metadata (V/T)'))
+
+    def _on_report_structure_select(self, event=None):
+        """Handle report structure selection and show editor for selected element."""
+        if not hasattr(self, 'report_structure_listbox'):
+            return
+        selection = self.report_structure_listbox.curselection()
+        if not selection:
+            self.report_data['selected_index'] = None
+            self._show_report_element_editor(None)
+            return
+        selected_index = selection[0]
+        self.report_data['selected_index'] = selected_index
+        self._show_report_element_editor(selected_index)
+
+    def _show_report_element_editor(self, index: Optional[int]):
+        """Render dynamic configuration controls for a report element."""
+        if not hasattr(self, 'report_editor_frame'):
+            return
+
+        for child in self.report_editor_frame.winfo_children():
+            child.destroy()
+
+        elements = self.report_data.get('elements', [])
+        if index is None or index < 0 or index >= len(elements):
+            info = ttk.Label(
+                self.report_editor_frame,
+                text=self.language_manager.translate("ui.messages.select_or_add_element", "Select an item in Structure or add a new element."),
+                font=("Arial", 10, "italic")
+            )
+            info.pack(anchor='w', pady=4)
+            return
+
+        element = elements[index]
+        element_type = element.get('type', 'text')
+        settings = element.setdefault('settings', {})
+
+        header = ttk.Label(
+            self.report_editor_frame,
+            text=f"{self.language_manager.translate('ui.labels.editing', 'Editing')}: {self._report_element_label(element_type)}",
+            font=("Arial", 10, "bold")
+        )
+        header.pack(anchor='w', pady=(0, 8))
+
+        if element_type in ('report_header', 'title', 'section', 'subsection', 'subsubsection', 'text'):
+            ttk.Label(self.report_editor_frame, text=self.language_manager.translate("ui.labels.text_content", "Text")).pack(anchor='w', pady=(0, 2))
+            text_widget = tk.Text(self.report_editor_frame, height=8, wrap=tk.WORD)
+            text_widget.pack(fill=tk.BOTH, expand=False, pady=(0, 8))
+            text_widget.insert('1.0', settings.get('text', ''))
+
+            def on_text_change(event=None, idx=index):
+                if not text_widget.winfo_exists():
+                    return
+                self._update_report_element_setting(idx, 'text', text_widget.get('1.0', tk.END).strip())
+
+            text_widget.bind('<KeyRelease>', on_text_change)
+
+            options_frame = ttk.Frame(self.report_editor_frame)
+            options_frame.pack(fill=tk.X)
+
+            ttk.Label(options_frame, text=self.language_manager.translate("ui.labels.font_size", "Font size")).grid(row=0, column=0, sticky='w', padx=(0, 6), pady=2)
+            font_var = tk.IntVar(value=int(settings.get('font_size', 11)))
+            font_spin = ttk.Spinbox(options_frame, from_=8, to=28, textvariable=font_var, width=8)
+            font_spin.grid(row=0, column=1, sticky='w', pady=2)
+            font_spin.configure(command=lambda idx=index: self._update_report_element_setting(idx, 'font_size', int(font_var.get())))
+
+            ttk.Label(options_frame, text=self.language_manager.translate("ui.labels.alignment", "Alignment")).grid(row=1, column=0, sticky='w', padx=(0, 6), pady=2)
+            align_var = tk.StringVar(value=self._report_alignment_label(settings.get('align', 'left')))
+            align_labels = [label for _, label in self._report_alignment_options()]
+            align_combo = ttk.Combobox(options_frame, textvariable=align_var, state='readonly', values=align_labels, width=10)
+            align_combo.grid(row=1, column=1, sticky='w', pady=2)
+            align_combo.bind('<<ComboboxSelected>>', lambda e, idx=index: self._update_report_element_setting(idx, 'align', self._report_alignment_value_from_label(align_var.get())))
+
+            font_spin.bind('<KeyRelease>', lambda e, idx=index: self._update_report_element_setting(idx, 'font_size', int(font_var.get()) if str(font_var.get()).isdigit() else 11))
+
+            style_frame = ttk.Frame(self.report_editor_frame)
+            style_frame.pack(fill=tk.X, pady=(8, 0))
+
+            bold_var = tk.BooleanVar(value=bool(settings.get('bold', False)))
+            italic_var = tk.BooleanVar(value=bool(settings.get('italic', False)))
+            underline_var = tk.BooleanVar(value=bool(settings.get('underline', False)))
+
+            bold_btn = ttk.Checkbutton(style_frame, text='B', variable=bold_var,
+                                       command=lambda idx=index: self._update_report_element_setting(idx, 'bold', bool(bold_var.get())))
+            bold_btn.pack(side=tk.LEFT, padx=(0, 8))
+
+            italic_btn = ttk.Checkbutton(style_frame, text='I', variable=italic_var,
+                                         command=lambda idx=index: self._update_report_element_setting(idx, 'italic', bool(italic_var.get())))
+            italic_btn.pack(side=tk.LEFT, padx=(0, 8))
+
+            underline_btn = ttk.Checkbutton(style_frame, text='U', variable=underline_var,
+                                            command=lambda idx=index: self._update_report_element_setting(idx, 'underline', bool(underline_var.get())))
+            underline_btn.pack(side=tk.LEFT)
+
+        elif element_type in ('sample_name', 'sample_metadata', 'sample_name_cal', 'sample_name_val', 'sample_metadata_cal', 'sample_metadata_val'):
+            if element_type in ('sample_name', 'sample_name_cal', 'sample_name_val'):
+                message_key = 'ui.messages.samples_element_info'
+                fallback = 'This element auto-generates sample tables from latest smp_*/Y_*/class_data_* values.'
+            else:
+                message_key = 'ui.messages.metadata_element_info'
+                fallback = 'This element auto-generates metadata tables from latest cal_metadata/val_metadata values.'
+            ttk.Label(
+                self.report_editor_frame,
+                text=self.language_manager.translate(message_key, fallback),
+                justify=tk.LEFT,
+                wraplength=520
+            ).pack(anchor='w')
+
+        elif element_type == 'graph':
+            graph_options = self._collect_report_graph_options()
+            ttk.Label(self.report_editor_frame, text=self.language_manager.translate("ui.labels.graph_source", "Graph source")).pack(anchor='w', pady=(0, 2))
+
+            option_labels = [entry['label'] for entry in graph_options]
+            selected_ref = settings.get('graph_ref')
+            initial_label = ''
+            for entry in graph_options:
+                if entry['ref'] == selected_ref:
+                    initial_label = entry['label']
+                    break
+            if not initial_label and option_labels:
+                initial_label = option_labels[0]
+                self._update_report_element_setting(index, 'graph_ref', graph_options[0]['ref'])
+
+            source_var = tk.StringVar(value=initial_label)
+            source_combo = ttk.Combobox(self.report_editor_frame, textvariable=source_var, values=option_labels, state='readonly')
+            source_combo.pack(fill=tk.X, pady=(0, 8))
+            if not option_labels:
+                source_combo.configure(state='disabled')
+
+            def on_graph_source_change(event=None, idx=index):
+                label = source_var.get()
+                for entry in graph_options:
+                    if entry['label'] == label:
+                        self._update_report_element_setting(idx, 'graph_ref', entry['ref'])
+                        break
+
+            source_combo.bind('<<ComboboxSelected>>', on_graph_source_change)
+
+            ttk.Label(self.report_editor_frame, text=self.language_manager.translate("ui.labels.title", "Title")).pack(anchor='w', pady=(0, 2))
+            title_var = tk.StringVar(value=settings.get('title', self.language_manager.translate("ui.messages.default_graph", "Graph")))
+            title_entry = ttk.Entry(self.report_editor_frame, textvariable=title_var)
+            title_entry.pack(fill=tk.X, pady=(0, 8))
+            title_entry.bind('<KeyRelease>', lambda e, idx=index: self._update_report_element_setting(idx, 'title', title_var.get()))
+
+            width_frame = ttk.Frame(self.report_editor_frame)
+            width_frame.pack(fill=tk.X)
+            ttk.Label(width_frame, text=self.language_manager.translate("ui.labels.width_ratio", "Width (0.3 - 1.0)")).pack(side=tk.LEFT)
+            width_var = tk.DoubleVar(value=float(settings.get('width', 0.9)))
+            width_spin = ttk.Spinbox(width_frame, from_=0.3, to=1.0, increment=0.05, textvariable=width_var, width=8)
+            width_spin.pack(side=tk.LEFT, padx=8)
+            width_spin.configure(command=lambda idx=index: self._update_report_element_setting(idx, 'width', float(width_var.get())))
+            width_spin.bind('<KeyRelease>', lambda e, idx=index: self._update_report_element_setting(idx, 'width', float(width_var.get()) if str(width_var.get()) else 0.9))
+
+            if not option_labels:
+                ttk.Label(
+                    self.report_editor_frame,
+                    text=self.language_manager.translate("ui.messages.no_graphs_available", "No analysis graphs available. Run analysis and configure graph sections first."),
+                    foreground='gray'
+                ).pack(anchor='w', pady=(8, 0))
+
+        elif element_type == 'table':
+            table_options = self._collect_report_table_options()
+            ttk.Label(self.report_editor_frame, text=self.language_manager.translate("ui.labels.table_source", "Table source")).pack(anchor='w', pady=(0, 2))
+
+            option_labels = [entry['label'] for entry in table_options]
+            selected_ref = settings.get('table_ref')
+            initial_label = ''
+            for entry in table_options:
+                if entry['ref'] == selected_ref:
+                    initial_label = entry['label']
+                    break
+            if not initial_label and option_labels:
+                initial_label = option_labels[0]
+                self._update_report_element_setting(index, 'table_ref', table_options[0]['ref'])
+
+            source_var = tk.StringVar(value=initial_label)
+            source_combo = ttk.Combobox(self.report_editor_frame, textvariable=source_var, values=option_labels, state='readonly')
+            source_combo.pack(fill=tk.X, pady=(0, 8))
+            if not option_labels:
+                source_combo.configure(state='disabled')
+
+            def on_table_source_change(event=None, idx=index):
+                label = source_var.get()
+                for entry in table_options:
+                    if entry['label'] == label:
+                        self._update_report_element_setting(idx, 'table_ref', entry['ref'])
+                        break
+
+            source_combo.bind('<<ComboboxSelected>>', on_table_source_change)
+
+            ttk.Label(self.report_editor_frame, text=self.language_manager.translate("ui.labels.title", "Title")).pack(anchor='w', pady=(0, 2))
+            title_var = tk.StringVar(value=settings.get('title', self.language_manager.translate("ui.messages.default_table", "Table")))
+            title_entry = ttk.Entry(self.report_editor_frame, textvariable=title_var)
+            title_entry.pack(fill=tk.X, pady=(0, 8))
+            title_entry.bind('<KeyRelease>', lambda e, idx=index: self._update_report_element_setting(idx, 'title', title_var.get()))
+
+            max_rows_frame = ttk.Frame(self.report_editor_frame)
+            max_rows_frame.pack(fill=tk.X)
+            ttk.Label(max_rows_frame, text=self.language_manager.translate("ui.labels.max_rows", "Max rows")).pack(side=tk.LEFT)
+            max_rows_var = tk.IntVar(value=int(settings.get('max_rows', 50)))
+            max_rows_spin = ttk.Spinbox(max_rows_frame, from_=5, to=500, increment=5, textvariable=max_rows_var, width=8)
+            max_rows_spin.pack(side=tk.LEFT, padx=8)
+            max_rows_spin.configure(command=lambda idx=index: self._update_report_element_setting(idx, 'max_rows', int(max_rows_var.get())))
+            max_rows_spin.bind('<KeyRelease>', lambda e, idx=index: self._update_report_element_setting(idx, 'max_rows', int(max_rows_var.get()) if str(max_rows_var.get()).isdigit() else 50))
+
+            row_options_frame = ttk.Frame(self.report_editor_frame)
+            row_options_frame.pack(fill=tk.X, pady=(8, 0))
+
+            omit_row_var = tk.BooleanVar(value=bool(settings.get('omit_row_column', False)))
+            omit_row_check = ttk.Checkbutton(
+                row_options_frame,
+                text=self.language_manager.translate('ui.labels.omit_row_column', 'Omit row column'),
+                variable=omit_row_var,
+                command=lambda idx=index: self._update_report_element_setting(idx, 'omit_row_column', bool(omit_row_var.get()))
+            )
+            omit_row_check.pack(anchor='w')
+
+            row_header_frame = ttk.Frame(self.report_editor_frame)
+            row_header_frame.pack(fill=tk.X, pady=(4, 0))
+            ttk.Label(row_header_frame, text=self.language_manager.translate('ui.labels.row_column_header', 'Row column header')).pack(side=tk.LEFT)
+            row_header_var = tk.StringVar(value=settings.get('row_column_header', self.language_manager.translate('ui.labels.row', 'Row')))
+            row_header_entry = ttk.Entry(row_header_frame, textvariable=row_header_var)
+            row_header_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(8, 0))
+            row_header_entry.bind('<KeyRelease>', lambda e, idx=index: self._update_report_element_setting(idx, 'row_column_header', row_header_var.get()))
+
+            if not option_labels:
+                ttk.Label(
+                    self.report_editor_frame,
+                    text=self.language_manager.translate("ui.messages.no_tables_available", "No analysis tables available. Run analysis and configure table sections first."),
+                    foreground='gray'
+                ).pack(anchor='w', pady=(8, 0))
+
+        elif element_type == 'page_break':
+            ttk.Label(
+                self.report_editor_frame,
+                text=self.language_manager.translate("ui.messages.page_break_description", "This element inserts a page break in the report."),
+                font=("Arial", 10, "italic")
+            ).pack(anchor='w')
+
+    def _update_report_element_setting(self, index: int, key: str, value: Any):
+        """Update one setting key of a report element and refresh structure labels."""
+        elements = self.report_data.get('elements', [])
+        if not (0 <= index < len(elements)):
+            return
+
+        settings = elements[index].setdefault('settings', {})
+        settings[key] = value
+        if key == 'row_column_header':
+            settings['row_column_header_custom'] = True
+        self._update_report_structure_list()
+        if hasattr(self, 'report_structure_listbox'):
+            self.report_structure_listbox.selection_clear(0, tk.END)
+            self.report_structure_listbox.selection_set(index)
+
+    def _remove_selected_report_element(self):
+        """Remove selected element from report structure."""
+        selected_index = self.report_data.get('selected_index')
+        elements = self.report_data.get('elements', [])
+        if selected_index is None or not (0 <= selected_index < len(elements)):
+            return
+
+        del elements[selected_index]
+        if not elements:
+            self.report_data['selected_index'] = None
+            self._update_report_structure_list()
+            self._show_report_element_editor(None)
+            return
+
+        new_index = min(selected_index, len(elements) - 1)
+        self.report_data['selected_index'] = new_index
+        self._update_report_structure_list()
+        if hasattr(self, 'report_structure_listbox'):
+            self.report_structure_listbox.selection_clear(0, tk.END)
+            self.report_structure_listbox.selection_set(new_index)
+            self.report_structure_listbox.see(new_index)
+        self._show_report_element_editor(new_index)
+
+    def _clear_report_elements(self):
+        """Remove all report elements from the structure."""
+        self.report_data['elements'] = []
+        self.report_data['selected_index'] = None
+        self._update_report_structure_list()
+        self._show_report_element_editor(None)
+
+    def _move_report_element(self, direction: int):
+        """Move selected report element up or down in structure."""
+        selected_index = self.report_data.get('selected_index')
+        elements = self.report_data.get('elements', [])
+        if selected_index is None or not (0 <= selected_index < len(elements)):
+            return
+
+        new_index = selected_index + direction
+        if new_index < 0 or new_index >= len(elements):
+            return
+
+        elements[selected_index], elements[new_index] = elements[new_index], elements[selected_index]
+        self.report_data['selected_index'] = new_index
+        self._update_report_structure_list()
+        if hasattr(self, 'report_structure_listbox'):
+            self.report_structure_listbox.selection_clear(0, tk.END)
+            self.report_structure_listbox.selection_set(new_index)
+            self.report_structure_listbox.see(new_index)
+        self._show_report_element_editor(new_index)
+
+    def _collect_report_graph_options(self) -> List[Dict[str, Any]]:
+        """Collect graph sections from all analysis tabs for report selection."""
+        options: List[Dict[str, Any]] = []
+        if not hasattr(self, 'analysis_data'):
+            return options
+
+        for instance_alias in self.methodology_list:
+            if instance_alias not in self.analysis_data:
+                continue
+            analysis_info = self.analysis_data.get(instance_alias, {})
+            execution_results = analysis_info.get('execution_results', {})
+            if execution_results.get('status') != 'success':
+                continue
+            pages = analysis_info.get('pages', [])
+            for page_idx, page in enumerate(pages):
+                if not self._is_report_page_visible(instance_alias, page):
+                    continue
+                page_title = page.get('title', f"{self.language_manager.translate('ui.messages.page_label', 'Page')} {page_idx + 1}")
+                sections = page.get('sections', [])
+                for section_idx, section in enumerate(sections):
+                    if section.get('type') != 'graph':
+                        continue
+                    if not self._is_report_section_visible(instance_alias, section):
+                        continue
+                    config = section.get('config', {})
+                    section_title = config.get('graph_title') or config.get('title') or f"{self.language_manager.translate('ui.report_elements.graph', 'Graph')} {section_idx + 1}"
+                    label = f"{instance_alias} > {page_title} > {section_title}"
+                    options.append({
+                        'label': label,
+                        'ref': {
+                            'instance_alias': instance_alias,
+                            'page_idx': page_idx,
+                            'section_idx': section_idx
+                        }
+                    })
+        return options
+
+    def _collect_report_table_options(self) -> List[Dict[str, Any]]:
+        """Collect table sections from all analysis tabs for report selection."""
+        options: List[Dict[str, Any]] = []
+        if not hasattr(self, 'analysis_data'):
+            return options
+
+        for instance_alias, analysis_info in self.analysis_data.items():
+            pages = analysis_info.get('pages', [])
+            for page_idx, page in enumerate(pages):
+                page_title = page.get('title', f"{self.language_manager.translate('ui.messages.page_label', 'Page')} {page_idx + 1}")
+                sections = page.get('sections', [])
+                for section_idx, section in enumerate(sections):
+                    if section.get('type') != 'table':
+                        continue
+                    config = section.get('config', {})
+                    section_title = config.get('table_title') or config.get('title') or f"{self.language_manager.translate('ui.report_elements.table', 'Table')} {section_idx + 1}"
+                    label = f"{instance_alias} > {page_title} > {section_title}"
+                    options.append({
+                        'label': label,
+                        'ref': {
+                            'instance_alias': instance_alias,
+                            'page_idx': page_idx,
+                            'section_idx': section_idx
+                        }
+                    })
+        return options
+
+    def _get_report_section(self, ref: Dict[str, Any]) -> Tuple[Optional[str], Optional[dict], Optional[dict]]:
+        """Resolve report reference to (instance_alias, section_data, analysis_info)."""
+        if not ref or not isinstance(ref, dict):
+            return None, None, None
+
+        instance_alias = ref.get('instance_alias')
+        page_idx = ref.get('page_idx')
+        section_idx = ref.get('section_idx')
+
+        if instance_alias is None or page_idx is None or section_idx is None:
+            return None, None, None
+        if not hasattr(self, 'analysis_data') or instance_alias not in self.analysis_data:
+            return None, None, None
+
+        analysis_info = self.analysis_data[instance_alias]
+        pages = analysis_info.get('pages', [])
+        if page_idx < 0 or page_idx >= len(pages):
+            return None, None, None
+        sections = pages[page_idx].get('sections', [])
+        if section_idx < 0 or section_idx >= len(sections):
+            return None, None, None
+
+        return instance_alias, sections[section_idx], analysis_info
+
+    def _build_report_footer_text(self) -> str:
+        """Build mandatory report footer text with version, OS, and timestamp."""
+        version = "0.0"
+        try:
+            about_path = Path(__file__).parent / "about_us.json"
+            if about_path.exists():
+                with open(about_path, encoding='utf-8') as f:
+                    about_data = json.load(f)
+                version = about_data.get('version', version)
+        except Exception:
+            pass
+
+        def _build_os_name_with_version() -> str:
+            unknown_os = self.language_manager.translate('ui.messages.unknown_os', 'Unknown OS')
+            system_name = (platform.system() or '').strip()
+            release = (platform.release() or '').strip()
+            version_info = (platform.version() or '').strip()
+            machine = (platform.machine() or '').strip()
+            platform_line = (platform.platform() or '').strip()
+
+            if not system_name:
+                return unknown_os
+
+            if system_name == 'Windows':
+                parts = [f"Windows {release}".strip()]
+                if version_info:
+                    parts.append(f"version {version_info}")
+                if machine:
+                    parts.append(machine)
+                return " | ".join([p for p in parts if p])
+
+            if system_name == 'Darwin':
+                mac_ver = (platform.mac_ver()[0] or '').strip()
+                base = f"macOS {mac_ver}".strip() if mac_ver else 'macOS'
+                extras = []
+                if release:
+                    extras.append(f"kernel {release}")
+                if machine:
+                    extras.append(machine)
+                return " | ".join([base] + extras) if extras else base
+
+            lower_platform = platform_line.lower()
+            lower_version = version_info.lower()
+            lower_release = release.lower()
+            is_android = ('android' in lower_platform) or ('android' in lower_version) or ('android' in lower_release)
+            if is_android:
+                base = 'Android'
+                extras = []
+                if release:
+                    extras.append(f"kernel {release}")
+                if machine:
+                    extras.append(machine)
+                return " | ".join([base] + extras) if extras else base
+
+            if system_name == 'Linux':
+                libc_name, libc_version = platform.libc_ver()
+                base = f"Linux {release}".strip() if release else 'Linux'
+                extras = []
+                if libc_name and libc_version:
+                    extras.append(f"{libc_name} {libc_version}")
+                if machine:
+                    extras.append(machine)
+                return " | ".join([base] + extras) if extras else base
+
+            parts = [system_name]
+            if release:
+                parts.append(release)
+            if version_info:
+                parts.append(f"version {version_info}")
+            if machine:
+                parts.append(machine)
+            return " | ".join(parts)
+
+        os_name = _build_os_name_with_version()
+        timestamp = datetime.now().strftime("%I:%M %p - %d/%m/%Y")
+        return self.language_manager.translate(
+            'ui.messages.report_footer_template',
+            'Model created in Chemometric Studio v{version} on a {os_name} system at {timestamp}'
+        ).format(version=version, os_name=os_name, timestamp=timestamp)
+
+    def _resolve_report_graph_image(self, graph_ref: Dict[str, Any], assets_dir: Path) -> Optional[str]:
+        """Resolve graph reference to an image path for LaTeX embedding."""
+        instance_alias, section_data, analysis_info = self._get_report_section(graph_ref)
+        if not instance_alias or not section_data:
+            return None
+
+        page_idx = graph_ref.get('page_idx')
+        section_idx = graph_ref.get('section_idx')
+        section_id = (page_idx, section_idx)
+
+        assets_dir.mkdir(parents=True, exist_ok=True)
+        image_path = assets_dir / f"graph_{instance_alias}_{page_idx}_{section_idx}.png"
+
+        try:
+            graph_canvases = analysis_info.get('graph_canvases', {})
+            if section_id in graph_canvases:
+                canvas, _frame = graph_canvases[section_id]
+                fig = canvas.figure
+                fig.savefig(str(image_path), dpi=220, bbox_inches='tight')
+                return str(image_path).replace('\\', '/')
+        except Exception:
+            pass
+
+        try:
+            metadata_map = analysis_info.get('graph_data_metadata', {})
+            metadata = metadata_map.get(section_id)
+            if not metadata:
+                metadata = None
+                pages = analysis_info.get('pages', [])
+                section_data = None
+                if 0 <= page_idx < len(pages):
+                    sections = pages[page_idx].get('sections', [])
+                    if 0 <= section_idx < len(sections):
+                        section_data = sections[section_idx]
+
+                if section_data and section_data.get('type') == 'graph':
+                    original_page = analysis_info.get('current_page', 0)
+                    temp_window = None
+                    temp_frame = None
+                    try:
+                        analysis_info['current_page'] = page_idx
+                        temp_window = tk.Toplevel(self.root)
+                        temp_window.withdraw()
+                        temp_frame = ttk.Frame(temp_window)
+                        temp_frame.pack(fill=tk.BOTH, expand=True)
+
+                        self._render_graph_section(temp_frame, instance_alias, section_data, section_idx)
+                        self.root.update_idletasks()
+
+                        graph_canvases = analysis_info.get('graph_canvases', {})
+                        if section_id in graph_canvases:
+                            canvas, _frame = graph_canvases[section_id]
+                            fig = canvas.figure
+                            fig.savefig(str(image_path), dpi=220, bbox_inches='tight')
+                            return str(image_path).replace('\\', '/')
+
+                        metadata_map = analysis_info.get('graph_data_metadata', {})
+                        metadata = metadata_map.get(section_id)
+                    finally:
+                        analysis_info['current_page'] = original_page
+                        if temp_window is not None and temp_window.winfo_exists():
+                            temp_window.destroy()
+
+                if not metadata:
+                    return None
+
+            config = metadata.get('config', {}).copy()
+            graph_type = metadata.get('graph_type', config.get('graph_type', 'scatter'))
+            x_data = metadata.get('x_data')
+            y_data = metadata.get('y_data')
+            z_data = metadata.get('z_data')
+            x_axis = metadata.get('x_axis_config', config.get('x_axis', {}))
+            y_axis = metadata.get('y_axis_config', config.get('y_axis', {}))
+            datasets = metadata.get('extracted_datasets')
+
+            fig, _ax = graph_renderer.render_graph_figure(
+                graph_type,
+                config,
+                x_data,
+                y_data,
+                z_data,
+                x_axis,
+                y_axis,
+                default_cmap=self.settings_manager.get('colormap', 'viridis'),
+                datasets=datasets,
+                qualitative_cmap=self.settings_manager.get('qualitative_colormap', 'tab10')
+            )
+            fig.savefig(str(image_path), dpi=220, bbox_inches='tight')
+            plt.close(fig)
+            return str(image_path).replace('\\', '/')
+        except Exception:
+            return None
+
+    def _resolve_report_table_data(self, table_ref: Dict[str, Any], max_rows: int = 50) -> Tuple[List[str], List[List[str]], List[str], str]:
+        """Resolve table reference to headers, row values, row labels, and row-header title."""
+        instance_alias, section_data, analysis_info = self._get_report_section(table_ref)
+        if not instance_alias or not section_data:
+            return [], [], [], self.language_manager.translate('ui.labels.row', 'Row')
+
+        config = section_data.get('config', {})
+        execution_results = analysis_info.get('execution_results', {})
+        if not execution_results or execution_results.get('status') != 'success':
+            return [], [], [], self.language_manager.translate('ui.labels.row', 'Row')
+
+        outputs = self._get_execution_data_sources(execution_results, instance_alias)
+
+        data = None
+        headers = config.get('column_headers') or []
+        row_header_title = str(config.get('row_label', self.language_manager.translate('ui.labels.row', 'Row')))
+        row_headers_config = config.get('row_headers')
+
+        columns_config = config.get('columns')
+        if columns_config:
+            data_columns = []
+            local_headers = []
+            for col_spec in columns_config:
+                source = col_spec.get('data_source')
+                nested_key = col_spec.get('nested_key')
+                col_name = col_spec.get('name', source)
+                column_data = self._get_data_from_source(outputs, source, nested_key)
+                if column_data is None:
+                    continue
+                column_arr = np.array(column_data).flatten()
+                data_columns.append(column_arr)
+                local_headers.append(col_name)
+            if data_columns:
+                min_len = min(len(col) for col in data_columns)
+                trimmed = [col[:min_len] for col in data_columns]
+                data = np.column_stack(trimmed)
+                headers = local_headers
+        else:
+            data_source = config.get('data_source')
+            nested_key = config.get('nested_key')
+            raw_data = self._get_data_from_source(outputs, data_source, nested_key)
+            if raw_data is not None:
+                data = np.array(raw_data)
+
+        if data is None:
+            return headers, [], [], row_header_title
+
+        nav_axes = config.get('data_slicing', [])
+        if nav_axes and data.ndim > 2:
+            indices = {}
+            for nav_item in nav_axes:
+                if isinstance(nav_item, dict):
+                    dim = nav_item.get('dimension', 0)
+                    indices[dim] = nav_item.get('default', 0)
+            if indices:
+                data = self._extract_sliced_data(data, indices)
+
+        if data.ndim == 1:
+            data = data.reshape(-1, 1)
+        elif data.ndim > 2:
+            data = data.reshape(data.shape[0], -1)
+
+        row_limit = max(1, int(max_rows))
+        data = data[:row_limit]
+
+        if not headers:
+            headers = [f"{self.language_manager.translate('ui.labels.column_name_plain', 'Column')} {i + 1}" for i in range(data.shape[1])]
+        else:
+            headers = [str(h) for h in headers[:data.shape[1]]]
+            if len(headers) < data.shape[1]:
+                headers.extend([f"{self.language_manager.translate('ui.labels.column_name_plain', 'Column')} {i + 1}" for i in range(len(headers), data.shape[1])])
+
+        decimal_places = int(config.get('decimal_places', 4))
+        rows: List[List[str]] = []
+        for row in data:
+            row_values: List[str] = []
+            for value in row:
+                if isinstance(value, (float, np.floating)):
+                    row_values.append(f"{value:.{decimal_places}f}")
+                else:
+                    row_values.append(str(value))
+            rows.append(row_values)
+
+        row_labels: List[str] = []
+        if isinstance(row_headers_config, (list, np.ndarray)):
+            row_labels = [str(v) for v in list(row_headers_config)[:len(rows)]]
+        else:
+            row_labels = [str(i + 1) for i in range(len(rows))]
+
+        return headers, rows, row_labels, row_header_title
+
+    def _build_resolved_report_elements(self, assets_dir: Path) -> List[Dict[str, Any]]:
+        """Build report elements with resolved graph images and table data."""
+        resolved: List[Dict[str, Any]] = []
+        for element in self.report_data.get('elements', []):
+            element_type = element.get('type', 'text')
+            settings = copy.deepcopy(element.get('settings', {}))
+
+            if element_type == 'graph':
+                graph_ref = settings.get('graph_ref')
+                settings['image_path'] = self._resolve_report_graph_image(graph_ref, assets_dir) if graph_ref else None
+                resolved.append({'type': element_type, 'settings': settings})
+            elif element_type == 'table':
+                table_ref = settings.get('table_ref')
+                max_rows = int(settings.get('max_rows', 50))
+                headers, rows, row_labels, row_header_title = self._resolve_report_table_data(table_ref, max_rows=max_rows) if table_ref else ([], [], [], self.language_manager.translate('ui.labels.row', 'Row'))
+                settings['headers'] = headers
+                settings['rows'] = rows
+                settings['row_labels'] = row_labels
+                default_row_label = self.language_manager.translate('ui.labels.row', 'Row')
+                existing_row_header = settings.get('row_column_header', '')
+                is_custom_row_header = bool(settings.get('row_column_header_custom', False))
+                if is_custom_row_header:
+                    settings['row_column_header'] = existing_row_header
+                else:
+                    if not existing_row_header or str(existing_row_header).strip() in ('', default_row_label):
+                        settings['row_column_header'] = row_header_title
+                    else:
+                        settings['row_column_header'] = row_header_title
+                settings['omit_row_column'] = bool(settings.get('omit_row_column', False))
+                resolved.append({'type': element_type, 'settings': settings})
+            elif element_type == 'sample_name':
+                resolved.append(self._build_report_sample_element('cal'))
+                resolved.append(self._build_report_sample_element('val'))
+            elif element_type == 'sample_metadata':
+                resolved.append(self._build_report_metadata_element('cal'))
+                resolved.append(self._build_report_metadata_element('val'))
+            elif element_type == 'sample_name_cal':
+                resolved.append(self._build_report_sample_element('cal'))
+            elif element_type == 'sample_name_val':
+                resolved.append(self._build_report_sample_element('val'))
+            elif element_type == 'sample_metadata_cal':
+                resolved.append(self._build_report_metadata_element('cal'))
+            elif element_type == 'sample_metadata_val':
+                resolved.append(self._build_report_metadata_element('val'))
+            else:
+                resolved.append({'type': element_type, 'settings': settings})
+
+        return resolved
+
+    def _generate_report_preview(self):
+        """Generate LaTeX preview on the right panel."""
+        if not hasattr(self, 'report_preview_text'):
+            return
+
+        if not self._report_has_successful_execution():
+            self._show_fading_warning(
+                self.language_manager.translate('ui.messages.run_model_before_report', 'Run the model before previewing or saving the report.')
+            )
+            return
+
+        if not self.report_data.get('elements'):
+            self.report_preview_text.delete('1.0', tk.END)
+            self.report_preview_text.insert('1.0', self.language_manager.translate("ui.messages.add_elements_for_preview", "Add report elements to generate preview."))
+            return
+
+        with tempfile.TemporaryDirectory(prefix='cm_report_preview_') as temp_dir:
+            assets_dir = Path(temp_dir) / 'assets'
+            elements = self._build_resolved_report_elements(assets_dir)
+            latex_source = build_latex_document(
+                elements,
+                self.language_manager.get_language(),
+                self._build_report_footer_text()
+            )
+
+        self.report_preview_text.delete('1.0', tk.END)
+        self.report_preview_text.insert('1.0', latex_source)
+        if hasattr(self, 'report_status_label'):
+            self.report_status_label.configure(text=self.language_manager.translate("ui.messages.preview_updated", "Preview updated."))
+
+    def _save_pdf_report(self):
+        """Save report as PDF (and always emit TeX source)."""
+        if not self._report_has_successful_execution():
+            self._show_fading_warning(
+                self.language_manager.translate('ui.messages.run_model_before_report', 'Run the model before previewing or saving the report.')
+            )
+            return
+
+        if not self.report_data.get('elements'):
+            self._show_fading_warning(
+                self.language_manager.translate("ui.messages.no_report_elements", "Add at least one report element before saving.")
+            )
+            return
+
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        default_name = f"CMStudio_report_{timestamp}.pdf"
+        file_path = filedialog.asksaveasfilename(
+            title=self.language_manager.translate("ui.dialogs.save_pdf_report", "Save PDF Report"),
+            defaultextension='.pdf',
+            initialfile=default_name,
+            filetypes=[(self.language_manager.translate('ui.dialogs.file_filter_pdf', 'PDF Files (*.pdf)'), '*.pdf')]
+        )
+        if not file_path:
+            return
+
+        output_pdf = Path(file_path)
+        assets_dir = output_pdf.parent / f"{output_pdf.stem}_assets"
+        assets_dir.mkdir(parents=True, exist_ok=True)
+
+        elements = self._build_resolved_report_elements(assets_dir)
+        latex_source = build_latex_document(
+            elements,
+            self.language_manager.get_language(),
+            self._build_report_footer_text()
+        )
+
+        compile_result = compile_latex_to_pdf(latex_source, str(output_pdf))
+        if compile_result.get('success'):
+            for suffix in ('.tex', '.aux', '.log', '.out', '.toc'):
+                artifact = output_pdf.with_suffix(suffix)
+                if artifact.exists():
+                    try:
+                        artifact.unlink()
+                    except Exception:
+                        pass
+
+            if assets_dir.exists():
+                try:
+                    shutil.rmtree(assets_dir)
+                except Exception:
+                    pass
+
+            self._show_fading_success(
+                self.language_manager.translate("ui.messages.report_saved_pdf", "Report saved successfully:") + f"\n{compile_result.get('pdf_path')}"
+            )
+            if hasattr(self, 'report_status_label'):
+                self.report_status_label.configure(text=self.language_manager.translate("ui.messages.report_saved", "PDF report saved."))
+            return
+
+        tex_path = compile_result.get('tex_path')
+        error_message = compile_result.get('error') or self.language_manager.translate("ui.messages.report_compile_failed", "Report compilation failed.")
+        self._show_fading_warning(
+            self.language_manager.translate("ui.messages.report_tex_saved", "LaTeX source saved, but PDF compilation failed.") +
+            f"\n{tex_path}\n\n{error_message}"
+        )
+        if hasattr(self, 'report_status_label'):
+            self.report_status_label.configure(text=self.language_manager.translate("ui.messages.report_tex_only", "Saved .tex source (PDF compilation failed)."))
     
     def _generate_model_json(self) -> bool:
         """Generate model.json from current configuration."""
@@ -6781,6 +8129,14 @@ Count:
             # Add analysis config if present
             if hasattr(self, 'analysis_data') and self.analysis_data:
                 model_data['analysis'] = self._serialize_analysis_data()
+
+            # Add report config if present
+            if hasattr(self, 'report_data') and isinstance(self.report_data, dict):
+                report_elements = self.report_data.get('elements', [])
+                if report_elements:
+                    model_data['report'] = {
+                        'elements': copy.deepcopy(report_elements)
+                    }
             
             # Write model.json
             model_path = Path(__file__).parent / "model.json"
@@ -7308,6 +8664,7 @@ Count:
         # Reset analysis_data completely when loading a new model
         # This ensures previous model's analysis changes don't persist
         self.analysis_data = {}
+        self.report_data = {'elements': [], 'selected_index': None}
         
         try:
             with open(model_path, encoding='utf-8') as f:
@@ -7378,6 +8735,16 @@ Count:
         analysis_config = model_data.get('analysis', {})
         if analysis_config:
             self._deserialize_analysis_data(analysis_config)
+
+        # Load report configuration if present
+        report_config = model_data.get('report', {})
+        if isinstance(report_config, dict):
+            self.report_data = {
+                'elements': copy.deepcopy(report_config.get('elements', [])),
+                'selected_index': None
+            }
+        elif not hasattr(self, 'report_data'):
+            self.report_data = {'elements': [], 'selected_index': None}
     
     def _clear_execution_cache(self):
         """Clear all cached execution results and graphs, preserving analysis structure.
