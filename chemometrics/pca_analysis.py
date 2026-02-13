@@ -352,7 +352,6 @@ def _pca_analysis_single_fit(
         {
             'calibration': metrics_cal,
             'validation': metrics_val,
-            'pct_variance_explained': metrics_cal.get('pct_variance_explained', []),  # For easy access in plotting
         },  # metrics
         cv_results,  # cv_results
         cal_shape,  # data_shape (original shape for multiway reference)

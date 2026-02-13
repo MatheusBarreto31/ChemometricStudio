@@ -37,19 +37,20 @@ class AddGraphDialog:
         # Get execution outputs
         self.outputs = self._get_execution_outputs()
         if not self.outputs:
-            messagebox.showerror("Error", "No data available. Please run 'Run Model' or 'Run to here' first.")
+            self._notify(self._t("ui.messages.no_data_run_first", "No data available. Please run 'Run Model' or 'Run to here' first."), level="error")
             return
         
         # Find empty sections
         self.empty_sections = self._find_empty_sections()
         if not self.empty_sections:
-            messagebox.showerror("Error", "No empty sections available. Add a new page or remove existing sections first.")
+            self._notify(self._t("ui.messages.no_empty_sections", "No empty sections available. Add a new page or remove existing sections first."), level="warning")
             return
         
         # Create dialog window
         self.dialog = tk.Toplevel(parent)
-        self.dialog.title("Add Graph")
-        self.dialog.geometry("900x700")
+        self.dialog.title(self._t("ui.dialogs.add_graph", "Add Graph"))
+        self.dialog.geometry("1000x552")
+        self._center_window(self.dialog, 1000, 552)
         
         # Graph configuration
         self.graph_config = {
@@ -70,15 +71,52 @@ class AddGraphDialog:
         
         # Build UI
         self._build_ui()
+
+    def _notify(self, message: str, level: str = "message"):
+        """Show notification using main GUI fading notices, with fallback to messagebox."""
+        if hasattr(self.main_gui, '_show_fading_notice'):
+            self.main_gui._show_fading_notice(message, level=level)
+            return
+        if level == "error":
+            messagebox.showerror("Error", message)
+        elif level == "warning":
+            messagebox.showwarning("Warning", message)
+        else:
+            messagebox.showinfo("Info", message)
+
+    def _t(self, key: str, default: str) -> str:
+        """Translate message key through main GUI language manager."""
+        if hasattr(self.main_gui, 'language_manager'):
+            return self.main_gui.language_manager.translate(key, default)
+        return default
+
+    def _center_window(self, window, width: int, height: int):
+        """Center a window on the screen with the given size."""
+        window.update_idletasks()
+        screen_width = window.winfo_screenwidth()
+        screen_height = window.winfo_screenheight()
+        x = (screen_width - width) // 2
+        y = (screen_height - height) // 2
+        window.geometry(f"{width}x{height}+{x}+{y}")
     
     def _get_execution_outputs(self) -> Optional[Dict]:
-        """Get execution outputs from analysis data."""
+        """Get execution data sources (inputs + outputs) from analysis data."""
         if self.instance_alias not in self.main_gui.analysis_data:
             return None
         execution_results = self.main_gui.analysis_data[self.instance_alias].get('execution_results', {})
         if execution_results.get('status') != 'success':
             return None
-        return execution_results.get('outputs', {})
+        if hasattr(self.main_gui, '_get_execution_data_sources'):
+            return self.main_gui._get_execution_data_sources(execution_results, self.instance_alias)
+
+        inputs = execution_results.get('inputs', {})
+        outputs = execution_results.get('outputs', {})
+        combined_sources = {}
+        if isinstance(inputs, dict):
+            combined_sources.update(inputs)
+        if isinstance(outputs, dict):
+            combined_sources.update(outputs)
+        return combined_sources
     
     def _find_empty_sections(self) -> List[Tuple[int, int, str]]:
         """Find all empty sections in the current analysis pages.
@@ -108,14 +146,41 @@ class AddGraphDialog:
         return sorted(list(self.outputs.keys()))
     
     def _get_nested_keys(self, data_source: str) -> List[str]:
-        """Get nested keys if data source is a dictionary."""
+        """Get nested key paths if data source is a dictionary."""
         if not data_source or data_source not in self.outputs:
             return []
         
         data = self.outputs[data_source]
         if isinstance(data, dict):
-            return sorted(list(data.keys()))
+            return self._collect_nested_key_paths(data)
         return []
+
+    def _collect_nested_key_paths(self, data: dict, prefix: str = "") -> List[str]:
+        """Collect nested dictionary paths in dot notation (e.g., 'a.b.c')."""
+        paths = []
+        for key, value in data.items():
+            key_str = str(key)
+            full_key = f"{prefix}.{key_str}" if prefix else key_str
+            paths.append(full_key)
+            if isinstance(value, dict):
+                paths.extend(self._collect_nested_key_paths(value, full_key))
+        return sorted(paths)
+
+    def _resolve_nested_data(self, data, nested_key: str = None):
+        """Resolve nested data using dot notation path."""
+        if not nested_key:
+            return data
+
+        if isinstance(data, dict):
+            current = data
+            for part in nested_key.split('.'):
+                if isinstance(current, dict) and part in current:
+                    current = current[part]
+                else:
+                    return None
+            return current
+
+        return data
     
     def _get_data_shape_info(self, data_source: str, nested_key: str = None) -> str:
         """Get shape information for a data source."""
@@ -123,8 +188,9 @@ class AddGraphDialog:
             return "N/A"
         
         data = self.outputs[data_source]
-        if nested_key and isinstance(data, dict) and nested_key in data:
-            data = data[nested_key]
+        data = self._resolve_nested_data(data, nested_key)
+        if data is None:
+            return "Invalid nested key path"
         
         if isinstance(data, np.ndarray):
             return f"Shape: {data.shape}, Type: {data.dtype}"
@@ -168,23 +234,62 @@ class AddGraphDialog:
         
         # Tab 1: Basic Configuration
         basic_tab = ttk.Frame(notebook)
-        notebook.add(basic_tab, text="Basic")
+        notebook.add(basic_tab, text=self._t("ui.tabs.basic", "Basic"))
         self._build_basic_tab(basic_tab)
         
         # Tab 2: Axes Configuration
         axes_tab = ttk.Frame(notebook)
-        notebook.add(axes_tab, text="Axes")
+        notebook.add(axes_tab, text=self._t("ui.tabs.axes", "Axes"))
         self._build_axes_tab(axes_tab)
         
         # Tab 3: Multi-Dataset Configuration
         datasets_tab = ttk.Frame(notebook)
-        notebook.add(datasets_tab, text="Multi-Dataset")
+        notebook.add(datasets_tab, text=self._t("ui.tabs.multi_dataset", "Multi-Dataset"))
         self._build_datasets_tab(datasets_tab)
         
         # Tab 4: Advanced Options
         advanced_tab = ttk.Frame(notebook)
-        notebook.add(advanced_tab, text="Advanced")
+        notebook.add(advanced_tab, text=self._t("ui.tabs.advanced", "Advanced"))
         self._build_advanced_tab(advanced_tab)
+
+    def _bind_canvas_mousewheel(self, canvas, scrollable_frame):
+        """Enable mouse wheel scrolling when hovering scrollable content."""
+        def _block_combobox_wheel(widget):
+            if isinstance(widget, ttk.Combobox):
+                if not getattr(widget, '_wheel_block_bound', False):
+                    widget.bind("<MouseWheel>", lambda e: "break")
+                    widget.bind("<Button-4>", lambda e: "break")
+                    widget.bind("<Button-5>", lambda e: "break")
+                    setattr(widget, '_wheel_block_bound', True)
+            for child in widget.winfo_children():
+                _block_combobox_wheel(child)
+
+        def _on_mousewheel(event):
+            if isinstance(event.widget, ttk.Combobox):
+                return "break"
+            if event.delta:
+                canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            elif getattr(event, 'num', None) == 4:
+                canvas.yview_scroll(-1, "units")
+            elif getattr(event, 'num', None) == 5:
+                canvas.yview_scroll(1, "units")
+            return "break"
+
+        def _bind_wheel(_event):
+            _block_combobox_wheel(scrollable_frame)
+            canvas.bind_all("<MouseWheel>", _on_mousewheel)
+            canvas.bind_all("<Button-4>", _on_mousewheel)
+            canvas.bind_all("<Button-5>", _on_mousewheel)
+
+        def _unbind_wheel(_event):
+            canvas.unbind_all("<MouseWheel>")
+            canvas.unbind_all("<Button-4>")
+            canvas.unbind_all("<Button-5>")
+
+        canvas.bind("<Enter>", _bind_wheel)
+        canvas.bind("<Leave>", _unbind_wheel)
+        scrollable_frame.bind("<Enter>", _bind_wheel)
+        scrollable_frame.bind("<Leave>", _unbind_wheel)
     
     def _build_basic_tab(self, parent):
         """Build basic configuration tab."""
@@ -203,12 +308,13 @@ class AddGraphDialog:
         
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self._bind_canvas_mousewheel(canvas, scrollable_frame)
         
         # Section selection
-        section_frame = ttk.LabelFrame(scrollable_frame, text="Target Section", padding=10)
+        section_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.target_section", "Target Section"), padding=10)
         section_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        ttk.Label(section_frame, text="Select empty section:").pack(anchor=tk.W)
+        ttk.Label(section_frame, text=self._t("ui.messages.select_empty_section", "Select empty section:")).pack(anchor=tk.W)
         self.section_var = tk.StringVar()
         section_combo = ttk.Combobox(section_frame, textvariable=self.section_var, state="readonly", width=40)
         section_combo['values'] = [desc for _, _, desc in self.empty_sections]
@@ -217,7 +323,7 @@ class AddGraphDialog:
         section_combo.pack(fill=tk.X, pady=5)
         
         # Graph type selection
-        type_frame = ttk.LabelFrame(scrollable_frame, text="Graph Type", padding=10)
+        type_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.graph_type", "Graph Type"), padding=10)
         type_frame.pack(fill=tk.X, padx=5, pady=5)
         
         graph_types = [
@@ -237,10 +343,10 @@ class AddGraphDialog:
             rb.pack(anchor=tk.W, pady=2)
         
         # Graph title
-        title_frame = ttk.LabelFrame(scrollable_frame, text="Graph Title", padding=10)
+        title_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.graph_title", "Graph Title"), padding=10)
         title_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        self.title_var = tk.StringVar(value="New Graph")
+        self.title_var = tk.StringVar(value=self._t("ui.labels.new_graph", "New Graph"))
         title_entry = ttk.Entry(title_frame, textvariable=self.title_var, width=50)
         title_entry.pack(fill=tk.X)
     
@@ -261,6 +367,7 @@ class AddGraphDialog:
         
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self._bind_canvas_mousewheel(canvas, scrollable_frame)
         
         # X-Axis configuration
         self._build_axis_config(scrollable_frame, "X-Axis", 'x')
@@ -277,7 +384,7 @@ class AddGraphDialog:
         frame.pack(fill=tk.X, padx=5, pady=5)
         
         # Data source
-        ttk.Label(frame, text="Data Source:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        ttk.Label(frame, text=self._t("ui.labels.input_output_source", "Input/Output Source:")).grid(row=0, column=0, sticky=tk.W, pady=2)
         data_sources = [''] + self._get_available_data_sources() + ['__index__']
         
         axis_var = tk.StringVar()
@@ -288,7 +395,7 @@ class AddGraphDialog:
         data_combo.bind('<<ComboboxSelected>>', lambda e: self._on_data_source_changed(axis_key))
         
         # Nested key (for dict sources)
-        ttk.Label(frame, text="Nested Key:").grid(row=1, column=0, sticky=tk.W, pady=2)
+        ttk.Label(frame, text=self._t("ui.labels.nested_key", "Nested Key:")).grid(row=1, column=0, sticky=tk.W, pady=2)
         nested_var = tk.StringVar()
         setattr(self, f'{axis_key}_nested_key_var', nested_var)
         
@@ -300,7 +407,7 @@ class AddGraphDialog:
         # Users should use default column or axis navigation instead
         
         # Axis label
-        ttk.Label(frame, text="Axis Label:").grid(row=2, column=0, sticky=tk.W, pady=2)
+        ttk.Label(frame, text=self._t("ui.labels.axis_label", "Axis Label:")).grid(row=2, column=0, sticky=tk.W, pady=2)
         label_var = tk.StringVar(value=label.replace('-Axis', ''))
         setattr(self, f'{axis_key}_label_var', label_var)
         
@@ -308,7 +415,7 @@ class AddGraphDialog:
         label_entry.grid(row=2, column=1, sticky=tk.W+tk.E, pady=2, padx=5)
         
         # Data shape info
-        info_var = tk.StringVar(value="Select a data source")
+        info_var = tk.StringVar(value=self._t("ui.messages.select_data_source", "Select a data source"))
         setattr(self, f'{axis_key}_info_var', info_var)
         
         info_label = ttk.Label(frame, textvariable=info_var, foreground="gray", font=("Arial", 8))
@@ -333,22 +440,23 @@ class AddGraphDialog:
         
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self._bind_canvas_mousewheel(canvas, scrollable_frame)
         
         # Info label
         info_frame = ttk.Frame(scrollable_frame)
         info_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        ttk.Label(info_frame, text="Multi-Dataset Plots", font=("Arial", 11, "bold")).pack(anchor=tk.W)
+        ttk.Label(info_frame, text=self._t("ui.labels.multi_dataset_plots", "Multi-Dataset Plots"), font=("Arial", 11, "bold")).pack(anchor=tk.W)
         ttk.Label(info_frame, 
-                 text="Configure multiple datasets to plot on the same graph (e.g., calibration vs validation).",
+                 text=self._t("ui.messages.configure_multiple_datasets", "Configure multiple datasets to plot on the same graph (e.g., calibration vs validation)."),
                  wraplength=450, foreground="gray").pack(anchor=tk.W, pady=(2, 5))
         
         ttk.Label(info_frame,
-                 text="Note: If you configure datasets here, the single-dataset axes (Axes tab) will be ignored.",
+                 text=self._t("ui.messages.datasets_override_single_axes", "Note: If you configure datasets here, the single-dataset axes (Axes tab) will be ignored."),
                  wraplength=450, font=("Arial", 9, "italic"), foreground="orange").pack(anchor=tk.W)
         
         # Datasets list frame
-        list_frame = ttk.LabelFrame(scrollable_frame, text="Datasets", padding=10)
+        list_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.datasets", "Datasets"), padding=10)
         list_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # Listbox to show datasets
@@ -367,13 +475,13 @@ class AddGraphDialog:
         btn_frame = ttk.Frame(list_frame)
         btn_frame.pack(fill=tk.X, pady=(10, 0))
         
-        ttk.Button(btn_frame, text="➕ Add Dataset", 
+        ttk.Button(btn_frame, text="➕ " + self._t("ui.buttons.add_dataset", "Add Dataset"), 
                   command=self._add_dataset).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text="✏ Edit Selected", 
+        ttk.Button(btn_frame, text="✏ " + self._t("ui.buttons.edit_selected", "Edit Selected"), 
                   command=self._edit_dataset).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text="🗑 Remove Selected", 
+        ttk.Button(btn_frame, text="🗑 " + self._t("ui.buttons.remove_selected", "Remove Selected"), 
                   command=self._remove_dataset).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text="Clear All", 
+        ttk.Button(btn_frame, text=self._t("ui.buttons.clear_all", "Clear All"), 
                   command=self._clear_datasets).pack(side=tk.LEFT, padx=2)
     
     def _add_dataset(self):
@@ -384,7 +492,7 @@ class AddGraphDialog:
         """Edit the selected dataset."""
         selection = self.datasets_listbox.curselection()
         if not selection:
-            messagebox.showwarning("Warning", "Please select a dataset to edit")
+            self._notify(self._t("ui.messages.select_dataset_edit", "Please select a dataset to edit"), level="warning")
             return
         
         idx = selection[0]
@@ -395,7 +503,7 @@ class AddGraphDialog:
         """Remove the selected dataset."""
         selection = self.datasets_listbox.curselection()
         if not selection:
-            messagebox.showwarning("Warning", "Please select a dataset to remove")
+            self._notify(self._t("ui.messages.select_dataset_remove", "Please select a dataset to remove"), level="warning")
             return
         
         idx = selection[0]
@@ -405,15 +513,23 @@ class AddGraphDialog:
     
     def _clear_datasets(self):
         """Clear all datasets."""
-        if self.datasets_configs and messagebox.askyesno("Confirm", "Clear all datasets?"):
+        if self.datasets_configs and messagebox.askyesno(
+            self._t("ui.dialogs.confirm", "Confirm"),
+            self._t("ui.messages.clear_all_datasets_confirm", "Clear all datasets?")
+        ):
             self.datasets_configs = []
             self._refresh_datasets_list()
     
     def _show_dataset_config_dialog(self, edit_idx=None, existing_config=None):
         """Show dialog to configure a single dataset."""
         dialog = tk.Toplevel(self.dialog)
-        dialog.title("Configure Dataset" if edit_idx is None else "Edit Dataset")
+        dialog.title(
+            self._t("ui.dialogs.configure_dataset", "Configure Dataset")
+            if edit_idx is None else
+            self._t("ui.dialogs.edit_dataset", "Edit Dataset")
+        )
         dialog.geometry("500x600")
+        self._center_window(dialog, 500, 600)
         
         # Scrollable frame
         canvas = tk.Canvas(dialog)
@@ -430,97 +546,98 @@ class AddGraphDialog:
         
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self._bind_canvas_mousewheel(canvas, scrollable_frame)
         
         # Dataset label
-        label_frame = ttk.LabelFrame(scrollable_frame, text="Dataset Label", padding=10)
+        label_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.dataset_label", "Dataset Label"), padding=10)
         label_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        ttk.Label(label_frame, text="Label (for legend):").pack(anchor=tk.W)
+        ttk.Label(label_frame, text=self._t("ui.labels.label_for_legend", "Label (for legend):")).pack(anchor=tk.W)
         label_var = tk.StringVar(value=existing_config.get('label', '') if existing_config else '')
         label_entry = ttk.Entry(label_frame, textvariable=label_var, width=40)
         label_entry.pack(fill=tk.X, pady=2)
         
         # Marker
-        marker_frame = ttk.LabelFrame(scrollable_frame, text="Marker Style", padding=10)
+        marker_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.marker_style", "Marker Style"), padding=10)
         marker_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        ttk.Label(marker_frame, text="Marker:").pack(anchor=tk.W)
+        ttk.Label(marker_frame, text=self._t("ui.labels.marker", "Marker:")).pack(anchor=tk.W)
         marker_var = tk.StringVar(value=existing_config.get('marker', 'o') if existing_config else 'o')
         markers = ['o', 's', '^', 'v', '<', '>', 'D', 'p', '*', 'h', 'H', '+', 'x']
         marker_combo = ttk.Combobox(marker_frame, textvariable=marker_var, values=markers, width=10)
         marker_combo.pack(fill=tk.X, pady=2)
         
         # Color (optional)
-        color_frame = ttk.LabelFrame(scrollable_frame, text="Color (Optional)", padding=10)
+        color_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.color_optional", "Color (Optional)"), padding=10)
         color_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        ttk.Label(color_frame, text="Color (leave blank for auto):").pack(anchor=tk.W)
+        ttk.Label(color_frame, text=self._t("ui.labels.color_leave_blank_auto", "Color (leave blank for auto):")).pack(anchor=tk.W)
         color_var = tk.StringVar(value=existing_config.get('color', '') if existing_config else '')
         color_entry = ttk.Entry(color_frame, textvariable=color_var, width=20)
         color_entry.pack(fill=tk.X, pady=2)
-        ttk.Label(color_frame, text="Examples: #1f77b4, red, blue", 
+        ttk.Label(color_frame, text=self._t("ui.labels.color_examples", "Examples: #1f77b4, red, blue"), 
                  font=("Arial", 8), foreground="gray").pack(anchor=tk.W)
         
         # X-axis config
-        x_frame = ttk.LabelFrame(scrollable_frame, text="X-Axis Configuration", padding=10)
+        x_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.x_axis_configuration", "X-Axis Configuration"), padding=10)
         x_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        ttk.Label(x_frame, text="Data Source:").pack(anchor=tk.W)
+        ttk.Label(x_frame, text=self._t("ui.labels.input_output_source_colon", "Input/Output Source:")).pack(anchor=tk.W)
         x_source_var = tk.StringVar(value=existing_config.get('x_axis', {}).get('data_source', '') if existing_config else '')
         x_source_combo = ttk.Combobox(x_frame, textvariable=x_source_var, 
                                       values=[''] + self._get_available_data_sources(), width=40)
         x_source_combo.pack(fill=tk.X, pady=2)
         
-        ttk.Label(x_frame, text="Nested Key (optional):").pack(anchor=tk.W, pady=(5, 0))
+        ttk.Label(x_frame, text=self._t("ui.labels.nested_key_optional", "Nested Key (optional):")).pack(anchor=tk.W, pady=(5, 0))
         x_nested_var = tk.StringVar(value=existing_config.get('x_axis', {}).get('nested_key', '') if existing_config else '')
         x_nested_entry = ttk.Entry(x_frame, textvariable=x_nested_var, width=40)
         x_nested_entry.pack(fill=tk.X, pady=2)
         
         # Y-axis config
-        y_frame = ttk.LabelFrame(scrollable_frame, text="Y-Axis Configuration", padding=10)
+        y_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.y_axis_configuration", "Y-Axis Configuration"), padding=10)
         y_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        ttk.Label(y_frame, text="Data Source:").pack(anchor=tk.W)
+        ttk.Label(y_frame, text=self._t("ui.labels.input_output_source_colon", "Input/Output Source:")).pack(anchor=tk.W)
         y_source_var = tk.StringVar(value=existing_config.get('y_axis', {}).get('data_source', '') if existing_config else '')
         y_source_combo = ttk.Combobox(y_frame, textvariable=y_source_var,
                                       values=[''] + self._get_available_data_sources(), width=40)
         y_source_combo.pack(fill=tk.X, pady=2)
         
-        ttk.Label(y_frame, text="Nested Key (optional):").pack(anchor=tk.W, pady=(5, 0))
+        ttk.Label(y_frame, text=self._t("ui.labels.nested_key_optional", "Nested Key (optional):")).pack(anchor=tk.W, pady=(5, 0))
         y_nested_var = tk.StringVar(value=existing_config.get('y_axis', {}).get('nested_key', '') if existing_config else '')
         y_nested_entry = ttk.Entry(y_frame, textvariable=y_nested_var, width=40)
         y_nested_entry.pack(fill=tk.X, pady=2)
         
         # Z-axis config (optional)
-        z_frame = ttk.LabelFrame(scrollable_frame, text="Z-Axis Configuration (Optional, for 3D)", padding=10)
+        z_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.z_axis_configuration_optional_3d", "Z-Axis Configuration (Optional, for 3D)"), padding=10)
         z_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        ttk.Label(z_frame, text="Data Source:").pack(anchor=tk.W)
+        ttk.Label(z_frame, text=self._t("ui.labels.input_output_source_colon", "Input/Output Source:")).pack(anchor=tk.W)
         z_source_var = tk.StringVar(value=existing_config.get('z_axis', {}).get('data_source', '') if existing_config else '')
         z_source_combo = ttk.Combobox(z_frame, textvariable=z_source_var,
                                       values=[''] + self._get_available_data_sources(), width=40)
         z_source_combo.pack(fill=tk.X, pady=2)
         
-        ttk.Label(z_frame, text="Nested Key (optional):").pack(anchor=tk.W, pady=(5, 0))
+        ttk.Label(z_frame, text=self._t("ui.labels.nested_key_optional", "Nested Key (optional):")).pack(anchor=tk.W, pady=(5, 0))
         z_nested_var = tk.StringVar(value=existing_config.get('z_axis', {}).get('nested_key', '') if existing_config else '')
         z_nested_entry = ttk.Entry(z_frame, textvariable=z_nested_var, width=40)
         z_nested_entry.pack(fill=tk.X, pady=2)
         
         # Class labels (optional)
-        class_frame = ttk.LabelFrame(scrollable_frame, text="Class Labels (Optional)", padding=10)
+        class_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.class_labels_optional", "Class Labels (Optional)"), padding=10)
         class_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        ttk.Label(class_frame, text="Class Labels Source:").pack(anchor=tk.W)
+        ttk.Label(class_frame, text=self._t("ui.labels.class_labels_source", "Class Labels Source:")).pack(anchor=tk.W)
         class_var = tk.StringVar(value=existing_config.get('class_labels', '') if existing_config else '')
         class_combo = ttk.Combobox(class_frame, textvariable=class_var,
                                    values=[''] + self._get_available_data_sources(), width=40)
         class_combo.pack(fill=tk.X, pady=2)
         
         # Sample labels (optional)
-        sample_frame = ttk.LabelFrame(scrollable_frame, text="Sample Labels (Optional)", padding=10)
+        sample_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.sample_labels_optional", "Sample Labels (Optional)"), padding=10)
         sample_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        ttk.Label(sample_frame, text="Sample Labels Source:").pack(anchor=tk.W)
+        ttk.Label(sample_frame, text=self._t("ui.labels.sample_labels_source", "Sample Labels Source:")).pack(anchor=tk.W)
         sample_var = tk.StringVar(value=existing_config.get('sample_labels_source', '') if existing_config else '')
         sample_combo = ttk.Combobox(sample_frame, textvariable=sample_var,
                                     values=[''] + self._get_available_data_sources(), width=40)
@@ -533,7 +650,7 @@ class AddGraphDialog:
         def save_dataset():
             # Build dataset config
             ds_config = {
-                'label': label_var.get() or 'Dataset',
+                'label': label_var.get() or self._t("ui.labels.dataset", "Dataset"),
                 'marker': marker_var.get() or 'o'
             }
             
@@ -571,7 +688,7 @@ class AddGraphDialog:
             
             # Validate
             if not ds_config.get('x_axis') or not ds_config.get('y_axis'):
-                messagebox.showerror("Error", "Both X and Y axis data sources are required")
+                self._notify(self._t("ui.messages.x_y_required", "Both X and Y axis data sources are required"), level="warning")
                 return
             
             # Add or update
@@ -583,14 +700,14 @@ class AddGraphDialog:
             self._refresh_datasets_list()
             dialog.destroy()
         
-        ttk.Button(btn_frame, text="✓ Save", command=save_dataset).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="✗ Cancel", command=dialog.destroy).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="✓ " + self._t("ui.buttons.save", "Save"), command=save_dataset).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="✗ " + self._t("ui.buttons.cancel", "Cancel"), command=dialog.destroy).pack(side=tk.LEFT, padx=5)
     
     def _refresh_datasets_list(self):
         """Refresh the datasets listbox."""
         self.datasets_listbox.delete(0, tk.END)
         for idx, ds in enumerate(self.datasets_configs):
-            label = ds.get('label', f'Dataset {idx+1}')
+            label = ds.get('label', f"{self._t('ui.labels.dataset', 'Dataset')} {idx+1}")
             marker = ds.get('marker', 'o')
             x_src = ds.get('x_axis', {}).get('data_source', '?')
             y_src = ds.get('y_axis', {}).get('data_source', '?')
@@ -614,32 +731,33 @@ class AddGraphDialog:
         
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self._bind_canvas_mousewheel(canvas, scrollable_frame)
         
         # Class labels
-        class_frame = ttk.LabelFrame(scrollable_frame, text="Class Labels (for coloring)", padding=10)
+        class_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.class_labels_for_coloring", "Class Labels (for coloring)"), padding=10)
         class_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        ttk.Label(class_frame, text="Class Data Source:").pack(anchor=tk.W)
+        ttk.Label(class_frame, text=self._t("ui.labels.class_data_source", "Class Data Source:")).pack(anchor=tk.W)
         self.class_labels_var = tk.StringVar()
         class_combo = ttk.Combobox(class_frame, textvariable=self.class_labels_var, 
                                    values=[''] + self._get_available_data_sources(), width=40)
         class_combo.pack(fill=tk.X, pady=5)
         
         # Sample labels
-        sample_frame = ttk.LabelFrame(scrollable_frame, text="Sample Labels (for tooltips)", padding=10)
+        sample_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.sample_labels_for_tooltips", "Sample Labels (for tooltips)"), padding=10)
         sample_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        ttk.Label(sample_frame, text="Sample Labels Source:").pack(anchor=tk.W)
+        ttk.Label(sample_frame, text=self._t("ui.labels.sample_labels_source", "Sample Labels Source:")).pack(anchor=tk.W)
         self.sample_labels_var = tk.StringVar()
         sample_combo = ttk.Combobox(sample_frame, textvariable=self.sample_labels_var,
                                     values=[''] + self._get_available_data_sources(), width=40)
         sample_combo.pack(fill=tk.X, pady=5)
         
         # Data slicing configuration
-        slice_frame = ttk.LabelFrame(scrollable_frame, text="Data Slicing / Navigation", padding=10)
+        slice_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.data_slicing_navigation", "Data Slicing / Navigation"), padding=10)
         slice_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        ttk.Label(slice_frame, text="Enable navigation for exploring multi-dimensional data:", 
+        ttk.Label(slice_frame, text=self._t("ui.messages.enable_nav_multi_dim", "Enable navigation for exploring multi-dimensional data:"), 
                  wraplength=400).pack(anchor=tk.W, pady=5)
         
         # Axis navigation checkboxes with dimension entry
@@ -652,39 +770,39 @@ class AddGraphDialog:
             # Checkbox for enabling navigation on this axis
             nav_var = tk.BooleanVar(value=False)
             setattr(self, f'{axis_key}_nav_enabled_var', nav_var)
-            cb = ttk.Checkbutton(axis_frame, text=f"{axis_label} Navigation", variable=nav_var)
+            cb = ttk.Checkbutton(axis_frame, text=self._t("ui.labels.axis_navigation", "{axis} Navigation").format(axis=axis_label), variable=nav_var)
             cb.pack(side=tk.LEFT)
             
             # Dimension entry
-            ttk.Label(axis_frame, text="Dim:").pack(side=tk.LEFT, padx=(10, 2))
+            ttk.Label(axis_frame, text=self._t("ui.labels.dim", "Dim:")).pack(side=tk.LEFT, padx=(10, 2))
             dim_var = tk.StringVar(value="0")
             setattr(self, f'{axis_key}_nav_dim_var', dim_var)
             dim_entry = ttk.Entry(axis_frame, textvariable=dim_var, width=8)
             dim_entry.pack(side=tk.LEFT, padx=2)
             
             # Default value entry
-            ttk.Label(axis_frame, text="Default:").pack(side=tk.LEFT, padx=(10, 2))
+            ttk.Label(axis_frame, text=self._t("ui.labels.default", "Default:")).pack(side=tk.LEFT, padx=(10, 2))
             default_var = tk.StringVar(value="0")
             setattr(self, f'{axis_key}_nav_default_var', default_var)
             
             default_entry = ttk.Entry(axis_frame, textvariable=default_var, width=8)
             default_entry.pack(side=tk.LEFT, padx=2)
         
-        ttk.Label(slice_frame, text="Tip: Dim 0=samples, 1=first variable dimension (e.g., PCs)", 
+        ttk.Label(slice_frame, text=self._t("ui.messages.tip_dim_samples", "Tip: Dim 0=samples, 1=first variable dimension (e.g., PCs)"), 
                  font=("Arial", 8), foreground="gray", wraplength=400).pack(anchor=tk.W, pady=(5, 0))
         
         # Multi-Dimensional Slicing for 4D+ Data
         ttk.Separator(scrollable_frame, orient='horizontal').pack(fill=tk.X, padx=5, pady=10)
         
-        md_slice_frame = ttk.LabelFrame(scrollable_frame, text="Multi-Dimensional Slicing (4D+ Data)", padding=10)
+        md_slice_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.multi_dim_slicing_4d_data", "Multi-Dimensional Slicing (4D+ Data)"), padding=10)
         md_slice_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        ttk.Label(md_slice_frame, text="For 4D+ heatmaps/contours, configure dimension combinations and slicing:", 
+        ttk.Label(md_slice_frame, text=self._t("ui.messages.configure_4d_heatmap_slicing", "For 4D+ heatmaps/contours, configure dimension combinations and slicing:"), 
                  wraplength=450).pack(anchor=tk.W, pady=(0, 10))
         
         # Enable 4D+ multi-dimensional slicing
         self.enable_md_slicing_var = tk.BooleanVar(value=False)
-        md_enable_cb = ttk.Checkbutton(md_slice_frame, text="Enable 4D+ Multi-Dimensional Slicing", 
+        md_enable_cb = ttk.Checkbutton(md_slice_frame, text=self._t("ui.labels.enable_4d_multi_dim_slicing", "Enable 4D+ Multi-Dimensional Slicing"), 
                                        variable=self.enable_md_slicing_var, command=self._toggle_md_config)
         md_enable_cb.pack(anchor=tk.W, pady=5)
         
@@ -694,25 +812,25 @@ class AddGraphDialog:
         # Dimension combination selector
         combo_frame = ttk.Frame(self.md_config_frame)
         combo_frame.pack(fill=tk.X, pady=5)
-        ttk.Label(combo_frame, text="Dimension Combination Index:", width=25).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Label(combo_frame, text=self._t("ui.labels.dimension_combination_index", "Dimension Combination Index:"), width=25).pack(side=tk.LEFT, padx=(0, 5))
         self.md_combo_index_var = tk.StringVar(value="0")
         ttk.Entry(combo_frame, textvariable=self.md_combo_index_var, width=10).pack(side=tk.LEFT)
-        ttk.Label(combo_frame, text="(0 = first combination)", font=("Arial", 8), 
+        ttk.Label(combo_frame, text=self._t("ui.labels.zero_first_combination", "(0 = first combination)"), font=("Arial", 8), 
                  foreground="gray").pack(side=tk.LEFT, padx=(5, 0))
         
-        ttk.Label(self.md_config_frame, text="For heatmaps/contours: 2 dims used for X/Y axes, others are navigable.", 
+        ttk.Label(self.md_config_frame, text=self._t("ui.messages.heatmap_two_dims_xy", "For heatmaps/contours: 2 dims used for X/Y axes, others are navigable."), 
                  font=("Arial", 8), foreground="gray", wraplength=450).pack(anchor=tk.W, pady=(5, 10))
         
         # Default slice indices for navigable dimensions
-        ttk.Label(self.md_config_frame, text="Default slice indices for navigable dimensions:").pack(anchor=tk.W)
-        ttk.Label(self.md_config_frame, text="Format: dim:index (e.g., '2:0,3:5' means dim 2→index 0, dim 3→index 5)", 
+        ttk.Label(self.md_config_frame, text=self._t("ui.labels.default_slice_indices_navigable", "Default slice indices for navigable dimensions:")).pack(anchor=tk.W)
+        ttk.Label(self.md_config_frame, text=self._t("ui.labels.slice_format_dim_index", "Format: dim:index (e.g., '2:0,3:5' means dim 2→index 0, dim 3→index 5)"), 
                  font=("Arial", 8), foreground="gray", wraplength=450).pack(anchor=tk.W, pady=(0, 5))
         
         self.md_slice_indices_var = tk.StringVar()
         md_slice_entry = ttk.Entry(self.md_config_frame, textvariable=self.md_slice_indices_var, width=50)
         md_slice_entry.pack(fill=tk.X, pady=5)
         
-        ttk.Label(self.md_config_frame, text="Leave blank to use default (0) for all navigable dimensions.", 
+        ttk.Label(self.md_config_frame, text=self._t("ui.messages.leave_blank_default_navigable", "Leave blank to use default (0) for all navigable dimensions."), 
                  font=("Arial", 8), foreground="gray", wraplength=450).pack(anchor=tk.W, pady=(0, 5))
     
     def _toggle_md_config(self):
@@ -725,11 +843,11 @@ class AddGraphDialog:
     def _build_preview_panel(self, parent):
         """Build the preview panel."""
         # Title
-        title = ttk.Label(parent, text="Preview", font=("Arial", 12, "bold"))
+        title = ttk.Label(parent, text=self._t("ui.labels.preview", "Preview"), font=("Arial", 12, "bold"))
         title.pack(pady=10)
         
         # Preview button
-        preview_btn = ttk.Button(parent, text="🔄 Update Preview", command=self._update_preview)
+        preview_btn = ttk.Button(parent, text="🔄 " + self._t("ui.buttons.update_preview", "Update Preview"), command=self._update_preview)
         preview_btn.pack(pady=5)
         
         # Preview container
@@ -739,7 +857,7 @@ class AddGraphDialog:
         self.preview_container = preview_container
         
         # Initial message
-        msg = ttk.Label(preview_container, text="Configure your graph and click 'Update Preview'",
+        msg = ttk.Label(preview_container, text=self._t("ui.messages.configure_graph_update_preview", "Configure your graph and click 'Update Preview'"),
                        foreground="gray", font=("Arial", 10, "italic"))
         msg.pack(expand=True)
     
@@ -749,11 +867,11 @@ class AddGraphDialog:
         button_frame.pack(fill=tk.X, side=tk.BOTTOM, padx=10, pady=10)
         
         # Add Graph button
-        add_btn = ttk.Button(button_frame, text="✓ Add Graph", command=self._add_graph)
+        add_btn = ttk.Button(button_frame, text="✓ " + self._t("ui.buttons.add_graph", "Add Graph"), command=self._add_graph)
         add_btn.pack(side=tk.LEFT, padx=5)
         
         # Cancel button
-        cancel_btn = ttk.Button(button_frame, text="✗ Cancel", command=self.dialog.destroy)
+        cancel_btn = ttk.Button(button_frame, text="✗ " + self._t("ui.buttons.cancel", "Cancel"), command=self.dialog.destroy)
         cancel_btn.pack(side=tk.LEFT, padx=5)
         
         # Spacer
@@ -761,7 +879,7 @@ class AddGraphDialog:
         spacer.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
         # Help button
-        help_btn = ttk.Button(button_frame, text="? Help", command=self._show_help)
+        help_btn = ttk.Button(button_frame, text="? " + self._t("ui.buttons.help", "Help"), command=self._show_help)
         help_btn.pack(side=tk.RIGHT, padx=5)
     
     def _on_graph_type_changed(self):
@@ -786,7 +904,7 @@ class AddGraphDialog:
             info = self._get_data_shape_info(data_source)
             info_var.set(info)
         else:
-            info_var.set("Select a data source")
+            info_var.set(self._t("ui.messages.select_data_source", "Select a data source"))
     
     def _build_graph_config(self) -> Dict:
         """Build graph configuration dictionary from UI inputs."""
@@ -1045,7 +1163,7 @@ class AddGraphDialog:
                                    wraplength=400)
             error_label.pack(expand=True, pady=20)
             
-            messagebox.showerror("Preview Error", f"Failed to generate preview:\n\n{str(e)}")
+            self._notify(self._t("ui.messages.preview_generate_failed", "Failed to generate preview:") + f"\n\n{str(e)}", level="error")
     
     def _add_graph(self):
         """Add the configured graph to the selected section."""
@@ -1053,7 +1171,7 @@ class AddGraphDialog:
             # Get selected section
             section_selection = self.section_var.get()
             if not section_selection:
-                messagebox.showerror("Error", "Please select a target section")
+                self._notify(self._t("ui.messages.select_target_section", "Please select a target section"), level="warning")
                 return
             
             # Find the corresponding section indices
@@ -1069,18 +1187,18 @@ class AddGraphDialog:
             # For multi-dataset, check datasets config
             if config.get('datasets'):
                 if not config['datasets']:
-                    messagebox.showerror("Error", "No datasets configured. Add at least one dataset in Multi-Dataset tab.")
+                    self._notify(self._t("ui.messages.no_datasets_configured", "No datasets configured. Add at least one dataset in Multi-Dataset tab."), level="warning")
                     return
                 # Datasets are already validated when added
             else:
                 # Single dataset mode - validate axes
                 if graph_type == 'histogram':
                     if not config.get('y_axis'):
-                        messagebox.showerror("Error", "Y-axis data source required for histogram")
+                        self._notify(self._t("ui.messages.y_required_histogram", "Y-axis data source required for histogram"), level="warning")
                         return
                 else:
                     if not config.get('x_axis') or not config.get('y_axis'):
-                        messagebox.showerror("Error", "Both X-axis and Y-axis data sources required (or configure datasets in Multi-Dataset tab)")
+                        self._notify(self._t("ui.messages.x_y_required_or_datasets", "Both X-axis and Y-axis data sources required (or configure datasets in Multi-Dataset tab)"), level="warning")
                         return
             
             # Update section in analysis data
@@ -1096,10 +1214,10 @@ class AddGraphDialog:
             # Refresh analysis tab
             self.main_gui._show_analysis_tab()
             
-            messagebox.showinfo("Success", f"Graph added to {section_selection}")
+            self._notify(self._t("ui.messages.graph_added_to", "Graph added to") + f" {section_selection}", level="success")
             
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to add graph:\n\n{str(e)}")
+            self._notify(self._t("ui.messages.add_graph_failed", "Failed to add graph:") + f"\n\n{str(e)}", level="error")
             import traceback
             traceback.print_exc()
     
@@ -1156,15 +1274,16 @@ Tips:
 """
         
         help_dialog = tk.Toplevel(self.dialog)
-        help_dialog.title("Help")
+        help_dialog.title(self._t("ui.buttons.help", "Help"))
         help_dialog.geometry("700x600")
+        self._center_window(help_dialog, 700, 600)
         
         text = scrolledtext.ScrolledText(help_dialog, wrap=tk.WORD, font=("Arial", 10))
         text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         text.insert(1.0, help_text)
         text.config(state=tk.DISABLED)
         
-        close_btn = ttk.Button(help_dialog, text="Close", command=help_dialog.destroy)
+        close_btn = ttk.Button(help_dialog, text=self._t("ui.buttons.close", "Close"), command=help_dialog.destroy)
         close_btn.pack(pady=10)
 
 

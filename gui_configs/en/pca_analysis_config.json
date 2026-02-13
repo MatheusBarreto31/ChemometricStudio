@@ -166,8 +166,8 @@
             "type": "graph",
             "config": {
               "graph_type": "line",
-              "x_axis": {"data_source": "__index__", "label": "PC", "reference_source": "metrics", "reference_nested_key": "pct_variance_explained"},
-              "y_axis": {"data_source": "metrics", "nested_key": "pct_variance_explained", "label": "Variance Explained (%)"},
+              "x_axis": {"data_source": "__index__", "label": "PC", "reference_source": "metrics", "reference_nested_key": "calibration.pct_variance_explained"},
+              "y_axis": {"data_source": "metrics", "nested_key": "calibration.pct_variance_explained", "label": "Variance Explained (%)"},
               "title": "Explained Variance by Component",
               "line_style": "lines+markers"
             }
@@ -240,7 +240,7 @@
             "type": "table",
             "config": {
               "data_source": "metrics",
-              "nested_key": "pct_variance_explained",
+              "nested_key": "calibration.pct_variance_explained",
               "title": "Explained Variance Table",
               "row_label": "PC",
               "decimal_places": 4,
@@ -261,7 +261,7 @@
               "columns": [
                 {
                   "data_source": "metrics",
-                  "nested_key": "pct_variance_explained",
+                  "nested_key": "calibration.pct_variance_explained",
                   "name": "Individual Variance (%)"
                 },
                 {
@@ -289,11 +289,11 @@
                 "data_source": "__index__",
                 "label": "Principal Component",
                 "reference_source": "metrics",
-                "reference_nested_key": "pct_variance_explained"
+                "reference_nested_key": "calibration.pct_variance_explained"
               },
               "y_axis": {
                 "data_source": "metrics",
-                "nested_key": "pct_variance_explained",
+                "nested_key": "calibration.pct_variance_explained",
                 "label": "Explained Variance (%)"
               }
             }
@@ -315,11 +315,11 @@
                     "data_source": "__index__",
                     "label": "Principal Component",
                     "reference_source": "metrics",
-                    "reference_nested_key": "pct_variance_explained"
+                    "reference_nested_key": "calibration.pct_variance_explained"
                   },
                   "y_axis": {
                     "data_source": "metrics",
-                    "nested_key": "pct_variance_explained",
+                    "nested_key": "calibration.pct_variance_explained",
                     "label": "Explained Variance (%)"
                   },
                   "label": "Individual Variance",
@@ -331,7 +331,7 @@
                     "data_source": "__index__",
                     "label": "Principal Component",
                     "reference_source": "metrics",
-                    "reference_nested_key": "pct_variance_explained"
+                    "reference_nested_key": "calibration.pct_variance_explained"
                   },
                   "y_axis": {
                     "data_source": "metrics",

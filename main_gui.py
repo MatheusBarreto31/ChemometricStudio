@@ -37,6 +37,9 @@ import graph_renderer
 # Import add graph dialog
 from add_graph_dialog import show_add_graph_dialog
 
+# Import add table dialog
+from add_table_dialog import show_add_table_dialog
+
 # Import routing map window
 from routing_map_window import RoutingMapWindow
 
@@ -101,6 +104,7 @@ class ChemometricsGUI:
         
         self.root.title(self.language_manager.translate("ui.main_title", "CM Studio"))
         self.root.geometry("1280x720")
+        self._disable_combobox_mousewheel()
         
         # Set up tempfiles folder for loaded models
         self.tempfiles_dir = Path(__file__).parent / "tempfiles"
@@ -116,6 +120,26 @@ class ChemometricsGUI:
         self.routing_lines: Dict[Tuple, str] = {}  # {(src_idx, src_output, dst_idx, dst_input): routing_info}
         self.selected_function_idx: Optional[int] = None  # Index in methodology_list
         self.gui_configs: Dict[str, Dict] = {}  # {func_alias: config_data}
+        self.notification_color_schemes: Dict[str, Dict[str, str]] = {
+            "message": {"bg": "#D9EDF7", "fg": "#0288d1"},
+            "success": {"bg": "#DFF2BF", "fg": "#2F7D32"},
+            "warning": {"bg": "#FEEFB3", "fg": "#9F6000"},
+            "error": {"bg": "#FFBABA", "fg": "#D8000C"}
+        }
+        self.notification_default_durations: Dict[str, int] = {
+            "message": 2200,
+            "success": 1800,
+            "warning": 2800,
+            "error": 3400
+        }
+        self.execution_progress_frame = None
+        self.execution_progress_popup = None
+        self.execution_progress_status_label = None
+        self.execution_progress_percent_label = None
+        self.execution_progress_bar = None
+        self.execution_progress_mode = ""
+        self.execution_progress_hide_after_id = None
+        self._execution_progress_root_bind_set = False
         
         # Configure dark theme styles
         style = ttk.Style()
@@ -130,6 +154,100 @@ class ChemometricsGUI:
         # Build UI
         self._build_ui()
         self._load_theme()
+
+    def _disable_combobox_mousewheel(self):
+        """Prevent mouse wheel from changing ttk.Combobox selections."""
+        self.root.bind_class("TCombobox", "<MouseWheel>", lambda e: "break", add="+")
+        self.root.bind_class("TCombobox", "<Button-4>", lambda e: "break", add="+")
+        self.root.bind_class("TCombobox", "<Button-5>", lambda e: "break", add="+")
+
+    def _show_fading_notice(self, message: str, level: str = "message", duration_ms: Optional[int] = None):
+        """Show a non-blocking fading notification.
+
+        Color scheme is configured in self.notification_color_schemes.
+        Supported levels: message, success, warning, error.
+        """
+        if not message:
+            return
+
+        if level not in self.notification_color_schemes:
+            level = "message"
+
+        colors = self.notification_color_schemes[level]
+        if duration_ms is None:
+            duration_ms = self.notification_default_durations.get(level, 2200)
+
+        existing_toast = getattr(self, "_notification_toast", None)
+        if existing_toast is not None and existing_toast.winfo_exists():
+            existing_toast.destroy()
+
+        toast = tk.Toplevel(self.root)
+        self._notification_toast = toast
+        toast.overrideredirect(True)
+        toast.attributes("-topmost", True)
+
+        try:
+            toast.attributes("-alpha", 0.96)
+        except tk.TclError:
+            pass
+
+        container = tk.Frame(toast, bg=colors["bg"], bd=1, relief=tk.SOLID)
+        container.pack(fill=tk.BOTH, expand=True)
+
+        label = tk.Label(
+            container,
+            text=message,
+            bg=colors["bg"],
+            fg=colors["fg"],
+            font=("Arial", 10),
+            justify=tk.LEFT,
+            anchor="w",
+            wraplength=520,
+            padx=12,
+            pady=8
+        )
+        label.pack(fill=tk.BOTH, expand=True)
+
+        self.root.update_idletasks()
+        toast.update_idletasks()
+        x = self.root.winfo_rootx() + self.root.winfo_width() - toast.winfo_reqwidth() - 24
+        y = self.root.winfo_rooty() + 58
+        toast.geometry(f"+{max(0, x)}+{max(0, y)}")
+
+        fade_steps = 12
+        fade_step_ms = 85
+
+        def fade_out(step=fade_steps):
+            if not toast.winfo_exists():
+                return
+            if step <= 0:
+                toast.destroy()
+                return
+            try:
+                toast.attributes("-alpha", max(0.0, step / fade_steps))
+            except tk.TclError:
+                if step <= 1 and toast.winfo_exists():
+                    toast.destroy()
+                return
+            toast.after(fade_step_ms, lambda: fade_out(step - 1))
+
+        toast.after(max(400, duration_ms), fade_out)
+
+    def _show_fading_warning(self, message: str, duration_ms: Optional[int] = None):
+        """Backward-compatible warning notification helper."""
+        self._show_fading_notice(message, level="warning", duration_ms=duration_ms)
+
+    def _show_fading_error(self, message: str, duration_ms: Optional[int] = None):
+        """Show an error-style fading notification."""
+        self._show_fading_notice(message, level="error", duration_ms=duration_ms)
+
+    def _show_fading_message(self, message: str, duration_ms: Optional[int] = None):
+        """Show a neutral info-style fading notification."""
+        self._show_fading_notice(message, level="message", duration_ms=duration_ms)
+
+    def _show_fading_success(self, message: str, duration_ms: Optional[int] = None):
+        """Show a success-style fading notification."""
+        self._show_fading_notice(message, level="success", duration_ms=duration_ms)
     
     def _load_gui_configs(self):
         """Load function-specific GUI configuration files with language support."""
@@ -205,6 +323,17 @@ class ChemometricsGUI:
         style.configure("Input.TButton",
                        font=("Arial", 9),
                        padding=8)
+
+        # Modern progress bar style for model execution feedback
+        style.configure(
+            "Execution.Horizontal.TProgressbar",
+            troughcolor="#2f2f2f",
+            background="#2f9fff",
+            bordercolor="#2f2f2f",
+            lightcolor="#2f9fff",
+            darkcolor="#2f9fff",
+            thickness=12
+        )
     
     def _build_menu_bar(self):
         """Build the menu bar with File, Settings, and Help menus."""
@@ -280,14 +409,20 @@ class ChemometricsGUI:
     def _change_colormap(self, colormap_name: str):
         """Change the default continuous colormap and save setting."""
         self.settings_manager.set("colormap", colormap_name)
-        messagebox.showinfo(self.language_manager.translate("ui.dialogs.info", "Information"),
-                          f"Colormap changed to '{colormap_name}'.\nThis will be used for new plots.")
+        self._show_fading_message(
+            self.language_manager.translate("ui.messages.colormap_changed_to", "Colormap changed to") +
+            f" '{colormap_name}'.\n" +
+            self.language_manager.translate("ui.messages.colormap_used_new_plots", "This will be used for new plots.")
+        )
     
     def _change_qualitative_colormap(self, colormap_name: str):
         """Change the qualitative colormap and save setting."""
         self.settings_manager.set("qualitative_colormap", colormap_name)
-        messagebox.showinfo(self.language_manager.translate("ui.dialogs.info", "Information"),
-                          f"Qualitative colormap changed to '{colormap_name}'.\nThis will be used for new plots.")
+        self._show_fading_message(
+            self.language_manager.translate("ui.messages.qual_colormap_changed_to", "Qualitative colormap changed to") +
+            f" '{colormap_name}'.\n" +
+            self.language_manager.translate("ui.messages.colormap_used_new_plots", "This will be used for new plots.")
+        )
     
     def _show_about_dialog(self):
         """Show the About dialog with program information."""
@@ -356,7 +491,7 @@ class ChemometricsGUI:
             version_text_label.pack(anchor=tk.W)
         
         # Description frame
-        desc_frame = ttk.LabelFrame(about_win, text="About", padding=15)
+        desc_frame = ttk.LabelFrame(about_win, text=self.language_manager.translate("menu.about", "About"), padding=15)
         desc_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=(0, 10))
         
         # Text widget for description
@@ -384,7 +519,7 @@ class ChemometricsGUI:
         link_label.bind("<Button-1>", open_link)
         
         # Close button
-        close_btn = ttk.Button(about_win, text="Close", command=about_win.destroy)
+        close_btn = ttk.Button(about_win, text=self.language_manager.translate("ui.buttons.close", "Close"), command=about_win.destroy)
         close_btn.pack(pady=(0, 10))
     
 
@@ -410,6 +545,13 @@ class ChemometricsGUI:
         # Workspace area (tabs + content)
         workspace_frame = ttk.Frame(self.root)
         workspace_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self.workspace_frame = workspace_frame
+
+        # Keep progress popup centered over workspace while window/layout changes
+        if not self._execution_progress_root_bind_set:
+            self.root.bind("<Configure>", self._on_execution_progress_anchor_configure, add="+")
+            self._execution_progress_root_bind_set = True
+        workspace_frame.bind("<Configure>", self._on_execution_progress_anchor_configure, add="+")
         
         self._build_control_bar(workspace_frame)
         
@@ -687,6 +829,219 @@ class ChemometricsGUI:
         # Run Model button
         run_btn = ttk.Button(control_frame, text="🠊 " + self.language_manager.translate("ui.buttons.run_model", "Run Model"), command=self._run_model, width=12)
         run_btn.pack(side=tk.RIGHT, padx=5)
+
+    def _ensure_execution_progress_popup(self):
+        """Create floating execution progress popup with main GUI color scheme if needed."""
+        popup = self.execution_progress_popup
+        if popup is not None:
+            try:
+                if popup.winfo_exists():
+                    return
+            except Exception:
+                pass
+
+        popup = tk.Toplevel(self.root)
+        popup.overrideredirect(True)
+        popup.attributes("-topmost", True)
+        popup.withdraw()
+
+        # Use active ttk theme colors so popup matches light/dark mode
+        style = ttk.Style()
+        bg_color = style.lookup("TFrame", "background") or self.root.cget("bg") or "#f0f0f0"
+        fg_color = style.lookup("TLabel", "foreground") or "#202020"
+        border_color = style.lookup("TLabelframe", "bordercolor") or "#b5b5b5"
+
+        # Outer border frame
+        border_frame = tk.Frame(popup, bg=border_color, bd=0)
+        border_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Inner card frame with padding
+        card = tk.Frame(border_frame, bg=bg_color, bd=0)
+        card.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+
+        header_frame = tk.Frame(card, bg=bg_color)
+        header_frame.pack(fill=tk.X, padx=14, pady=(10, 6))
+
+        status_label = tk.Label(
+            header_frame,
+            text=self.language_manager.translate("ui.messages.ready_to_run", "Ready to run"),
+            bg=bg_color,
+            fg=fg_color,
+            font=("Arial", 10, "bold"),
+            anchor="w"
+        )
+        status_label.pack(side=tk.LEFT)
+
+        percent_label = tk.Label(
+            header_frame,
+            text="0%",
+            bg=bg_color,
+            fg=fg_color,
+            font=("Arial", 10),
+            anchor="e"
+        )
+        percent_label.pack(side=tk.RIGHT)
+
+        progress_bar = ttk.Progressbar(
+            card,
+            orient=tk.HORIZONTAL,
+            mode="determinate",
+            maximum=1,
+            value=0,
+            style="Execution.Horizontal.TProgressbar"
+        )
+        progress_bar.pack(fill=tk.X, padx=14, pady=(0, 12))
+
+        self.execution_progress_popup = popup
+        self.execution_progress_status_label = status_label
+        self.execution_progress_percent_label = percent_label
+        self.execution_progress_bar = progress_bar
+
+    def _position_execution_progress_popup(self):
+        """Position execution popup centered on the workspace/tabs pane."""
+        popup = self.execution_progress_popup
+        if popup is None or not popup.winfo_exists():
+            return
+
+        self.root.update_idletasks()
+        popup.update_idletasks()
+
+        anchor_widget = getattr(self, "workspace_frame", None)
+        if anchor_widget is not None and anchor_widget.winfo_exists():
+            anchor_widget.update_idletasks()
+            anchor_x = anchor_widget.winfo_rootx()
+            anchor_y = anchor_widget.winfo_rooty()
+            anchor_width = anchor_widget.winfo_width()
+            anchor_height = anchor_widget.winfo_height()
+        else:
+            anchor_x = self.root.winfo_rootx()
+            anchor_y = self.root.winfo_rooty()
+            anchor_width = self.root.winfo_width()
+            anchor_height = self.root.winfo_height()
+
+        width = max(420, min(560, anchor_width - 80))
+        height = 80
+
+        x = anchor_x + max(16, (anchor_width - width) // 2)
+        y = anchor_y + max(16, (anchor_height - height) // 2)
+
+        popup.geometry(f"{width}x{height}+{x}+{y}")
+
+    def _on_execution_progress_anchor_configure(self, event=None):
+        """Reposition execution popup when root/workspace geometry changes."""
+        popup = self.execution_progress_popup
+        if popup is None:
+            return
+        try:
+            if popup.winfo_exists() and popup.winfo_ismapped():
+                self._position_execution_progress_popup()
+        except tk.TclError:
+            pass
+
+    def _begin_execution_progress(self, total_steps: int, mode_label: str):
+        """Initialize and show execution progress bar."""
+        self._ensure_execution_progress_popup()
+        if not self.execution_progress_bar:
+            return
+
+        if self.execution_progress_hide_after_id is not None:
+            try:
+                self.root.after_cancel(self.execution_progress_hide_after_id)
+            except Exception:
+                pass
+            self.execution_progress_hide_after_id = None
+
+        total = max(1, int(total_steps))
+        self.execution_progress_mode = mode_label
+        self.execution_progress_bar.configure(maximum=total)
+        self.execution_progress_bar.configure(value=0)
+
+        if self.execution_progress_status_label:
+            self.execution_progress_status_label.configure(text=f"{mode_label}: 0/{total}")
+        if self.execution_progress_percent_label:
+            self.execution_progress_percent_label.configure(text="0%")
+
+        popup = self.execution_progress_popup
+        if popup is not None and popup.winfo_exists():
+            self._position_execution_progress_popup()
+            popup.deiconify()
+            popup.lift()
+        self.root.update_idletasks()
+
+    def _update_execution_progress(self, completed_steps: int, total_steps: int, instance_alias: str = "", base_alias: str = ""):
+        """Update execution progress bar and status text."""
+        if not self.execution_progress_bar:
+            return
+
+        total = max(1, int(total_steps))
+        completed = min(max(0, int(completed_steps)), total)
+        percent = int((completed / total) * 100)
+
+        self.execution_progress_bar.configure(maximum=total)
+        self.execution_progress_bar.configure(value=completed)
+
+        current_func_label = ""
+        if instance_alias or base_alias:
+            display_name = ""
+
+            if instance_alias and instance_alias in self.methodology_list:
+                idx = self.methodology_list.index(instance_alias)
+                resolved_base_alias = self.function_base_aliases[idx] if idx < len(self.function_base_aliases) else base_alias
+                config = self.gui_configs.get(resolved_base_alias, {})
+                display_name = config.get("display_name", resolved_base_alias or instance_alias)
+
+                # Match methodology naming for duplicates
+                duplicate_count = self.function_base_aliases[:idx].count(resolved_base_alias)
+                if duplicate_count > 0:
+                    display_name = f"{display_name} #{duplicate_count + 1}"
+            else:
+                resolved_base_alias = base_alias
+                config = self.gui_configs.get(resolved_base_alias, {}) if resolved_base_alias else {}
+                display_name = config.get("display_name", resolved_base_alias or instance_alias)
+
+            if display_name:
+                current_func_label = f" • {display_name}"
+
+        if self.execution_progress_status_label:
+            mode = self.execution_progress_mode or self.language_manager.translate("ui.buttons.run_model", "Run Model")
+            self.execution_progress_status_label.configure(text=f"{mode}: {completed}/{total}{current_func_label}")
+        if self.execution_progress_percent_label:
+            self.execution_progress_percent_label.configure(text=f"{percent}%")
+
+        self._position_execution_progress_popup()
+        self.root.update_idletasks()
+
+    def _finish_execution_progress(self, success: bool = True):
+        """Finalize execution progress bar and auto-hide after a short delay."""
+        popup = self.execution_progress_popup
+        if popup is None or not popup.winfo_exists():
+            return
+
+        if self.execution_progress_status_label:
+            if success:
+                self.execution_progress_status_label.configure(
+                    text=self.language_manager.translate("ui.messages.execution_complete", "Execution complete")
+                )
+            else:
+                self.execution_progress_status_label.configure(
+                    text=self.language_manager.translate("ui.messages.execution_failed", "Model execution failed")
+                )
+
+        if self.execution_progress_hide_after_id is not None:
+            try:
+                self.root.after_cancel(self.execution_progress_hide_after_id)
+            except Exception:
+                pass
+
+        hide_delay_ms = 1800 if success else 3600
+        self.execution_progress_hide_after_id = self.root.after(hide_delay_ms, self._hide_execution_progress)
+
+    def _hide_execution_progress(self):
+        """Hide execution progress area."""
+        self.execution_progress_hide_after_id = None
+        popup = self.execution_progress_popup
+        if popup is not None and popup.winfo_exists():
+            popup.withdraw()
     
     def _clear_tab(self):
         """Clear current tab content."""
@@ -764,7 +1119,7 @@ class ChemometricsGUI:
         
         title = ttk.Label(
             title_frame,
-            text=f"Setup: {display_name}",
+            text=f"{self.language_manager.translate('ui.tabs.setup', 'Setup')}: {display_name}",
             font=("Arial", 11, "bold")
         )
         title.pack(side=tk.LEFT, padx=5)
@@ -990,20 +1345,29 @@ class ChemometricsGUI:
                 multiple = widget_spec.get("multiple", False)
                 def browse(n, f_widget, is_multiple):
                     if is_multiple:
-                        files = filedialog.askopenfilenames(title=f"Select files for {label_text}")
+                        files = filedialog.askopenfilenames(
+                            title=self.language_manager.translate("ui.dialogs.select_files_for", "Select files for") + f" {label_text}"
+                        )
                         if files:
                             f_widget.delete(0, tk.END)
                             # Store as comma-separated or newline-separated list
                             f_widget.insert(0, ";".join(files))
                             self._save_widget_value(instance_alias, n, f_widget.get())
                     else:
-                        file = filedialog.askopenfilename(title=f"Select file for {label_text}")
+                        file = filedialog.askopenfilename(
+                            title=self.language_manager.translate("ui.dialogs.select_file_for", "Select file for") + f" {label_text}"
+                        )
                         if file:
                             f_widget.delete(0, tk.END)
                             f_widget.insert(0, file)
                             self._save_widget_value(instance_alias, n, f_widget.get())
                 
-                browse_btn = ttk.Button(file_frame, text="Browse", command=lambda n=name, f=file_entry, m=multiple: browse(n, f, m), width=10)
+                browse_btn = ttk.Button(
+                    file_frame,
+                    text=self.language_manager.translate("ui.buttons.browse", "Browse"),
+                    command=lambda n=name, f=file_entry, m=multiple: browse(n, f, m),
+                    width=10
+                )
                 browse_btn.pack(side=tk.LEFT)
                 
                 widget_data["widget"] = file_entry
@@ -1107,14 +1471,16 @@ class ChemometricsGUI:
                     
                     # Browse button for this entry
                     def browse_single(idx, f_widget, widgets=file_widgets, n=name, a=instance_alias, lbl=label_text):
-                        file = filedialog.askopenfilename(title=f"Select file for {lbl} [{idx+1}]")
+                        file = filedialog.askopenfilename(
+                            title=self.language_manager.translate("ui.dialogs.select_file_for", "Select file for") + f" {lbl} [{idx+1}]"
+                        )
                         if file:
                             f_widget.delete(0, tk.END)
                             f_widget.insert(0, file)
                             values_list = [w.get() for w in widgets]
                             self._save_widget_value(a, n, values_list)
                     
-                    browse_btn = ttk.Button(item_frame, text="Browse", 
+                    browse_btn = ttk.Button(item_frame, text=self.language_manager.translate("ui.buttons.browse", "Browse"), 
                                            command=lambda idx=i, fw=file_entry: browse_single(idx, fw), width=8)
                     browse_btn.pack(side=tk.LEFT)
                 
@@ -1210,7 +1576,9 @@ class ChemometricsGUI:
                     
                     # Browse button for multiple files
                     def browse_multiple_files(idx, f_widget, widgets=sample_widgets, n=name, a=instance_alias, lbl=label_text):
-                        files = filedialog.askopenfilenames(title=f"Select files for Sample {idx+1}")
+                        files = filedialog.askopenfilenames(
+                            title=self.language_manager.translate("ui.dialogs.select_files_for", "Select files for") + f" Sample {idx+1}"
+                        )
                         if files:
                             # Update the entry display
                             f_widget.delete(0, tk.END)
@@ -1221,7 +1589,7 @@ class ChemometricsGUI:
                             values_list = [w["files"] for w in widgets]
                             self._save_widget_value(a, n, values_list)
                     
-                    browse_btn = ttk.Button(item_frame, text="Browse...", 
+                    browse_btn = ttk.Button(item_frame, text=self.language_manager.translate("ui.buttons.browse_more", "Browse..."), 
                                            command=lambda idx=i, fw=file_entry: browse_multiple_files(idx, fw), width=10)
                     browse_btn.pack(side=tk.LEFT)
                     
@@ -1259,7 +1627,7 @@ class ChemometricsGUI:
     def _show_help_popup(self, title: str, short_desc: str, long_desc: str):
         """Show a popup window with function help information."""
         popup = tk.Toplevel(self.root)
-        popup.title(f"Help: {title}")
+        popup.title(f"{self.language_manager.translate('ui.dialogs.help_for', 'Help:')} {title}")
         popup.geometry("600x400")
         
         # Set the window icon to Info.ico
@@ -1294,7 +1662,7 @@ class ChemometricsGUI:
         text_widget.config(state=tk.DISABLED)  # Make read-only
         
         # Close button
-        close_btn = ttk.Button(popup, text="Close", command=popup.destroy)
+        close_btn = ttk.Button(popup, text=self.language_manager.translate("ui.buttons.close", "Close"), command=popup.destroy)
         close_btn.pack(pady=10)
     
     def _update_field_visibility(self, func_alias: str, visible_widgets: Dict, category_headers: Dict = None):
@@ -1800,8 +2168,9 @@ class ChemometricsGUI:
         input_idx = self._function_mapping.get(self.input_func_var.get())
         
         if output_idx is not None and input_idx is not None and output_idx == input_idx:
-            messagebox.showwarning(self.language_manager.translate("ui.dialogs.warning", "Warning"), 
-                                 self.language_manager.translate("ui.messages.same_function_error", "Cannot select the same function on both sides"))
+            self._show_fading_warning(
+                self.language_manager.translate("ui.messages.same_function_error", "Cannot select the same function on both sides")
+            )
             self.input_func_var.set("--")
             return
         
@@ -2090,8 +2459,7 @@ class ChemometricsGUI:
     def _open_routing_map_window(self):
         """Open the full routing map window."""
         if not self.methodology_list:
-            messagebox.showinfo(
-                self.language_manager.translate("ui.dialogs.info", "Info"),
+            self._show_fading_warning(
                 self.language_manager.translate("ui.messages.empty_methodology", "Add functions to Methodology first")
             )
             return
@@ -2197,26 +2565,30 @@ class ChemometricsGUI:
         config = self.gui_configs.get(base_alias, {})
         display_name = config.get("display_name", base_alias)
         
-        title = ttk.Label(control_frame, text=f"Analysis: {display_name}", font=("Arial", 11, "bold"))
+        title = ttk.Label(
+            control_frame,
+            text=f"{self.language_manager.translate('ui.tabs.analysis', 'Analysis')}: {display_name}",
+            font=("Arial", 11, "bold")
+        )
         title.pack(side=tk.LEFT, padx=5)
         
         # Run to here button
-        run_btn = ttk.Button(control_frame, text="🠊 Run to here", 
+        run_btn = ttk.Button(control_frame, text="🠊 " + self.language_manager.translate("ui.buttons.run_to_here", "Run to here"), 
                             command=lambda: self._run_analysis_to_function(instance_alias))
         run_btn.pack(side=tk.LEFT, padx=5)
         
         # Add graph button
-        add_graph_btn = ttk.Button(control_frame, text="Add graph", 
+        add_graph_btn = ttk.Button(control_frame, text=self.language_manager.translate("ui.buttons.add_graph", "Add graph"), 
                                    command=lambda: self._show_add_graph_dialog(instance_alias))
         add_graph_btn.pack(side=tk.LEFT, padx=5)
         
         # Add table button
-        add_table_btn = ttk.Button(control_frame, text="Add table", 
-                                   command=lambda: messagebox.showinfo("Info", "Add Table feature is still in development"))
+        add_table_btn = ttk.Button(control_frame, text=self.language_manager.translate("ui.buttons.add_table", "Add table"), 
+                                   command=lambda: self._show_add_table_dialog(instance_alias))
         add_table_btn.pack(side=tk.LEFT, padx=5)
         
         # Remove section button
-        remove_section_btn = ttk.Button(control_frame, text="Remove section", 
+        remove_section_btn = ttk.Button(control_frame, text=self.language_manager.translate("ui.buttons.remove_section", "Remove section"), 
                                        command=lambda: self._show_remove_section_dialog(instance_alias))
         remove_section_btn.pack(side=tk.LEFT, padx=5)
         
@@ -2225,12 +2597,12 @@ class ChemometricsGUI:
         spacer.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
         # Add page button
-        add_page_btn = ttk.Button(control_frame, text="Add Page", 
+        add_page_btn = ttk.Button(control_frame, text=self.language_manager.translate("ui.buttons.add_page", "Add Page"), 
                                  command=lambda: self._show_add_page_dialog(instance_alias))
         add_page_btn.pack(side=tk.RIGHT, padx=5)
         
         # Remove page button
-        remove_page_btn = ttk.Button(control_frame, text="Remove Page", 
+        remove_page_btn = ttk.Button(control_frame, text=self.language_manager.translate("ui.buttons.remove_page", "Remove Page"), 
                                     command=lambda: self._remove_current_page(instance_alias))
         remove_page_btn.pack(side=tk.RIGHT, padx=5)
         
@@ -2270,15 +2642,15 @@ class ChemometricsGUI:
             page_title = current_page_data.get('title', f'Page {current_idx + 1}')
             page_info = f"Page {visible_page_idx + 1}/{len(visible_pages)}: {page_title}"
         else:
-            page_info = "No pages available"
+            page_info = self.language_manager.translate("ui.messages.no_pages_available", "No pages available")
         
         # Previous page button
-        prev_btn = ttk.Button(nav_frame, text="← Previous", width=10,
+        prev_btn = ttk.Button(nav_frame, text="← " + self.language_manager.translate("ui.buttons.previous", "Previous"), width=10,
                              command=lambda: self._switch_analysis_page_relative(instance_alias, -1))
         prev_btn.pack(side=tk.LEFT, padx=2)
         
         # Next page button
-        next_btn = ttk.Button(nav_frame, text="Next →", width=10,
+        next_btn = ttk.Button(nav_frame, text=self.language_manager.translate("ui.buttons.next", "Next") + " →", width=10,
                              command=lambda: self._switch_analysis_page_relative(instance_alias, 1))
         next_btn.pack(side=tk.LEFT, padx=2)
         
@@ -2450,7 +2822,7 @@ class ChemometricsGUI:
                 break
             else:
                 # No more sections with passing conditions
-                placeholder = ttk.Label(container, text="[Empty Section]", foreground="gray")
+                placeholder = ttk.Label(container, text=self.language_manager.translate("ui.messages.empty_section", "[Empty Section]"), foreground="gray")
                 placeholder.pack(expand=True)
     
     def _create_layout_containers(self, parent: ttk.Frame, layout_type: str) -> list:
@@ -2468,7 +2840,7 @@ class ChemometricsGUI:
             top_paned = ttk.PanedWindow(main_paned, orient=tk.HORIZONTAL)
             main_paned.add(top_paned, weight=1)
             for j in range(2):
-                container = ttk.LabelFrame(top_paned, text=f"Section", padding=section_padding)
+                container = ttk.LabelFrame(top_paned, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
                 top_paned.add(container, weight=1)
                 containers.append(container)
             
@@ -2476,7 +2848,7 @@ class ChemometricsGUI:
             bottom_paned = ttk.PanedWindow(main_paned, orient=tk.HORIZONTAL)
             main_paned.add(bottom_paned, weight=1)
             for j in range(2):
-                container = ttk.LabelFrame(bottom_paned, text=f"Section", padding=section_padding)
+                container = ttk.LabelFrame(bottom_paned, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
                 bottom_paned.add(container, weight=1)
                 containers.append(container)
             
@@ -2484,16 +2856,16 @@ class ChemometricsGUI:
             parent.after_idle(lambda: self._position_fd_sashes(main_paned, top_paned, bottom_paned))
         
         elif layout_type == 'fp':  # Full page (1 section)
-            container = ttk.LabelFrame(parent, text="Section", padding=section_padding)
+            container = ttk.LabelFrame(parent, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
             container.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
             containers.append(container)
         
         elif layout_type == 'ns':  # North-South (2 sections: top, bottom)
-            top_frame = ttk.LabelFrame(parent, text="Section", padding=section_padding)
+            top_frame = ttk.LabelFrame(parent, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
             top_frame.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
             containers.append(top_frame)
             
-            bottom_frame = ttk.LabelFrame(parent, text="Section", padding=section_padding)
+            bottom_frame = ttk.LabelFrame(parent, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
             bottom_frame.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
             containers.append(bottom_frame)
         
@@ -2501,11 +2873,11 @@ class ChemometricsGUI:
             paned = ttk.PanedWindow(parent, orient=tk.HORIZONTAL)
             paned.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
             
-            left_container = ttk.LabelFrame(paned, text="Section", padding=section_padding)
+            left_container = ttk.LabelFrame(paned, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
             paned.add(left_container, weight=1)
             containers.append(left_container)
             
-            right_container = ttk.LabelFrame(paned, text="Section", padding=section_padding)
+            right_container = ttk.LabelFrame(paned, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
             paned.add(right_container, weight=1)
             containers.append(right_container)
             
@@ -2517,7 +2889,7 @@ class ChemometricsGUI:
             main_paned.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
             
             # Top section
-            top_frame = ttk.LabelFrame(main_paned, text="Section", padding=section_padding)
+            top_frame = ttk.LabelFrame(main_paned, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
             main_paned.add(top_frame, weight=1)
             containers.append(top_frame)
             
@@ -2525,7 +2897,7 @@ class ChemometricsGUI:
             bottom_paned = ttk.PanedWindow(main_paned, orient=tk.HORIZONTAL)
             main_paned.add(bottom_paned, weight=1)
             for j in range(2):
-                container = ttk.LabelFrame(bottom_paned, text=f"Section", padding=section_padding)
+                container = ttk.LabelFrame(bottom_paned, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
                 bottom_paned.add(container, weight=1)
                 containers.append(container)
         
@@ -2538,12 +2910,12 @@ class ChemometricsGUI:
             top_paned = ttk.PanedWindow(main_paned, orient=tk.HORIZONTAL)
             main_paned.add(top_paned, weight=1)
             for j in range(2):
-                container = ttk.LabelFrame(top_paned, text=f"Section", padding=section_padding)
+                container = ttk.LabelFrame(top_paned, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
                 top_paned.add(container, weight=1)
                 containers.append(container)
             
             # Bottom section
-            bottom_frame = ttk.LabelFrame(main_paned, text="Section", padding=section_padding)
+            bottom_frame = ttk.LabelFrame(main_paned, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
             main_paned.add(bottom_frame, weight=1)
             containers.append(bottom_frame)
         
@@ -2552,7 +2924,7 @@ class ChemometricsGUI:
             paned.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
             
             # Left side (single container)
-            left_container = ttk.LabelFrame(paned, text="Section", padding=section_padding)
+            left_container = ttk.LabelFrame(paned, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
             paned.add(left_container, weight=1)
             containers.append(left_container)
             
@@ -2561,7 +2933,7 @@ class ChemometricsGUI:
             paned.add(right_paned, weight=1)
             
             for i in range(2):
-                container = ttk.LabelFrame(right_paned, text=f"Section", padding=section_padding)
+                container = ttk.LabelFrame(right_paned, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
                 right_paned.add(container, weight=1)
                 containers.append(container)
             
@@ -2576,12 +2948,12 @@ class ChemometricsGUI:
             paned.add(left_paned, weight=1)
             
             for i in range(2):
-                container = ttk.LabelFrame(left_paned, text=f"Section", padding=section_padding)
+                container = ttk.LabelFrame(left_paned, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
                 left_paned.add(container, weight=1)
                 containers.append(container)
             
             # Right side (single container)
-            right_container = ttk.LabelFrame(paned, text="Section", padding=section_padding)
+            right_container = ttk.LabelFrame(paned, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
             paned.add(right_container, weight=1)
             containers.append(right_container)
             
@@ -2589,7 +2961,7 @@ class ChemometricsGUI:
         
         else:
             # Default to full page for unknown layouts
-            container = ttk.LabelFrame(parent, text="Section", padding=section_padding)
+            container = ttk.LabelFrame(parent, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
             container.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
             containers.append(container)
         
@@ -2614,7 +2986,7 @@ class ChemometricsGUI:
             self._render_table_section(parent, instance_alias, section_data, section_idx)
         else:
             # Empty section
-            label = ttk.Label(parent, text="[Empty]", foreground="gray")
+            label = ttk.Label(parent, text=self.language_manager.translate("ui.messages.empty", "[Empty]"), foreground="gray")
             label.pack(expand=True)
         
         # Add popup button AFTER content is rendered (only if not already in a popup)
@@ -2792,22 +3164,22 @@ class ChemometricsGUI:
             
             # Get execution results
             if instance_alias not in self.analysis_data:
-                label = ttk.Label(parent, text="No data available - Please run 'Run Model' or 'Run to here' first", foreground="gray")
+                label = ttk.Label(parent, text=self.language_manager.translate("ui.messages.no_data_run_first", "No data available. Please run 'Run Model' or 'Run to here' first."), foreground="gray")
                 label.pack(expand=True)
                 return
             
             execution_results = self.analysis_data[instance_alias].get('execution_results', {})
             if not execution_results:
-                label = ttk.Label(parent, text="No data available - Please run 'Run Model' or 'Run to here' first", foreground="gray")
+                label = ttk.Label(parent, text=self.language_manager.translate("ui.messages.no_data_run_first", "No data available. Please run 'Run Model' or 'Run to here' first."), foreground="gray")
                 label.pack(expand=True)
                 return
             
             if execution_results.get('status') != 'success':
-                label = ttk.Label(parent, text="Execution failed - Check model_log.txt for details", foreground="red")
+                label = ttk.Label(parent, text=self.language_manager.translate("ui.messages.execution_failed_check_log", "Execution failed. Check model_log.txt for details."), foreground="red")
                 label.pack(expand=True)
                 return
             
-            outputs = execution_results.get('outputs', {})
+            outputs = self._get_execution_data_sources(execution_results, instance_alias)
             
             # Initialize slice state if needed
             # Use (page_index, section_idx) tuple as key to ensure each graph has unique state per page
@@ -3302,7 +3674,11 @@ class ChemometricsGUI:
             }
             
         except Exception as e:
-            label = ttk.Label(parent, text=f"Error rendering graph: {str(e)}", foreground="red")
+            label = ttk.Label(
+                parent,
+                text=self.language_manager.translate("ui.messages.error_rendering_graph", "Error rendering graph:") + f" {str(e)}",
+                foreground="red"
+            )
             label.pack(expand=True)
     
     def _get_data_from_source(self, outputs: dict, data_source: str, nested_key: str = None) -> Any:
@@ -3360,6 +3736,92 @@ class ChemometricsGUI:
                 pass
         
         return None
+
+    def _get_execution_data_sources(self, execution_results: dict, instance_alias: str = None) -> dict:
+        """Get combined execution data sources (inputs + routed inputs + outputs).
+
+        Precedence on key collisions: direct inputs < routed inputs < outputs.
+        """
+        combined_sources = {}
+        try:
+            if not isinstance(execution_results, dict):
+                return combined_sources
+
+            inputs = execution_results.get('inputs', {})
+            outputs = execution_results.get('outputs', {})
+
+            if isinstance(inputs, dict):
+                combined_sources.update(inputs)
+                if instance_alias and instance_alias in inputs and isinstance(inputs[instance_alias], dict):
+                    combined_sources.update(inputs[instance_alias])
+
+            if instance_alias:
+                try:
+                    combined_sources.update(self._resolve_routed_inputs(instance_alias))
+                except Exception:
+                    pass
+
+            if isinstance(outputs, dict):
+                combined_sources.update(outputs)
+                if instance_alias and instance_alias in outputs and isinstance(outputs[instance_alias], dict):
+                    combined_sources.update(outputs[instance_alias])
+
+            return combined_sources
+        except Exception:
+            return combined_sources
+
+    def _resolve_routed_inputs(self, instance_alias: str) -> dict:
+        """Resolve routed input values for a function instance from upstream execution outputs."""
+        resolved_inputs = {}
+
+        if instance_alias not in self.methodology_list:
+            return resolved_inputs
+
+        dst_idx = self.methodology_list.index(instance_alias)
+
+        for key, routing_info in self.routing_lines.items():
+            try:
+                src_idx = None
+                src_param_key = None
+                dst_idx_key = None
+                dst_param_key = None
+
+                if isinstance(key, tuple) and len(key) >= 4:
+                    src_idx, src_param_key, dst_idx_key, dst_param_key = key[:4]
+                elif isinstance(routing_info, dict):
+                    src_idx = routing_info.get('src_idx')
+                    src_param_key = routing_info.get('src_param_key')
+                    dst_idx_key = routing_info.get('dst_idx')
+                    dst_param_key = routing_info.get('dst_param_key')
+
+                try:
+                    src_idx = int(src_idx) if src_idx is not None else None
+                    dst_idx_key = int(dst_idx_key) if dst_idx_key is not None else None
+                except (TypeError, ValueError):
+                    continue
+
+                if dst_idx_key != dst_idx or src_idx is None or src_param_key is None or dst_param_key is None:
+                    continue
+
+                if src_idx < 0 or src_idx >= len(self.methodology_list):
+                    continue
+
+                src_instance_alias = self.methodology_list[src_idx]
+                src_exec = self.analysis_data.get(src_instance_alias, {}).get('execution_results', {})
+                if src_exec.get('status') != 'success':
+                    continue
+
+                src_outputs = src_exec.get('outputs', {})
+                src_inputs = src_exec.get('inputs', {})
+
+                if isinstance(src_outputs, dict) and src_param_key in src_outputs:
+                    resolved_inputs[dst_param_key] = src_outputs[src_param_key]
+                elif isinstance(src_inputs, dict) and src_param_key in src_inputs:
+                    resolved_inputs[dst_param_key] = src_inputs[src_param_key]
+            except Exception:
+                continue
+
+        return resolved_inputs
     
     def _extract_axis_data(self, outputs: dict, axis_config: dict, indices: dict = None, ref_data: np.ndarray = None) -> Optional[np.ndarray]:
         """Extract data for an axis from execution outputs, supporting nested dictionary access and row indices.
@@ -3718,22 +4180,22 @@ class ChemometricsGUI:
             
             # Get execution results
             if instance_alias not in self.analysis_data:
-                label = ttk.Label(parent, text="No data available - Please run 'Run Model' or 'Run to here' first", foreground="gray")
+                label = ttk.Label(parent, text=self.language_manager.translate("ui.messages.no_data_run_first", "No data available. Please run 'Run Model' or 'Run to here' first."), foreground="gray")
                 label.pack(expand=True)
                 return
             
             execution_results = self.analysis_data[instance_alias].get('execution_results', {})
             if not execution_results:
-                label = ttk.Label(parent, text="No data available - Please run 'Run Model' or 'Run to here' first", foreground="gray")
+                label = ttk.Label(parent, text=self.language_manager.translate("ui.messages.no_data_run_first", "No data available. Please run 'Run Model' or 'Run to here' first."), foreground="gray")
                 label.pack(expand=True)
                 return
             
             if execution_results.get('status') != 'success':
-                label = ttk.Label(parent, text="Execution failed - Check model_log.txt for details", foreground="red")
+                label = ttk.Label(parent, text=self.language_manager.translate("ui.messages.execution_failed_check_log", "Execution failed. Check model_log.txt for details."), foreground="red")
                 label.pack(expand=True)
                 return
             
-            outputs = execution_results.get('outputs', {})
+            outputs = self._get_execution_data_sources(execution_results, instance_alias)
             
             # Initialize col_headers - will be set based on configuration
             col_headers = None
@@ -3754,7 +4216,11 @@ class ChemometricsGUI:
                     col_data = self._get_data_from_source(outputs, col_data_source, col_nested_key)
                     
                     if col_data is None:
-                        label = ttk.Label(parent, text=f"Column data source '{col_data_source}' not found", foreground="red")
+                        label = ttk.Label(
+                            parent,
+                            text=self.language_manager.translate("ui.messages.column_data_source_not_found", "Column data source not found:") + f" '{col_data_source}'",
+                            foreground="red"
+                        )
                         label.pack(expand=True)
                         return
                     
@@ -3772,7 +4238,7 @@ class ChemometricsGUI:
                 try:
                     data = np.column_stack(data_columns)
                 except ValueError:
-                    label = ttk.Label(parent, text="Column lengths do not match - all columns must have same length", foreground="red")
+                    label = ttk.Label(parent, text=self.language_manager.translate("ui.messages.column_lengths_mismatch", "Column lengths do not match. All columns must have the same length."), foreground="red")
                     label.pack(expand=True)
                     return
             else:
@@ -3784,7 +4250,7 @@ class ChemometricsGUI:
                 data = self._get_data_from_source(outputs, data_source, nested_key)
                 
                 if data is None:
-                    label = ttk.Label(parent, text="Data source not found", foreground="red")
+                    label = ttk.Label(parent, text=self.language_manager.translate("ui.messages.data_source_not_found_generic", "Data source not found"), foreground="red")
                     label.pack(expand=True)
                     return
                 
@@ -3900,18 +4366,18 @@ class ChemometricsGUI:
             
             # Export button - use table_title > section title > data_source
             export_title = table_title or title or data_source
-            export_btn = ttk.Button(toolbar, text='Export to CSV', 
+            export_btn = ttk.Button(toolbar, text=self.language_manager.translate("ui.buttons.export_csv", "Export to CSV"), 
                                    command=lambda: self._export_table_to_csv(data, export_title))
             export_btn.pack(side=tk.LEFT, padx=2)
             
             # Statistics button - use table_title > section title > data_source
             stats_title = table_title or title or data_source
-            stats_btn = ttk.Button(toolbar, text='Show Statistics',
+            stats_btn = ttk.Button(toolbar, text=self.language_manager.translate("ui.buttons.show_statistics", "Show Statistics"),
                                   command=lambda: self._show_table_statistics(data, stats_title))
             stats_btn.pack(side=tk.LEFT, padx=2)
             
             # Refresh button
-            refresh_btn = ttk.Button(toolbar, text='Refresh',
+            refresh_btn = ttk.Button(toolbar, text=self.language_manager.translate("ui.buttons.refresh", "Refresh"),
                                     command=lambda: self._refresh_table(instance_alias, section_id))
             refresh_btn.pack(side=tk.LEFT, padx=2)
             
@@ -3921,7 +4387,11 @@ class ChemometricsGUI:
             
         except Exception as e:
             import traceback
-            label = ttk.Label(parent, text=f"Error rendering table: {str(e)}", foreground="red")
+            label = ttk.Label(
+                parent,
+                text=self.language_manager.translate("ui.messages.error_rendering_table", "Error rendering table:") + f" {str(e)}",
+                foreground="red"
+            )
             label.pack(expand=True)
             traceback.print_exc()
     
@@ -3932,9 +4402,9 @@ class ChemometricsGUI:
         try:
             # Check if data is still 3D+ (shouldn't happen if slicing is configured, but safety check)
             if data.ndim > 2:
-                error_msg = f"Cannot display {data.ndim}D data in table view.\n"
-                error_msg += f"Data shape: {data.shape}\n\n"
-                error_msg += "This should have been caught earlier. Ensure data_slicing is configured."
+                error_msg = self.language_manager.translate("ui.messages.cannot_display_nd_table", "Cannot display {ndim}D data in table view.").format(ndim=data.ndim) + "\n"
+                error_msg += self.language_manager.translate("ui.messages.data_shape", "Data shape:") + f" {data.shape}\n\n"
+                error_msg += self.language_manager.translate("ui.messages.ensure_data_slicing", "This should have been caught earlier. Ensure data_slicing is configured.")
                 label = ttk.Label(parent, text=error_msg, foreground="red", justify=tk.LEFT)
                 label.pack(expand=True, padx=10, pady=10)
                 return
@@ -4008,7 +4478,11 @@ class ChemometricsGUI:
             tree_frame.grid_columnconfigure(0, weight=1)
             
         except Exception as e:
-            label = ttk.Label(parent, text=f"Error creating table view: {str(e)}", foreground="red")
+            label = ttk.Label(
+                parent,
+                text=self.language_manager.translate("ui.messages.error_creating_table_view", "Error creating table view:") + f" {str(e)}",
+                foreground="red"
+            )
             label.pack(expand=True)
     
     def _export_table_to_csv(self, data: np.ndarray, title: str = 'export') -> None:
@@ -4026,7 +4500,7 @@ class ChemometricsGUI:
                 defaultextension=".csv",
                 initialfile=default_filename,
                 filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
-                title="Export Table to CSV"
+                title=self.language_manager.translate("ui.dialogs.export_table_csv", "Export Table to CSV")
             )
             
             # User cancelled the dialog
@@ -4055,15 +4529,19 @@ class ChemometricsGUI:
                     for row in flat_data:
                         writer.writerow(row)
             
-            messagebox.showinfo("Success", f"✅ Table exported to:\n{filepath}")
+            self._show_fading_success(
+                "✅ " + self.language_manager.translate("ui.messages.table_exported_to", "Table exported to:") + f"\n{filepath}"
+            )
         except Exception as e:
-            messagebox.showerror("Export Error", f"❌ Error exporting table: {str(e)}")
+            self._show_fading_error(
+                "❌ " + self.language_manager.translate("ui.messages.table_export_error", "Error exporting table:") + f" {str(e)}"
+            )
     
     def _show_table_statistics(self, data: np.ndarray, title: str = 'Statistics') -> None:
         """Display statistical summary of table data."""
         try:
             stats_window = tk.Toplevel(self.root)
-            stats_window.title(f"{title} - Statistics")
+            stats_window.title(f"{title} - {self.language_manager.translate('ui.labels.statistics', 'Statistics')}")
             stats_window.geometry("500x400")
             
             # Calculate statistics
@@ -4153,7 +4631,10 @@ Count:
         try:
             # Create a new popup window
             popup = tk.Toplevel(self.root)
-            popup.title(f"Section: {section_data.get('config', {}).get('title', 'Section')}")
+            popup.title(
+                self.language_manager.translate("ui.labels.section_prefix", "Section:") +
+                f" {section_data.get('config', {}).get('title', self.language_manager.translate('ui.labels.section', 'Section'))}"
+            )
             popup.geometry("900x700")
             
             # Add button frame at top for action buttons
@@ -4164,7 +4645,7 @@ Count:
             if section_data.get('type') == 'graph':
                 save_img_btn = ttk.Button(
                     button_frame,
-                    text="💾 Save as Image",
+                    text="💾 " + self.language_manager.translate("ui.buttons.save_as_image", "Save as Image"),
                     command=lambda: self._save_section_graph_as_image(instance_alias, section_idx)
                 )
                 save_img_btn.pack(side=tk.LEFT, padx=5)
@@ -4172,13 +4653,13 @@ Count:
                 # Add "Save data" button
                 save_data_btn = ttk.Button(
                     button_frame,
-                    text="💾 Save Data",
+                    text="💾 " + self.language_manager.translate("ui.buttons.save_data", "Save Data"),
                     command=lambda: self._save_section_graph_as_csv(instance_alias, section_idx)
                 )
                 save_data_btn.pack(side=tk.LEFT, padx=5)
             
             # Add close button on the right
-            close_btn = ttk.Button(button_frame, text="Close", command=popup.destroy)
+            close_btn = ttk.Button(button_frame, text=self.language_manager.translate("ui.buttons.close", "Close"), command=popup.destroy)
             close_btn.pack(side=tk.RIGHT, padx=5)
             
             # Create a frame for the content
@@ -4189,14 +4670,18 @@ Count:
             self._render_section(content_frame, instance_alias, section_data, section_idx, is_popup=True)
         
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to open section popup: {str(e)}")
+            self._show_fading_error(
+                self.language_manager.translate("ui.messages.section_popup_open_failed", "Failed to open section popup:") + f" {str(e)}"
+            )
     
     def _save_section_graph_as_image(self, instance_alias: str, section_idx: int):
         """Save a graph section as an image file (PNG, JPEG, or TIFF)."""
         try:
             # Get the canvas and figure from stored references
             if instance_alias not in self.analysis_data:
-                messagebox.showerror("Error", "Analysis data not found")
+                self._show_fading_error(
+                    self.language_manager.translate("ui.messages.analysis_data_not_found", "Analysis data not found")
+                )
                 return
             
             # Get current page to build the correct section_id tuple
@@ -4205,7 +4690,9 @@ Count:
             
             graph_canvases = self.analysis_data[instance_alias].get('graph_canvases', {})
             if section_id not in graph_canvases:
-                messagebox.showerror("Error", "Graph not found for this section")
+                self._show_fading_error(
+                    self.language_manager.translate("ui.messages.graph_not_found_section", "Graph not found for this section")
+                )
                 return
             
             canvas, canvas_frame = graph_canvases[section_id]
@@ -4225,10 +4712,14 @@ Count:
             if file_path:
                 # Save the figure
                 fig.savefig(file_path, dpi=300, bbox_inches='tight')
-                messagebox.showinfo("Success", f"Graph saved successfully to:\n{file_path}")
+                self._show_fading_success(
+                    self.language_manager.translate("ui.messages.graph_saved_to", "Graph saved successfully to:") + f"\n{file_path}"
+                )
         
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to save graph: {str(e)}")
+            self._show_fading_error(
+                self.language_manager.translate("ui.messages.graph_save_failed", "Failed to save graph:") + f" {str(e)}"
+            )
     
     def _save_section_graph_as_csv(self, instance_alias: str, section_idx: int):
         """Save all data used in a graph section as CSV file(s)."""
@@ -4237,7 +4728,9 @@ Count:
         try:
             # Get the metadata stored during graph rendering
             if instance_alias not in self.analysis_data:
-                messagebox.showerror("Error", "Analysis data not found")
+                self._show_fading_error(
+                    self.language_manager.translate("ui.messages.analysis_data_not_found", "Analysis data not found")
+                )
                 return
             
             # Get current page to build the correct section_id tuple
@@ -4246,7 +4739,9 @@ Count:
             
             graph_data_metadata = self.analysis_data[instance_alias].get('graph_data_metadata', {})
             if section_id not in graph_data_metadata:
-                messagebox.showerror("Error", "Graph metadata not found for this section")
+                self._show_fading_error(
+                    self.language_manager.translate("ui.messages.graph_metadata_not_found", "Graph metadata not found for this section")
+                )
                 return
             
             metadata = graph_data_metadata[section_id]
@@ -4555,18 +5050,32 @@ Count:
             
             # Show success message
             if files_created:
-                message = f"Data saved successfully!\n\nFiles created:\n"
+                message = (
+                    self.language_manager.translate("ui.messages.graph_data_saved", "Data saved successfully!") +
+                    "\n\n" +
+                    self.language_manager.translate("ui.messages.files_created", "Files created:") +
+                    "\n"
+                )
                 for fname in files_created:
                     message += f"  • {fname}\n"
-                message += f"\nLocation: {dir_path}"
-                messagebox.showinfo("Success", message)
+                message += f"\n{self.language_manager.translate('ui.messages.location', 'Location')}: {dir_path}"
+                self._show_fading_success(message)
             else:
-                messagebox.showwarning("No Data", "No data found to save for this graph.")
+                self._show_fading_warning(
+                    self.language_manager.translate("ui.messages.no_data_found_save_graph", "No data found to save for this graph.")
+                )
         
         except ImportError:
-            messagebox.showerror("Error", "pandas library is required to save data as CSV.\n\nPlease install it using: pip install pandas")
+            self._show_fading_error(
+                self.language_manager.translate(
+                    "ui.messages.pandas_required_csv",
+                    "pandas library is required to save data as CSV.\n\nPlease install it using: pip install pandas"
+                )
+            )
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to save graph data: {str(e)}")
+            self._show_fading_error(
+                self.language_manager.translate("ui.messages.graph_data_save_failed", "Failed to save graph data:") + f" {str(e)}"
+            )
             import traceback
             traceback.print_exc()
     
@@ -4745,14 +5254,14 @@ Count:
                     
                     # Create UI for multi-dimensional slicing ONLY if show_md_menu is True
                     if show_md_menu:
-                        md_frame = ttk.LabelFrame(parent_frame, text="Multi-Dimensional Slicing (4D+)", padding=5)
+                        md_frame = ttk.LabelFrame(parent_frame, text=self.language_manager.translate("ui.labels.multi_dim_slicing", "Multi-Dimensional Slicing (4D+)"), padding=5)
                         md_frame.pack(fill=tk.X, padx=5, pady=5)
                         
                         # Combination selector
                         combo_select_frame = ttk.Frame(md_frame)
                         combo_select_frame.pack(fill=tk.X, padx=5, pady=2)
                         
-                        ttk.Label(combo_select_frame, text="Dimension Combination:", width=20).pack(side=tk.LEFT, padx=5)
+                        ttk.Label(combo_select_frame, text=self.language_manager.translate("ui.labels.dimension_combination", "Dimension Combination:"), width=20).pack(side=tk.LEFT, padx=5)
                         
                         # Get dimension labels from config
                         dim_labels = self._get_dimension_labels(outputs, config)
@@ -5024,7 +5533,8 @@ Count:
                     if var_key in self._var_labels:
                         var_label, var_labels_config, dim = self._var_labels[var_key]
                         # Get outputs to resolve variable label
-                        outputs = self.analysis_data[instance_alias].get('execution_results', {}).get('outputs', {})
+                        exec_results = self.analysis_data[instance_alias].get('execution_results', {})
+                        outputs = self._get_execution_data_sources(exec_results, instance_alias)
                         var_label_text = self._get_variable_label(outputs, var_labels_config, dim, new_index)
                         if var_label_text:
                             var_label.config(text=f"[{var_label_text}]")
@@ -5208,7 +5718,8 @@ Count:
                     if var_key in self._var_labels:
                         var_label, var_labels_config, dim = self._var_labels[var_key]
                         # Get outputs to resolve variable label
-                        outputs = self.analysis_data[instance_alias].get('execution_results', {}).get('outputs', {})
+                        exec_results = self.analysis_data[instance_alias].get('execution_results', {})
+                        outputs = self._get_execution_data_sources(exec_results, instance_alias)
                         var_label_text = self._get_variable_label(outputs, var_labels_config, dim, new_index)
                         if var_label_text:
                             var_label.config(text=f"[{var_label_text}]")
@@ -5238,7 +5749,7 @@ Count:
             current_state = slice_state[section_id]
             # Get fresh outputs from execution_results, not from stale cached version
             execution_results = self.analysis_data[instance_alias].get('execution_results', {})
-            outputs = execution_results.get('outputs', {})
+            outputs = self._get_execution_data_sources(execution_results, instance_alias)
             config = current_state.get('config', {})
             graph_type = current_state.get('graph_type', 'scatter')
             
@@ -5601,16 +6112,18 @@ Count:
         sections = page_data.get('sections', [])
         
         if not sections:
-            messagebox.showinfo("Info", "No sections to remove")
+            self._show_fading_message(
+                self.language_manager.translate("ui.messages.no_sections_remove", "No sections to remove")
+            )
             return
         
         # Create dialog
         dialog = tk.Toplevel(self.root)
-        dialog.title("Remove Section")
+        dialog.title(self.language_manager.translate("ui.dialogs.remove_section", "Remove Section"))
         dialog.geometry("350x250")
         dialog.resizable(False, False)
         
-        label = ttk.Label(dialog, text="Select section to remove:", font=("Arial", 10))
+        label = ttk.Label(dialog, text=self.language_manager.translate("ui.messages.select_section_remove", "Select section to remove:"), font=("Arial", 10))
         label.pack(padx=10, pady=10)
         
         # Section list frame
@@ -5625,9 +6138,9 @@ Count:
         listbox.config(yscrollcommand=scrollbar.set)
         
         for idx, section in enumerate(sections):
-            section_type = section.get('type', 'Empty')
+            section_type = section.get('type', self.language_manager.translate("ui.labels.empty", "Empty"))
             config = section.get('config', {})
-            section_title = config.get('title', f'Section {idx + 1}')
+            section_title = config.get('title', f"{self.language_manager.translate('ui.labels.section', 'Section')} {idx + 1}")
             listbox.insert(tk.END, f"{section_title} ({section_type})")
         
         # Buttons
@@ -5642,15 +6155,19 @@ Count:
                 dialog.destroy()
                 self._show_analysis_tab()
         
-        ok_btn = ttk.Button(button_frame, text="Remove", command=remove_selected)
+        ok_btn = ttk.Button(button_frame, text=self.language_manager.translate("ui.buttons.remove", "Remove"), command=remove_selected)
         ok_btn.pack(padx=5)
         
-        cancel_btn = ttk.Button(button_frame, text="Cancel", command=dialog.destroy)
+        cancel_btn = ttk.Button(button_frame, text=self.language_manager.translate("ui.buttons.cancel", "Cancel"), command=dialog.destroy)
         cancel_btn.pack(padx=5)
     
     def _show_add_graph_dialog(self, instance_alias: str):
         """Show the Add Graph dialog."""
         show_add_graph_dialog(self.root, self, instance_alias)
+    
+    def _show_add_table_dialog(self, instance_alias: str):
+        """Show the Add Table dialog."""
+        show_add_table_dialog(self.root, self, instance_alias)
     
     def _show_add_page_dialog(self, instance_alias: str):
         """Show dialog to add a new page."""
@@ -5658,7 +6175,7 @@ Count:
             return
         
         dialog = tk.Toplevel(self.root)
-        dialog.title("Add Page")
+        dialog.title(self.language_manager.translate("ui.dialogs.add_page", "Add Page"))
         dialog.geometry("500x520")
         dialog.resizable(False, False)
         
@@ -5667,7 +6184,7 @@ Count:
         main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
         # Page title
-        title_label = ttk.Label(main_frame, text="Page Title:", font=("Arial", 10))
+        title_label = ttk.Label(main_frame, text=self.language_manager.translate("ui.labels.page_title", "Page Title:"), font=("Arial", 10))
         title_label.pack(anchor=tk.W, pady=(0, 5))
         
         title_entry = ttk.Entry(main_frame, width=30)
@@ -5675,7 +6192,7 @@ Count:
         title_entry.insert(0, f"Page {len(self.analysis_data[instance_alias]['pages']) + 1}")
         
         # Layout selection with visual buttons
-        layout_label = ttk.Label(main_frame, text="Layout:", font=("Arial", 11, "bold"))
+        layout_label = ttk.Label(main_frame, text=self.language_manager.translate("ui.labels.layout", "Layout:"), font=("Arial", 11, "bold"))
         layout_label.pack(anchor=tk.W, pady=(10, 10))
         
         layouts = [
@@ -5774,7 +6291,7 @@ Count:
         button_frame.pack(fill=tk.X, padx=10, pady=10, side=tk.BOTTOM)
         
         def add_page():
-            title = title_entry.get() or "New Page"
+            title = title_entry.get() or self.language_manager.translate("ui.labels.new_page", "New Page")
             layout = layout_var.get()
             
             # Create sections based on layout
@@ -5794,10 +6311,10 @@ Count:
             dialog.destroy()
             self._show_analysis_tab()
         
-        ok_btn = ttk.Button(button_frame, text="Add", command=add_page)
+        ok_btn = ttk.Button(button_frame, text=self.language_manager.translate("ui.buttons.add", "Add"), command=add_page)
         ok_btn.pack(side=tk.LEFT, padx=5)
         
-        cancel_btn = ttk.Button(button_frame, text="Cancel", command=dialog.destroy)
+        cancel_btn = ttk.Button(button_frame, text=self.language_manager.translate("ui.buttons.cancel", "Cancel"), command=dialog.destroy)
         cancel_btn.pack(side=tk.LEFT, padx=5)
     
     def _remove_current_page(self, instance_alias: str):
@@ -5809,10 +6326,15 @@ Count:
         current_page = self.analysis_data[instance_alias]['current_page']
         
         if len(pages) <= 1:
-            messagebox.showwarning("Warning", "Cannot remove the last page")
+            self._show_fading_warning(
+                self.language_manager.translate("ui.messages.cannot_remove_last_page", "Cannot remove the last page")
+            )
             return
         
-        if messagebox.askyesno("Confirm", f"Remove page '{pages[current_page]['title']}'?"):
+        if messagebox.askyesno(
+            self.language_manager.translate("ui.dialogs.confirm", "Confirm"),
+            self.language_manager.translate("ui.messages.remove_page_confirm", "Remove page '{title}'?").format(title=pages[current_page]['title'])
+        ):
             pages.pop(current_page)
             self.analysis_data[instance_alias]['current_page'] = min(current_page, len(pages) - 1)
             self._show_analysis_tab()
@@ -5825,14 +6347,23 @@ Count:
             
             # Find the index of this function in the methodology
             if instance_alias not in self.methodology_list:
-                messagebox.showerror("Error", "Function not found in methodology")
+                self._show_fading_error(
+                    self.language_manager.translate("ui.messages.function_not_found_methodology", "Function not found in methodology")
+                )
                 return
             
             stop_at_idx = self.methodology_list.index(instance_alias)
+
+            self._begin_execution_progress(
+                total_steps=stop_at_idx + 1,
+                mode_label=self.language_manager.translate("ui.messages.run_to_here", "Run to here")
+            )
             
             # Generate model.json first
             if not self._generate_model_json():
-                messagebox.showerror("Error", "Failed to generate model.json")
+                self._show_fading_error(
+                    self.language_manager.translate("ui.messages.generate_model_json_failed", "Failed to generate model.json")
+                )
                 return
             
             # Run analyst in partial mode
@@ -5846,8 +6377,11 @@ Count:
             sys.stderr = output_buffer
             
             try:
+                def _progress_callback(completed_steps: int, total_steps: int, current_instance: str, current_base: str):
+                    self._update_execution_progress(completed_steps, total_steps, current_instance, current_base)
+
                 # Run analyst with stop_at_function_idx parameter
-                outputs = analyst_main(stop_at_function_idx=stop_at_idx)
+                outputs = analyst_main(stop_at_function_idx=stop_at_idx, progress_callback=_progress_callback)
                 
             finally:
                 sys.stdout = old_stdout
@@ -5899,15 +6433,20 @@ Count:
             # Note: graph_canvases, graph_slices, and table_slices are already cleared
             # by _clear_execution_cache() at the start of this method
             
-            # Show success message
-            messagebox.showinfo("Success", f"Model executed up to {instance_alias}\n\nResults loaded for analysis.")
+            self._show_fading_success(
+                self.language_manager.translate("ui.messages.model_executed_up_to", "Model executed up to") +
+                f" {instance_alias}\n\n" +
+                self.language_manager.translate("ui.messages.results_loaded_analysis", "Results loaded for analysis.")
+            )
+            self._finish_execution_progress(success=True)
             
             # Refresh the analysis tab to show results
             self._show_analysis_tab()
             
         except Exception as e:
-            error_msg = f"Failed to run model: {str(e)}"
-            messagebox.showerror("Error", error_msg)
+            self._finish_execution_progress(success=False)
+            error_msg = self.language_manager.translate("ui.messages.run_model_failed", "Failed to run model:") + f" {str(e)}"
+            self._show_fading_error(error_msg)
             print(f"ERROR: {error_msg}")
             import traceback
             traceback.print_exc()
@@ -6086,7 +6625,9 @@ Count:
             
             return True
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to generate model.json: {e}")
+            self._show_fading_error(
+                self.language_manager.translate("ui.messages.generate_model_json_failed", "Failed to generate model.json") + f": {e}"
+            )
             return False
     
     def _serialize_analysis_data(self) -> dict:
@@ -6332,12 +6873,14 @@ Count:
                 if Path(zip_path).exists():
                     Path(zip_path).rename(mdcd_path)
                 
-                messagebox.showinfo(self.language_manager.translate("ui.dialogs.success", "Success"), 
-                                  self.language_manager.translate("ui.messages.model_saved", "Model saved to:") + f"\n{mdcd_path}")
+                self._show_fading_success(
+                    self.language_manager.translate("ui.messages.model_saved", "Model saved to:") + f"\n{mdcd_path}"
+                )
         
         except Exception as e:
-            messagebox.showerror(self.language_manager.translate("ui.dialogs.error", "Error"), 
-                               self.language_manager.translate("ui.messages.save_failed", "Failed to save model:") + f" {e}")
+            self._show_fading_error(
+                self.language_manager.translate("ui.messages.save_failed", "Failed to save model:") + f" {e}"
+            )
     
     def _save_model_method_only(self, dialog):
         """Save model method only (no data) to .mdon file (removes only file paths, keeps validation inputs)."""
@@ -6399,12 +6942,14 @@ Count:
                 if Path(zip_path).exists():
                     Path(zip_path).rename(mdon_path)
                 
-                messagebox.showinfo(self.language_manager.translate("ui.dialogs.success", "Success"), 
-                                  self.language_manager.translate("ui.messages.model_saved", "Model saved to:") + f"\n{mdon_path}")
+                self._show_fading_success(
+                    self.language_manager.translate("ui.messages.model_saved", "Model saved to:") + f"\n{mdon_path}"
+                )
         
         except Exception as e:
-            messagebox.showerror(self.language_manager.translate("ui.dialogs.error", "Error"), 
-                               self.language_manager.translate("ui.messages.save_failed", "Failed to save model:") + f" {e}")
+            self._show_fading_error(
+                self.language_manager.translate("ui.messages.save_failed", "Failed to save model:") + f" {e}"
+            )
     
     def _save_full_model(self, dialog):
         """Save full model to .mdfd file (includes all data and validation inputs)."""
@@ -6506,12 +7051,14 @@ Count:
                 if Path(zip_path).exists():
                     Path(zip_path).rename(mdfd_path)
                 
-                messagebox.showinfo(self.language_manager.translate("ui.dialogs.success", "Success"), 
-                                  self.language_manager.translate("ui.messages.model_saved", "Model saved to:") + f"\n{mdfd_path}")
+                self._show_fading_success(
+                    self.language_manager.translate("ui.messages.model_saved", "Model saved to:") + f"\n{mdfd_path}"
+                )
         
         except Exception as e:
-            messagebox.showerror(self.language_manager.translate("ui.dialogs.error", "Error"), 
-                               self.language_manager.translate("ui.messages.save_failed", "Failed to save model:") + f" {e}")
+            self._show_fading_error(
+                self.language_manager.translate("ui.messages.save_failed", "Failed to save model:") + f" {e}"
+            )
     
     def _show_load_model_dialog(self):
         """Show dialog to load a model from .mdcd, .mdon, or .mdfd file."""
@@ -6526,8 +7073,9 @@ Count:
         try:
             self._load_model(file_path)
         except Exception as e:
-            messagebox.showerror(self.language_manager.translate("ui.dialogs.error", "Error"), 
-                               self.language_manager.translate("ui.messages.load_failed", "Failed to load model:") + f" {e}")
+            self._show_fading_error(
+                self.language_manager.translate("ui.messages.load_failed", "Failed to load model:") + f" {e}"
+            )
     
     def _load_model(self, file_path: str):
         """Load a model from .mdcd, .mdon, or .mdfd file and update GUI."""
@@ -6579,8 +7127,9 @@ Count:
         # Refresh GUI
         self._refresh_gui_from_config()
         
-        messagebox.showinfo(self.language_manager.translate("ui.dialogs.success", "Success"), 
-                          self.language_manager.translate("ui.messages.model_loaded", "Model loaded from:") + f"\n{file_path}")
+        self._show_fading_success(
+            self.language_manager.translate("ui.messages.model_loaded", "Model loaded from:") + f"\n{file_path}"
+        )
     
     def _parse_and_load_model_json(self):
         """Parse model.json and load configuration."""
@@ -6600,7 +7149,9 @@ Count:
             with open(model_path, encoding='utf-8') as f:
                 model_data = json.load(f)
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to load model.json: {e}")
+            self._show_fading_error(
+                self.language_manager.translate("ui.messages.load_model_json_failed", "Failed to load model.json:") + f" {e}"
+            )
             return
         
         # Load functions
@@ -6722,8 +7273,9 @@ Count:
     def _run_model(self):
         """Execute model and capture output."""
         if not self.methodology_list:
-            messagebox.showwarning(self.language_manager.translate("ui.dialogs.warning", "Warning"), 
-                                 self.language_manager.translate("ui.messages.empty_methodology", "Add functions to Methodology first"))
+            self._show_fading_warning(
+                self.language_manager.translate("ui.messages.empty_methodology", "Add functions to Methodology first")
+            )
             return
         
         # Clear any cached execution results and graphs to ensure fresh data
@@ -6731,6 +7283,11 @@ Count:
         
         if not self._generate_model_json():
             return
+
+        self._begin_execution_progress(
+            total_steps=len(self.methodology_list),
+            mode_label=self.language_manager.translate("ui.buttons.run_model", "Run Model")
+        )
         
         try:
             # Import and run analyst_main
@@ -6744,9 +7301,12 @@ Count:
             try:
                 sys.stdout = output_buffer
                 sys.stderr = output_buffer
+
+                def _progress_callback(completed_steps: int, total_steps: int, current_instance: str, current_base: str):
+                    self._update_execution_progress(completed_steps, total_steps, current_instance, current_base)
                 
                 # Run the full model and capture outputs
-                outputs = analyst_main()
+                outputs = analyst_main(progress_callback=_progress_callback)
                 
             finally:
                 sys.stdout = old_stdout
@@ -6797,22 +7357,26 @@ Count:
                     'inputs': input_parameters  # Store the input parameters for condition evaluation
                 }
             
-            messagebox.showinfo(self.language_manager.translate("ui.dialogs.success", "Success"), 
-                              self.language_manager.translate("ui.messages.model_executed", "Model executed successfully. Results loaded for analysis."))
+            self._show_fading_success(
+                self.language_manager.translate("ui.messages.model_executed", "Model executed successfully. Results loaded for analysis.")
+            )
+            self._finish_execution_progress(success=True)
             
             # Switch to analysis tab to show results
             if self.selected_function_idx is not None:
                 self._show_analysis_tab()
             
         except Exception as e:
+            self._finish_execution_progress(success=False)
             error_log_path = Path(__file__).parent / "model_log.txt"
             with open(error_log_path, "w") as f:
                 f.write(f"ERROR: {str(e)}\n\n")
                 f.write(output_buffer.getvalue() if 'output_buffer' in locals() else "")
             
-            messagebox.showerror(self.language_manager.translate("ui.dialogs.error", "Error"), 
-                               self.language_manager.translate("ui.messages.execution_failed", "Model execution failed:") + f" {e}\n" + 
-                               self.language_manager.translate("ui.messages.check_log", "Check model_log.txt for details"))
+            self._show_fading_error(
+                self.language_manager.translate("ui.messages.execution_failed", "Model execution failed:") + f" {e}\n" +
+                self.language_manager.translate("ui.messages.check_log", "Check model_log.txt for details")
+            )
 
 
 def main():

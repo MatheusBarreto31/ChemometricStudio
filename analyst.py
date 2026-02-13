@@ -1,6 +1,9 @@
-from typing import Optional
+from typing import Optional, Callable
 
-def analyst_main(stop_at_function_idx: Optional[int] = None):
+def analyst_main(
+    stop_at_function_idx: Optional[int] = None,
+    progress_callback: Optional[Callable[[int, int, str, str], None]] = None
+):
     """
     Execute the model configuration from model.json.
     
@@ -126,6 +129,18 @@ def analyst_main(stop_at_function_idx: Optional[int] = None):
         if instance_alias in functions_info:
             functions_list.append((instance_alias, functions_info[instance_alias]))
     
+    total_functions = len(functions_list)
+    if stop_at_function_idx is not None:
+        progress_total = min(total_functions, max(0, stop_at_function_idx + 1))
+    else:
+        progress_total = total_functions
+
+    if progress_callback:
+        try:
+            progress_callback(0, progress_total, "", "")
+        except Exception:
+            pass
+
     # Execute each function in order
     for exec_idx, (instance_alias, info) in enumerate(functions_list):
         # Check if we should stop before this function
@@ -136,6 +151,13 @@ def analyst_main(stop_at_function_idx: Optional[int] = None):
         base_alias = info['base_alias']
         params = info['parameters'].copy()
         param_types = info.get('parameter_types', {})
+
+        if progress_callback:
+            try:
+                # Function is starting now; completed count is functions before this one
+                progress_callback(exec_idx, progress_total, instance_alias, base_alias)
+            except Exception:
+                pass
         
         print(f"\nProcessing: {instance_alias} ({base_alias})")
         print(f"  Parameters: {params}")
@@ -170,6 +192,13 @@ def analyst_main(stop_at_function_idx: Optional[int] = None):
             print(f"{base_alias} executed successfully.")
         else:
             print(f"Function {base_alias} not found.")
+
+        if progress_callback:
+            try:
+                # Function has completed successfully
+                progress_callback(exec_idx + 1, progress_total, instance_alias, base_alias)
+            except Exception:
+                pass
         
         # Stop after requested function
         if stop_at_function_idx is not None and exec_idx == stop_at_function_idx:
