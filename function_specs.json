@@ -1,8 +1,8 @@
 {
   "return_specs": {
     "cv_configuration": ["cv_config"],
-    "load_data": ["X_cal", "Y_cal", "axis_t_info", "smp_cal", "axis_n_info", "dim_labels", "class_data_cal"],
-    "validation_data_main": ["X_cal", "Y_cal", "X_val", "Y_val", "smp_cal", "smp_val", "class_data_cal", "class_data_val"],
+    "load_data": ["X_cal", "Y_cal", "axis_t_info", "smp_cal", "axis_n_info", "dim_labels", "class_data_cal", "cal_metadata"],
+    "validation_data_main": ["X_cal", "Y_cal", "X_val", "Y_val", "smp_cal", "smp_val", "class_data_cal", "class_data_val", "cal_metadata", "val_metadata"],
     "baseline_correction": ["X_cal", "X_val"],
     "smoothing": ["X_cal", "X_val"],
     "center_and_normalize": ["X_cal", "X_val"],
@@ -12,7 +12,7 @@
   "input_specs": {
     "cv_configuration": ["use_cv", "cv_strategy", "n_splits", "random_state", "shuffle", "window_size", "n_repeats", "test_size"],
     "load_data": ["d_specs_separator", "d_specs_headlines", "d_specs_type", "d_specs_dimensions", "data_path", "nway_flag", "y_path", "var_path", "smp_path", "transpose", "axis_info", "reshape_order", "multi_file_per_sample", "num_samples", "dim_labels", "scale_type", "cdata_path"],
-    "validation_data_main": ["X_cal", "Y_cal", "smp_cal", "class_data_cal", "validation_mode", "createVal", "creationMethod", "calProportion", "selection_file", "X_val_path", "Y_val_path", "val_labels_path", "cdata_path", "d_specs_separator", "d_specs_headlines", "d_specs_type", "d_specs_dimensions", "data_path", "y_path", "var_path", "smp_path", "transpose", "nway_flag", "reshape_order"],
+    "validation_data_main": ["X_cal", "Y_cal", "smp_cal", "class_data_cal", "cal_metadata", "validation_mode", "createVal", "creationMethod", "calProportion", "selection_file", "X_val_path", "Y_val_path", "val_labels_path", "cdata_path", "d_specs_separator", "d_specs_headlines", "d_specs_type", "d_specs_dimensions", "data_path", "y_path", "var_path", "smp_path", "transpose", "nway_flag", "reshape_order"],
     "baseline_correction": ["X_cal", "method", "X_val", "nway_flag", "direction", "window_size"],
     "smoothing": ["X_cal", "method", "X_val", "nway_flag", "direction", "window_size", "polyorder"],
     "center_and_normalize": ["X_cal", "X_val", "center", "normalize", "nway_flag", "direction"],
@@ -86,6 +86,7 @@
       "X_cal": "ndarray",
       "Y_cal": "ndarray",
       "smp_cal": "list",
+      "cal_metadata": "dict",
       "validation_mode": "str",
       "createVal": "str",
       "creationMethod": "str",

@@ -85,6 +85,13 @@ cm-studio/
 - **[Routing Guide](Documentation/README_ROUTING.md)** — Data flow and connections
 - **[Visual Guide](Documentation/ROUTING_VISUAL_GUIDE.md)** — Diagrams and workflows
 
+## Metadata Notes
+
+- `load_data` outputs `cal_metadata` with one entry per sample.
+- `validation_data_main` outputs `cal_metadata` and `val_metadata`.
+- `sample_index` in metadata is **1-based** (starts at 1), while internal NumPy indexing remains 0-based.
+- Validation splitting preserves the original metadata keys and 1-based `sample_index` values.
+
 ## Requirements
 
 - Python 3.8+

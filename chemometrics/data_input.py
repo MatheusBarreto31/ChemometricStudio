@@ -1,9 +1,10 @@
 
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Dict, Any
 import numpy as np
 import os
 import csv
 import pandas as pd
+from datetime import datetime
 
 
 def _load_file(path: str, separator: Optional[str], num_headlines: int) -> np.ndarray:
@@ -51,7 +52,7 @@ def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str,
               transpose: bool = False, axis_info: Optional[List[str]] = None, reshape_order: str = 'F',
               dim_labels: Optional[List[str]] = None, scale_type: Optional[List[str]] = None,
               multi_file_per_sample: bool = False, num_samples: Optional[int] = None,
-              cdata_path: Optional[str] = None) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[List[List[str]]], List[str], Optional[List[np.ndarray]], List[str], Optional[List[str]]]:
+              cdata_path: Optional[str] = None) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[List[List[str]]], List[str], Optional[List[np.ndarray]], List[str], Optional[List[str]], Dict[str, Dict[str, Any]]]:
     """
     Load and organize chemometrics data.
 
@@ -84,6 +85,7 @@ def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str,
         axis_n_info: List of axis vectors matching data dimensions or None
         dim_labels: List of dimension labels
         class_data_cal: List of class labels or None
+        cal_metadata: Dict with per-sample metadata extracted from source files
     """
     # Parse d_specs parameters
     separator_map = {"comma": ",", "spaces": None, "tabs": "\t"}
@@ -128,10 +130,13 @@ def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str,
         elif isinstance(axis_info, list):
             axis_info_list = [a.strip() if isinstance(a, str) else a for a in axis_info if a]
 
+    normalized_data_paths = _normalize_data_path(data_path)
+    sample_paths = None
+
     # Load X data - check if multi_file_per_sample mode is enabled
     if multi_file_per_sample and nway_flag >= 3 and data_path and num_samples:
         # Multi-file per sample mode: divide files equally among samples
-        file_list = _normalize_data_path(data_path)
+        file_list = normalized_data_paths
         
         if len(file_list) % num_samples != 0:
             raise ValueError(f"Cannot divide {len(file_list)} files equally among {num_samples} samples")
@@ -150,13 +155,13 @@ def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str,
             smp_labels = _load_labels(smp_path)
     else:
         # Standard loading mode
-        X, row_counts = _load_x_data(data_path, separator, num_headlines, data_type, dimensions, transpose, nway_flag, reshape_order)
+        X, row_counts = _load_x_data(normalized_data_paths, separator, num_headlines, data_type, dimensions, transpose, nway_flag, reshape_order)
         # Load sample labels
         if smp_path is None:
             if nway_flag == 1 and data_type == "x_matrix":
-                smp_labels = _generate_row_labels(data_path, row_counts)
+                smp_labels = _generate_row_labels(normalized_data_paths, row_counts)
             else:
-                smp_labels = _generate_sample_labels(data_path)
+                smp_labels = _generate_sample_labels(normalized_data_paths)
         else:
             smp_labels = _load_labels(smp_path)
 
@@ -180,7 +185,17 @@ def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str,
     # Generate dimension labels
     processed_dim_labels = _generate_dim_labels(dim_labels, nway_flag)
 
-    return X, Y, axis_t_info, smp_labels, axis_n_info, processed_dim_labels, class_data
+    cal_metadata = _build_sample_metadata(
+        smp_labels=smp_labels,
+        data_paths=normalized_data_paths,
+        row_counts=row_counts,
+        nway_flag=nway_flag,
+        data_type=data_type,
+        multi_file_per_sample=multi_file_per_sample,
+        sample_paths=sample_paths
+    )
+
+    return X, Y, axis_t_info, smp_labels, axis_n_info, processed_dim_labels, class_data, cal_metadata
 
 
 def _load_x_data(data_path: List[str], separator: Optional[str], num_headlines: int,
@@ -484,6 +499,105 @@ def _generate_row_labels(data_path: List[str], row_counts: List[int]) -> List[st
         for i in range(1, count + 1):
             labels.append(f"{name}_{i}")
     return labels
+
+
+def _safe_stat(file_path: str) -> Dict[str, Any]:
+    """Return basic filesystem metadata for a file path."""
+    abs_path = os.path.abspath(file_path)
+    metadata: Dict[str, Any] = {
+        "file_path": abs_path,
+        "file_name": os.path.basename(abs_path),
+        "file_stem": os.path.splitext(os.path.basename(abs_path))[0],
+        "file_extension": os.path.splitext(abs_path)[1]
+    }
+
+    try:
+        stat_info = os.stat(abs_path)
+        metadata["file_size_bytes"] = stat_info.st_size
+        metadata["created_time"] = datetime.fromtimestamp(stat_info.st_ctime).isoformat()
+        metadata["modified_time"] = datetime.fromtimestamp(stat_info.st_mtime).isoformat()
+    except OSError:
+        metadata["file_size_bytes"] = None
+        metadata["created_time"] = None
+        metadata["modified_time"] = None
+
+    return metadata
+
+
+def _unique_sample_key(metadata: Dict[str, Dict[str, Any]], base_label: str, sample_index: int) -> str:
+    """Create a unique dictionary key for metadata entries."""
+    key = str(base_label).strip() if str(base_label).strip() else f"sample_{sample_index}"
+    if key not in metadata:
+        return key
+
+    suffix = 2
+    while f"{key}__{suffix}" in metadata:
+        suffix += 1
+    return f"{key}__{suffix}"
+
+
+def _build_sample_metadata(smp_labels: List[str], data_paths: List[str], row_counts: List[int],
+                           nway_flag: int, data_type: str, multi_file_per_sample: bool,
+                           sample_paths: Optional[List[List[str]]] = None) -> Dict[str, Dict[str, Any]]:
+    """Build per-sample metadata dictionary extracted from source file metadata."""
+    metadata: Dict[str, Dict[str, Any]] = {}
+
+    if multi_file_per_sample and sample_paths:
+        for sample_index, sample_label in enumerate(smp_labels):
+            files_for_sample = sample_paths[sample_index] if sample_index < len(sample_paths) else []
+            sample_index_1b = sample_index + 1
+            key = _unique_sample_key(metadata, sample_label, sample_index_1b)
+            metadata[key] = {
+                "sample_index": sample_index_1b,
+                "sample_label": sample_label,
+                "source_mode": "multi_file_per_sample",
+                "source_files": [_safe_stat(path) for path in files_for_sample]
+            }
+        return metadata
+
+    if nway_flag == 1 and data_type == "x_matrix" and row_counts:
+        running_index = 0
+        for path, count in zip(data_paths, row_counts):
+            file_meta = _safe_stat(path)
+            for row_index in range(count):
+                if running_index >= len(smp_labels):
+                    break
+                sample_label = smp_labels[running_index]
+                sample_index_1b = running_index + 1
+                key = _unique_sample_key(metadata, sample_label, sample_index_1b)
+                metadata[key] = {
+                    "sample_index": sample_index_1b,
+                    "sample_label": sample_label,
+                    "source_mode": "matrix_row",
+                    "source_file": file_meta,
+                    "row_index_in_file": row_index
+                }
+                running_index += 1
+
+        while running_index < len(smp_labels):
+            sample_label = smp_labels[running_index]
+            sample_index_1b = running_index + 1
+            key = _unique_sample_key(metadata, sample_label, sample_index_1b)
+            metadata[key] = {
+                "sample_index": sample_index_1b,
+                "sample_label": sample_label,
+                "source_mode": "unknown"
+            }
+            running_index += 1
+        return metadata
+
+    for sample_index, sample_label in enumerate(smp_labels):
+        sample_path = data_paths[sample_index] if sample_index < len(data_paths) else None
+        sample_index_1b = sample_index + 1
+        key = _unique_sample_key(metadata, sample_label, sample_index_1b)
+        metadata[key] = {
+            "sample_index": sample_index_1b,
+            "sample_label": sample_label,
+            "source_mode": "single_file" if sample_path else "unknown",
+            "source_file": _safe_stat(sample_path) if sample_path else None
+        }
+
+    return metadata
 
 
 def _generate_default_axis_info(X: np.ndarray) -> List[np.ndarray]:

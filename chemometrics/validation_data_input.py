@@ -6,6 +6,7 @@ import os
 
 def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal: List[str],
                           class_data_cal: Optional[List[str]] = None,
+                          cal_metadata: Optional[dict] = None,
                           validation_mode: Optional[str] = None, createVal: Optional[bool] = None,
                           creationMethod: Optional[str] = None,
                           calProportion: Optional[float] = None, selection_file: Optional[str] = None,
@@ -17,7 +18,7 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
                           nway_flag: Optional[int] = None, reshape_order: str = 'F',
                           X_val_path: Optional[str] = None, Y_val_path: Optional[str] = None,
                           val_labels_path: Optional[str] = None,
-                          cdata_path: Optional[str] = None) -> Tuple[np.ndarray, Optional[np.ndarray], np.ndarray, Optional[np.ndarray], List[str], List[str], Optional[List[str]], Optional[List[str]]]:
+                          cdata_path: Optional[str] = None) -> Tuple[np.ndarray, Optional[np.ndarray], np.ndarray, Optional[np.ndarray], List[str], List[str], Optional[List[str]], Optional[List[str]], Optional[dict], Optional[dict]]:
     """
     Split data into calibration and validation sets.
 
@@ -26,6 +27,7 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
         Y_cal: Input Y data
         smp_cal: Sample labels
         class_data_cal: Input classification data (optional)
+        cal_metadata: Input per-sample calibration metadata dictionary (optional)
         validation_mode: "Create Validation Set" or "Load External Validation Set"
         createVal: (deprecated) If True, create validation from calibration; if False, load validation separately
         creationMethod: Method for creating validation ('random', 'kennard_stone', 'file')
@@ -36,7 +38,7 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
         cdata_path: Path to external classification data file
 
     Returns:
-        X_cal, Y_cal, X_val, Y_val, smp_cal, smp_val, class_data_cal, class_data_val
+        X_cal, Y_cal, X_val, Y_val, smp_cal, smp_val, class_data_cal, class_data_val, cal_metadata, val_metadata
     """
     # Determine mode: prefer validation_mode if provided, fall back to createVal for backward compatibility
     if validation_mode is not None:
@@ -54,7 +56,7 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
         # Check if using new parameters (X_val_path, Y_val_path)
         if X_val_path or Y_val_path:
             # Load from external file paths
-            X_val, Y_val, _, smp_val, _, _, class_data_val = load_data(
+            X_val, Y_val, _, smp_val, _, _, class_data_val, val_metadata = load_data(
                 d_specs_separator=d_specs_separator or "tabs",
                 d_specs_headlines=d_specs_headlines or "0",
                 d_specs_type=d_specs_type or "x_matrix",
@@ -72,7 +74,7 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
             # Use data_path parameters for loading external validation
             if data_path is None or nway_flag is None:
                 raise ValueError("Either X_val_path/Y_val_path or data_path/nway_flag required when loading external validation")
-            X_val, Y_val, _, smp_val, _, _, class_data_val = load_data(
+            X_val, Y_val, _, smp_val, _, _, class_data_val, val_metadata = load_data(
                 d_specs_separator=d_specs_separator or "tabs",
                 d_specs_headlines=d_specs_headlines or "0",
                 d_specs_type=d_specs_type or "x_matrix",
@@ -88,6 +90,7 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
             )
         
         X_cal_out, Y_cal_out, smp_cal_out, class_data_cal_out = X_cal, Y_cal, smp_cal, class_data_cal
+        cal_metadata_out = cal_metadata
     else:
         # Create validation from calibration
         if creationMethod is None or calProportion is None:
@@ -113,13 +116,52 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
         Y_cal_out = Y_cal[cal_indices] if Y_cal is not None else None
         smp_cal_out = [smp_cal[i] for i in cal_indices]
         class_data_cal_out = [class_data_cal[i] for i in cal_indices] if class_data_cal is not None else None
+        cal_metadata_out, val_metadata = _split_metadata_by_indices(cal_metadata, cal_indices, val_indices)
 
         X_val = X_cal[val_indices]
         Y_val = Y_cal[val_indices] if Y_cal is not None else None
         smp_val = [smp_cal[i] for i in val_indices]
         class_data_val = [class_data_cal[i] for i in val_indices] if class_data_cal is not None else None
 
-    return X_cal_out, Y_cal_out, X_val, Y_val, smp_cal_out, smp_val, class_data_cal_out, class_data_val
+    return X_cal_out, Y_cal_out, X_val, Y_val, smp_cal_out, smp_val, class_data_cal_out, class_data_val, cal_metadata_out, val_metadata
+
+
+def _split_metadata_by_indices(sample_metadata: Optional[dict], cal_indices: np.ndarray, val_indices: np.ndarray) -> Tuple[Optional[dict], Optional[dict]]:
+    """Split metadata dictionary into calibration and validation subsets by sample index.
+
+    Metadata sample_index values are expected to be 1-based.
+    Internal cal/val indices are 0-based and converted accordingly.
+    """
+    if sample_metadata is None:
+        return None, None
+
+    if not isinstance(sample_metadata, dict):
+        return None, None
+
+    cal_set = {int(i) for i in np.asarray(cal_indices).tolist()}
+    val_set = {int(i) for i in np.asarray(val_indices).tolist()}
+
+    cal_metadata = {}
+    val_metadata = {}
+
+    fallback_order = 0
+    for key, entry in sample_metadata.items():
+        if isinstance(entry, dict) and "sample_index" in entry:
+            try:
+                sample_index_0b = int(entry["sample_index"]) - 1
+            except (TypeError, ValueError):
+                sample_index_0b = fallback_order
+        else:
+            sample_index_0b = fallback_order
+
+        if sample_index_0b in cal_set:
+            cal_metadata[key] = entry
+        elif sample_index_0b in val_set:
+            val_metadata[key] = entry
+
+        fallback_order += 1
+
+    return cal_metadata, val_metadata
 
 
 def _kennard_stone_selection(X: np.ndarray, n_select: int) -> np.ndarray:

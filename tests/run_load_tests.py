@@ -17,7 +17,7 @@ ok = True
 
 print('Running load_data smoke tests...')
 try:
-    X, Y, axis_t_info, smp_cal, axis_n_info, dim_labels = load_data(
+    X, Y, axis_t_info, smp_cal, axis_n_info, dim_labels, _, cal_metadata = load_data(
         d_specs_separator='comma',
         d_specs_headlines='0',
         d_specs_type='x_matrix',
@@ -53,6 +53,7 @@ try:
 
     print('\naxis_n_info (first few) =')
     pprint.pprint([a.tolist() for a in axis_n_info])
+    print('\ncal_metadata entries =', len(cal_metadata) if isinstance(cal_metadata, dict) else 0)
 
     # Test 2 - axis_info list + scale_type
     Xfake = np.zeros((2,3))
