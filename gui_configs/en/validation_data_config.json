@@ -11,6 +11,7 @@
     "createVal": "Create Validation",
     "creationMethod": "Method",
     "calProportion": "Cal. Proportion",
+    "random_seed": "Random Seed",
     "selection_file": "Selection File",
     "d_specs_separator": "Data Separator",
     "d_specs_headlines": "Header Rows",
@@ -72,6 +73,17 @@
         "input_type": "user",
         "tooltip": "Fraction of data for calibration (0.7 = 70% cal, 30% val)",
         "visible_if": {"validation_mode": "Create"}
+      },
+      {
+        "name": "random_seed",
+        "label": "Random Seed (optional)",
+        "category": "Creation Settings",
+        "widget": "entry",
+        "type": "int",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Seed used for reproducible random splits (same seed = same selection)",
+        "visible_if": {"creationMethod": "random"}
       },
       {
         "name": "selection_file",

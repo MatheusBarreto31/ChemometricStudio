@@ -12,7 +12,7 @@
   "input_specs": {
     "cv_configuration": ["use_cv", "cv_strategy", "n_splits", "random_state", "shuffle", "window_size", "n_repeats", "test_size"],
     "load_data": ["d_specs_separator", "d_specs_headlines", "d_specs_type", "d_specs_dimensions", "data_path", "nway_flag", "y_path", "var_path", "smp_path", "transpose", "axis_info", "reshape_order", "multi_file_per_sample", "num_samples", "dim_labels", "scale_type", "cdata_path"],
-    "validation_data_main": ["X_cal", "Y_cal", "smp_cal", "class_data_cal", "cal_metadata", "validation_mode", "createVal", "creationMethod", "calProportion", "selection_file", "X_val_path", "Y_val_path", "val_labels_path", "cdata_path", "d_specs_separator", "d_specs_headlines", "d_specs_type", "d_specs_dimensions", "data_path", "y_path", "var_path", "smp_path", "transpose", "nway_flag", "reshape_order"],
+    "validation_data_main": ["X_cal", "Y_cal", "smp_cal", "class_data_cal", "cal_metadata", "validation_mode", "createVal", "creationMethod", "calProportion", "random_seed", "selection_file", "X_val_path", "Y_val_path", "val_labels_path", "cdata_path", "d_specs_separator", "d_specs_headlines", "d_specs_type", "d_specs_dimensions", "data_path", "y_path", "var_path", "smp_path", "transpose", "nway_flag", "reshape_order"],
     "baseline_correction": ["X_cal", "method", "X_val", "nway_flag", "direction", "window_size"],
     "smoothing": ["X_cal", "method", "X_val", "nway_flag", "direction", "window_size", "polyorder"],
     "center_and_normalize": ["X_cal", "X_val", "center", "normalize", "nway_flag", "direction"],
@@ -91,6 +91,7 @@
       "createVal": "str",
       "creationMethod": "str",
       "calProportion": "float",
+      "random_seed": "int",
       "selection_file": "str",
       "X_val_path": "str",
       "Y_val_path": "str",

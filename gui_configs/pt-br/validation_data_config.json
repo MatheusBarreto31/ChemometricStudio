@@ -11,6 +11,7 @@
     "createVal": "Criar Validação",
     "creationMethod": "Método",
     "calProportion": "Proporção de Calibração",
+    "random_seed": "Semente Aleatória",
     "selection_file": "Arquivo de Seleção",
     "d_specs_separator": "Separador de Dados",
     "d_specs_headlines": "Linhas de Cabeçalho",
@@ -67,6 +68,16 @@
         "input_type": "user",
         "tooltip": "Fração de dados para calibração (0.7 = 70% cal, 30% val)",
         "visible_if": {"validation_mode": "Create"}
+      },
+      {
+        "name": "random_seed",
+        "label": "Semente Aleatória (opcional)",
+        "widget": "entry",
+        "type": "int",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Semente para divisões aleatórias reproduzíveis (mesma semente = mesma seleção)",
+        "visible_if": {"creationMethod": "random"}
       },
       {
         "name": "selection_file",

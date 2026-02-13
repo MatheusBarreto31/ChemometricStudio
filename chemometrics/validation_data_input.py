@@ -9,7 +9,8 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
                           cal_metadata: Optional[dict] = None,
                           validation_mode: Optional[str] = None, createVal: Optional[bool] = None,
                           creationMethod: Optional[str] = None,
-                          calProportion: Optional[float] = None, selection_file: Optional[str] = None,
+                          calProportion: Optional[float] = None, random_seed: Optional[int] = None,
+                          selection_file: Optional[str] = None,
                           d_specs_separator: Optional[str] = None, d_specs_headlines: Optional[str] = None,
                           d_specs_type: Optional[str] = None, d_specs_dimensions: Optional[str] = None,
                           data_path: Optional[List[str]] = None,
@@ -32,6 +33,7 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
         createVal: (deprecated) If True, create validation from calibration; if False, load validation separately
         creationMethod: Method for creating validation ('random', 'kennard_stone', 'file')
         calProportion: Proportion of samples for calibration (0-1)
+        random_seed: Seed for reproducible random selection (for 'random' method)
         selection_file: Path to file with 1s/2s for cal/val selection (for 'file' method)
         X_val_path, Y_val_path, val_labels_path: Paths to external validation files
         d_specs, data_path, etc.: Parameters for load_data if loading external validation
@@ -100,7 +102,8 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
         indices = np.arange(n_samples)
 
         if creationMethod == 'random':
-            cal_indices = np.random.choice(indices, size=n_cal, replace=False)
+            rng = np.random.default_rng(random_seed)
+            cal_indices = rng.choice(indices, size=n_cal, replace=False)
         elif creationMethod == 'kennard_stone':
             cal_indices = _kennard_stone_selection(X_cal, n_cal)
         elif creationMethod == 'file':
