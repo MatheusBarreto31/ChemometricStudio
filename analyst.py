@@ -1,8 +1,10 @@
-from typing import Optional, Callable
+from typing import Optional, Callable, Dict, Any
+from time import perf_counter
 
 def analyst_main(
     stop_at_function_idx: Optional[int] = None,
-    progress_callback: Optional[Callable[[int, int, str, str], None]] = None
+    progress_callback: Optional[Callable[[int, int, str, str], None]] = None,
+    return_timing: bool = False
 ):
     """
     Execute the model configuration from model.json.
@@ -141,6 +143,9 @@ def analyst_main(
         except Exception:
             pass
 
+    function_timings = []
+    model_start_time = perf_counter()
+
     # Execute each function in order
     for exec_idx, (instance_alias, info) in enumerate(functions_list):
         # Check if we should stop before this function
@@ -180,7 +185,9 @@ def analyst_main(
         
         # Call the function
         if base_alias in globals():
+            function_start_time = perf_counter()
             result = globals()[base_alias](**params)
+            function_elapsed_seconds = perf_counter() - function_start_time
             if base_alias in return_specs:
                 # Store outputs under the instance alias
                 return_keys = return_specs[base_alias]
@@ -189,6 +196,11 @@ def analyst_main(
                 else:
                     # Single return value
                     outputs[instance_alias] = {return_keys[0]: result} if return_keys else {}
+            function_timings.append({
+                "instance_alias": instance_alias,
+                "base_alias": base_alias,
+                "execution_time": function_elapsed_seconds
+            })
             print(f"{base_alias} executed successfully.")
         else:
             print(f"Function {base_alias} not found.")
@@ -212,6 +224,18 @@ def analyst_main(
         for name, value in out_dict.items():
             print(f"  {name}: {value}")
     
+    model_elapsed_seconds = perf_counter() - model_start_time
+    timing_report: Dict[str, Any] = {
+        "total_execution_time": model_elapsed_seconds,
+        "function_timings": function_timings,
+        "executed_function_count": len(function_timings),
+        "partial_run": stop_at_function_idx is not None,
+        "stop_at_function_idx": stop_at_function_idx
+    }
+
+    if return_timing:
+        return outputs, timing_report
+
     return outputs  # Return outputs for analysis tab
 
 

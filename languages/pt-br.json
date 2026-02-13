@@ -166,7 +166,8 @@
       "edit_dataset": "Editar Dataset",
       "export_table_csv": "Exportar Tabela para CSV",
       "model_files": "Arquivos de Modelo",
-      "model_method_only": "Método do Modelo Apenas"
+      "model_method_only": "Método do Modelo Apenas",
+      "timing_report": "Relatório de Tempo"
     },
     "messages": {
       "no_methodology": "Nenhuma função selecionada. Por favor, adicione funções à sua metodologia.",
@@ -204,6 +205,7 @@
       "model_executed": "Modelo executado com sucesso. Saída salva em model_log.txt",
       "execution_failed": "Falha na execução do modelo:",
       "check_log": "Verifique model_log.txt para detalhes",
+      "no_timing_report": "Nenhum relatório de tempo disponível. Execute o modelo primeiro.",
       "save_failed": "Falha ao salvar modelo:",
       "load_failed": "Falha ao carregar modelo:",
       "no_config": "Nenhuma configuração disponível para esta função",
@@ -285,6 +287,16 @@
       "select_single_row_column": "Selecione uma única linha ou coluna dos dados da matriz:",
       "enable_navigation_3d": "Habilitar navegação para dados 3D+:"
       ,"leave_blank_default_navigable": "Deixe em branco para usar o padrão (0) para todas as dimensões navegáveis."
+    },
+    "timing_report": {
+      "title": "Relatório de Tempo de Execução",
+      "run_type": "Tipo de execução",
+      "total_time": "Tempo total de execução",
+      "executed_count": "Funções executadas",
+      "run_to_here_target": "Destino do Executar até aqui",
+      "per_function": "Tempo por função:",
+      "no_functions": "Nenhum dado de tempo por função foi registrado.",
+      "unknown": "Desconhecido"
     }
   },
   "data": {
@@ -293,8 +305,10 @@
   },
   "menu": {
     "file": "Arquivo",
+    "tools": "Ferramentas",
     "load_model": "Carregar Modelo",
     "save_model": "Salvar Modelo",
+    "timing_report": "Relatório de Tempo",
     "exit": "Sair",
     "settings": "Configurações",
     "language": "Idioma",

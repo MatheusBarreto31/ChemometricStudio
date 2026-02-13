@@ -166,7 +166,8 @@
       "edit_dataset": "Edit Dataset",
       "export_table_csv": "Export Table to CSV",
       "model_files": "Model Files",
-      "model_method_only": "Model Method Only"
+      "model_method_only": "Model Method Only",
+      "timing_report": "Timing Report"
     },
     "messages": {
       "no_methodology": "No functions selected. Please add functions to your methodology.",
@@ -204,6 +205,7 @@
       "model_executed": "Model executed successfully. Output saved to model_log.txt",
       "execution_failed": "Model execution failed:",
       "check_log": "Check model_log.txt for details",
+      "no_timing_report": "No timing report available. Run the model first.",
       "save_failed": "Failed to save model:",
       "load_failed": "Failed to load model:",
       "no_config": "No configuration available for this function",
@@ -285,6 +287,16 @@
       "select_single_row_column": "Select a single row or column from matrix data:",
       "enable_navigation_3d": "Enable navigation for 3D+ data:"
       ,"leave_blank_default_navigable": "Leave blank to use default (0) for all navigable dimensions."
+    },
+    "timing_report": {
+      "title": "Execution Timing Report",
+      "run_type": "Run type",
+      "total_time": "Total run time",
+      "executed_count": "Executed functions",
+      "run_to_here_target": "Run to here target",
+      "per_function": "Per-function run time:",
+      "no_functions": "No function timing data recorded.",
+      "unknown": "Unknown"
     }
   },
   "data": {
@@ -293,8 +305,10 @@
   },
   "menu": {
     "file": "File",
+    "tools": "Tools",
     "load_model": "Load Model",
     "save_model": "Save Model",
+    "timing_report": "Timing Report",
     "exit": "Exit",
     "settings": "Settings",
     "language": "Language",

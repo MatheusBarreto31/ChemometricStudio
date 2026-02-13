@@ -140,6 +140,9 @@ class ChemometricsGUI:
         self.execution_progress_mode = ""
         self.execution_progress_hide_after_id = None
         self._execution_progress_root_bind_set = False
+        self.latest_timing_report: Optional[Dict[str, Any]] = None
+        self.tools_menu = None
+        self.timing_report_menu_index: Optional[int] = None
         
         # Configure dark theme styles
         style = ttk.Style()
@@ -336,7 +339,7 @@ class ChemometricsGUI:
         )
     
     def _build_menu_bar(self):
-        """Build the menu bar with File, Settings, and Help menus."""
+        """Build the menu bar with File, Tools, Settings, and Help menus."""
         menubar = tk.Menu(self.root)
         self.root.config(menu=menubar)
         
@@ -347,6 +350,17 @@ class ChemometricsGUI:
         file_menu.add_command(label=self.language_manager.translate("menu.save_model", "Save Model"), command=self._show_save_model_dialog)
         file_menu.add_separator()
         file_menu.add_command(label=self.language_manager.translate("menu.exit", "Exit"), command=self._on_close)
+
+        # Tools Menu
+        self.tools_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label=self.language_manager.translate("menu.tools", "Tools"), menu=self.tools_menu)
+        self.tools_menu.add_command(
+            label=self.language_manager.translate("menu.timing_report", "Timing Report"),
+            command=self._show_timing_report_popup,
+            state=tk.DISABLED
+        )
+        self.timing_report_menu_index = self.tools_menu.index("end")
+        self._set_timing_report_menu_state(self.latest_timing_report is not None)
         
         # Settings Menu
         settings_menu = tk.Menu(menubar, tearoff=0)
@@ -399,6 +413,141 @@ class ChemometricsGUI:
         help_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label=self.language_manager.translate("menu.help", "Help"), menu=help_menu)
         help_menu.add_command(label=self.language_manager.translate("menu.about", "About"), command=self._show_about_dialog)
+
+    def _set_timing_report_menu_state(self, enabled: bool):
+        """Enable or disable the Timing Report menu item."""
+        if self.tools_menu is None or self.timing_report_menu_index is None:
+            return
+
+        state = tk.NORMAL if enabled else tk.DISABLED
+        try:
+            self.tools_menu.entryconfig(self.timing_report_menu_index, state=state)
+        except tk.TclError:
+            pass
+
+    def _store_timing_report(self, run_type_label: str, timing_report: Optional[Dict[str, Any]], stop_at_function_alias: Optional[str] = None):
+        """Persist latest timing report and enable menu access."""
+        if not timing_report:
+            self.latest_timing_report = None
+            self._set_timing_report_menu_state(False)
+            return
+
+        self.latest_timing_report = {
+            'run_type': run_type_label,
+            'stop_at_function_alias': stop_at_function_alias,
+            'total_execution_time': timing_report.get('total_execution_time', 0.0),
+            'function_timings': timing_report.get('function_timings', []),
+            'executed_function_count': timing_report.get('executed_function_count', 0),
+            'partial_run': timing_report.get('partial_run', False),
+            'timestamp': datetime.now().isoformat()
+        }
+        self._set_timing_report_menu_state(True)
+
+    def _format_execution_seconds(self, seconds: Any) -> str:
+        """Format execution duration consistently for reports."""
+        try:
+            return f"{float(seconds):.3f} s"
+        except (TypeError, ValueError):
+            return "0.000 s"
+
+    def _show_timing_report_popup(self):
+        """Show timing report popup for latest model run."""
+        report = self.latest_timing_report
+        if not report:
+            self._show_fading_warning(
+                self.language_manager.translate("ui.messages.no_timing_report", "No timing report available. Run the model first.")
+            )
+            return
+
+        report_win = tk.Toplevel(self.root)
+        report_win.title(self.language_manager.translate("ui.dialogs.timing_report", "Timing Report"))
+        report_win.geometry("640x460")
+        report_win.transient(self.root)
+        report_win.grab_set()
+
+        container = ttk.Frame(report_win, padding=12)
+        container.pack(fill=tk.BOTH, expand=True)
+
+        text_frame = ttk.Frame(container)
+        text_frame.pack(fill=tk.BOTH, expand=True)
+
+        scrollbar = ttk.Scrollbar(text_frame, orient=tk.VERTICAL)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        report_text = tk.Text(
+            text_frame,
+            wrap=tk.WORD,
+            yscrollcommand=scrollbar.set,
+            font=("Consolas", 10),
+            padx=8,
+            pady=8
+        )
+        report_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=report_text.yview)
+
+        lines = [
+            self.language_manager.translate("ui.timing_report.title", "Execution Timing Report"),
+            "",
+            f"{self.language_manager.translate('ui.timing_report.run_type', 'Run type')}: {report.get('run_type', 'N/A')}",
+            f"{self.language_manager.translate('ui.timing_report.total_time', 'Total run time')}: {self._format_execution_seconds(report.get('total_execution_time', 0.0))}",
+            f"{self.language_manager.translate('ui.timing_report.executed_count', 'Executed functions')}: {report.get('executed_function_count', 0)}",
+        ]
+
+        if report.get('partial_run'):
+            stop_alias = report.get('stop_at_function_alias') or self.language_manager.translate("ui.timing_report.unknown", "Unknown")
+            if stop_alias != self.language_manager.translate("ui.timing_report.unknown", "Unknown"):
+                # Look up display name for the stop target function
+                if stop_alias in self.methodology_list:
+                    idx = self.methodology_list.index(stop_alias)
+                    base_alias = self.function_base_aliases[idx] if idx < len(self.function_base_aliases) else stop_alias
+                    config = self.gui_configs.get(base_alias, {})
+                    config_display_name = config.get("display_name", base_alias)
+                    existing_count = self.methodology_list[:idx].count(base_alias)
+                    if existing_count > 0:
+                        stop_alias_display = f"{config_display_name} #{existing_count + 1}"
+                    else:
+                        stop_alias_display = config_display_name
+                else:
+                    stop_alias_display = stop_alias
+            else:
+                stop_alias_display = stop_alias
+            lines.append(
+                f"{self.language_manager.translate('ui.timing_report.run_to_here_target', 'Run to here target')}: {stop_alias_display}"
+            )
+
+        lines.append("")
+        lines.append(self.language_manager.translate("ui.timing_report.per_function", "Per-function run time:"))
+
+        function_timings = report.get('function_timings', [])
+        if function_timings:
+            for idx, function_entry in enumerate(function_timings, start=1):
+                instance_alias = function_entry.get('instance_alias', '')
+                base_alias = function_entry.get('base_alias', '')
+                
+                # Look up configured display name for this function
+                config = self.gui_configs.get(base_alias, {})
+                config_display_name = config.get("display_name", base_alias)
+                
+                # Count previous instances of this base alias for suffix
+                existing_count = self.methodology_list[:self.methodology_list.index(instance_alias)].count(base_alias) if instance_alias in self.methodology_list else 0
+                if existing_count > 0:
+                    display_name = f"{config_display_name} #{existing_count + 1}"
+                else:
+                    display_name = config_display_name
+                
+                lines.append(f"{idx:>2}. {display_name}: {self._format_execution_seconds(function_entry.get('execution_time', 0.0))}")
+        else:
+            lines.append(self.language_manager.translate("ui.timing_report.no_functions", "No function timing data recorded."))
+
+        report_text.insert(tk.END, "\n".join(lines))
+        report_text.config(state=tk.DISABLED)
+
+        close_btn = ttk.Button(
+            container,
+            text=self.language_manager.translate("ui.buttons.close", "Close"),
+            command=report_win.destroy
+        )
+        close_btn.pack(anchor="e", pady=(10, 0))
     
     def _change_language(self, language_code: str):
         """Change the application language and save setting."""
@@ -6356,7 +6505,7 @@ Count:
 
             self._begin_execution_progress(
                 total_steps=stop_at_idx + 1,
-                mode_label=self.language_manager.translate("ui.messages.run_to_here", "Run to here")
+                mode_label=self.language_manager.translate("ui.buttons.run_to_here", "Run to here")
             )
             
             # Generate model.json first
@@ -6381,12 +6530,21 @@ Count:
                     self._update_execution_progress(completed_steps, total_steps, current_instance, current_base)
 
                 # Run analyst with stop_at_function_idx parameter
-                outputs = analyst_main(stop_at_function_idx=stop_at_idx, progress_callback=_progress_callback)
+                outputs, timing_report = analyst_main(
+                    stop_at_function_idx=stop_at_idx,
+                    progress_callback=_progress_callback,
+                    return_timing=True
+                )
                 
             finally:
                 sys.stdout = old_stdout
                 sys.stderr = old_stderr
             
+            execution_time_by_instance = {
+                entry.get('instance_alias'): entry.get('execution_time', 0.0)
+                for entry in (timing_report.get('function_timings', []) if timing_report else [])
+            }
+
             # Store execution results in analysis data for ALL executed functions
             # (not just the selected one), so functions before it can also display their results
             for idx in range(stop_at_idx + 1):
@@ -6425,10 +6583,16 @@ Count:
                 self.analysis_data[func_instance_alias]['execution_results'] = {
                     'status': 'success',
                     'timestamp': datetime.now().isoformat(),
-                    'execution_time': 0,  # TODO: measure execution time
+                    'execution_time': execution_time_by_instance.get(func_instance_alias, 0.0),
                     'outputs': function_outputs,
                     'inputs': input_parameters  # Store the input parameters for condition evaluation
                 }
+
+            self._store_timing_report(
+                run_type_label=self.language_manager.translate("ui.buttons.run_to_here", "Run to here"),
+                timing_report=timing_report,
+                stop_at_function_alias=instance_alias
+            )
             
             # Note: graph_canvases, graph_slices, and table_slices are already cleared
             # by _clear_execution_cache() at the start of this method
@@ -7241,6 +7405,10 @@ Count:
                 # Clear control frame references
                 if 'graph_control_frames' in self.analysis_data[instance_alias]:
                     del self.analysis_data[instance_alias]['graph_control_frames']
+
+            # Timing report is valid only for the latest successful run
+            self.latest_timing_report = None
+            self._set_timing_report_menu_state(False)
     
     def _refresh_gui_from_config(self):
         """Refresh GUI to reflect loaded configuration."""
@@ -7306,7 +7474,7 @@ Count:
                     self._update_execution_progress(completed_steps, total_steps, current_instance, current_base)
                 
                 # Run the full model and capture outputs
-                outputs = analyst_main(progress_callback=_progress_callback)
+                outputs, timing_report = analyst_main(progress_callback=_progress_callback, return_timing=True)
                 
             finally:
                 sys.stdout = old_stdout
@@ -7321,6 +7489,11 @@ Count:
             if not hasattr(self, 'analysis_data'):
                 self.analysis_data = {}
             
+            execution_time_by_instance = {
+                entry.get('instance_alias'): entry.get('execution_time', 0.0)
+                for entry in (timing_report.get('function_timings', []) if timing_report else [])
+            }
+
             for idx, instance_alias in enumerate(self.methodology_list):
                 base_alias = self.function_base_aliases[idx]
                 
@@ -7352,10 +7525,16 @@ Count:
                 self.analysis_data[instance_alias]['execution_results'] = {
                     'status': 'success',
                     'timestamp': datetime.now().isoformat(),
-                    'execution_time': 0,
+                    'execution_time': execution_time_by_instance.get(instance_alias, 0.0),
                     'outputs': outputs.get(instance_alias, {}) if outputs else {},
                     'inputs': input_parameters  # Store the input parameters for condition evaluation
                 }
+
+            self._store_timing_report(
+                run_type_label=self.language_manager.translate("ui.buttons.run_model", "Run Model"),
+                timing_report=timing_report,
+                stop_at_function_alias=None
+            )
             
             self._show_fading_success(
                 self.language_manager.translate("ui.messages.model_executed", "Model executed successfully. Results loaded for analysis.")
