@@ -215,9 +215,9 @@ def build_latex_document(elements: List[Dict[str, Any]], language_code: str, foo
                     row_values = [str(row_label)] + row_values
                 row_char_counts.append(sum(len(cell) for cell in row_values))
             max_row_chars = max([header_row_chars] + row_char_counts) if row_char_counts else header_row_chars
-            estimated_row_width = min(0.86, max(0.34, 0.26 + (0.0035 * min(max_row_chars, 160))))
-            density_width = min(0.88, max(0.36, 0.28 + (0.018 * min(col_count, 10)) + (0.0007 * min(content_density, 90))))
-            header_guard_width = min(0.88, max(0.34, 0.20 + (0.010 * min(max_header_len, 36))))
+            estimated_row_width = min(0.86, max(0.48, 0.36 + (0.0035 * min(max_row_chars, 160))))
+            density_width = min(0.88, max(0.50, 0.38 + (0.018 * min(col_count, 10)) + (0.0007 * min(content_density, 90))))
+            header_guard_width = min(0.88, max(0.46, 0.28 + (0.010 * min(max_header_len, 36))))
             if is_metadata_table:
                 table_width = max(estimated_row_width, density_width)
             else:
