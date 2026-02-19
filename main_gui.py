@@ -123,6 +123,12 @@ class ChemometricsGUI:
         self.function_configs: Dict[str, Dict[str, Any]] = {}  # {instance_alias: {param: value}}
         self.routing_lines: Dict[Tuple, str] = {}  # {(src_idx, src_output, dst_idx, dst_input): routing_info}
         self.selected_function_idx: Optional[int] = None  # Index in methodology_list
+        self.methodology_drag_source_idx: Optional[int] = None
+        self.methodology_drag_target_idx: Optional[int] = None
+        self.methodology_drag_insert_idx: Optional[int] = None
+        self.methodology_drag_active: bool = False
+        self.methodology_drag_ghost: Optional[tk.Toplevel] = None
+        self.methodology_drop_indicator: Optional[tk.Frame] = None
         self.workflow_control_aliases = {
             "workflow_loop_start",
             "workflow_loop_end",
@@ -1040,6 +1046,9 @@ class ChemometricsGUI:
         self.methodology_listbox = tk.Listbox(list_frame, height=10, selectmode=tk.SINGLE)
         self.methodology_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.methodology_listbox.bind("<<ListboxSelect>>", self._on_methodology_select)
+        self.methodology_listbox.bind("<ButtonPress-1>", self._on_methodology_drag_start)
+        self.methodology_listbox.bind("<B1-Motion>", self._on_methodology_drag_motion)
+        self.methodology_listbox.bind("<ButtonRelease-1>", self._on_methodology_drag_drop)
         
         scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.methodology_listbox.yview)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
@@ -1053,9 +1062,283 @@ class ChemometricsGUI:
         
         clear_btn = ttk.Button(button_frame, text=self.language_manager.translate("ui.buttons.clear_methodology", "Clear All"), command=self._clear_methodology)
         clear_btn.pack(side=tk.LEFT, padx=5)
+
+    def _on_methodology_drag_start(self, event=None):
+        """Start drag operation for methodology reordering."""
+        if not self.methodology_list:
+            return
+
+        idx = self.methodology_listbox.nearest(event.y)
+        if 0 <= idx < len(self.methodology_list):
+            self.methodology_drag_source_idx = idx
+            self.methodology_drag_target_idx = idx
+            self.methodology_drag_insert_idx = idx
+            self.methodology_drag_active = False
+            self._hide_methodology_drag_ghost()
+            self._hide_methodology_drop_indicator()
+
+    def _on_methodology_drag_motion(self, event=None):
+        """Track drag movement and update visual selection."""
+        if self.methodology_drag_source_idx is None:
+            return
+
+        idx = self.methodology_listbox.nearest(event.y)
+        if 0 <= idx < len(self.methodology_list):
+            self.methodology_drag_target_idx = idx
+            insert_idx = self._calculate_methodology_insert_index(event.y)
+            self.methodology_drag_insert_idx = insert_idx
+            if idx != self.methodology_drag_source_idx:
+                self.methodology_drag_active = True
+                drag_text = self.methodology_listbox.get(self.methodology_drag_source_idx)
+                self._show_methodology_drag_ghost(drag_text)
+                self._move_methodology_drag_ghost(event.x_root, event.y_root)
+                self._show_methodology_drop_indicator(insert_idx)
+            elif self.methodology_drag_active:
+                self._show_methodology_drop_indicator(insert_idx)
+
+            self.methodology_listbox.selection_clear(0, tk.END)
+            self.methodology_listbox.selection_set(idx)
+            self.methodology_listbox.activate(idx)
+            self.methodology_listbox.see(idx)
+
+    def _on_methodology_drag_drop(self, event=None):
+        """Finalize drag operation and apply methodology reorder."""
+        if self.methodology_drag_source_idx is None:
+            return
+
+        src_idx = self.methodology_drag_source_idx
+        drop_insert_idx = self.methodology_drag_insert_idx
+
+        if drop_insert_idx is None:
+            drop_insert_idx = self._calculate_methodology_insert_index(event.y)
+
+        if drop_insert_idx is None:
+            dst_idx = self.methodology_listbox.nearest(event.y)
+        else:
+            dst_idx = drop_insert_idx - 1 if drop_insert_idx > src_idx else drop_insert_idx
+
+        if not (0 <= dst_idx < len(self.methodology_list)):
+            dst_idx = self.methodology_drag_target_idx
+
+        should_reorder = (
+            self.methodology_drag_active
+            and dst_idx is not None
+            and 0 <= dst_idx < len(self.methodology_list)
+            and src_idx != dst_idx
+        )
+
+        self.methodology_drag_source_idx = None
+        self.methodology_drag_target_idx = None
+        self.methodology_drag_insert_idx = None
+        self.methodology_drag_active = False
+        self._hide_methodology_drag_ghost()
+        self._hide_methodology_drop_indicator()
+
+        if should_reorder:
+            self._move_methodology_item(src_idx, dst_idx)
+
+    def _show_methodology_drag_ghost(self, text: str):
+        """Display floating label with dragged function name."""
+        if self.methodology_drag_ghost is not None:
+            return
+
+        ghost = tk.Toplevel(self.root)
+        ghost.wm_overrideredirect(True)
+        ghost.attributes("-topmost", True)
+
+        label = tk.Label(
+            ghost,
+            text=text,
+            bg="#f3f4f6",
+            fg="#111827",
+            relief=tk.SOLID,
+            borderwidth=1,
+            padx=8,
+            pady=3,
+            font=("Arial", 9, "bold")
+        )
+        label.pack()
+        self.methodology_drag_ghost = ghost
+
+    def _move_methodology_drag_ghost(self, x_root: int, y_root: int):
+        """Move floating drag label near cursor."""
+        if self.methodology_drag_ghost is None:
+            return
+        self.methodology_drag_ghost.geometry(f"+{x_root + 12}+{y_root + 12}")
+
+    def _hide_methodology_drag_ghost(self):
+        """Hide and destroy floating drag label."""
+        if self.methodology_drag_ghost is not None:
+            self.methodology_drag_ghost.destroy()
+            self.methodology_drag_ghost = None
+
+    def _calculate_methodology_insert_index(self, y: int) -> Optional[int]:
+        """Calculate insertion index from listbox y-coordinate."""
+        item_count = len(self.methodology_list)
+        if item_count == 0:
+            return None
+
+        if y <= 0:
+            return 0
+
+        widget_height = self.methodology_listbox.winfo_height()
+        if y >= widget_height:
+            return item_count
+
+        nearest_idx = self.methodology_listbox.nearest(y)
+        if nearest_idx < 0:
+            return 0
+        if nearest_idx >= item_count:
+            return item_count
+
+        item_bbox = self.methodology_listbox.bbox(nearest_idx)
+        if not item_bbox:
+            return min(max(nearest_idx, 0), item_count)
+
+        item_top = item_bbox[1]
+        item_height = item_bbox[3]
+        midpoint = item_top + (item_height / 2)
+
+        if y < midpoint:
+            return nearest_idx
+        return min(nearest_idx + 1, item_count)
+
+    def _show_methodology_drop_indicator(self, insert_idx: Optional[int]):
+        """Show black drop indicator line at insertion point."""
+        if insert_idx is None:
+            return
+
+        item_count = len(self.methodology_list)
+        if item_count == 0:
+            return
+
+        insert_idx = max(0, min(insert_idx, item_count))
+
+        y_pos = 1
+        if insert_idx >= item_count:
+            last_bbox = self.methodology_listbox.bbox(item_count - 1)
+            if last_bbox:
+                y_pos = last_bbox[1] + last_bbox[3] - 1
+            else:
+                y_pos = self.methodology_listbox.winfo_height() - 2
+        else:
+            target_bbox = self.methodology_listbox.bbox(insert_idx)
+            if target_bbox:
+                y_pos = target_bbox[1] - 1
+
+        width = max(8, self.methodology_listbox.winfo_width() - 6)
+
+        if self.methodology_drop_indicator is None:
+            self.methodology_drop_indicator = tk.Frame(self.methodology_listbox, bg="black", height=2)
+
+        self.methodology_drop_indicator.place(x=3, y=max(0, y_pos), width=width, height=2)
+
+    def _hide_methodology_drop_indicator(self):
+        """Hide drop indicator line."""
+        if self.methodology_drop_indicator is not None:
+            self.methodology_drop_indicator.place_forget()
+
+    def _remap_routing_indices(self, old_to_new_idx: Dict[int, int]):
+        """Remap routing lines from old function indices to new indices."""
+        remapped_routing = {}
+
+        for key, routing_info in self.routing_lines.items():
+            if isinstance(routing_info, dict) and routing_info.get("auto_created"):
+                continue
+
+            src_idx = None
+            src_param_key = None
+            dst_idx = None
+            dst_param_key = None
+
+            if isinstance(key, tuple) and len(key) >= 4:
+                src_idx, src_param_key, dst_idx, dst_param_key = key[:4]
+
+            if isinstance(routing_info, dict):
+                src_idx = routing_info.get("src_idx", src_idx)
+                src_param_key = routing_info.get("src_param_key", src_param_key)
+                dst_idx = routing_info.get("dst_idx", dst_idx)
+                dst_param_key = routing_info.get("dst_param_key", dst_param_key)
+
+            try:
+                src_idx = int(src_idx)
+                dst_idx = int(dst_idx)
+            except (TypeError, ValueError):
+                continue
+
+            if src_idx not in old_to_new_idx or dst_idx not in old_to_new_idx:
+                continue
+            if src_param_key is None or dst_param_key is None:
+                continue
+
+            new_src_idx = old_to_new_idx[src_idx]
+            new_dst_idx = old_to_new_idx[dst_idx]
+
+            if new_src_idx >= new_dst_idx:
+                continue
+
+            new_key = (new_src_idx, src_param_key, new_dst_idx, dst_param_key)
+            new_info = routing_info.copy() if isinstance(routing_info, dict) else {}
+            new_info["src_idx"] = new_src_idx
+            new_info["src_param_key"] = src_param_key
+            new_info["dst_idx"] = new_dst_idx
+            new_info["dst_param_key"] = dst_param_key
+            remapped_routing[new_key] = new_info
+
+        self.routing_lines = remapped_routing
+
+    def _recalculate_auto_routing(self):
+        """Rebuild automatic routing lines from current methodology order."""
+        manual_routing = {}
+
+        for key, routing_info in self.routing_lines.items():
+            if isinstance(routing_info, dict) and routing_info.get("auto_created"):
+                continue
+            manual_routing[key] = routing_info
+
+        self.routing_lines = manual_routing
+
+        for idx, base_alias in enumerate(self.function_base_aliases):
+            self._auto_create_routing(idx, base_alias)
+
+    def _move_methodology_item(self, src_idx: int, dst_idx: int):
+        """Move a methodology item and keep routing synchronized."""
+        item_count = len(self.methodology_list)
+        if item_count <= 1:
+            return
+        if src_idx < 0 or dst_idx < 0 or src_idx >= item_count or dst_idx >= item_count:
+            return
+        if src_idx == dst_idx:
+            return
+
+        original_indices = list(range(item_count))
+        moved_index = original_indices.pop(src_idx)
+        original_indices.insert(dst_idx, moved_index)
+        old_to_new_idx = {old_idx: new_idx for new_idx, old_idx in enumerate(original_indices)}
+
+        moved_instance_alias = self.methodology_list.pop(src_idx)
+        moved_base_alias = self.function_base_aliases.pop(src_idx)
+        self.methodology_list.insert(dst_idx, moved_instance_alias)
+        self.function_base_aliases.insert(dst_idx, moved_base_alias)
+
+        self._remap_routing_indices(old_to_new_idx)
+        self._recalculate_auto_routing()
+
+        self.selected_function_idx = dst_idx
+        self._refresh_methodology_listbox(selected_idx=dst_idx)
+
+        if self.current_tab == "analysis":
+            self._show_analysis_tab()
+        elif self.current_tab == "setup":
+            self._show_setup_tab()
+        elif self.current_tab == "routing":
+            self._show_routing_tab()
     
     def _on_methodology_select(self, event=None):
         """Handle methodology list selection."""
+        if self.methodology_drag_active:
+            return
+
         selection = self.methodology_listbox.curselection()
         if selection:
             self.selected_function_idx = selection[0]
