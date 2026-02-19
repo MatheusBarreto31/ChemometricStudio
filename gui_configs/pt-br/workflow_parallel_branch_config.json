@@ -1,0 +1,13 @@
+{
+  "display_name": "Ramo Paralelo",
+  "category": "Fluxo",
+  "data_type": "workflow",
+  "input_aliases": {},
+  "output_aliases": {},
+  "short_description": "Separa para o próximo ramo.",
+  "long_description": "Separa os ramos dentro de um bloco paralelo.",
+  "setup": {
+    "categories": ["Paralelo"],
+    "layout": []
+  }
+}

@@ -1,5 +1,10 @@
 {
   "return_specs": {
+    "workflow_loop_start": [],
+    "workflow_loop_end": [],
+    "workflow_parallel_start": [],
+    "workflow_parallel_branch": [],
+    "workflow_parallel_end": [],
     "cv_configuration": ["cv_config"],
     "load_data": ["X_cal", "Y_cal", "axis_t_info", "smp_cal", "axis_n_info", "dim_labels", "class_data_cal", "cal_metadata"],
     "validation_data_main": ["X_cal", "Y_cal", "X_val", "Y_val", "smp_cal", "smp_val", "class_data_cal", "class_data_val", "cal_metadata", "val_metadata"],
@@ -10,16 +15,51 @@
     "pca_analysis": ["model_scores", "model_loadings", "val_scores", "model_scores_cv", "model_loadings_cv", "metrics", "cv_results", "data_shape", "data_shape_val", "axis_n_info", "pc_labels", "class_data_cal", "class_data_val", "smp_cal", "smp_val"]
   },
   "input_specs": {
+    "workflow_loop_start": [
+      "iterations",
+      "mode",
+      "sweep_target",
+      "sweep_values",
+      "sweep_choice_values",
+      "benchmark_source",
+      "benchmark_nested_key",
+      "benchmark_mode",
+      "use_best_iteration"
+    ],
+    "workflow_loop_end": [],
+    "workflow_parallel_start": ["merge_strategy"],
+    "workflow_parallel_branch": [],
+    "workflow_parallel_end": [],
     "cv_configuration": ["use_cv", "cv_strategy", "n_splits", "random_state", "shuffle", "window_size", "n_repeats", "test_size"],
     "load_data": ["d_specs_separator", "d_specs_headlines", "d_specs_type", "d_specs_dimensions", "data_path", "nway_flag", "y_path", "var_path", "smp_path", "transpose", "axis_info", "reshape_order", "multi_file_per_sample", "num_samples", "dim_labels", "scale_type", "cdata_path"],
     "validation_data_main": ["X_cal", "Y_cal", "smp_cal", "class_data_cal", "cal_metadata", "validation_mode", "createVal", "creationMethod", "calProportion", "random_seed", "selection_file", "X_val_path", "Y_val_path", "val_labels_path", "cdata_path", "d_specs_separator", "d_specs_headlines", "d_specs_type", "d_specs_dimensions", "data_path", "y_path", "var_path", "smp_path", "transpose", "nway_flag", "reshape_order"],
-    "baseline_correction": ["X_cal", "method", "X_val", "nway_flag", "direction", "window_size"],
-    "smoothing": ["X_cal", "method", "X_val", "nway_flag", "direction", "window_size", "polyorder"],
+    "baseline_correction": [
+      {"key": "X_cal", "aliases": ["X", "X_train"]},
+      "method",
+      {"key": "X_val", "aliases": ["X_test", "X_validation"]},
+      "nway_flag",
+      "direction",
+      "window_size"
+    ],
+    "smoothing": [
+      {"key": "X_cal", "aliases": ["X", "X_train"]},
+      "method",
+      {"key": "X_val", "aliases": ["X_test", "X_validation"]},
+      "nway_flag",
+      "direction",
+      "window_size",
+      "polyorder"
+    ],
     "center_and_normalize": ["X_cal", "X_val", "center", "normalize", "nway_flag", "direction"],
     "univariate_calibration": ["X_cal", "Y_cal", "X_val", "Y_val", "degree", "intercept", "cv_config"],
     "pca_analysis": ["X_cal", "X_val", "n_components", "cv_config", "axis_n_info", "class_data_cal", "class_data_val", "smp_cal", "smp_val"]
   },
   "import_map": {
+    "workflow_loop_start": ["builtins", "print"],
+    "workflow_loop_end": ["builtins", "print"],
+    "workflow_parallel_start": ["builtins", "print"],
+    "workflow_parallel_branch": ["builtins", "print"],
+    "workflow_parallel_end": ["builtins", "print"],
     "cv_configuration": ["chemometrics.cv_pipeline", "cv_configuration"],
     "load_data": ["chemometrics.data_input", "load_data"],
     "validation_data_main": ["chemometrics.validation_data_input", "validation_data_main"],
@@ -30,6 +70,21 @@
     "pca_analysis": ["chemometrics.pca_analysis", "pca_analysis"]
   },
   "gui_listing": {
+    "workflow_loop_start": {
+      "config_path": "gui_configs/workflow_loop_start_config.json"
+    },
+    "workflow_loop_end": {
+      "config_path": "gui_configs/workflow_loop_end_config.json"
+    },
+    "workflow_parallel_start": {
+      "config_path": "gui_configs/workflow_parallel_start_config.json"
+    },
+    "workflow_parallel_branch": {
+      "config_path": "gui_configs/workflow_parallel_branch_config.json"
+    },
+    "workflow_parallel_end": {
+      "config_path": "gui_configs/workflow_parallel_end_config.json"
+    },
     "cv_configuration": {
       "config_path": "gui_configs/cv_configuration_config.json"
     },
@@ -56,6 +111,23 @@
     }
   },
   "parameter_types": {
+    "workflow_loop_start": {
+      "iterations": "int",
+      "mode": "str",
+      "sweep_target": "str",
+      "sweep_values": "str",
+      "sweep_choice_values": "list",
+      "benchmark_source": "str",
+      "benchmark_nested_key": "str",
+      "benchmark_mode": "str",
+      "use_best_iteration": "bool"
+    },
+    "workflow_loop_end": {},
+    "workflow_parallel_start": {
+      "merge_strategy": "str"
+    },
+    "workflow_parallel_branch": {},
+    "workflow_parallel_end": {},
     "cv_configuration": {
       "use_cv": "bool",
       "cv_strategy": "str",

@@ -1,0 +1,13 @@
+{
+  "display_name": "Fim Paralelo",
+  "category": "Fluxo",
+  "data_type": "workflow",
+  "input_aliases": {},
+  "output_aliases": {},
+  "short_description": "Finaliza um bloco paralelo.",
+  "long_description": "Marca o fim do bloco paralelo atual.",
+  "setup": {
+    "categories": ["Paralelo"],
+    "layout": []
+  }
+}

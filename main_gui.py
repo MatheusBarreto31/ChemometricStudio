@@ -123,6 +123,13 @@ class ChemometricsGUI:
         self.function_configs: Dict[str, Dict[str, Any]] = {}  # {instance_alias: {param: value}}
         self.routing_lines: Dict[Tuple, str] = {}  # {(src_idx, src_output, dst_idx, dst_input): routing_info}
         self.selected_function_idx: Optional[int] = None  # Index in methodology_list
+        self.workflow_control_aliases = {
+            "workflow_loop_start",
+            "workflow_loop_end",
+            "workflow_parallel_start",
+            "workflow_parallel_branch",
+            "workflow_parallel_end"
+        }
         self.gui_configs: Dict[str, Dict] = {}  # {func_alias: config_data}
         self.notification_color_schemes: Dict[str, Dict[str, str]] = {
             "message": {"bg": "#D9EDF7", "fg": "#0288d1"},
@@ -830,10 +837,156 @@ class ChemometricsGUI:
         self.function_configs[instance_alias] = {}  # Initialize config for this instance
         
         new_func_idx = len(self.methodology_list) - 1
-        self.methodology_listbox.insert(tk.END, item_name)
+        self._refresh_methodology_listbox(selected_idx=new_func_idx)
         
         # Auto-create routing for inputs that match previous outputs
         self._auto_create_routing(new_func_idx, func_alias)
+
+    def _is_workflow_control(self, base_alias: str) -> bool:
+        return base_alias in self.workflow_control_aliases
+
+    def _get_workflow_scope_signature(self, target_idx: int) -> Tuple:
+        """Return active workflow scope signature before target index.
+
+        Signature includes loop/parallel nesting and current parallel branch so auto-routing
+        can be constrained to the same branch context.
+        """
+        active_stack = []
+        loop_counter = 0
+        parallel_counter = 0
+
+        for idx in range(max(0, target_idx)):
+            base_alias = self.function_base_aliases[idx] if idx < len(self.function_base_aliases) else ""
+            if base_alias == "workflow_loop_start":
+                loop_counter += 1
+                active_stack.append(("loop", loop_counter))
+            elif base_alias == "workflow_loop_end":
+                for stack_idx in range(len(active_stack) - 1, -1, -1):
+                    if active_stack[stack_idx][0] == "loop":
+                        active_stack.pop(stack_idx)
+                        break
+            elif base_alias == "workflow_parallel_start":
+                parallel_counter += 1
+                active_stack.append(("parallel", parallel_counter, 1))
+            elif base_alias == "workflow_parallel_branch":
+                for stack_idx in range(len(active_stack) - 1, -1, -1):
+                    if active_stack[stack_idx][0] == "parallel":
+                        p_type, p_id, p_branch = active_stack[stack_idx]
+                        active_stack[stack_idx] = (p_type, p_id, p_branch + 1)
+                        break
+            elif base_alias == "workflow_parallel_end":
+                for stack_idx in range(len(active_stack) - 1, -1, -1):
+                    if active_stack[stack_idx][0] == "parallel":
+                        active_stack.pop(stack_idx)
+                        break
+
+        return tuple(active_stack)
+
+    def _can_auto_route_between(self, src_idx: int, dst_idx: int) -> bool:
+        if src_idx < 0 or dst_idx < 0 or src_idx >= len(self.function_base_aliases) or dst_idx >= len(self.function_base_aliases):
+            return False
+        src_base = self.function_base_aliases[src_idx]
+        dst_base = self.function_base_aliases[dst_idx]
+        if self._is_workflow_control(src_base) or self._is_workflow_control(dst_base):
+            return False
+        src_scope = self._get_workflow_scope_signature(src_idx)
+        dst_scope = self._get_workflow_scope_signature(dst_idx)
+
+        # Same scope always allowed
+        if src_scope == dst_scope:
+            return True
+
+        # Allow routing from outer (upstream) scopes into nested inner scopes
+        # so functions inside loop/parallel blocks can receive inputs from previous functions.
+        if len(src_scope) <= len(dst_scope) and dst_scope[:len(src_scope)] == src_scope:
+            return True
+
+        # Reject sibling/cross-branch auto-routing by default.
+        return False
+
+    def _get_output_spec_keys(self, func_alias: str) -> List[str]:
+        return_specs = FUNCTION_SPECS.get("return_specs", {})
+        outputs = return_specs.get(func_alias, [])
+        keys = []
+        for entry in outputs:
+            if isinstance(entry, str):
+                keys.append(entry)
+            elif isinstance(entry, dict):
+                key = entry.get("key")
+                if key:
+                    keys.append(key)
+        return keys
+
+    def _get_input_spec_candidates(self, func_alias: str) -> List[Tuple[str, List[str]]]:
+        input_specs = FUNCTION_SPECS.get("input_specs", {})
+        inputs = input_specs.get(func_alias, [])
+        candidates: List[Tuple[str, List[str]]] = []
+        for entry in inputs:
+            if isinstance(entry, str):
+                candidates.append((entry, [entry]))
+            elif isinstance(entry, dict):
+                key = entry.get("key")
+                if not key:
+                    continue
+                alias_candidates = [key]
+                aliases = entry.get("aliases", [])
+                if isinstance(aliases, list):
+                    alias_candidates.extend([alias for alias in aliases if isinstance(alias, str) and alias])
+                candidates.append((key, alias_candidates))
+        return candidates
+
+    def _get_methodology_item_display(self, idx: int, depth: int) -> str:
+        instance_alias = self.methodology_list[idx]
+        base_alias = self.function_base_aliases[idx]
+        config = self.gui_configs.get(base_alias, {})
+        display_name = config.get("display_name", base_alias)
+        existing_count = self.function_base_aliases[:idx].count(base_alias)
+        if existing_count > 0:
+            display_name = f"{display_name} #{existing_count + 1}"
+
+        if base_alias == "workflow_loop_start":
+            text = f"┌ {display_name}"
+        elif base_alias == "workflow_loop_end":
+            text = f"└ {display_name}"
+        elif base_alias == "workflow_parallel_start":
+            text = f"┌ {display_name}"
+        elif base_alias == "workflow_parallel_branch":
+            text = f"├ {display_name}"
+        elif base_alias == "workflow_parallel_end":
+            text = f"└ {display_name}"
+        else:
+            text = display_name
+
+        indent = "    " * max(0, depth)
+        return f"{indent}{text}"
+
+    def _refresh_methodology_listbox(self, selected_idx: Optional[int] = None):
+        """Rebuild methodology list display with workflow indentation."""
+        if not hasattr(self, "methodology_listbox"):
+            return
+
+        self.methodology_listbox.delete(0, tk.END)
+        depth = 0
+
+        for idx, base_alias in enumerate(self.function_base_aliases):
+            if base_alias in ("workflow_loop_end", "workflow_parallel_end"):
+                depth = max(0, depth - 1)
+
+            if base_alias == "workflow_parallel_branch":
+                item_depth = max(0, depth - 1)
+            else:
+                item_depth = depth
+
+            self.methodology_listbox.insert(tk.END, self._get_methodology_item_display(idx, item_depth))
+
+            if base_alias in ("workflow_loop_start", "workflow_parallel_start"):
+                depth += 1
+
+        if selected_idx is not None and 0 <= selected_idx < len(self.methodology_list):
+            self.methodology_listbox.selection_clear(0, tk.END)
+            self.methodology_listbox.selection_set(selected_idx)
+            self.methodology_listbox.activate(selected_idx)
+            self.methodology_listbox.see(selected_idx)
     
     def _auto_create_routing(self, new_func_idx: int, new_func_alias: str):
         """Automatically create routing connections for parameters with matching names.
@@ -843,31 +996,37 @@ class ChemometricsGUI:
         """
         if new_func_idx == 0:
             return  # First function, no previous outputs to route from
+        if self._is_workflow_control(new_func_alias):
+            return
         
-        return_specs = FUNCTION_SPECS.get("return_specs", {})
-        input_specs = FUNCTION_SPECS.get("input_specs", {})
-        
-        new_func_inputs = input_specs.get(new_func_alias, [])
+        new_func_inputs = self._get_input_spec_candidates(new_func_alias)
         
         # Check each input parameter of the new function
-        for input_param in new_func_inputs:
+        for dst_param_key, input_candidates in new_func_inputs:
             # Find the immediately previous function that outputs this parameter
             for src_idx in range(new_func_idx - 1, -1, -1):  # Check backwards from newest to oldest
                 src_base_alias = self.function_base_aliases[src_idx]  # Get the base alias
-                src_outputs = return_specs.get(src_base_alias, [])
+                if not self._can_auto_route_between(src_idx, new_func_idx):
+                    continue
+                src_outputs = self._get_output_spec_keys(src_base_alias)
+                matched_src_param = None
+                for candidate in input_candidates:
+                    if candidate in src_outputs:
+                        matched_src_param = candidate
+                        break
                 
-                if input_param in src_outputs:
+                if matched_src_param:
                     # Found the most recent function with this output
                     # Create automatic routing connection
-                    key = (src_idx, input_param, new_func_idx, input_param)
+                    key = (src_idx, matched_src_param, new_func_idx, dst_param_key)
                     
                     # Only add if not already exists
                     if key not in self.routing_lines:
                         self.routing_lines[key] = {
                             "src_idx": src_idx,
-                            "src_param_key": input_param,
+                            "src_param_key": matched_src_param,
                             "dst_idx": new_func_idx,
-                            "dst_param_key": input_param,
+                            "dst_param_key": dst_param_key,
                             "auto_created": True
                         }
                     break  # Stop searching - we found the most recent source
@@ -913,7 +1072,6 @@ class ChemometricsGUI:
         selection = self.methodology_listbox.curselection()
         if selection:
             idx = selection[0]
-            self.methodology_listbox.delete(idx)
             instance_alias = self.methodology_list.pop(idx)
             self.function_base_aliases.pop(idx)
             
@@ -943,16 +1101,17 @@ class ChemometricsGUI:
                         self.routing_lines[new_key]["dst_idx"] = new_dst_idx
             
             self.selected_function_idx = None
+            self._refresh_methodology_listbox()
             self._clear_tab()
     
     def _clear_methodology(self):
         """Clear all methodology items."""
-        self.methodology_listbox.delete(0, tk.END)
         self.methodology_list.clear()
         self.function_base_aliases.clear()
         self.function_configs.clear()
         self.routing_lines.clear()
         self.selected_function_idx = None
+        self._refresh_methodology_listbox()
         self._clear_tab()
     
     def _build_control_bar(self, parent: ttk.Frame):
@@ -1277,23 +1436,8 @@ class ChemometricsGUI:
         self.function_configs = current_configs
         self.routing_lines = current_routing
         self.selected_function_idx = current_selected_idx
-        
-        # Rebuild methodology listbox with translated display names
-        self.methodology_listbox.delete(0, tk.END)
-        for idx, instance_alias in enumerate(self.methodology_list):
-            base_alias = self.function_base_aliases[idx]
-            config = self.gui_configs.get(base_alias, {})
-            display_name = config.get("display_name", base_alias)
-            
-            # Count previous instances of this base alias for suffix
-            existing_count = self.function_base_aliases[:idx].count(base_alias)
-            
-            if existing_count > 0:
-                item_name = f"{display_name} #{existing_count + 1}"
-            else:
-                item_name = display_name
-            
-            self.methodology_listbox.insert(tk.END, item_name)
+
+        self._refresh_methodology_listbox(selected_idx=current_selected_idx)
     
     def _show_setup_tab(self):
         """Show Setup tab with function configuration widgets."""
@@ -1378,6 +1522,7 @@ class ChemometricsGUI:
             self.function_configs[instance_alias] = {}
         
         func_config = self.function_configs[instance_alias]
+        locked_params = self._get_swept_param_locks_for_index(self.selected_function_idx)
         
         # Store widgets for visibility control
         visible_widgets = {}
@@ -1478,19 +1623,26 @@ class ChemometricsGUI:
                 
                 # Binding for KeyRelease: update visibility (value will be saved on FocusOut)
                 entry.bind("<KeyRelease>", lambda e, a=instance_alias, vw=visible_widgets, ch=category_headers: self._update_field_visibility(a, vw, ch))
+
+                if name in locked_params:
+                    entry.configure(state="disabled")
+                    lock_label = ttk.Label(input_container, text="Swept by loop", font=("Arial", 8, "italic"))
+                    lock_label.pack(anchor=tk.W, padx=20, pady=(0, 2))
                 
                 widget_data["widget"] = entry
                 
             elif widget_type == "combobox":
                 values = widget_spec.get("values", [])
                 value_aliases = widget_spec.get("value_aliases", values)  # Use values as fallback if no aliases
+                editable_combo = bool(widget_spec.get("editable", False))
                 
                 # Create mapping from alias to actual value
                 alias_to_value = dict(zip(value_aliases, values))
                 value_to_alias = dict(zip(values, value_aliases))
                 
                 # Display aliases in the combobox
-                combo = ttk.Combobox(input_container, values=value_aliases, width=37, state="readonly")
+                combo_state = "normal" if editable_combo else "readonly"
+                combo = ttk.Combobox(input_container, values=value_aliases, width=37, state=combo_state)
                 
                 # Get the current value
                 current_value = func_config.get(name, default if default else "")
@@ -1508,14 +1660,44 @@ class ChemometricsGUI:
                 combo.pack(anchor=tk.W, padx=20, pady=(0, 5))
                 
                 # Binding for ComboboxSelected: convert alias to actual value, then save and update visibility
-                def on_combo_selected(event, n=name, c_widget=combo, a=instance_alias, vw=visible_widgets, a2v=alias_to_value, ch=category_headers):
+                def on_combo_selected(event, n=name, c_widget=combo, a=instance_alias, vw=visible_widgets, ch=category_headers):
                     selected_alias = c_widget.get()
-                    actual_value = a2v.get(selected_alias, selected_alias)
+                    field_data = vw.get(n, {})
+                    a2v = field_data.get("alias_to_value", alias_to_value)
+                    if "," in selected_alias:
+                        mapped_parts = [a2v.get(part.strip(), part.strip()) for part in selected_alias.split(',') if part.strip()]
+                        actual_value = ",".join(str(part) for part in mapped_parts)
+                    else:
+                        actual_value = a2v.get(selected_alias, selected_alias)
                     self._save_widget_value(a, n, actual_value)
                     self._update_field_visibility(a, vw, ch)
+                    current_base_alias = self.function_base_aliases[self.selected_function_idx] if self.selected_function_idx is not None else ""
+                    if current_base_alias == "workflow_loop_start" and n in ("mode", "sweep_target", "benchmark_source"):
+                        self._refresh_workflow_setup_dynamic_options(a, current_base_alias, vw)
                 combo.bind("<<ComboboxSelected>>", on_combo_selected)
+
+                def on_combo_focus_out(event, n=name, c_widget=combo, a=instance_alias, vw=visible_widgets, ch=category_headers):
+                    if not editable_combo:
+                        return
+                    selected_alias = c_widget.get().strip()
+                    field_data = vw.get(n, {})
+                    a2v = field_data.get("alias_to_value", alias_to_value)
+                    if "," in selected_alias:
+                        mapped_parts = [a2v.get(part.strip(), part.strip()) for part in selected_alias.split(',') if part.strip()]
+                        actual_value = ",".join(str(part) for part in mapped_parts)
+                    else:
+                        actual_value = a2v.get(selected_alias, selected_alias)
+                    self._save_widget_value(a, n, actual_value)
+                    self._update_field_visibility(a, vw, ch)
+                combo.bind("<FocusOut>", on_combo_focus_out)
+
+                if name in locked_params:
+                    combo.configure(state="disabled")
+                    lock_label = ttk.Label(input_container, text="Swept by loop", font=("Arial", 8, "italic"))
+                    lock_label.pack(anchor=tk.W, padx=20, pady=(0, 2))
                 
                 widget_data["widget"] = combo
+                widget_data["alias_to_value"] = alias_to_value
                 widget_data["value_to_alias"] = value_to_alias  # Store for later reference if needed
                 
             elif widget_type == "checkbutton":
@@ -1527,9 +1709,55 @@ class ChemometricsGUI:
                 # Save the value immediately
                 self._save_widget_value(instance_alias, name, var.get())
                 check.pack(anchor=tk.W, padx=20, pady=(0, 5))
+
+                if name in locked_params:
+                    check.configure(state="disabled")
+                    lock_label = ttk.Label(input_container, text="Swept by loop", font=("Arial", 8, "italic"))
+                    lock_label.pack(anchor=tk.W, padx=20, pady=(0, 2))
                 
                 widget_data["widget"] = check
                 widget_data["variable"] = var
+
+            elif widget_type == "checklist":
+                checklist_frame = ttk.Frame(input_container)
+                checklist_frame.pack(anchor=tk.W, padx=20, pady=(0, 5), fill=tk.X)
+
+                values = [str(v) for v in widget_spec.get("values", [])]
+                value_aliases = [str(v) for v in widget_spec.get("value_aliases", values)]
+                save_to = widget_spec.get("save_to", name)
+                selected_values = func_config.get(save_to, [])
+                if isinstance(selected_values, str):
+                    selected_values = [segment.strip() for segment in selected_values.split(',') if segment.strip()]
+                if not isinstance(selected_values, list):
+                    selected_values = []
+                selected_set = {str(v) for v in selected_values}
+
+                check_vars = []
+                for actual_value, display_value in zip(values, value_aliases):
+                    var = tk.BooleanVar(value=actual_value in selected_set)
+                    chk = ttk.Checkbutton(checklist_frame, text=display_value, variable=var)
+                    chk.pack(anchor=tk.W, pady=(0, 2))
+                    check_vars.append((var, actual_value, chk))
+
+                def on_checklist_change(*_args, vars_with_values=check_vars, a=instance_alias, field=name, save_field=save_to):
+                    selected = [actual for var, actual, _widget in vars_with_values if var.get()]
+                    self._save_widget_value(a, field, selected)
+                    self._save_widget_value(a, save_field, ",".join(selected))
+
+                for var, _actual, _widget in check_vars:
+                    var.trace_add("write", on_checklist_change)
+
+                if name in locked_params:
+                    for _var, _actual, chk_widget in check_vars:
+                        chk_widget.configure(state="disabled")
+                    lock_label = ttk.Label(input_container, text="Swept by loop", font=("Arial", 8, "italic"))
+                    lock_label.pack(anchor=tk.W, padx=20, pady=(0, 2))
+
+                on_checklist_change()
+                widget_data["widget"] = check_vars
+                widget_data["save_to"] = save_to
+                widget_data["is_checklist"] = True
+                widget_data["checklist_frame"] = checklist_frame
                 
             elif widget_type == "file_selector":
                 file_frame = ttk.Frame(input_container)
@@ -1817,6 +2045,310 @@ class ChemometricsGUI:
         
         # Initial visibility update
         self._update_field_visibility(instance_alias, visible_widgets, category_headers)
+        self._refresh_workflow_setup_dynamic_options(instance_alias, base_alias, visible_widgets)
+
+    def _find_matching_control_end(self, start_idx: int, start_alias: str, end_alias: str) -> int:
+        depth = 0
+        for idx in range(start_idx, len(self.function_base_aliases)):
+            base_alias = self.function_base_aliases[idx]
+            if base_alias == start_alias:
+                depth += 1
+            elif base_alias == end_alias:
+                depth -= 1
+                if depth == 0:
+                    return idx
+        return -1
+
+    def _get_loop_body_indices(self, loop_start_idx: int) -> List[int]:
+        loop_end_idx = self._find_matching_control_end(loop_start_idx, "workflow_loop_start", "workflow_loop_end")
+        if loop_end_idx < 0:
+            return []
+        return list(range(loop_start_idx + 1, loop_end_idx))
+
+    def _get_swept_param_locks_for_index(self, target_idx: Optional[int]) -> set:
+        """Return parameter names controlled by enclosing loop sweep for given function index."""
+        locked = set()
+        if target_idx is None or target_idx < 0 or target_idx >= len(self.methodology_list):
+            return locked
+
+        target_instance = self.methodology_list[target_idx]
+        loop_stack: List[int] = []
+
+        for idx in range(target_idx + 1):
+            base_alias = self.function_base_aliases[idx]
+            if base_alias == "workflow_loop_start":
+                loop_stack.append(idx)
+            elif base_alias == "workflow_loop_end" and loop_stack:
+                loop_stack.pop()
+
+        for loop_idx in loop_stack:
+            loop_instance = self.methodology_list[loop_idx]
+            loop_cfg = self.function_configs.get(loop_instance, {})
+            loop_mode = str(loop_cfg.get("mode", ""))
+            if loop_mode not in ("sweep_numeric", "sweep_choice"):
+                continue
+
+            sweep_target = str(loop_cfg.get("sweep_target", "") or "").strip()
+            if not sweep_target or "." not in sweep_target:
+                continue
+            target_alias, target_param = sweep_target.split('.', 1)
+            if target_alias == target_instance and target_param:
+                locked.add(target_param)
+
+        return locked
+
+    def _get_widget_spec_by_name(self, base_alias: str, field_name: str) -> Optional[Dict[str, Any]]:
+        config = self.gui_configs.get(base_alias, {})
+        layout = config.get("setup", {}).get("layout", [])
+        for field in layout:
+            if field.get("name") == field_name:
+                return field
+        return None
+
+    def _set_setup_combobox_options(self, widget_data: Dict[str, Any], actual_values: List[str], display_values: List[str], selected_actual: Optional[str] = None):
+        combo = widget_data.get("widget")
+        if combo is None:
+            return
+        alias_to_value = dict(zip(display_values, actual_values))
+        value_to_alias = dict(zip(actual_values, display_values))
+        combo.configure(values=display_values)
+        widget_data["alias_to_value"] = alias_to_value
+        widget_data["value_to_alias"] = value_to_alias
+
+        if selected_actual:
+            combo.set(value_to_alias.get(selected_actual, selected_actual))
+        elif combo.get().strip() and combo.get().strip() in alias_to_value:
+            pass
+        else:
+            combo.set("")
+
+    def _set_setup_checklist_options(self, widget_data: Dict[str, Any], actual_values: List[str], display_values: List[str], selected_actual_values: List[str], instance_alias: str, field_name: str):
+        if not widget_data.get("is_checklist"):
+            return
+
+        checklist_frame = widget_data.get("checklist_frame")
+        if checklist_frame is None:
+            return
+
+        for child in checklist_frame.winfo_children():
+            child.destroy()
+
+        save_to = widget_data.get("save_to", field_name)
+        selected_set = {str(v) for v in (selected_actual_values or [])}
+        check_vars = []
+
+        for actual_value, display_value in zip(actual_values, display_values):
+            actual_str = str(actual_value)
+            var = tk.BooleanVar(value=actual_str in selected_set)
+            chk = ttk.Checkbutton(checklist_frame, text=str(display_value), variable=var)
+            chk.pack(anchor=tk.W, pady=(0, 2))
+            check_vars.append((var, actual_str, chk))
+
+        def on_checklist_change(*_args, vars_with_values=check_vars, a=instance_alias, field=field_name, save_field=save_to):
+            selected = [actual for var, actual, _widget in vars_with_values if var.get()]
+            self._save_widget_value(a, field, selected)
+            self._save_widget_value(a, save_field, ",".join(selected))
+
+        for var, _actual, _widget in check_vars:
+            var.trace_add("write", on_checklist_change)
+
+        on_checklist_change()
+        widget_data["widget"] = check_vars
+
+    def _refresh_workflow_setup_dynamic_options(self, instance_alias: str, base_alias: str, visible_widgets: Dict[str, Dict[str, Any]]):
+        """Populate dynamic combobox options for loop workflow controls."""
+        if base_alias != "workflow_loop_start":
+            return
+        if instance_alias not in self.methodology_list:
+            return
+
+        loop_start_idx = self.methodology_list.index(instance_alias)
+        body_indices = self._get_loop_body_indices(loop_start_idx)
+        if not body_indices:
+            return
+
+        current_mode = str(self.function_configs.get(instance_alias, {}).get("mode", "repeat"))
+
+        sweep_targets_actual: List[str] = []
+        sweep_targets_display: List[str] = []
+        target_meta: Dict[str, Dict[str, Any]] = {}
+
+        benchmark_actual: List[str] = []
+        benchmark_display: List[str] = []
+
+        parameter_types = FUNCTION_SPECS.get("parameter_types", {})
+        return_specs = FUNCTION_SPECS.get("return_specs", {})
+
+        for idx in body_indices:
+            body_instance = self.methodology_list[idx]
+            body_base = self.function_base_aliases[idx]
+            if self._is_workflow_control(body_base):
+                continue
+
+            body_config = self.gui_configs.get(body_base, {})
+            body_display = body_config.get("display_name", body_base)
+            layout = body_config.get("setup", {}).get("layout", [])
+            body_param_types = parameter_types.get(body_base, {})
+
+            for field in layout:
+                field_name = field.get("name")
+                field_widget = field.get("widget")
+                if not field_name:
+                    continue
+                if field.get("input_type", "user") != "user":
+                    continue
+
+                type_name = str(body_param_types.get(field_name, field.get("type", "str"))).lower()
+                is_numeric = type_name in ("int", "float") or field.get("type") in ("int", "float")
+                is_choice = field_widget == "combobox"
+
+                if current_mode == "sweep_numeric" and not is_numeric:
+                    continue
+                if current_mode == "sweep_choice" and not is_choice:
+                    continue
+                if current_mode not in ("sweep_numeric", "sweep_choice"):
+                    continue
+
+                target_value = f"{body_instance}.{field_name}"
+                target_label = field.get("label", field_name)
+                target_alias = f"{body_display} [{body_instance}] · {target_label}"
+
+                sweep_targets_actual.append(target_value)
+                sweep_targets_display.append(target_alias)
+
+                choice_values = field.get("values", []) if is_choice else []
+                choice_aliases = field.get("value_aliases", choice_values) if is_choice else []
+                target_meta[target_value] = {
+                    "is_choice": is_choice,
+                    "choice_values": [str(v) for v in choice_values],
+                    "choice_aliases": [str(v) for v in choice_aliases],
+                    "is_numeric": is_numeric
+                }
+
+            output_keys = return_specs.get(body_base, [])
+            for output_key in output_keys:
+                if isinstance(output_key, dict):
+                    output_key = output_key.get("key", "")
+                if not output_key:
+                    continue
+                actual = f"{body_instance}.{output_key}"
+                display = f"{body_display} [{body_instance}] · {output_key}"
+                benchmark_actual.append(actual)
+                benchmark_display.append(display)
+
+        sweep_target_data = visible_widgets.get("sweep_target")
+        benchmark_data = visible_widgets.get("benchmark_source")
+        benchmark_nested_data = visible_widgets.get("benchmark_nested_key")
+        sweep_values_data = visible_widgets.get("sweep_values")
+        sweep_choice_data = visible_widgets.get("sweep_choice_values")
+
+        selected_target_actual = self.function_configs.get(instance_alias, {}).get("sweep_target", "")
+
+        if sweep_target_data:
+            sweep_target_data["target_meta"] = target_meta
+            self._set_setup_combobox_options(
+                sweep_target_data,
+                sweep_targets_actual,
+                sweep_targets_display,
+                selected_actual=selected_target_actual
+            )
+
+        if benchmark_data:
+            selected_benchmark = self.function_configs.get(instance_alias, {}).get("benchmark_source", "")
+            self._set_setup_combobox_options(
+                benchmark_data,
+                benchmark_actual,
+                benchmark_display,
+                selected_actual=selected_benchmark
+            )
+
+        if benchmark_nested_data:
+            selected_benchmark_source = self.function_configs.get(instance_alias, {}).get("benchmark_source", "")
+            selected_nested_key = self.function_configs.get(instance_alias, {}).get("benchmark_nested_key", "")
+            nested_actual: List[str] = []
+            nested_display: List[str] = []
+
+            if isinstance(selected_benchmark_source, str) and "." in selected_benchmark_source:
+                source_instance, source_output = selected_benchmark_source.split(".", 1)
+
+                source_value = None
+                source_analysis = self.analysis_data.get(source_instance, {}) if hasattr(self, 'analysis_data') else {}
+                source_history = source_analysis.get('execution_history', []) if isinstance(source_analysis, dict) else []
+                if source_history and isinstance(source_history, list):
+                    latest_snapshot = source_history[-1]
+                    if isinstance(latest_snapshot, dict):
+                        latest_outputs = latest_snapshot.get('outputs', {})
+                        if isinstance(latest_outputs, dict):
+                            source_value = latest_outputs.get(source_output)
+
+                if source_value is None and isinstance(source_analysis, dict):
+                    fallback_outputs = source_analysis.get('execution_results', {}).get('outputs', {})
+                    if isinstance(fallback_outputs, dict):
+                        source_value = fallback_outputs.get(source_output)
+
+                def _collect_dict_paths(value, prefix=""):
+                    paths = []
+                    if isinstance(value, dict):
+                        for key, child in value.items():
+                            child_prefix = f"{prefix}.{key}" if prefix else str(key)
+                            paths.append(child_prefix)
+                            paths.extend(_collect_dict_paths(child, child_prefix))
+                    return paths
+
+                if isinstance(source_value, dict):
+                    nested_actual = _collect_dict_paths(source_value)
+                    nested_display = nested_actual.copy()
+
+            self._set_setup_combobox_options(
+                benchmark_nested_data,
+                nested_actual,
+                nested_display,
+                selected_actual=str(selected_nested_key) if selected_nested_key is not None else ""
+            )
+
+            hint_label = benchmark_nested_data.get("hint_label")
+            if not nested_actual:
+                if hint_label is None:
+                    hint_label = ttk.Label(
+                        benchmark_nested_data.get("container"),
+                        text=self.language_manager.translate(
+                            "ui.messages.run_to_discover_nested_keys",
+                            "Run the model once to discover nested keys automatically."
+                        ),
+                        font=("Arial", 8, "italic")
+                    )
+                    benchmark_nested_data["hint_label"] = hint_label
+                if not hint_label.winfo_ismapped():
+                    hint_label.pack(anchor=tk.W, padx=20, pady=(0, 2))
+            elif hint_label is not None and hint_label.winfo_exists() and hint_label.winfo_ismapped():
+                hint_label.pack_forget()
+
+        if sweep_values_data:
+            entry_widget = sweep_values_data.get("widget")
+            if entry_widget is not None and hasattr(entry_widget, "configure"):
+                entry_widget.configure(state="normal")
+
+        if sweep_choice_data:
+            selected_target_actual = self.function_configs.get(instance_alias, {}).get("sweep_target", "")
+            target_info = target_meta.get(selected_target_actual, {})
+            choice_values = target_info.get("choice_values", []) if target_info.get("is_choice") else []
+            choice_aliases = target_info.get("choice_aliases", choice_values) if target_info.get("is_choice") else []
+            current_sweep_raw = self.function_configs.get(instance_alias, {}).get("sweep_values", "")
+            if isinstance(current_sweep_raw, str):
+                selected_choice_values = [segment.strip() for segment in current_sweep_raw.split(',') if segment.strip()]
+            elif isinstance(current_sweep_raw, list):
+                selected_choice_values = [str(v) for v in current_sweep_raw]
+            else:
+                selected_choice_values = []
+
+            self._set_setup_checklist_options(
+                sweep_choice_data,
+                [str(v) for v in choice_values],
+                [str(v) for v in choice_aliases],
+                selected_choice_values,
+                instance_alias,
+                "sweep_choice_values"
+            )
     
     def _save_widget_value(self, func_alias: str, param_name: str, value: Any):
         """Save widget value to function config."""
@@ -2275,6 +2807,15 @@ class ChemometricsGUI:
                                              state="readonly", width=30)
         self.input_func_combo.pack(fill=tk.X)
         self.input_func_combo.bind("<<ComboboxSelected>>", lambda e: self._on_input_func_selected())
+
+        nested_frame = ttk.Frame(routing_frame)
+        nested_frame.pack(fill=tk.X, pady=(0, 8))
+        ttk.Label(
+            nested_frame,
+            text=self.language_manager.translate("ui.messages.routing_nested_key", "Optional source nested key (e.g., metrics.rmse):")
+        ).pack(side=tk.LEFT, padx=(0, 6))
+        self.routing_nested_key_var = tk.StringVar(value="")
+        ttk.Entry(nested_frame, textvariable=self.routing_nested_key_var, width=40).pack(side=tk.LEFT)
         
         # Populate function dropdowns
         self._populate_function_dropdowns()
@@ -2330,6 +2871,8 @@ class ChemometricsGUI:
         
         for idx, instance_alias in enumerate(self.methodology_list):
             base_alias = self.function_base_aliases[idx]
+            if self._is_workflow_control(base_alias):
+                continue
             func_config = self.gui_configs.get(base_alias, {})
             display_name = func_config.get("display_name", base_alias)
             
@@ -2593,7 +3136,8 @@ class ChemometricsGUI:
                 "dst_param_key": dst_param_key,
                 "dst_param_name": dst_param_name,
                 "src_display": src_display,
-                "dst_display": dst_display
+                "dst_display": dst_display,
+                "src_nested_key": self.routing_nested_key_var.get().strip() if hasattr(self, "routing_nested_key_var") else ""
             }
         
         self.selected_button = None
@@ -2756,6 +3300,8 @@ class ChemometricsGUI:
                 }
         
         analysis_info = self.analysis_data[instance_alias]
+        self._ensure_analysis_result_selection(instance_alias)
+        analysis_info = self.analysis_data[instance_alias]
         
         # Create top control bar
         control_frame = ttk.Frame(self.tab_content_frame)
@@ -2771,6 +3317,28 @@ class ChemometricsGUI:
             font=("Arial", 11, "bold")
         )
         title.pack(side=tk.LEFT, padx=5)
+
+        history_entries_for_hint = analysis_info.get('execution_history', [])
+        has_loop_context = any(
+            isinstance(entry, dict) and bool((entry.get('history_context', {}) or {}).get('loop_path'))
+            for entry in history_entries_for_hint
+        )
+        has_parallel_context = any(
+            isinstance(entry, dict) and bool((entry.get('history_context', {}) or {}).get('parallel_path'))
+            for entry in history_entries_for_hint
+        )
+        if has_loop_context or has_parallel_context:
+            hint_parts = []
+            if has_loop_context:
+                hint_parts.append("⟳ Loop Context")
+            if has_parallel_context:
+                hint_parts.append("⎇ Branch Context")
+            context_hint = ttk.Label(
+                control_frame,
+                text="  •  " + " | ".join(hint_parts),
+                font=("Arial", 9, "italic")
+            )
+            context_hint.pack(side=tk.LEFT, padx=3)
         
         # Run to here button
         run_btn = ttk.Button(control_frame, text="🠊 " + self.language_manager.translate("ui.buttons.run_to_here", "Run to here"), 
@@ -2832,9 +3400,11 @@ class ChemometricsGUI:
                 visible_page_idx = i
                 break
         
-        # Page navigation frame (bottom) - PACK THIS FIRST so it doesn't get pushed off screen
+        # Navigation frame (bottom): page navigation row + result navigation row
         nav_frame = ttk.Frame(self.tab_content_frame)
         nav_frame.pack(fill=tk.X, padx=10, pady=(0, 10), side=tk.BOTTOM)
+        page_nav_row = ttk.Frame(nav_frame)
+        page_nav_row.pack(fill=tk.X)
         
         # Page display label (first)
         if visible_pages:
@@ -2845,17 +3415,67 @@ class ChemometricsGUI:
             page_info = self.language_manager.translate("ui.messages.no_pages_available", "No pages available")
         
         # Previous page button
-        prev_btn = ttk.Button(nav_frame, text="← " + self.language_manager.translate("ui.buttons.previous", "Previous"), width=10,
-                             command=lambda: self._switch_analysis_page_relative(instance_alias, -1))
+        prev_btn = ttk.Button(page_nav_row, text="← " + self.language_manager.translate("ui.buttons.previous", "Previous"), width=10,
+                     command=lambda: self._switch_analysis_page_relative(instance_alias, -1))
         prev_btn.pack(side=tk.LEFT, padx=2)
         
         # Next page button
-        next_btn = ttk.Button(nav_frame, text=self.language_manager.translate("ui.buttons.next", "Next") + " →", width=10,
+        next_btn = ttk.Button(page_nav_row, text=self.language_manager.translate("ui.buttons.next", "Next") + " →", width=10,
                              command=lambda: self._switch_analysis_page_relative(instance_alias, 1))
         next_btn.pack(side=tk.LEFT, padx=2)
         
-        page_label = ttk.Label(nav_frame, text=page_info, font=("Arial", 9))
+        page_label = ttk.Label(page_nav_row, text=page_info, font=("Arial", 9))
         page_label.pack(side=tk.LEFT, padx=10)
+
+        # Result/cycle/branch navigation (under page controls)
+        history_entries = analysis_info.get('execution_history', [])
+        has_contextual_history = any(
+            bool((entry.get('history_context', {}) or {}).get('loop_path')) or
+            bool((entry.get('history_context', {}) or {}).get('parallel_path'))
+            for entry in history_entries
+            if isinstance(entry, dict)
+        )
+        if history_entries and has_contextual_history:
+            result_nav_row = ttk.Frame(nav_frame)
+            result_nav_row.pack(fill=tk.X, pady=(6, 0))
+
+            result_prev_btn = ttk.Button(
+                result_nav_row,
+                text="← " + self.language_manager.translate("ui.buttons.previous", "Previous"),
+                width=10,
+                command=lambda: self._switch_analysis_result_relative(instance_alias, -1)
+            )
+            result_prev_btn.pack(side=tk.LEFT, padx=2)
+
+            result_next_btn = ttk.Button(
+                result_nav_row,
+                text=self.language_manager.translate("ui.buttons.next", "Next") + " →",
+                width=10,
+                command=lambda: self._switch_analysis_result_relative(instance_alias, 1)
+            )
+            result_next_btn.pack(side=tk.LEFT, padx=2)
+
+            ttk.Label(
+                result_nav_row,
+                text=self.language_manager.translate("ui.messages.result_selector", "Cycle/Branch:"),
+                font=("Arial", 9)
+            ).pack(side=tk.LEFT, padx=(10, 6))
+
+            result_options = [
+                self._build_analysis_result_label(entry, idx, len(history_entries))
+                for idx, entry in enumerate(history_entries)
+            ]
+            current_result_idx = analysis_info.get('current_result_idx', 0)
+            current_result_idx = max(0, min(current_result_idx, len(history_entries) - 1))
+            result_combo = ttk.Combobox(
+                result_nav_row,
+                state="readonly",
+                values=result_options,
+                width=52
+            )
+            result_combo.current(current_result_idx)
+            result_combo.bind("<<ComboboxSelected>>", lambda e, ia=instance_alias, cb=result_combo: self._on_analysis_result_selected(ia, cb))
+            result_combo.pack(side=tk.LEFT, padx=4)
         
         # Main content area - PACK THIS AFTER so it expands into remaining space
         content_frame = ttk.Frame(self.tab_content_frame)
@@ -2917,6 +3537,145 @@ class ChemometricsGUI:
         new_page_idx = visible_pages[new_visible_idx][0]
         self.analysis_data[instance_alias]['current_page'] = new_page_idx
         self._show_analysis_tab()
+
+    def _ensure_analysis_result_selection(self, instance_alias: str):
+        """Ensure execution_results reflects the selected history snapshot for this instance."""
+        if instance_alias not in self.analysis_data:
+            return
+
+        analysis_info = self.analysis_data[instance_alias]
+        history_entries = analysis_info.get('execution_history', [])
+
+        if not history_entries:
+            if 'current_result_idx' in analysis_info:
+                del analysis_info['current_result_idx']
+            return
+
+        current_idx = analysis_info.get('current_result_idx', 0)
+        if current_idx < 0:
+            current_idx = 0
+        if current_idx >= len(history_entries):
+            current_idx = len(history_entries) - 1
+
+        analysis_info['current_result_idx'] = current_idx
+        selected_snapshot = history_entries[current_idx]
+        if isinstance(selected_snapshot, dict):
+            analysis_info['execution_results'] = selected_snapshot.copy()
+
+    def _get_sweep_value_display_alias(self, sweep_target: str, sweep_value: Any) -> str:
+        """Map a sweep value to the target field alias (value_aliases) when available."""
+        if sweep_value is None:
+            return ""
+
+        raw_text = str(sweep_value)
+        if not isinstance(sweep_target, str) or "." not in sweep_target:
+            return raw_text
+
+        target_instance, target_param = sweep_target.split('.', 1)
+        if not target_instance or not target_param:
+            return raw_text
+
+        try:
+            if target_instance not in self.methodology_list:
+                return raw_text
+            target_idx = self.methodology_list.index(target_instance)
+            if target_idx < 0 or target_idx >= len(self.function_base_aliases):
+                return raw_text
+
+            target_base_alias = self.function_base_aliases[target_idx]
+            field_spec = self._get_widget_spec_by_name(target_base_alias, target_param)
+            if not isinstance(field_spec, dict):
+                return raw_text
+
+            values = field_spec.get("values", [])
+            value_aliases = field_spec.get("value_aliases", values)
+            if not isinstance(values, list) or not isinstance(value_aliases, list):
+                return raw_text
+
+            value_to_alias = {str(v): str(a) for v, a in zip(values, value_aliases)}
+            return value_to_alias.get(raw_text, raw_text)
+        except Exception:
+            return raw_text
+
+    def _build_analysis_result_label(self, history_entry: dict, position: int, total: int) -> str:
+        context = history_entry.get('history_context', {}) if isinstance(history_entry, dict) else {}
+        loop_path = context.get('loop_path', []) if isinstance(context, dict) else []
+        parallel_path = context.get('parallel_path', []) if isinstance(context, dict) else []
+
+        context_parts = []
+        if loop_path:
+            loop_segments = []
+            for entry in loop_path:
+                base_text = f"⟳{entry.get('loop_id', '?')}:C{entry.get('iteration', '?')}"
+                sweep_value = entry.get('sweep_value')
+                if sweep_value is not None and str(sweep_value) != "":
+                    sweep_target = str(entry.get('sweep_target', '') or '')
+                    sweep_display = self._get_sweep_value_display_alias(sweep_target, sweep_value)
+                    base_text += f" ({sweep_display})"
+                loop_segments.append(base_text)
+            loop_desc = ", ".join(loop_segments)
+            context_parts.append(loop_desc)
+        if parallel_path:
+            parallel_desc = ", ".join([
+                f"⎇{entry.get('parallel_id', '?')}:B{entry.get('branch', '?')}"
+                for entry in parallel_path
+            ])
+            context_parts.append(parallel_desc)
+
+        context_text = " | ".join(context_parts) if context_parts else "Base"
+        return f"R{position + 1} — {context_text}"
+
+    def _clear_instance_analysis_runtime_cache(self, instance_alias: str):
+        if instance_alias not in self.analysis_data:
+            return
+        runtime_keys = [
+            'graph_slices',
+            'table_slices',
+            'graph_canvases',
+            'graph_control_frames',
+            'graph_data_metadata',
+            'table_state'
+        ]
+        for key in runtime_keys:
+            if key in self.analysis_data[instance_alias]:
+                del self.analysis_data[instance_alias][key]
+
+    def _set_analysis_result_index(self, instance_alias: str, result_idx: int):
+        if instance_alias not in self.analysis_data:
+            return
+
+        analysis_info = self.analysis_data[instance_alias]
+        history_entries = analysis_info.get('execution_history', [])
+        if not history_entries:
+            return
+
+        result_idx = max(0, min(result_idx, len(history_entries) - 1))
+        analysis_info['current_result_idx'] = result_idx
+        analysis_info['execution_results'] = history_entries[result_idx].copy()
+        self._clear_instance_analysis_runtime_cache(instance_alias)
+        self._show_analysis_tab()
+
+    def _switch_analysis_result_relative(self, instance_alias: str, direction: int):
+        if instance_alias not in self.analysis_data:
+            return
+
+        analysis_info = self.analysis_data[instance_alias]
+        history_entries = analysis_info.get('execution_history', [])
+        if not history_entries:
+            return
+
+        current_idx = analysis_info.get('current_result_idx', 0)
+        target_idx = max(0, min(current_idx + direction, len(history_entries) - 1))
+        self._set_analysis_result_index(instance_alias, target_idx)
+
+    def _on_analysis_result_selected(self, instance_alias: str, combo_widget: ttk.Combobox):
+        try:
+            selected_idx = combo_widget.current()
+        except Exception:
+            selected_idx = -1
+        if selected_idx is None or selected_idx < 0:
+            return
+        self._set_analysis_result_index(instance_alias, selected_idx)
     
     def _evaluate_condition(self, instance_alias: str, condition: dict) -> bool:
         """Evaluate a condition against execution inputs.
@@ -3466,8 +4225,8 @@ class ChemometricsGUI:
             if 'aux_axis' in config:
                 # Get data source to check if we need 4D+ initialization
                 data_source_check = config.get('z_axis', {}).get('data_source')
-                if data_source_check and data_source_check in outputs:
-                    data_check = outputs[data_source_check]
+                data_check = self._get_data_from_source(outputs, data_source_check) if data_source_check else None
+                if data_check is not None:
                     if isinstance(data_check, np.ndarray) and data_check.ndim >= 4:
                         # Initialize md_combo_index if not present
                         if 'md_combo_index' not in current_slice:
@@ -3528,8 +4287,8 @@ class ChemometricsGUI:
                     axis_config_temp = config.get('y_axis', {}) or config.get('x_axis', {})
                     data_source_temp = axis_config_temp.get('data_source')
                 
-                if data_source_temp and data_source_temp in outputs:
-                    data_temp = outputs[data_source_temp]
+                data_temp = self._get_data_from_source(outputs, data_source_temp) if data_source_temp else None
+                if data_temp is not None:
                     if isinstance(data_temp, np.ndarray):
                         # For heatmaps, we display 2 dimensions (x, y) and navigate through others
                         # Combo size is always 2 regardless of how many dimensions are specified
@@ -3551,8 +4310,8 @@ class ChemometricsGUI:
                 labels = []
                 if isinstance(labels_config, str):
                     # labels is a variable name - look it up in outputs
-                    if labels_config in outputs:
-                        label_data = outputs[labels_config]
+                    label_data = self._get_data_from_source(outputs, labels_config)
+                    if label_data is not None:
                         if isinstance(label_data, (list, np.ndarray)):
                             labels = [str(lbl) for lbl in label_data]
                 elif isinstance(labels_config, list):
@@ -3736,8 +4495,8 @@ class ChemometricsGUI:
                     ds_class_data = None
                     if 'class_labels' in dataset_cfg:
                         class_source = dataset_cfg['class_labels']
-                        if class_source in outputs:
-                            class_val = outputs[class_source]
+                        class_val = self._get_data_from_source(outputs, class_source)
+                        if class_val is not None:
                             if isinstance(class_val, (list, np.ndarray)):
                                 ds_class_data = np.array(class_val)
                     
@@ -3765,8 +4524,8 @@ class ChemometricsGUI:
             # If main plot has class_labels config, treat it as a dataset for proper class coloring with qualitative colormap
             if 'class_labels' in config and graph_type == 'scatter' and x_data is not None and y_data is not None:
                 class_source = config['class_labels']
-                if class_source in outputs:
-                    class_val = outputs[class_source]
+                class_val = self._get_data_from_source(outputs, class_source)
+                if class_val is not None:
                     if isinstance(class_val, (list, np.ndarray)):
                         main_class_data = np.array(class_val)
                         
@@ -3901,11 +4660,26 @@ class ChemometricsGUI:
             # This will be handled specially - return marker to caller
             return "__index__"
         
-        # Get the base data from outputs
+        # Get the base data from outputs with prefixed/unprefixed compatibility
         if data_source not in outputs:
-            return None
-        
-        data = outputs[data_source]
+            source_key = str(data_source) if data_source is not None else ""
+            fallback_keys = []
+            if source_key.startswith('in.') or source_key.startswith('out.'):
+                fallback_keys.append(source_key.split('.', 1)[1])
+            elif source_key:
+                fallback_keys.extend([f"out.{source_key}", f"in.{source_key}"])
+
+            data = None
+            found = False
+            for key in fallback_keys:
+                if key in outputs:
+                    data = outputs[key]
+                    found = True
+                    break
+            if not found:
+                return None
+        else:
+            data = outputs[data_source]
         
         # If no nested key, return the base data
         if not nested_key:
@@ -3949,6 +4723,47 @@ class ChemometricsGUI:
 
             inputs = execution_results.get('inputs', {})
             outputs = execution_results.get('outputs', {})
+            inherited_inputs = {}
+            if instance_alias:
+                try:
+                    inherited_inputs = self._resolve_inherited_upstream_outputs(instance_alias, execution_results)
+                except Exception:
+                    inherited_inputs = {}
+
+            def _add_prefixed_aliases() -> None:
+                if isinstance(inputs, dict):
+                    for key, value in inputs.items():
+                        combined_sources[f"in.{key}"] = value
+                    if instance_alias and instance_alias in inputs and isinstance(inputs[instance_alias], dict):
+                        for key, value in inputs[instance_alias].items():
+                            combined_sources[f"in.{key}"] = value
+
+                if instance_alias:
+                    try:
+                        routed_inputs = self._resolve_routed_inputs(instance_alias)
+                        if isinstance(routed_inputs, dict):
+                            for key, value in routed_inputs.items():
+                                combined_sources[f"in.{key}"] = value
+                    except Exception:
+                        pass
+
+                if isinstance(inherited_inputs, dict):
+                    for key, value in inherited_inputs.items():
+                        combined_sources.setdefault(f"in.{key}", value)
+
+                if isinstance(outputs, dict):
+                    for key, value in outputs.items():
+                        combined_sources[f"out.{key}"] = value
+                    if instance_alias and instance_alias in outputs and isinstance(outputs[instance_alias], dict):
+                        for key, value in outputs[instance_alias].items():
+                            combined_sources[f"out.{key}"] = value
+
+                for key, value in list(combined_sources.items()):
+                    if not isinstance(key, str):
+                        continue
+                    if key.startswith('in.') or key.startswith('out.'):
+                        continue
+                    combined_sources.setdefault(f"in.{key}", value)
 
             if isinstance(inputs, dict):
                 combined_sources.update(inputs)
@@ -3961,10 +4776,16 @@ class ChemometricsGUI:
                 except Exception:
                     pass
 
+            if isinstance(inherited_inputs, dict):
+                for key, value in inherited_inputs.items():
+                    combined_sources.setdefault(key, value)
+
             if isinstance(outputs, dict):
                 combined_sources.update(outputs)
                 if instance_alias and instance_alias in outputs and isinstance(outputs[instance_alias], dict):
                     combined_sources.update(outputs[instance_alias])
+
+            _add_prefixed_aliases()
 
             return combined_sources
         except Exception:
@@ -4013,15 +4834,116 @@ class ChemometricsGUI:
 
                 src_outputs = src_exec.get('outputs', {})
                 src_inputs = src_exec.get('inputs', {})
+                src_nested_key = routing_info.get('src_nested_key', '') if isinstance(routing_info, dict) else ''
+
+                def _extract_nested(value, nested_key: str):
+                    if not nested_key:
+                        return value
+                    current = value
+                    for part in str(nested_key).split('.'):
+                        if isinstance(current, dict) and part in current:
+                            current = current[part]
+                        else:
+                            return None
+                    return current
 
                 if isinstance(src_outputs, dict) and src_param_key in src_outputs:
-                    resolved_inputs[dst_param_key] = src_outputs[src_param_key]
+                    extracted_value = _extract_nested(src_outputs[src_param_key], src_nested_key)
+                    if extracted_value is not None:
+                        resolved_inputs[dst_param_key] = extracted_value
                 elif isinstance(src_inputs, dict) and src_param_key in src_inputs:
-                    resolved_inputs[dst_param_key] = src_inputs[src_param_key]
+                    extracted_value = _extract_nested(src_inputs[src_param_key], src_nested_key)
+                    if extracted_value is not None:
+                        resolved_inputs[dst_param_key] = extracted_value
             except Exception:
                 continue
 
         return resolved_inputs
+
+    def _resolve_inherited_upstream_outputs(self, instance_alias: str, target_execution_results: Optional[dict] = None) -> dict:
+        """Resolve inherited upstream outputs for contextual analysis rendering.
+
+        Uses the best matching upstream execution snapshot for the target history context.
+        """
+        inherited = {}
+
+        if instance_alias not in self.methodology_list:
+            return inherited
+
+        dst_idx = self.methodology_list.index(instance_alias)
+        target_context = {}
+        if isinstance(target_execution_results, dict):
+            target_context = target_execution_results.get('history_context', {}) or {}
+
+        def _pick_contextual_execution(src_instance_alias: str) -> dict:
+            analysis_info = self.analysis_data.get(src_instance_alias, {})
+            history_entries = analysis_info.get('execution_history', [])
+            if not isinstance(history_entries, list) or not history_entries:
+                exec_result = analysis_info.get('execution_results', {})
+                return exec_result if isinstance(exec_result, dict) else {}
+
+            target_loop = target_context.get('loop_path', []) if isinstance(target_context, dict) else []
+            target_parallel = target_context.get('parallel_path', []) if isinstance(target_context, dict) else []
+
+            def _score(entry: dict) -> int:
+                if not isinstance(entry, dict):
+                    return -1
+                ctx = entry.get('history_context', {}) or {}
+                loop_path = ctx.get('loop_path', []) if isinstance(ctx, dict) else []
+                parallel_path = ctx.get('parallel_path', []) if isinstance(ctx, dict) else []
+
+                if loop_path == target_loop and parallel_path == target_parallel:
+                    return 4
+                if (
+                    isinstance(loop_path, list)
+                    and isinstance(target_loop, list)
+                    and len(loop_path) <= len(target_loop)
+                    and target_loop[:len(loop_path)] == loop_path
+                    and parallel_path == target_parallel
+                ):
+                    return 3
+                if (
+                    isinstance(parallel_path, list)
+                    and isinstance(target_parallel, list)
+                    and len(parallel_path) <= len(target_parallel)
+                    and target_parallel[:len(parallel_path)] == parallel_path
+                ):
+                    return 2
+                if not loop_path and not parallel_path:
+                    return 1
+                return 0
+
+            best_entry = None
+            best_score = -1
+            for entry in history_entries:
+                score = _score(entry)
+                if score > best_score:
+                    best_score = score
+                    best_entry = entry
+
+            if isinstance(best_entry, dict):
+                return best_entry
+
+            exec_result = analysis_info.get('execution_results', {})
+            return exec_result if isinstance(exec_result, dict) else {}
+
+        for src_idx in range(dst_idx):
+            try:
+                if hasattr(self, '_can_auto_route_between') and not self._can_auto_route_between(src_idx, dst_idx):
+                    continue
+
+                src_instance_alias = self.methodology_list[src_idx]
+                src_exec = _pick_contextual_execution(src_instance_alias)
+                if src_exec.get('status') != 'success':
+                    continue
+
+                src_outputs = src_exec.get('outputs', {})
+                if isinstance(src_outputs, dict):
+                    inherited.update(src_outputs)
+            except Exception:
+                continue
+
+        return inherited
     
     def _extract_axis_data(self, outputs: dict, axis_config: dict, indices: dict = None, ref_data: np.ndarray = None) -> Optional[np.ndarray]:
         """Extract data for an axis from execution outputs, supporting nested dictionary access and row indices.
@@ -4978,8 +5900,8 @@ Count:
             config = metadata.get('config', {})
             
             # For aux_axis configs, re-extract z_data from the raw source to ensure we have full dimensional data
-            if 'aux_axis' in config and z_data_source and z_data_source in outputs:
-                z_data_raw = outputs[z_data_source]
+            z_data_raw = self._get_data_from_source(outputs, z_data_source) if ('aux_axis' in config and z_data_source) else None
+            if z_data_raw is not None:
                 if isinstance(z_data_raw, np.ndarray):
                     z_data = z_data_raw  # Use the full raw data instead of the sliced version
             
@@ -5022,16 +5944,16 @@ Count:
                             labels = []
                             if isinstance(labels_config, str):
                                 # labels is a variable name
-                                if labels_config in outputs:
-                                    label_data = outputs[labels_config]
+                                label_data = self._get_data_from_source(outputs, labels_config)
+                                if label_data is not None:
                                     if isinstance(label_data, (list, np.ndarray)):
                                         labels = [str(lbl) for lbl in label_data]
                             elif isinstance(labels_config, list):
                                 labels = labels_config
                             
                             # Extract axis data from data_source
-                            if data_source and data_source in outputs:
-                                axis_data_full = outputs[data_source]
+                            axis_data_full = self._get_data_from_source(outputs, data_source) if data_source else None
+                            if axis_data_full is not None:
                                 if isinstance(axis_data_full, list):
                                     # x-axis uses first dimension in active combination
                                     if len(md_active_dims) > 0:
@@ -5108,8 +6030,8 @@ Count:
                 
                 # Check if config has class_labels field
                 class_labels_source = config.get('class_labels')
-                if class_labels_source and class_labels_source in outputs:
-                    class_val = outputs[class_labels_source]
+                class_val = self._get_data_from_source(outputs, class_labels_source) if class_labels_source else None
+                if class_val is not None:
                     if isinstance(class_val, (list, np.ndarray)):
                         class_data = np.array(class_val)
                         if class_data.ndim > 1:
@@ -5118,8 +6040,8 @@ Count:
                 else:
                     # Try common class label sources
                     for class_source in ['class_data_cal', 'class_data_val', 'class_labels', 'class_data']:
-                        if class_source in outputs:
-                            class_val = outputs[class_source]
+                        class_val = self._get_data_from_source(outputs, class_source)
+                        if class_val is not None:
                             if isinstance(class_val, (list, np.ndarray)):
                                 class_data = np.array(class_val)
                                 if class_data.ndim > 1:
@@ -5981,8 +6903,8 @@ Count:
                     axis_config_temp = config.get('y_axis', {}) or config.get('x_axis', {})
                     data_source_temp = axis_config_temp.get('data_source')
                 
-                if data_source_temp and data_source_temp in outputs:
-                    data_temp = outputs[data_source_temp]
+                data_temp = self._get_data_from_source(outputs, data_source_temp) if data_source_temp else None
+                if data_temp is not None:
                     if isinstance(data_temp, np.ndarray):
                         # For heatmaps, we display 2 dimensions (x, y) and navigate through others
                         combo_size = 2
@@ -6003,8 +6925,8 @@ Count:
                 labels = []
                 if isinstance(labels_config, str):
                     # labels is a variable name - look it up in outputs
-                    if labels_config in outputs:
-                        label_data = outputs[labels_config]
+                    label_data = self._get_data_from_source(outputs, labels_config)
+                    if label_data is not None:
                         if isinstance(label_data, (list, np.ndarray)):
                             labels = [str(lbl) for lbl in label_data]
                 elif isinstance(labels_config, list):
@@ -6187,8 +7109,8 @@ Count:
                     ds_class_data = None
                     if 'class_labels' in dataset_cfg:
                         class_source = dataset_cfg['class_labels']
-                        if class_source in outputs:
-                            class_val = outputs[class_source]
+                        class_val = self._get_data_from_source(outputs, class_source)
+                        if class_val is not None:
                             if isinstance(class_val, (list, np.ndarray)):
                                 ds_class_data = np.array(class_val)
                     
@@ -6216,8 +7138,8 @@ Count:
             # If main plot has class_labels config, treat it as a dataset for proper class coloring with qualitative colormap
             if 'class_labels' in config and graph_type == 'scatter' and x_data is not None and y_data is not None:
                 class_source = config['class_labels']
-                if class_source in outputs:
-                    class_val = outputs[class_source]
+                class_val = self._get_data_from_source(outputs, class_source)
+                if class_val is not None:
                     if isinstance(class_val, (list, np.ndarray)):
                         main_class_data = np.array(class_val)
                         
@@ -6595,6 +7517,7 @@ Count:
                 entry.get('instance_alias'): entry.get('execution_time', 0.0)
                 for entry in (timing_report.get('function_timings', []) if timing_report else [])
             }
+            execution_history_by_instance = timing_report.get('execution_history_by_instance', {}) if timing_report else {}
 
             # Store execution results in analysis data for ALL executed functions
             # (not just the selected one), so functions before it can also display their results
@@ -6629,15 +7552,25 @@ Count:
                 
                 # Get outputs for this function instance
                 function_outputs = outputs.get(func_instance_alias, {}) if outputs else {}
+                history_entries = copy.deepcopy(execution_history_by_instance.get(func_instance_alias, []))
                 
-                # Store the outputs from the execution
-                self.analysis_data[func_instance_alias]['execution_results'] = {
-                    'status': 'success',
-                    'timestamp': datetime.now().isoformat(),
-                    'execution_time': execution_time_by_instance.get(func_instance_alias, 0.0),
-                    'outputs': function_outputs,
-                    'inputs': input_parameters  # Store the input parameters for condition evaluation
-                }
+                if history_entries:
+                    self.analysis_data[func_instance_alias]['execution_history'] = history_entries
+                    selected_history_idx = 0
+                    self.analysis_data[func_instance_alias]['current_result_idx'] = selected_history_idx
+                    self.analysis_data[func_instance_alias]['execution_results'] = history_entries[selected_history_idx].copy()
+                else:
+                    self.analysis_data[func_instance_alias]['execution_results'] = {
+                        'status': 'success',
+                        'timestamp': datetime.now().isoformat(),
+                        'execution_time': execution_time_by_instance.get(func_instance_alias, 0.0),
+                        'outputs': function_outputs,
+                        'inputs': input_parameters
+                    }
+                    self.analysis_data[func_instance_alias]['execution_history'] = [
+                        self.analysis_data[func_instance_alias]['execution_results'].copy()
+                    ]
+                    self.analysis_data[func_instance_alias]['current_result_idx'] = 0
 
             self._store_timing_report(
                 run_type_label=self.language_manager.translate("ui.buttons.run_to_here", "Run to here"),
@@ -8182,6 +9115,7 @@ Count:
                     dst_param_key = conn_info.get("dst_param_key", key[3] if isinstance(key, tuple) and len(key) > 3 else "")
                     src_param_name = conn_info.get("src_param_name", src_param_key)
                     dst_param_name = conn_info.get("dst_param_name", dst_param_key)
+                    src_nested_key = conn_info.get("src_nested_key", "")
                     auto_created = conn_info.get("auto_created", False)
                     
                     # Get function instance aliases from methodology list
@@ -8193,7 +9127,8 @@ Count:
                             "source": {
                                 "instance_alias": src_instance_alias,
                                 "param_key": src_param_key,
-                                "param_name": src_param_name
+                                "param_name": src_param_name,
+                                "nested_key": src_nested_key
                             },
                             "destination": {
                                 "instance_alias": dst_instance_alias,
@@ -8277,7 +9212,9 @@ Count:
                 self.analysis_data[instance_alias] = {
                     'pages': config_data.get('pages', []),
                     'current_page': config_data.get('current_page', 0),
-                    'execution_results': {}  # Will be populated on demand
+                    'execution_results': {},
+                    'execution_history': [],
+                    'current_result_idx': 0
                 }
         except Exception as e:
             print(f"Warning: Failed to deserialize analysis data: {e}")
@@ -8799,6 +9736,7 @@ Count:
             src_param = src_info.get('param_key', '')
             dst_param = dst_info.get('param_key', '')
             src_param_name = src_info.get('param_name', src_param)
+            src_nested_key = src_info.get('nested_key', '')
             dst_param_name = dst_info.get('param_name', dst_param)
             
             # Find indices
@@ -8811,6 +9749,7 @@ Count:
                     "src_idx": src_idx,
                     "src_param_key": src_param,
                     "src_param_name": src_param_name,
+                    "src_nested_key": src_nested_key,
                     "dst_idx": dst_idx,
                     "dst_param_key": dst_param,
                     "dst_param_name": dst_param_name,
@@ -8848,6 +9787,10 @@ Count:
             for instance_alias in self.analysis_data:
                 if 'execution_results' in self.analysis_data[instance_alias]:
                     del self.analysis_data[instance_alias]['execution_results']
+                if 'execution_history' in self.analysis_data[instance_alias]:
+                    del self.analysis_data[instance_alias]['execution_history']
+                if 'current_result_idx' in self.analysis_data[instance_alias]:
+                    del self.analysis_data[instance_alias]['current_result_idx']
                 # Clear graph_slices to prevent stale dimension indices
                 if 'graph_slices' in self.analysis_data[instance_alias]:
                     del self.analysis_data[instance_alias]['graph_slices']
@@ -8867,24 +9810,7 @@ Count:
     
     def _refresh_gui_from_config(self):
         """Refresh GUI to reflect loaded configuration."""
-        # Rebuild methodology listbox
-        self.methodology_listbox.delete(0, tk.END)
-        
-        # Re-add methodology items with translated display names
-        for idx, instance_alias in enumerate(self.methodology_list):
-            base_alias = self.function_base_aliases[idx]
-            config = self.gui_configs.get(base_alias, {})
-            display_name = config.get("display_name", base_alias)
-            
-            # Count previous instances of this base alias for suffix
-            existing_count = self.function_base_aliases[:idx].count(base_alias)
-            
-            if existing_count > 0:
-                item_name = f"{display_name} #{existing_count + 1}"
-            else:
-                item_name = display_name
-            
-            self.methodology_listbox.insert(tk.END, item_name)
+        self._refresh_methodology_listbox()
         
         # Clear setup tab
         self._clear_tab()
@@ -8948,6 +9874,7 @@ Count:
                 entry.get('instance_alias'): entry.get('execution_time', 0.0)
                 for entry in (timing_report.get('function_timings', []) if timing_report else [])
             }
+            execution_history_by_instance = timing_report.get('execution_history_by_instance', {}) if timing_report else {}
 
             for idx, instance_alias in enumerate(self.methodology_list):
                 base_alias = self.function_base_aliases[idx]
@@ -8975,15 +9902,25 @@ Count:
                 
                 # Get input parameters from function_configs for condition evaluation
                 input_parameters = self.function_configs.get(instance_alias, {}).copy()
+                history_entries = copy.deepcopy(execution_history_by_instance.get(instance_alias, []))
                 
-                # Store the outputs from the execution
-                self.analysis_data[instance_alias]['execution_results'] = {
-                    'status': 'success',
-                    'timestamp': datetime.now().isoformat(),
-                    'execution_time': execution_time_by_instance.get(instance_alias, 0.0),
-                    'outputs': outputs.get(instance_alias, {}) if outputs else {},
-                    'inputs': input_parameters  # Store the input parameters for condition evaluation
-                }
+                if history_entries:
+                    self.analysis_data[instance_alias]['execution_history'] = history_entries
+                    selected_history_idx = 0
+                    self.analysis_data[instance_alias]['current_result_idx'] = selected_history_idx
+                    self.analysis_data[instance_alias]['execution_results'] = history_entries[selected_history_idx].copy()
+                else:
+                    self.analysis_data[instance_alias]['execution_results'] = {
+                        'status': 'success',
+                        'timestamp': datetime.now().isoformat(),
+                        'execution_time': execution_time_by_instance.get(instance_alias, 0.0),
+                        'outputs': outputs.get(instance_alias, {}) if outputs else {},
+                        'inputs': input_parameters
+                    }
+                    self.analysis_data[instance_alias]['execution_history'] = [
+                        self.analysis_data[instance_alias]['execution_results'].copy()
+                    ]
+                    self.analysis_data[instance_alias]['current_result_idx'] = 0
 
             self._store_timing_report(
                 run_type_label=self.language_manager.translate("ui.buttons.run_model", "Run Model"),

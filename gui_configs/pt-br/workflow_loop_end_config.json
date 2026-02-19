@@ -1,0 +1,13 @@
+{
+  "display_name": "Fim do Loop",
+  "category": "Fluxo",
+  "data_type": "workflow",
+  "input_aliases": {},
+  "output_aliases": {},
+  "short_description": "Finaliza um bloco de loop.",
+  "long_description": "Marca o fim do bloco de loop atual.",
+  "setup": {
+    "categories": ["Loop"],
+    "layout": []
+  }
+}

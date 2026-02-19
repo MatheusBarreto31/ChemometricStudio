@@ -107,7 +107,11 @@ class AddGraphDialog:
         if execution_results.get('status') != 'success':
             return None
         if hasattr(self.main_gui, '_get_execution_data_sources'):
-            return self.main_gui._get_execution_data_sources(execution_results, self.instance_alias)
+            combined_sources = self.main_gui._get_execution_data_sources(execution_results, self.instance_alias)
+            if not isinstance(combined_sources, dict):
+                combined_sources = {}
+            self._append_prefixed_data_sources(combined_sources, execution_results)
+            return combined_sources
 
         inputs = execution_results.get('inputs', {})
         outputs = execution_results.get('outputs', {})
@@ -116,7 +120,55 @@ class AddGraphDialog:
             combined_sources.update(inputs)
         if isinstance(outputs, dict):
             combined_sources.update(outputs)
+        self._append_prefixed_data_sources(combined_sources, execution_results)
         return combined_sources
+
+    def _append_prefixed_data_sources(self, combined_sources: Dict[str, Any], execution_results: Dict[str, Any]) -> None:
+        """Add explicit in./out. aliases while preserving unprefixed precedence behavior."""
+        if not isinstance(combined_sources, dict) or not isinstance(execution_results, dict):
+            return
+
+        inputs = execution_results.get('inputs', {})
+        outputs = execution_results.get('outputs', {})
+
+        if isinstance(inputs, dict):
+            for key, value in inputs.items():
+                combined_sources[f"in.{key}"] = value
+            if self.instance_alias in inputs and isinstance(inputs[self.instance_alias], dict):
+                for key, value in inputs[self.instance_alias].items():
+                    combined_sources[f"in.{key}"] = value
+
+        if hasattr(self.main_gui, '_resolve_routed_inputs'):
+            try:
+                routed_inputs = self.main_gui._resolve_routed_inputs(self.instance_alias)
+                if isinstance(routed_inputs, dict):
+                    for key, value in routed_inputs.items():
+                        combined_sources[f"in.{key}"] = value
+            except Exception:
+                pass
+
+        if hasattr(self.main_gui, '_resolve_inherited_upstream_outputs'):
+            try:
+                inherited_inputs = self.main_gui._resolve_inherited_upstream_outputs(self.instance_alias)
+                if isinstance(inherited_inputs, dict):
+                    for key, value in inherited_inputs.items():
+                        combined_sources.setdefault(f"in.{key}", value)
+            except Exception:
+                pass
+
+        if isinstance(outputs, dict):
+            for key, value in outputs.items():
+                combined_sources[f"out.{key}"] = value
+            if self.instance_alias in outputs and isinstance(outputs[self.instance_alias], dict):
+                for key, value in outputs[self.instance_alias].items():
+                    combined_sources[f"out.{key}"] = value
+
+        for key, value in list(combined_sources.items()):
+            if not isinstance(key, str):
+                continue
+            if key.startswith('in.') or key.startswith('out.'):
+                continue
+            combined_sources.setdefault(f"in.{key}", value)
     
     def _find_empty_sections(self) -> List[Tuple[int, int, str]]:
         """Find all empty sections in the current analysis pages.

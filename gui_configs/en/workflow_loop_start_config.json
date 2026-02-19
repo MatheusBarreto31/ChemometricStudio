@@ -1,0 +1,140 @@
+{
+  "display_name": "Loop Start",
+  "category": "Workflow",
+  "data_type": "workflow",
+  "input_aliases": {
+    "iterations": "Iterations",
+    "mode": "Loop Mode",
+    "sweep_target": "Sweep Target",
+    "sweep_values": "Sweep Values",
+    "benchmark_source": "Benchmark Source",
+    "benchmark_nested_key": "Benchmark Nested Key",
+    "benchmark_mode": "Benchmark Mode",
+    "use_best_iteration": "Use Best Iteration"
+  },
+  "output_aliases": {},
+  "short_description": "Start a loop block.",
+  "long_description": "Controls repeated execution of functions between Loop Start and Loop End.",
+  "setup": {
+    "categories": ["Loop"],
+    "layout": [
+      {
+        "name": "iterations",
+        "label": "Iterations",
+        "category": "Loop",
+        "widget": "entry",
+        "type": "int",
+        "default": "3",
+        "required": true,
+        "input_type": "user",
+        "visible_if": {"mode": ["repeat", "feedback"]},
+        "tooltip": "How many times to execute the loop body"
+      },
+      {
+        "name": "mode",
+        "label": "Mode",
+        "category": "Loop",
+        "widget": "combobox",
+        "values": ["repeat", "feedback", "sweep_numeric", "sweep_choice"],
+        "value_aliases": ["Repeat", "Feedback", "Sweep (Numeric)", "Sweep (Choice)"],
+        "default": "repeat",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "repeat/feedback rerun body; sweep modes update one parameter each iteration"
+      },
+      {
+        "name": "sweep_target",
+        "label": "Sweep Target (instance.param)",
+        "category": "Loop",
+        "widget": "combobox",
+        "editable": false,
+        "values": [],
+        "value_aliases": [],
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {"mode": ["sweep_numeric", "sweep_choice"]},
+        "tooltip": "Example: smoothing.window_size"
+      },
+      {
+        "name": "sweep_values",
+        "label": "Sweep Values",
+        "category": "Loop",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {"mode": ["sweep_numeric"]},
+        "tooltip": "Numeric: 0:2:6, 0:3, 0-3, or comma list."
+      },
+      {
+        "name": "sweep_choice_values",
+        "label": "Sweep Choice Values",
+        "category": "Loop",
+        "widget": "checklist",
+        "values": [],
+        "value_aliases": [],
+        "save_to": "sweep_values",
+        "type": "list",
+        "default": [],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {"mode": ["sweep_choice"]},
+        "tooltip": "Select one or more choice values to include in sweep."
+      },
+      {
+        "name": "benchmark_source",
+        "label": "Benchmark Source (instance.output)",
+        "category": "Loop",
+        "widget": "combobox",
+        "editable": false,
+        "values": [],
+        "value_aliases": [],
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Example: pca_analysis.metrics"
+      },
+      {
+        "name": "benchmark_nested_key",
+        "label": "Benchmark Nested Key (for dict outputs)",
+        "category": "Loop",
+        "widget": "combobox",
+        "editable": true,
+        "values": [],
+        "value_aliases": [],
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Optional nested key path for dict benchmark outputs (e.g., rmse or scores.mean)."
+      },
+      {
+        "name": "benchmark_mode",
+        "label": "Benchmark Mode",
+        "category": "Loop",
+        "widget": "combobox",
+        "values": ["min", "max"],
+        "value_aliases": ["Min", "Max"],
+        "default": "min",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Choose lower-is-better (min) or higher-is-better (max)"
+      },
+      {
+        "name": "use_best_iteration",
+        "label": "Keep Best Iteration Outputs",
+        "category": "Loop",
+        "widget": "checkbutton",
+        "type": "bool",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "If enabled, final outputs after loop come from the best benchmarked iteration"
+      }
+    ]
+  }
+}

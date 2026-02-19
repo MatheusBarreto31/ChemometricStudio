@@ -1,0 +1,140 @@
+{
+  "display_name": "Início do Loop",
+  "category": "Fluxo",
+  "data_type": "workflow",
+  "input_aliases": {
+    "iterations": "Ciclos",
+    "mode": "Modo do Loop",
+    "sweep_target": "Alvo do Sweep",
+    "sweep_values": "Valores do Sweep",
+    "benchmark_source": "Fonte de Benchmark",
+    "benchmark_nested_key": "Chave Aninhada do Benchmark",
+    "benchmark_mode": "Modo do Benchmark",
+    "use_best_iteration": "Usar Melhor Ciclo"
+  },
+  "output_aliases": {},
+  "short_description": "Inicia um bloco de loop.",
+  "long_description": "Controla a execução repetida das funções entre Início do Loop e Fim do Loop.",
+  "setup": {
+    "categories": ["Loop"],
+    "layout": [
+      {
+        "name": "iterations",
+        "label": "Ciclos",
+        "category": "Loop",
+        "widget": "entry",
+        "type": "int",
+        "default": "3",
+        "required": true,
+        "input_type": "user",
+        "visible_if": {"mode": ["repeat", "feedback"]},
+        "tooltip": "Quantidade de vezes que o corpo do loop será executado"
+      },
+      {
+        "name": "mode",
+        "label": "Modo",
+        "category": "Loop",
+        "widget": "combobox",
+        "values": ["repeat", "feedback", "sweep_numeric", "sweep_choice"],
+        "value_aliases": ["Repetir", "Feedback", "Sweep (Numérico)", "Sweep (Escolha)"],
+        "default": "repeat",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "repeat/feedback reexecutam o bloco; modos sweep alteram um parâmetro por ciclo"
+      },
+      {
+        "name": "sweep_target",
+        "label": "Alvo do Sweep (instancia.param)",
+        "category": "Loop",
+        "widget": "combobox",
+        "editable": false,
+        "values": [],
+        "value_aliases": [],
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {"mode": ["sweep_numeric", "sweep_choice"]},
+        "tooltip": "Exemplo: smoothing.window_size"
+      },
+      {
+        "name": "sweep_values",
+        "label": "Valores do Sweep",
+        "category": "Loop",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {"mode": ["sweep_numeric"]},
+        "tooltip": "Numérico: 0:2:6, 0:3, 0-3, ou lista por vírgula."
+      },
+      {
+        "name": "sweep_choice_values",
+        "label": "Valores de Escolha do Sweep",
+        "category": "Loop",
+        "widget": "checklist",
+        "values": [],
+        "value_aliases": [],
+        "save_to": "sweep_values",
+        "type": "list",
+        "default": [],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {"mode": ["sweep_choice"]},
+        "tooltip": "Selecione um ou mais valores de escolha para incluir no sweep."
+      },
+      {
+        "name": "benchmark_source",
+        "label": "Fonte de Benchmark (instancia.saida)",
+        "category": "Loop",
+        "widget": "combobox",
+        "editable": false,
+        "values": [],
+        "value_aliases": [],
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Exemplo: pca_analysis.metrics"
+      },
+      {
+        "name": "benchmark_nested_key",
+        "label": "Chave Aninhada do Benchmark (saídas dict)",
+        "category": "Loop",
+        "widget": "combobox",
+        "editable": true,
+        "values": [],
+        "value_aliases": [],
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Caminho de chave opcional para saídas dict (ex.: rmse ou scores.mean)."
+      },
+      {
+        "name": "benchmark_mode",
+        "label": "Modo do Benchmark",
+        "category": "Loop",
+        "widget": "combobox",
+        "values": ["min", "max"],
+        "value_aliases": ["Mínimo", "Máximo"],
+        "default": "min",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Escolha menor-é-melhor (min) ou maior-é-melhor (max)"
+      },
+      {
+        "name": "use_best_iteration",
+        "label": "Usar Saídas do Melhor Ciclo",
+        "category": "Loop",
+        "widget": "checkbutton",
+        "type": "bool",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Se ativado, as saídas finais após o loop virão do melhor ciclo"
+      }
+    ]
+  }
+}

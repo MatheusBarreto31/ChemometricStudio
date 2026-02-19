@@ -1,0 +1,13 @@
+{
+  "display_name": "Loop End",
+  "category": "Workflow",
+  "data_type": "workflow",
+  "input_aliases": {},
+  "output_aliases": {},
+  "short_description": "End a loop block.",
+  "long_description": "Marks the end of the current loop block.",
+  "setup": {
+    "categories": ["Loop"],
+    "layout": []
+  }
+}

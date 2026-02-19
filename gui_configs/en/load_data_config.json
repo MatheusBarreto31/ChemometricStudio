@@ -251,7 +251,7 @@
             "config": {
               "graph_type": "line",
               "x_axis": {"data_source": "axis_n_info", "index": 1, "label": "dim_labels", "l_index": 1},
-              "y_axis": {"data_source": "X_cal", "label": "Intensity"},
+              "y_axis": {"data_source": "out.X_cal", "label": "Intensity"},
               "title": "Spectral Data Overview",
               "dimension_labels": "dim_labels",
               "variable_labels": "axis_t_info",

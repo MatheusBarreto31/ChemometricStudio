@@ -87,5 +87,109 @@
         "tooltip": "Automatically inherited from Load Data function"
       }
     ]
+  },
+  "analysis": {
+    "pages": [
+      {
+        "title": "Baseline Correction Comparison",
+        "layout": "ew",
+        "condition": {"parameter": "nway_flag", "operator": "==", "value": "1"},
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "y_axis": {"data_source": "in.X_cal", "label": "Intensity"},
+              "title": "Original Spectra",
+              "dimension_labels": "in.dim_labels"
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "y_axis": {"data_source": "out.X_cal", "label": "Intensity"},
+              "title": "Processed Spectra",
+              "dimension_labels": "in.dim_labels"
+            }
+          }
+        ]
+      },
+      {
+        "title": "Baseline Correction Comparison",
+        "layout": "ew",
+        "condition": {"parameter": "nway_flag", "operator": "==", "value": "2"},
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "contour",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 2, "label": "in.dim_labels", "l_index": 2},
+              "y_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "z_axis": {"data_source": "in.X_cal", "label": "Intensity"},
+              "title": "Original Spectra",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "contour",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 2, "label": "in.dim_labels", "l_index": 2},
+              "y_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "z_axis": {"data_source": "out.X_cal", "label": "Intensity"},
+              "title": "Processed Spectra",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Baseline Correction Comparison",
+        "layout": "ew",
+        "condition": {"parameter": "nway_flag", "operator": ">", "value": "2"},
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "aux_axis": {
+                "data_source": "in.axis_n_info",
+                "labels": "in.dim_labels"
+              },
+              "z_axis": {"data_source": "in.X_cal", "label": "Intensity"},
+              "title": "Original Spectra",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}],
+              "show_md_menu": true
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "aux_axis": {
+                "data_source": "in.axis_n_info",
+                "labels": "in.dim_labels"
+              },
+              "z_axis": {"data_source": "out.X_cal", "label": "Intensity"},
+              "title": "Processed Spectra",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}],
+              "show_md_menu": true
+            }
+          }
+        ]
+      }
+    ],
+    "current_page": 0
   }
 }

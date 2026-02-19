@@ -1,0 +1,28 @@
+{
+  "display_name": "Início Paralelo",
+  "category": "Fluxo",
+  "data_type": "workflow",
+  "input_aliases": {
+    "merge_strategy": "Estratégia de Mesclagem"
+  },
+  "output_aliases": {},
+  "short_description": "Inicia um bloco paralelo.",
+  "long_description": "Funções entre Início Paralelo e Fim Paralelo rodam em ramos independentes separados por Ramo Paralelo.",
+  "setup": {
+    "categories": ["Paralelo"],
+    "layout": [
+      {
+        "name": "merge_strategy",
+        "label": "Estratégia de Mesclagem",
+        "category": "Paralelo",
+        "widget": "combobox",
+        "values": ["merge", "keep_last"],
+        "value_aliases": ["Mesclar Saídas dos Ramos", "Manter Saídas do Último Ramo"],
+        "default": "merge",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "merge mantém saídas de todos os ramos por alias; keep_last aplica só o último ramo"
+      }
+    ]
+  }
+}
