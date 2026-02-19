@@ -14,6 +14,10 @@
     "X_cal": "X Cal (Processed)",
     "X_val": "X Val (Processed)"
   },
+  "output_synonyms": {
+    "X_cal": ["X", "X_train"],
+    "X_val": ["X_test", "X_validation"]
+  },
   "short_description": "Centers and/or normalizes spectroscopic data",
   "long_description": "Preprocessing step that centers and/or normalizes data to improve model performance. Essential preparation for multivariate calibration methods.\n\nCentering:\n- Subtracts column means from all samples\n- Removes baseline/offset effects\n- Centers data around zero\n- Recommended for most applications\n\nNormalization (Autoscaling):\n- Divides by column standard deviations\n- Scales each variable to unit variance\n- Gives equal weight to all variables\n- Important when variables have different scales/units\n- Particularly useful for spectroscopic data\n\nCombination Effects:\n\nCentering Only:\n- Removes offset differences between samples\n- Preserves variance structure\n- Good when variables are on same scale\n\nNormalization Only (rare):\n- Without centering, less common\n- Useful for specific data distributions\n\nBoth Centering + Normalization (recommended):\n- Standard preprocessing for chemometrics\n- Equal treatment of all variables\n- Improves model stability and interpretability\n- Required for most PLS and PCR applications\n\nMultiway Data:\n- Works with 2D, 3D, and higher dimensional data\n- Direction parameter specifies axis\n- Default direction (-1) applies along last axis\n\nNote: Validation data will be transformed using calibration statistics during modeling.",
   "setup": {
@@ -87,55 +91,104 @@
   "analysis": {
     "pages": [
       {
-        "title": "Preprocessing Comparison",
+        "title": "Center & Normalize Comparison",
         "layout": "ew",
+        "condition": {"parameter": "nway_flag", "operator": "==", "value": "1"},
         "sections": [
           {
             "type": "graph",
             "config": {
-              "graph_type": "scatter",
-              "x_axis": {"data_source": "X_cal", "label": "Variables"},
-              "y_axis": {"data_source": "X_cal", "label": "Intensity"},
-              "title": "Original Data",
-              "data_slicing": ["Samples"]
+              "graph_type": "line",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "y_axis": {"data_source": "in.X_cal", "label": "Intensity"},
+              "title": "Original Spectra",
+              "dimension_labels": "in.dim_labels"
             }
           },
           {
             "type": "graph",
             "config": {
-              "graph_type": "scatter",
-              "x_axis": {"data_source": "X_cal", "label": "Variables"},
-              "y_axis": {"data_source": "X_cal", "label": "Intensity"},
-              "title": "Processed Data",
-              "data_slicing": ["Samples"]
+              "graph_type": "line",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "y_axis": {"data_source": "out.X_cal", "label": "Intensity"},
+              "title": "Processed Spectra",
+              "dimension_labels": "in.dim_labels"
             }
           }
         ]
       },
       {
-        "title": "Statistics",
-        "layout": "fd",
+        "title": "Center & Normalize Comparison",
+        "layout": "ew",
+        "condition": {"parameter": "nway_flag", "operator": "==", "value": "2"},
         "sections": [
           {
-            "type": "table",
+            "type": "graph",
             "config": {
-              "data_source": "X_cal",
-              "decimal_places": 6,
-              "max_rows": 20,
-              "title": "Original Statistics"
+              "graph_type": "contour",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 2, "label": "in.dim_labels", "l_index": 2},
+              "y_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "z_axis": {"data_source": "in.X_cal", "label": "Intensity"},
+              "title": "Original Spectra",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}]
             }
           },
           {
-            "type": "table",
+            "type": "graph",
             "config": {
-              "data_source": "X_cal",
-              "decimal_places": 6,
-              "max_rows": 20,
-              "title": "Processed Statistics"
+              "graph_type": "contour",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 2, "label": "in.dim_labels", "l_index": 2},
+              "y_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "z_axis": {"data_source": "out.X_cal", "label": "Intensity"},
+              "title": "Processed Spectra",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}]
             }
           },
           {"type": null},
           {"type": null}
+        ]
+      },
+      {
+        "title": "Center & Normalize Comparison",
+        "layout": "ew",
+        "condition": {"parameter": "nway_flag", "operator": ">", "value": "2"},
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "aux_axis": {
+                "data_source": "in.axis_n_info",
+                "labels": "in.dim_labels"
+              },
+              "z_axis": {"data_source": "in.X_cal", "label": "Intensity"},
+              "title": "Original Spectra",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}],
+              "show_md_menu": true
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "aux_axis": {
+                "data_source": "in.axis_n_info",
+                "labels": "in.dim_labels"
+              },
+              "z_axis": {"data_source": "out.X_cal", "label": "Intensity"},
+              "title": "Processed Spectra",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}],
+              "show_md_menu": true
+            }
+          }
         ]
       }
     ],

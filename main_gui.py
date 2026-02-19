@@ -923,6 +923,39 @@ class ChemometricsGUI:
                     keys.append(key)
         return keys
 
+    def _get_output_synonym_to_key_map(self, func_alias: str) -> Dict[str, str]:
+        """Return optional output synonym mapping for a function.
+
+        Expected optional format in function-specific JSON config:
+        {
+          "output_synonyms": {
+            "output_key": ["syn1", "syn2"]
+          }
+        }
+        """
+        config = self.gui_configs.get(func_alias, {})
+        output_synonyms = config.get("output_synonyms", {})
+        if not isinstance(output_synonyms, dict):
+            return {}
+
+        valid_output_keys = set(self._get_output_spec_keys(func_alias))
+        synonym_to_key: Dict[str, str] = {}
+
+        for output_key, synonyms in output_synonyms.items():
+            if output_key not in valid_output_keys:
+                continue
+            if not isinstance(synonyms, list):
+                continue
+            for synonym in synonyms:
+                if not isinstance(synonym, str):
+                    continue
+                normalized = synonym.strip()
+                if not normalized:
+                    continue
+                synonym_to_key.setdefault(normalized, output_key)
+
+        return synonym_to_key
+
     def _get_input_spec_candidates(self, func_alias: str) -> List[Tuple[str, List[str]]]:
         input_specs = FUNCTION_SPECS.get("input_specs", {})
         inputs = input_specs.get(func_alias, [])
@@ -1016,10 +1049,20 @@ class ChemometricsGUI:
                     continue
                 src_outputs = self._get_output_spec_keys(src_base_alias)
                 matched_src_param = None
+
+                # Phase 1: direct output-name match
                 for candidate in input_candidates:
                     if candidate in src_outputs:
                         matched_src_param = candidate
                         break
+
+                # Phase 2: optional synonym match for this same source function
+                if not matched_src_param:
+                    synonym_to_key = self._get_output_synonym_to_key_map(src_base_alias)
+                    for candidate in input_candidates:
+                        if candidate in synonym_to_key:
+                            matched_src_param = synonym_to_key[candidate]
+                            break
                 
                 if matched_src_param:
                     # Found the most recent function with this output
@@ -9592,6 +9635,27 @@ Count:
                 path_params.append(param.get("name"))
         
         return path_params
+
+    def _extract_source_file_metadata(self, file_path: Path) -> Dict[str, Any]:
+        """Extract portable metadata for a source file."""
+        abs_path = file_path.resolve()
+        metadata: Dict[str, Any] = {
+            "file_path": str(abs_path),
+            "file_name": abs_path.name,
+            "file_stem": abs_path.stem,
+            "file_extension": abs_path.suffix
+        }
+        try:
+            stat_info = abs_path.stat()
+            metadata["file_size_bytes"] = stat_info.st_size
+            metadata["created_time"] = datetime.fromtimestamp(stat_info.st_ctime).isoformat()
+            metadata["modified_time"] = datetime.fromtimestamp(stat_info.st_mtime).isoformat()
+        except OSError:
+            metadata["file_size_bytes"] = None
+            metadata["created_time"] = None
+            metadata["modified_time"] = None
+
+        return metadata
     
     def _save_model_with_data(self, dialog):
         """Save model with calibration data to .mdcd file."""
@@ -9622,6 +9686,7 @@ Count:
                 
                 # Process model.json: collect all file paths and copy them
                 files_to_copy = []
+                packaged_source_metadata: Dict[str, Dict[str, Any]] = {}
                 
                 # Process each function's parameters
                 for func_entry in model_data.get('functions', []):
@@ -9655,7 +9720,9 @@ Count:
                                                 src_file = Path(file_path)
                                                 if src_file.exists():
                                                     files_to_copy.append(src_file)
-                                                    nested_paths.append(f"tempfiles/{src_file.name}")
+                                                    temp_ref = f"tempfiles/{src_file.name}"
+                                                    nested_paths.append(temp_ref)
+                                                    packaged_source_metadata[temp_ref] = self._extract_source_file_metadata(src_file)
                                                 else:
                                                     nested_paths.append(file_path)
                                             else:
@@ -9665,7 +9732,9 @@ Count:
                                         src_file = Path(item)
                                         if src_file.exists():
                                             files_to_copy.append(src_file)
-                                            new_paths.append(f"tempfiles/{src_file.name}")
+                                            temp_ref = f"tempfiles/{src_file.name}"
+                                            new_paths.append(temp_ref)
+                                            packaged_source_metadata[temp_ref] = self._extract_source_file_metadata(src_file)
                                         else:
                                             new_paths.append(item)
                                     else:
@@ -9675,7 +9744,12 @@ Count:
                                 src_file = Path(param_value)
                                 if src_file.exists():
                                     files_to_copy.append(src_file)
-                                    params[param_name] = f"tempfiles/{src_file.name}"
+                                    temp_ref = f"tempfiles/{src_file.name}"
+                                    params[param_name] = temp_ref
+                                    packaged_source_metadata[temp_ref] = self._extract_source_file_metadata(src_file)
+
+                if packaged_source_metadata:
+                    model_data["packaged_source_metadata"] = packaged_source_metadata
                 
                 # Write modified model.json
                 model_tmpfile = tmpdir_path / "model.json"
@@ -9686,7 +9760,7 @@ Count:
                 files_dir = tmpdir_path / "files"
                 files_dir.mkdir(exist_ok=True)
                 for src_file in files_to_copy:
-                    shutil.copy(src_file, files_dir / src_file.name)
+                    shutil.copy2(src_file, files_dir / src_file.name)
                 
                 # Create zip file with .mdcd extension
                 zip_path = save_path[:-5] + ".zip" if save_path.endswith(".mdcd") else save_path + ".zip"
@@ -9807,6 +9881,7 @@ Count:
                     model_data = json.load(f)
                 
                 files_to_copy = []
+                packaged_source_metadata: Dict[str, Dict[str, Any]] = {}
                 
                 # Process each function's parameters
                 for func_entry in model_data.get('functions', []):
@@ -9833,7 +9908,9 @@ Count:
                                                 src_file = Path(file_path)
                                                 if src_file.exists():
                                                     files_to_copy.append(src_file)
-                                                    nested_paths.append(f"tempfiles/{src_file.name}")
+                                                    temp_ref = f"tempfiles/{src_file.name}"
+                                                    nested_paths.append(temp_ref)
+                                                    packaged_source_metadata[temp_ref] = self._extract_source_file_metadata(src_file)
                                                 else:
                                                     nested_paths.append(file_path)
                                             else:
@@ -9843,7 +9920,9 @@ Count:
                                         src_file = Path(item)
                                         if src_file.exists():
                                             files_to_copy.append(src_file)
-                                            new_paths.append(f"tempfiles/{src_file.name}")
+                                            temp_ref = f"tempfiles/{src_file.name}"
+                                            new_paths.append(temp_ref)
+                                            packaged_source_metadata[temp_ref] = self._extract_source_file_metadata(src_file)
                                         else:
                                             new_paths.append(item)
                                     else:
@@ -9853,7 +9932,12 @@ Count:
                                 src_file = Path(param_value)
                                 if src_file.exists():
                                     files_to_copy.append(src_file)
-                                    params[param_name] = f"tempfiles/{src_file.name}"
+                                    temp_ref = f"tempfiles/{src_file.name}"
+                                    params[param_name] = temp_ref
+                                    packaged_source_metadata[temp_ref] = self._extract_source_file_metadata(src_file)
+
+                if packaged_source_metadata:
+                    model_data["packaged_source_metadata"] = packaged_source_metadata
                 
                 # Write modified model.json
                 model_tmpfile = tmpdir_path / "model.json"
@@ -9864,7 +9948,7 @@ Count:
                 files_dir = tmpdir_path / "files"
                 files_dir.mkdir(exist_ok=True)
                 for src_file in files_to_copy:
-                    shutil.copy(src_file, files_dir / src_file.name)
+                    shutil.copy2(src_file, files_dir / src_file.name)
                 
                 # Create zip file with .mdfd extension
                 zip_path = save_path[:-5] + ".zip" if save_path.endswith(".mdfd") else save_path + ".zip"
@@ -9936,7 +10020,7 @@ Count:
                 if files_folder.exists():
                     for src_file in files_folder.iterdir():
                         if src_file.is_file():
-                            shutil.copy(src_file, self.tempfiles_dir / src_file.name)
+                            shutil.copy2(src_file, self.tempfiles_dir / src_file.name)
             
             # Load functions.txt
             functions_file = tmpdir_path / "functions.txt"
@@ -9984,27 +10068,35 @@ Count:
             return
         
         # Load functions
+        packaged_source_metadata = model_data.get('packaged_source_metadata', {})
+
         for func_entry in model_data.get('functions', []):
             instance_alias = func_entry.get('instance_alias', '')
             base_alias = func_entry.get('base_alias', '')
             params = func_entry.get('parameters', {}).copy()
+            source_metadata_overrides: Dict[str, Dict[str, Any]] = {}
             
             self.methodology_list.append(instance_alias)
             self.function_base_aliases.append(base_alias)
             
-            # Convert tempfiles references to absolute paths
-            for key, value in params.items():
+            # Convert tempfiles references to absolute paths and collect source metadata overrides
+            def _convert_tempfile_paths(value: Any) -> Any:
+                if isinstance(value, str) and value.startswith('tempfiles/'):
+                    temp_ref = value.replace('\\', '/')
+                    abs_path = str(self.tempfiles_dir / temp_ref.replace('tempfiles/', ''))
+                    source_meta = packaged_source_metadata.get(temp_ref)
+                    if isinstance(source_meta, dict):
+                        source_metadata_overrides[abs_path] = copy.deepcopy(source_meta)
+                    return abs_path
                 if isinstance(value, list):
-                    converted_list = []
-                    for item in value:
-                        if isinstance(item, str) and item.startswith('tempfiles/'):
-                            abs_path = str(self.tempfiles_dir / item.replace('tempfiles/', ''))
-                            converted_list.append(abs_path)
-                        else:
-                            converted_list.append(item)
-                    params[key] = converted_list
-                elif isinstance(value, str) and value.startswith('tempfiles/'):
-                    params[key] = str(self.tempfiles_dir / value.replace('tempfiles/', ''))
+                    return [_convert_tempfile_paths(item) for item in value]
+                return value
+
+            for key, value in list(params.items()):
+                params[key] = _convert_tempfile_paths(value)
+
+            if base_alias in ('load_data', 'validation_data_main') and source_metadata_overrides:
+                params['source_metadata_overrides'] = source_metadata_overrides
             
             self.function_configs[instance_alias] = params
         

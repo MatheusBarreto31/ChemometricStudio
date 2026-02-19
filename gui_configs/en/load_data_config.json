@@ -31,6 +31,16 @@
     "class_data_cal": "Classification Data",
     "cal_metadata": "Sample Metadata"
   },
+  "output_synonyms": {
+    "X_cal": ["X", "X_train"],
+    "Y_cal": ["Y", "Y_train"],
+    "axis_t_info": ["axis_labels", "variable_labels"],
+    "smp_cal": ["sample_labels", "smp_train"],
+    "axis_n_info": ["axis_info", "axis_vectors", "variables"],
+    "dim_labels": ["dimension_labels"],
+    "class_data_cal": ["class_data", "class_labels", "class_data_train"],
+    "cal_metadata": ["metadata", "train_metadata"]
+  },
   "short_description": "Loads spectroscopic and response data from files",
   "long_description": "This step loads your calibration dataset including spectroscopic data (X), response variables (Y), and optional metadata.\n\nInput Data Components:\n- X Data (Spectra): Main spectroscopic measurements (required)\n- Y Data (Responses): Target/dependent variables (optional)\n- Variable Labels: Wavelengths, frequencies, or variable names (optional)\n- Sample Labels: Sample IDs or identifiers (optional)\n\nData Formats:\n- CSV files with configurable delimiters (comma, tabs, spaces)\n- Matrix format: samples (rows) x variables (columns)\n- Vector formats for specialized data types\n- Support for multiple files via file selection\n\nConfiguration:\n- Specify delimiter type for your files\n- Set number of header rows to skip\n- Choose appropriate data type structure\n- Transpose if needed (samples in columns instead of rows)\n\nThe loaded data becomes input for preprocessing and validation steps.",
   "setup": {

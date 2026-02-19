@@ -52,7 +52,8 @@ def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str,
               transpose: bool = False, axis_info: Optional[List[str]] = None, reshape_order: str = 'F',
               dim_labels: Optional[List[str]] = None, scale_type: Optional[List[str]] = None,
               multi_file_per_sample: bool = False, num_samples: Optional[int] = None,
-              cdata_path: Optional[str] = None) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[List[List[str]]], List[str], Optional[List[np.ndarray]], List[str], Optional[List[str]], Dict[str, Dict[str, Any]]]:
+              cdata_path: Optional[str] = None,
+              source_metadata_overrides: Optional[Dict[str, Dict[str, Any]]] = None) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[List[List[str]]], List[str], Optional[List[np.ndarray]], List[str], Optional[List[str]], Dict[str, Dict[str, Any]]]:
     """
     Load and organize chemometrics data.
 
@@ -76,6 +77,7 @@ def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str,
         multi_file_per_sample: If True, each sample consists of multiple files (only for nway_flag >= 3)
         num_samples: Number of samples when using multi_file_per_sample mode (files divided equally)
         cdata_path: Optional path to classification data file (one class label per line)
+        source_metadata_overrides: Optional mapping of absolute file paths to pre-recorded metadata
 
     Returns:
         X_cal: X data array
@@ -192,7 +194,8 @@ def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str,
         nway_flag=nway_flag,
         data_type=data_type,
         multi_file_per_sample=multi_file_per_sample,
-        sample_paths=sample_paths
+        sample_paths=sample_paths,
+        source_metadata_overrides=source_metadata_overrides
     )
 
     return X, Y, axis_t_info, smp_labels, axis_n_info, processed_dim_labels, class_data, cal_metadata
@@ -501,9 +504,17 @@ def _generate_row_labels(data_path: List[str], row_counts: List[int]) -> List[st
     return labels
 
 
-def _safe_stat(file_path: str) -> Dict[str, Any]:
+def _safe_stat(file_path: str, source_metadata_overrides: Optional[Dict[str, Dict[str, Any]]] = None) -> Dict[str, Any]:
     """Return basic filesystem metadata for a file path."""
     abs_path = os.path.abspath(file_path)
+
+    if isinstance(source_metadata_overrides, dict):
+        override_entry = source_metadata_overrides.get(abs_path)
+        if override_entry is None:
+            override_entry = source_metadata_overrides.get(abs_path.replace('\\', '/'))
+        if isinstance(override_entry, dict):
+            return dict(override_entry)
+
     metadata: Dict[str, Any] = {
         "file_path": abs_path,
         "file_name": os.path.basename(abs_path),
@@ -538,7 +549,8 @@ def _unique_sample_key(metadata: Dict[str, Dict[str, Any]], base_label: str, sam
 
 def _build_sample_metadata(smp_labels: List[str], data_paths: List[str], row_counts: List[int],
                            nway_flag: int, data_type: str, multi_file_per_sample: bool,
-                           sample_paths: Optional[List[List[str]]] = None) -> Dict[str, Dict[str, Any]]:
+                           sample_paths: Optional[List[List[str]]] = None,
+                           source_metadata_overrides: Optional[Dict[str, Dict[str, Any]]] = None) -> Dict[str, Dict[str, Any]]:
     """Build per-sample metadata dictionary extracted from source file metadata."""
     metadata: Dict[str, Dict[str, Any]] = {}
 
@@ -551,14 +563,14 @@ def _build_sample_metadata(smp_labels: List[str], data_paths: List[str], row_cou
                 "sample_index": sample_index_1b,
                 "sample_label": sample_label,
                 "source_mode": "multi_file_per_sample",
-                "source_files": [_safe_stat(path) for path in files_for_sample]
+                "source_files": [_safe_stat(path, source_metadata_overrides) for path in files_for_sample]
             }
         return metadata
 
     if nway_flag == 1 and data_type == "x_matrix" and row_counts:
         running_index = 0
         for path, count in zip(data_paths, row_counts):
-            file_meta = _safe_stat(path)
+            file_meta = _safe_stat(path, source_metadata_overrides)
             for row_index in range(count):
                 if running_index >= len(smp_labels):
                     break
@@ -594,7 +606,7 @@ def _build_sample_metadata(smp_labels: List[str], data_paths: List[str], row_cou
             "sample_index": sample_index_1b,
             "sample_label": sample_label,
             "source_mode": "single_file" if sample_path else "unknown",
-            "source_file": _safe_stat(sample_path) if sample_path else None
+            "source_file": _safe_stat(sample_path, source_metadata_overrides) if sample_path else None
         }
 
     return metadata

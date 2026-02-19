@@ -14,6 +14,10 @@
     "X_cal": "X Cal (Corrected)",
     "X_val": "X Val (Corrected)"
   },
+  "output_synonyms": {
+    "X_cal": ["X", "X_train"],
+    "X_val": ["X_test", "X_validation"]
+  },
   "short_description": "Removes baseline offset from spectra",
   "long_description": "Baseline correction removes systematic offsets and trends from spectroscopic measurements, improving data quality and model performance.\n\nAvailable Methods:\n\n1. Multiplicative Scatter Correction (MSC)\n   - Corrects for multiplicative and additive scatter effects\n   - Works well for diffuse reflectance and transmittance data\n   - Preserves spectral shape while normalizing intensity\n\n2. Standard Normal Variate (SNV)\n   - Center-scales each spectrum independently\n   - Removes baseline drift and multiplicative effects\n   - Suitable for reflectance spectroscopy\n\n3. Moving Average\n   - Simple smoothing-based baseline correction\n   - Uses configurable window size\n   - Good for noisy data with local baselines\n\nMultiway Data Support:\n- For 2D data: standard processing (nway_flag=1)\n- For 3D+ data: specify dimensionality and direction\n- Direction parameter controls along which axis correction is applied\n\nThis preprocessing significantly improves model accuracy and interpretability.",
   "setup": {

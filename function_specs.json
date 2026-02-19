@@ -185,7 +185,7 @@
       "method": "str",
       "X_val": "ndarray",
       "nway_flag": "int",
-      "direction": "str",
+      "direction": "int",
       "window_size": "int"
     },
     "smoothing": {
@@ -193,7 +193,7 @@
       "method": "str",
       "X_val": "ndarray",
       "nway_flag": "int",
-      "direction": "str",
+      "direction": "int",
       "window_size": "int",
       "polyorder": "int"
     },
@@ -203,7 +203,7 @@
       "center": "bool",
       "normalize": "bool",
       "nway_flag": "int",
-      "direction": "str"
+      "direction": "int"
     },
     "univariate_calibration": {
       "X_cal": "ndarray",

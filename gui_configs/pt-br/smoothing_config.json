@@ -15,6 +15,10 @@
     "X_cal": "X Cal (Suavizado)",
     "X_val": "X Val (Suavizado)"
   },
+  "output_synonyms": {
+    "X_cal": ["X", "X_train"],
+    "X_val": ["X_test", "X_validation"]
+  },
   "short_description": "Reduz ruído enquanto preserva características espectrais",
   "long_description": "A suavização reduz ruído de alta frequência em dados espectroscópicos enquanto preserva características espectrais importantes e informações de picos.\n\nMétodos de Suavização:\n\n1. Média Móvel\n   - Média simples em uma janela deslizante\n   - Rápido e direto\n   - Pode achatar picos agudos se a janela for muito grande\n   - Bom para redução inicial de ruído\n\n2. Filtro Savitzky-Golay\n   - Filtro que preserva polinômios\n   - Melhor na manutenção de formas de picos espectrais\n   - Usa ajuste polinomial dentro da janela deslizante\n   - Mais computacionalmente intensivo que média móvel\n   - Requer ordem polinomial < tamanho da janela\n\nParâmetros:\n\nTamanho da Janela:\n- Janelas maiores = suavização mais forte, mas mais perda de características\n- Valores típicos: 5-15 pontos\n- Deve ser número ímpar\n- Deve ser menor que a largura da característica espectral\n\nOrdem Polinomial (apenas Savitzky-Golay):\n- Ordem 2: ajuste parabólico (recomendado)\n- Ordem 3-5: polinômios de grau superior\n- Ordens inferiores preservam características melhor\n\nDados Multidirecionais:\n- Especifique dimensionalidade para dados 3D+\n- Parâmetro de direção controla o eixo de suavização\n\nDica: Para melhores resultados, aplique correção de linha de base antes de suavizar.",
   "setup": {

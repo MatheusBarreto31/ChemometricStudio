@@ -27,6 +27,16 @@
     "class_data_cal": "Dados de Classificação",
     "cal_metadata": "Metadados de Amostras"
   },
+  "output_synonyms": {
+    "X_cal": ["X", "X_train"],
+    "Y_cal": ["Y", "Y_train"],
+    "axis_t_info": ["axis_labels", "variable_labels"],
+    "smp_cal": ["sample_labels", "smp_train"],
+    "axis_n_info": ["axis_info", "axis_vectors", "variables"],
+    "dim_labels": ["dimension_labels"],
+    "class_data_cal": ["class_data", "class_labels", "class_data_train"],
+    "cal_metadata": ["metadata", "train_metadata"]
+  },
   "short_description": "Carrega dados espectroscópicos e de resposta de arquivos",
   "long_description": "Esta etapa carrega seu conjunto de dados de calibração, incluindo dados espectroscópicos (X), variáveis de resposta (Y) e metadados opcionais.\n\nComponentes de Dados de Entrada:\n- Dados X (Espectros): Principais medições espectroscópicas (obrigatório)\n- Dados Y (Respostas): Variáveis alvo/dependentes (opcional)\n- Rótulos de Variáveis: Comprimentos de onda, frequências ou nomes de variáveis (opcional)\n- Rótulos de Amostras: IDs de amostra ou identificadores (opcional)\n\nFormatos de Dados:\n- Arquivos CSV com delimitadores configuráveis (vírgula, tabulações, espaços)\n- Formato de matriz: amostras (linhas) x variáveis (colunas)\n- Formatos de vetor para tipos de dados especializados\n- Suporte para múltiplos arquivos via seleção de arquivo\n\nConfiguração:\n- Especifique o tipo de delimitador para seus arquivos\n- Defina o número de linhas de cabeçalho para pular\n- Escolha a estrutura de tipo de dados apropriada\n- Transponha se necessário (amostras em colunas em vez de linhas)\n\nOs dados carregados se tornam entrada para etapas de pré-processamento e validação.",
   "setup": {

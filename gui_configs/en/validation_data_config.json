@@ -32,6 +32,18 @@
     "cal_metadata": "Cal Metadata",
     "val_metadata": "Val Metadata"
   },
+  "output_synonyms": {
+    "X_cal": ["X", "X_train"],
+    "Y_cal": ["Y", "Y_train"],
+    "X_val": ["X_test", "X_validation"],
+    "Y_val": ["Y_test", "Y_validation"],
+    "smp_cal": ["sample_labels", "smp_train"],
+    "smp_val": ["sample_labels_val", "smp_test", "smp_validation"],
+    "class_data_cal": ["class_data", "class_labels", "class_data_train"],
+    "class_data_val": ["class_data_val", "class_labels_val", "class_data_test", "class_data_validation"],
+    "cal_metadata": ["metadata", "train_metadata"],
+    "val_metadata": ["metadata_val", "test_metadata", "validation_metadata"]
+  },
   "short_description": "Creates or loads validation data for model assessment",
   "long_description": "Validation data is essential for unbiased assessment of model performance. This step creates validation sets by splitting calibration data or loads external validation data.\n\nCreating Validation Sets from Calibration Data:\n\n1. Random Splitting\n   - Randomly selects samples for validation\n   - Fastest and simplest approach\n   - Suitable for large, diverse datasets\n   - May not ensure representative distribution\n\n2. Kennard-Stone Algorithm\n   - Selects samples that span the data space\n   - Ensures good representation of data range\n   - Better for small or clustered datasets\n   - More computationally expensive\n\n3. File-Based Selection\n   - Uses external index file for sample selection\n   - Allows custom selection criteria\n   - Requires pre-prepared selection file\n\nCalibration Proportion:\n- Typical value: 0.7 (70% calibration, 30% validation)\n- Larger sets: can use 0.8-0.9 for better calibration\n- Smaller datasets: may use 0.6-0.7 for more validation samples\n\nLoading External Validation Sets:\n- Load completely independent validation data\n- Useful for temporal or spatial validation\n- Provides most realistic performance estimate\n- Separate X and Y files required\n- Optional sample labels file\n\nBest Practices:\n- Validation set should be independent of calibration\n- Ensure both sets cover similar data ranges\n- Document how validation sets were selected\n- Use appropriate set size for statistical reliability\n\nUsage:\n- Create internal set OR load external set\n- Both can be used simultaneously for comprehensive validation\n- Settings applied automatically during model building.",
   "setup": {

@@ -31,6 +31,18 @@
     "cal_metadata": "Metadados Cal",
     "val_metadata": "Metadados Val"
   },
+  "output_synonyms": {
+    "X_cal": ["X", "X_train"],
+    "Y_cal": ["Y", "Y_train"],
+    "X_val": ["X_test", "X_validation"],
+    "Y_val": ["Y_test", "Y_validation"],
+    "smp_cal": ["sample_labels", "smp_train"],
+    "smp_val": ["sample_labels_val", "smp_test", "smp_validation"],
+    "class_data_cal": ["class_data", "class_labels", "class_data_train"],
+    "class_data_val": ["class_data_val", "class_labels_val", "class_data_test", "class_data_validation"],
+    "cal_metadata": ["metadata", "train_metadata"],
+    "val_metadata": ["metadata_val", "test_metadata", "validation_metadata"]
+  },
   "short_description": "Cria ou carrega dados de validação para avaliação de modelo",
   "long_description": "Dados de validação são essenciais para avaliação imparcial do desempenho do modelo. Esta etapa cria conjuntos de validação dividindo dados de calibração ou carrega dados de validação externos.\n\nCriando Conjuntos de Validação a partir de Dados de Calibração:\n\n1. Divisão Aleatória\n   - Seleciona aleatoriamente amostras para validação\n   - Abordagem mais rápida e simples\n   - Adequada para conjuntos de dados grandes e diversos\n   - Pode não garantir distribuição representativa\n\n2. Algoritmo Kennard-Stone\n   - Seleciona amostras que abrangem o espaço de dados\n   - Garante boa representação da gama de dados\n   - Melhor para conjuntos de dados pequenos ou aglomerados\n   - Mais caro computacionalmente\n\n3. Seleção Baseada em Arquivo\n   - Usa arquivo de índice externo para seleção de amostras\n   - Permite critérios de seleção personalizados\n   - Requer arquivo de seleção pré-preparado\n\nProporção de Calibração:\n- Valor típico: 0.7 (70% calibração, 30% validação)\n- Conjuntos maiores: podem usar 0.8-0.9 para melhor calibração\n- Conjuntos menores: podem usar 0.6-0.7 para mais amostras de validação\n\nCarregando Conjuntos de Validação Externos:\n- Carrega dados de validação completamente independentes\n- Útil para validação temporal ou espacial\n- Fornece estimativa de desempenho mais realista\n- Arquivos X e Y separados obrigatórios\n- Arquivo opcional de rótulos de amostras\n\nMelhores Práticas:\n- Conjunto de validação deve ser independente da calibração\n- Garanta que ambos os conjuntos abrangem faixas de dados similares\n- Documente como os conjuntos de validação foram selecionados\n- Use tamanho apropriado para confiabilidade estatística\n\nUso:\n- Criar conjunto interno OU carregar conjunto externo\n- Ambos podem ser usados simultaneamente para validação abrangente\n- Configurações aplicadas automaticamente durante a construção do modelo.",
   "setup": {

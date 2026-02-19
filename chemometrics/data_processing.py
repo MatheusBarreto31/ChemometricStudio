@@ -265,6 +265,15 @@ def center_and_normalize(
         X_cal, X_val = center_and_normalize(X_cal, X_val, center=True, normalize=True, 
                                             nway_flag=3, direction=2)
     """
+    if isinstance(direction, str):
+        stripped = direction.strip()
+        if stripped == "":
+            direction = None
+        else:
+            direction = int(stripped)
+    elif isinstance(direction, float):
+        direction = int(direction)
+
     if nway_flag is None:
         nway_flag = _determine_dimensionality(X_cal)
     

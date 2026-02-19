@@ -19,7 +19,8 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
                           nway_flag: Optional[int] = None, reshape_order: str = 'F',
                           X_val_path: Optional[str] = None, Y_val_path: Optional[str] = None,
                           val_labels_path: Optional[str] = None,
-                          cdata_path: Optional[str] = None) -> Tuple[np.ndarray, Optional[np.ndarray], np.ndarray, Optional[np.ndarray], List[str], List[str], Optional[List[str]], Optional[List[str]], Optional[dict], Optional[dict]]:
+                          cdata_path: Optional[str] = None,
+                          source_metadata_overrides: Optional[dict] = None) -> Tuple[np.ndarray, Optional[np.ndarray], np.ndarray, Optional[np.ndarray], List[str], List[str], Optional[List[str]], Optional[List[str]], Optional[dict], Optional[dict]]:
     """
     Split data into calibration and validation sets.
 
@@ -70,7 +71,8 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
                 smp_path=val_labels_path,
                 transpose=transpose,
                 reshape_order=reshape_order,
-                cdata_path=cdata_path
+                cdata_path=cdata_path,
+                source_metadata_overrides=source_metadata_overrides
             )
         else:
             # Use data_path parameters for loading external validation
@@ -88,7 +90,8 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
                 smp_path=smp_path,
                 transpose=transpose,
                 reshape_order=reshape_order,
-                cdata_path=cdata_path
+                cdata_path=cdata_path,
+                source_metadata_overrides=source_metadata_overrides
             )
         
         X_cal_out, Y_cal_out, smp_cal_out, class_data_cal_out = X_cal, Y_cal, smp_cal, class_data_cal

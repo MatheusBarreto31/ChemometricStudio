@@ -14,6 +14,10 @@
     "X_cal": "X Cal (Corrigido)",
     "X_val": "X Val (Corrigido)"
   },
+  "output_synonyms": {
+    "X_cal": ["X", "X_train"],
+    "X_val": ["X_test", "X_validation"]
+  },
   "short_description": "Remove a correção de linha de base dos espectros",
   "long_description": "A correção de linha de base remove deslocamentos sistemáticos e tendências das medições espectroscópicas, melhorando a qualidade dos dados e o desempenho do modelo.\n\nMétodos Disponíveis:\n\n1. Correção de Espalhamento Multiplicativo (MSC)\n   - Corrige efeitos de espalhamento multiplicativo e aditivo\n   - Funciona bem para dados de refletância difusa e transmitância\n   - Preserva a forma espectral enquanto normaliza a intensidade\n\n2. Variante Normal Padrão (SNV)\n   - Centraliza e dimensiona cada espectro independentemente\n   - Remove desvio de linha de base e efeitos multiplicativos\n   - Adequado para espectroscopia de refletância\n\n3. Média Móvel\n   - Correção de linha de base simples baseada em suavização\n   - Usa tamanho de janela configurável\n   - Bom para dados ruidosos com linhas de base locais\n\nSuporte a Dados Multidirecionais:\n- Para dados 2D: processamento padrão (nway_flag=1)\n- Para dados 3D+: especifique dimensionalidade e direção\n- Parâmetro de direção controla em qual eixo a correção é aplicada\n\nEste pré-processamento melhora significativamente a precisão e interpretabilidade do modelo.",
   "setup": {
