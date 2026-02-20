@@ -1,8 +1,7 @@
 import tkinter as tk
-from main_gui import ChemometricsGUI
+from settings import get_settings_manager
 
 print("Starting Chemometric Studio GUI...")
-root = tk.Tk()
-root.iconbitmap("Icon.ico")
-app = ChemometricsGUI(root)
-root.mainloop() 
+from main_gui import main
+
+main()

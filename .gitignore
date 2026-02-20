@@ -126,6 +126,7 @@ model_log.txt
 output.txt
 *.log
 Chemometric_Studio.egg-info/
+Graphics/*.af
 
 # Generated documentation and notes
 Generated Notes/

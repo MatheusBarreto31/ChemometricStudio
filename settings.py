@@ -10,7 +10,8 @@ class SettingsManager:
     # Default settings
     DEFAULT_SETTINGS = {
         "language": "en",
-        "colormap": "jet"
+        "colormap": "jet",
+        "display_splashscreen": True
     }
     
     def __init__(self, settings_dir: Optional[Path] = None):

@@ -1,5 +1,6 @@
 {
   "language": "en",
   "colormap": "jet",
+  "display_splashscreen": true,
   "qualitative_colormap": "Set1"
 }

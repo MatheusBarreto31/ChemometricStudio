@@ -1,5 +1,5 @@
 """
-Main GUI application for CM Studio using tkinter + Sun-Valley theme.
+Main GUI application for Chemometric Studio using tkinter + Sun-Valley theme.
 Provides Setup, Routing, Analysis, and Report tabs for building analysis pipelines.
 """
 
@@ -21,31 +21,13 @@ from datetime import datetime
 import tempfile
 import threading
 import time
-from PIL import Image, ImageTk
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from matplotlib.figure import Figure
-from mpl_toolkits.mplot3d import Axes3D
 
 # Import language manager
 from language_manager import get_language_manager, _
 
 # Import settings manager
 from settings import get_settings_manager
-
-# Import graph renderer module
-import graph_renderer
-
-# Import add graph dialog
-from add_graph_dialog import show_add_graph_dialog
-
-# Import add table dialog
-from add_table_dialog import show_add_table_dialog
-
-# Import routing map window
-from routing_map_window import RoutingMapWindow
-from chemometrics.reporting import build_latex_document, compile_latex_to_pdf
 
 # Load function specs
 SPECS_PATH = Path(__file__).parent / "function_specs.json"
@@ -106,7 +88,7 @@ class ChemometricsGUI:
         self.language_manager = get_language_manager()
         self.language_manager.set_language(saved_language)
         
-        self.root.title(self.language_manager.translate("ui.main_title", "CM Studio"))
+        self.root.title(self.language_manager.translate("ui.main_title", "Chemometric Studio"))
         self.root.geometry("1280x720")
         self._disable_combobox_mousewheel()
         
@@ -178,6 +160,20 @@ class ChemometricsGUI:
         # Build UI
         self._build_ui()
         self._load_theme()
+
+    def _get_graph_renderer(self):
+        """Lazy-load graph renderer to reduce startup import time."""
+        if not hasattr(self, "_graph_renderer") or self._graph_renderer is None:
+            import graph_renderer
+            self._graph_renderer = graph_renderer
+        return self._graph_renderer
+
+    def _get_reporting_functions(self):
+        """Lazy-load report builders to avoid report stack imports at startup."""
+        if not hasattr(self, "_reporting_funcs") or self._reporting_funcs is None:
+            from chemometrics.reporting import build_latex_document, compile_latex_to_pdf
+            self._reporting_funcs = (build_latex_document, compile_latex_to_pdf)
+        return self._reporting_funcs
 
     def _disable_combobox_mousewheel(self):
         """Prevent mouse wheel from changing ttk.Combobox selections."""
@@ -632,6 +628,7 @@ class ChemometricsGUI:
             icon_path = Path(__file__).parent / "Icon.ico"
             if icon_path.exists():
                 # Load and resize the icon
+                from PIL import Image, ImageTk
                 icon_image = Image.open(icon_path)
                 icon_image = icon_image.resize((80, 80), Image.Resampling.LANCZOS)
                 icon_photo = ImageTk.PhotoImage(icon_image)
@@ -646,7 +643,7 @@ class ChemometricsGUI:
         text_frame = ttk.Frame(info_frame)
         text_frame.pack(side=tk.LEFT, expand=True, fill=tk.BOTH)
         
-        program_name = about_data.get("program_name", "CM Studio")
+        program_name = about_data.get("program_name", "Chemometric Studio")
         version = about_data.get("version", "1.0.0")
         
         name_label = ttk.Label(text_frame, text=program_name, font=("Arial", 16, "bold"))
@@ -1739,7 +1736,7 @@ class ChemometricsGUI:
         self._load_gui_configs()
         
         # Update window title
-        self.root.title(self.language_manager.translate("ui.main_title", "CM Studio"))
+        self.root.title(self.language_manager.translate("ui.main_title", "Chemometric Studio"))
         
         # Save current methodology list display state
         current_methodology_list = self.methodology_list.copy()
@@ -3535,6 +3532,7 @@ class ChemometricsGUI:
             return
         
         # Open routing map window
+        from routing_map_window import RoutingMapWindow
         RoutingMapWindow(
             self.root,
             self.methodology_list,
@@ -4915,6 +4913,7 @@ class ChemometricsGUI:
                             break
             
             # Render graph using graph_renderer module
+            graph_renderer = self._get_graph_renderer()
             fig, ax = graph_renderer.render_graph_figure(
                 graph_type, render_config, x_data, y_data, z_data, x_axis_config, y_axis_config,
                 default_cmap=self.settings_manager.get('colormap', 'viridis'),
@@ -7580,6 +7579,7 @@ Count:
                             break
             
             # Render graph using graph_renderer module
+            graph_renderer = self._get_graph_renderer()
             fig, ax = graph_renderer.render_graph_figure(
                 graph_type, render_config, x_data, y_data, z_data, x_axis_config, y_axis_config,
                 default_cmap=self.settings_manager.get('colormap', 'viridis'),
@@ -7662,10 +7662,12 @@ Count:
     
     def _show_add_graph_dialog(self, instance_alias: str):
         """Show the Add Graph dialog."""
+        from add_graph_dialog import show_add_graph_dialog
         show_add_graph_dialog(self.root, self, instance_alias)
     
     def _show_add_table_dialog(self, instance_alias: str):
         """Show the Add Table dialog."""
+        from add_table_dialog import show_add_table_dialog
         show_add_table_dialog(self.root, self, instance_alias)
     
     def _show_add_page_dialog(self, instance_alias: str):
@@ -9072,6 +9074,7 @@ Count:
             y_axis = metadata.get('y_axis_config', config.get('y_axis', {}))
             datasets = metadata.get('extracted_datasets')
 
+            graph_renderer = self._get_graph_renderer()
             fig, _ax = graph_renderer.render_graph_figure(
                 graph_type,
                 config,
@@ -9085,6 +9088,7 @@ Count:
                 qualitative_cmap=self.settings_manager.get('qualitative_colormap', 'tab10')
             )
             fig.savefig(str(image_path), dpi=220, bbox_inches='tight')
+            from matplotlib import pyplot as plt
             plt.close(fig)
             return str(image_path).replace('\\', '/')
         except Exception:
@@ -9249,6 +9253,7 @@ Count:
         with tempfile.TemporaryDirectory(prefix='cm_report_preview_') as temp_dir:
             assets_dir = Path(temp_dir) / 'assets'
             elements = self._build_resolved_report_elements(assets_dir)
+            build_latex_document, _ = self._get_reporting_functions()
             latex_source = build_latex_document(
                 elements,
                 self.language_manager.get_language(),
@@ -9290,6 +9295,7 @@ Count:
         assets_dir.mkdir(parents=True, exist_ok=True)
 
         elements = self._build_resolved_report_elements(assets_dir)
+        build_latex_document, compile_latex_to_pdf = self._get_reporting_functions()
         latex_source = build_latex_document(
             elements,
             self.language_manager.get_language(),
@@ -9520,7 +9526,7 @@ Count:
                 "metadata": {
                     "version": "1.0",
                     "created": datetime.now().isoformat(),
-                    "description": "CM Studio Model Configuration"
+                    "description": "Chemometric Studio Model Configuration"
                 },
                 "functions": functions_array,
                 "routing": routing_array
@@ -10378,9 +10384,104 @@ Count:
 
 def main():
     """Main entry point for the GUI."""
+    settings_manager = get_settings_manager()
+    show_splash = settings_manager.get("display_splashscreen", True)
+
     root = tk.Tk()
     root.iconbitmap("Icon.ico")
-    app = ChemometricsGUI(root)
+
+    splash = None
+    if show_splash:
+        root.withdraw()
+        splash = tk.Toplevel(root)
+        splash.overrideredirect(True)
+        splash.resizable(False, False)
+        splash.attributes("-topmost", True)
+        splash.lift()
+
+        splash_image_path = Path(__file__).parent / "Graphics" / "splash.png"
+        loaded_image = False
+        if splash_image_path.exists():
+            try:
+                from PIL import Image, ImageTk
+                splash_image = Image.open(splash_image_path)
+
+                if splash_image.mode != "RGBA":
+                    splash_image = splash_image.convert("RGBA")
+
+                if platform.system().lower() == "windows":
+                    key_rgb = (255, 0, 255)
+                    splash_bg = "#ff00ff"
+
+                    alpha_channel = splash_image.getchannel("A")
+                    opaque_mask = alpha_channel.point(lambda alpha: 255 if alpha > 0 else 0)
+                    rgb_image = splash_image.convert("RGB")
+                    key_background = Image.new("RGB", splash_image.size, key_rgb)
+                    composited = Image.composite(rgb_image, key_background, opaque_mask)
+
+                    splash_photo = ImageTk.PhotoImage(composited)
+                    splash.configure(bg=splash_bg)
+                    splash.wm_attributes("-transparentcolor", splash_bg)
+                    image_label = tk.Label(
+                        splash,
+                        image=splash_photo,
+                        borderwidth=0,
+                        highlightthickness=0,
+                        bg=splash_bg,
+                    )
+                else:
+                    splash_photo = ImageTk.PhotoImage(splash_image)
+                    image_label = tk.Label(
+                        splash,
+                        image=splash_photo,
+                        borderwidth=0,
+                        highlightthickness=0,
+                    )
+
+                splash._splash_photo = splash_photo
+                image_label.pack(fill=tk.BOTH, expand=True)
+                loaded_image = True
+            except ImportError:
+                try:
+                    splash_photo = tk.PhotoImage(file=str(splash_image_path))
+                    splash._splash_photo = splash_photo
+                    image_label = tk.Label(splash, image=splash_photo, borderwidth=0, highlightthickness=0)
+                    image_label.pack(fill=tk.BOTH, expand=True)
+                    loaded_image = True
+                except tk.TclError:
+                    loaded_image = False
+            except (tk.TclError, OSError):
+                loaded_image = False
+
+        if not loaded_image:
+            frame = tk.Frame(splash, padx=26, pady=20, relief=tk.SOLID, borderwidth=1)
+            frame.pack(fill=tk.BOTH, expand=True)
+
+            title_label = tk.Label(frame, text="Chemometric Studio", font=("Arial", 14, "bold"))
+            title_label.pack(anchor="center", pady=(0, 6))
+
+            status_label = tk.Label(frame, text="Loading...", font=("Arial", 10))
+            status_label.pack(anchor="center")
+
+        splash.update_idletasks()
+        width = splash.winfo_reqwidth()
+        height = splash.winfo_reqheight()
+        screen_w = splash.winfo_screenwidth()
+        screen_h = splash.winfo_screenheight()
+        pos_x = (screen_w // 2) - (width // 2)
+        pos_y = (screen_h // 2) - (height // 2)
+        splash.geometry(f"{width}x{height}+{pos_x}+{pos_y}")
+        splash.update()
+
+    try:
+        app = ChemometricsGUI(root)
+    finally:
+        if splash is not None and splash.winfo_exists():
+            splash.destroy()
+
+    if show_splash:
+        root.deiconify()
+
     root.mainloop()
 
 
