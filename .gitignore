@@ -127,6 +127,7 @@ output.txt
 *.log
 Chemometric_Studio.egg-info/
 Graphics/*.af
+Graphics/*.af~lock~
 
 # Generated documentation and notes
 Generated Notes/
