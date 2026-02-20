@@ -15,21 +15,39 @@
     "X_val": "X Val (Corrected)"
   },
   "output_synonyms": {
-    "X_cal": ["X", "X_train"],
-    "X_val": ["X_test", "X_validation"]
+    "X_cal": [
+      "X",
+      "X_train"
+    ],
+    "X_val": [
+      "X_test",
+      "X_validation"
+    ]
   },
   "short_description": "Removes baseline offset from spectra",
   "long_description": "Baseline correction removes systematic offsets and trends from spectroscopic measurements, improving data quality and model performance.\n\nAvailable Methods:\n\n1. Multiplicative Scatter Correction (MSC)\n   - Corrects for multiplicative and additive scatter effects\n   - Works well for diffuse reflectance and transmittance data\n   - Preserves spectral shape while normalizing intensity\n\n2. Standard Normal Variate (SNV)\n   - Center-scales each spectrum independently\n   - Removes baseline drift and multiplicative effects\n   - Suitable for reflectance spectroscopy\n\n3. Moving Average\n   - Simple smoothing-based baseline correction\n   - Uses configurable window size\n   - Good for noisy data with local baselines\n\nMultiway Data Support:\n- For 2D data: standard processing (nway_flag=1)\n- For 3D+ data: specify dimensionality and direction\n- Direction parameter controls along which axis correction is applied\n\nThis preprocessing significantly improves model accuracy and interpretability.",
   "setup": {
-    "categories": ["Method Parameters", "Data Inputs", "Multiway Configuration"],
+    "categories": [
+      "Method Parameters",
+      "Data Inputs",
+      "Multiway Configuration"
+    ],
     "layout": [
       {
         "name": "method",
         "label": "Correction Method",
         "category": "Method Parameters",
         "widget": "combobox",
-        "values": ["msc", "svn", "moving_average"],
-        "value_aliases": ["Multiplicative Scatter Correction", "Standard Normal Variate", "Moving Average"],
+        "values": [
+          "msc",
+          "svn",
+          "moving_average"
+        ],
+        "value_aliases": [
+          "Multiplicative Scatter Correction",
+          "Standard Normal Variate",
+          "Moving Average"
+        ],
         "default": "msc",
         "required": true,
         "input_type": "user",
@@ -56,7 +74,9 @@
         "required": false,
         "input_type": "user",
         "tooltip": "Number of points in the moving average window (only used with moving_average method)",
-        "visible_if": {"method": "moving_average"}
+        "visible_if": {
+          "method": "moving_average"
+        }
       },
       {
         "name": "X_cal",
@@ -65,7 +85,9 @@
         "widget": "data_input",
         "required": true,
         "input_type": "routed",
-        "visible_if": {"input_type": "user"},
+        "visible_if": {
+          "input_type": "user"
+        },
         "tooltip": "Routed from previous function output"
       },
       {
@@ -75,7 +97,9 @@
         "widget": "data_input",
         "required": false,
         "input_type": "routed",
-        "visible_if": {"input_type": "user"},
+        "visible_if": {
+          "input_type": "user"
+        },
         "tooltip": "Routed from previous function output"
       },
       {
@@ -87,7 +111,9 @@
         "default": "1",
         "required": true,
         "input_type": "inherited",
-        "visible_if": {"input_type": "user"},
+        "visible_if": {
+          "input_type": "user"
+        },
         "tooltip": "Automatically inherited from Load Data function"
       }
     ]
@@ -97,67 +123,145 @@
       {
         "title": "Baseline Correction Comparison",
         "layout": "ew",
-        "condition": {"parameter": "nway_flag", "operator": "==", "value": "1"},
+        "condition": {
+          "parameter": "nway_flag",
+          "operator": "==",
+          "value": "1"
+        },
         "sections": [
           {
             "type": "graph",
             "config": {
               "graph_type": "line",
-              "x_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
-              "y_axis": {"data_source": "in.X_cal", "label": "Intensity"},
+              "x_axis": {
+                "data_source": "in.axis_n_info",
+                "index": 1,
+                "label": "in.dim_labels",
+                "l_index": 1
+              },
+              "y_axis": {
+                "data_source": "in.X_cal",
+                "label": "Intensity"
+              },
               "title": "Original Spectra",
               "dimension_labels": "in.dim_labels"
-            }
+            },
+            "short_description": "Displays Original Spectra as a line graph in the analysis section.",
+            "long_description": "This section visualizes 'Original Spectra' using a line graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
           },
           {
             "type": "graph",
             "config": {
               "graph_type": "line",
-              "x_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
-              "y_axis": {"data_source": "out.X_cal", "label": "Intensity"},
+              "x_axis": {
+                "data_source": "in.axis_n_info",
+                "index": 1,
+                "label": "in.dim_labels",
+                "l_index": 1
+              },
+              "y_axis": {
+                "data_source": "out.X_cal",
+                "label": "Intensity"
+              },
               "title": "Processed Spectra",
               "dimension_labels": "in.dim_labels"
-            }
+            },
+            "short_description": "Displays Processed Spectra as a line graph in the analysis section.",
+            "long_description": "This section visualizes 'Processed Spectra' using a line graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
           }
         ]
       },
       {
         "title": "Baseline Correction Comparison",
         "layout": "ew",
-        "condition": {"parameter": "nway_flag", "operator": "==", "value": "2"},
+        "condition": {
+          "parameter": "nway_flag",
+          "operator": "==",
+          "value": "2"
+        },
         "sections": [
           {
             "type": "graph",
             "config": {
               "graph_type": "contour",
-              "x_axis": {"data_source": "in.axis_n_info", "index": 2, "label": "in.dim_labels", "l_index": 2},
-              "y_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
-              "z_axis": {"data_source": "in.X_cal", "label": "Intensity"},
+              "x_axis": {
+                "data_source": "in.axis_n_info",
+                "index": 2,
+                "label": "in.dim_labels",
+                "l_index": 2
+              },
+              "y_axis": {
+                "data_source": "in.axis_n_info",
+                "index": 1,
+                "label": "in.dim_labels",
+                "l_index": 1
+              },
+              "z_axis": {
+                "data_source": "in.X_cal",
+                "label": "Intensity"
+              },
               "title": "Original Spectra",
               "dimension_labels": "in.dim_labels",
               "variable_labels": "in.axis_t_info",
-              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}]
-            }
+              "data_slicing": [
+                {
+                  "name": "Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "axis": "z",
+                  "show_navigation_menu": true
+                }
+              ]
+            },
+            "short_description": "Displays Original Spectra as a contour graph in the analysis section.",
+            "long_description": "This section visualizes 'Original Spectra' using a contour graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
           },
           {
             "type": "graph",
             "config": {
               "graph_type": "contour",
-              "x_axis": {"data_source": "in.axis_n_info", "index": 2, "label": "in.dim_labels", "l_index": 2},
-              "y_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
-              "z_axis": {"data_source": "out.X_cal", "label": "Intensity"},
+              "x_axis": {
+                "data_source": "in.axis_n_info",
+                "index": 2,
+                "label": "in.dim_labels",
+                "l_index": 2
+              },
+              "y_axis": {
+                "data_source": "in.axis_n_info",
+                "index": 1,
+                "label": "in.dim_labels",
+                "l_index": 1
+              },
+              "z_axis": {
+                "data_source": "out.X_cal",
+                "label": "Intensity"
+              },
               "title": "Processed Spectra",
               "dimension_labels": "in.dim_labels",
               "variable_labels": "in.axis_t_info",
-              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}]
-            }
+              "data_slicing": [
+                {
+                  "name": "Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "axis": "z",
+                  "show_navigation_menu": true
+                }
+              ]
+            },
+            "short_description": "Displays Processed Spectra as a contour graph in the analysis section.",
+            "long_description": "This section visualizes 'Processed Spectra' using a contour graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
           }
         ]
       },
       {
         "title": "Baseline Correction Comparison",
         "layout": "ew",
-        "condition": {"parameter": "nway_flag", "operator": ">", "value": "2"},
+        "condition": {
+          "parameter": "nway_flag",
+          "operator": ">",
+          "value": "2"
+        },
         "sections": [
           {
             "type": "graph",
@@ -167,13 +271,26 @@
                 "data_source": "in.axis_n_info",
                 "labels": "in.dim_labels"
               },
-              "z_axis": {"data_source": "in.X_cal", "label": "Intensity"},
+              "z_axis": {
+                "data_source": "in.X_cal",
+                "label": "Intensity"
+              },
               "title": "Original Spectra",
               "dimension_labels": "in.dim_labels",
               "variable_labels": "in.axis_t_info",
-              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}],
+              "data_slicing": [
+                {
+                  "name": "Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "axis": "z",
+                  "show_navigation_menu": true
+                }
+              ],
               "show_md_menu": true
-            }
+            },
+            "short_description": "Displays Original Spectra as a heatmap graph in the analysis section.",
+            "long_description": "This section visualizes 'Original Spectra' using a heatmap graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
           },
           {
             "type": "graph",
@@ -183,13 +300,26 @@
                 "data_source": "in.axis_n_info",
                 "labels": "in.dim_labels"
               },
-              "z_axis": {"data_source": "out.X_cal", "label": "Intensity"},
+              "z_axis": {
+                "data_source": "out.X_cal",
+                "label": "Intensity"
+              },
               "title": "Processed Spectra",
               "dimension_labels": "in.dim_labels",
               "variable_labels": "in.axis_t_info",
-              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}],
+              "data_slicing": [
+                {
+                  "name": "Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "axis": "z",
+                  "show_navigation_menu": true
+                }
+              ],
               "show_md_menu": true
-            }
+            },
+            "short_description": "Displays Processed Spectra as a heatmap graph in the analysis section.",
+            "long_description": "This section visualizes 'Processed Spectra' using a heatmap graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
           }
         ]
       }

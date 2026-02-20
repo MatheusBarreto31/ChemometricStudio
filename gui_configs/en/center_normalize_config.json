@@ -97,6 +97,8 @@
         "sections": [
           {
             "type": "graph",
+            "short_description": "Displays the input calibration spectra before preprocessing.",
+            "long_description": "Shows the original X calibration data exactly as it enters this step. Use this section to inspect baseline shifts, offsets, and variable-scale differences before centering and/or normalization are applied.",
             "config": {
               "graph_type": "line",
               "x_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
@@ -107,6 +109,8 @@
           },
           {
             "type": "graph",
+            "short_description": "Displays the processed calibration spectra after preprocessing.",
+            "long_description": "Shows the X calibration data after centering and/or normalization. Compare directly against the original spectra to verify that offsets are removed and scaling behavior matches expectations.",
             "config": {
               "graph_type": "line",
               "x_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
@@ -124,6 +128,8 @@
         "sections": [
           {
             "type": "graph",
+            "short_description": "Contour view of one selected sample before preprocessing.",
+            "long_description": "Displays a contour plot of the original multiway calibration data for the selected sample index. Use the sample navigation control to inspect spatial/spectral structure prior to preprocessing.",
             "config": {
               "graph_type": "contour",
               "x_axis": {"data_source": "in.axis_n_info", "index": 2, "label": "in.dim_labels", "l_index": 2},
@@ -137,6 +143,8 @@
           },
           {
             "type": "graph",
+            "short_description": "Contour view of one selected sample after preprocessing.",
+            "long_description": "Displays a contour plot of the processed multiway calibration data for the selected sample index. Compare with the original contour to assess how centering/normalization affected signal distribution.",
             "config": {
               "graph_type": "contour",
               "x_axis": {"data_source": "in.axis_n_info", "index": 2, "label": "in.dim_labels", "l_index": 2},
@@ -159,6 +167,8 @@
         "sections": [
           {
             "type": "graph",
+            "short_description": "Heatmap view of higher-dimensional input data before preprocessing.",
+            "long_description": "Displays the original calibration data as a heatmap for n-way datasets with dimensionality greater than 2. Use slicing and axis controls to inspect specific samples and dimension combinations before transformation.",
             "config": {
               "graph_type": "heatmap",
               "aux_axis": {
@@ -175,6 +185,8 @@
           },
           {
             "type": "graph",
+            "short_description": "Heatmap view of higher-dimensional data after preprocessing.",
+            "long_description": "Displays the processed calibration data as a heatmap for n-way datasets with dimensionality greater than 2. Compare with the original heatmap to validate the effect of centering/normalization across slices and dimensions.",
             "config": {
               "graph_type": "heatmap",
               "aux_axis": {

@@ -15,8 +15,14 @@
     "X_val": "X Val (Processado)"
   },
   "output_synonyms": {
-    "X_cal": ["X", "X_train"],
-    "X_val": ["X_test", "X_validation"]
+    "X_cal": [
+      "X",
+      "X_train"
+    ],
+    "X_val": [
+      "X_test",
+      "X_validation"
+    ]
   },
   "short_description": "Centraliza e/ou normaliza dados espectroscópicos",
   "long_description": "Etapa de pré-processamento que centraliza e/ou normaliza dados para melhorar o desempenho do modelo. Preparação essencial para métodos de calibração multivariada.\n\nCentralização:\n- Subtrai as médias das colunas de todas as amostras\n- Remove efeitos de linha de base/deslocamento\n- Centraliza dados em torno de zero\n- Recomendado para a maioria das aplicações\n\nNormalização (Autoscaling):\n- Divide pelos desvios padrão das colunas\n- Dimensiona cada variável para variância unitária\n- Dá peso igual a todas as variáveis\n- Importante quando variáveis têm escalas/unidades diferentes\n- Particularmente útil para dados espectroscópicos\n\nEfeitos de Combinação:\n\nApenas Centralização:\n- Remove diferenças de deslocamento entre amostras\n- Preserva estrutura de variância\n- Bom quando variáveis estão na mesma escala\n\nApenas Normalização (raro):\n- Sem centralização, menos comum\n- Útil para distribuições de dados específicas\n\nTanto Centralização + Normalização (recomendado):\n- Pré-processamento padrão para quimiometria\n- Tratamento igual de todas as variáveis\n- Melhora estabilidade e interpretabilidade do modelo\n- Necessário para a maioria das aplicações PLS e PCR\n\nDados Multidirecionais:\n- Funciona com dados 2D, 3D e de dimensões superiores\n- Parâmetro de direção especifica o eixo\n- Direção padrão (-1) se aplica ao longo do último eixo\n\nNota: Dados de validação serão transformados usando estatísticas de calibração durante a modelagem.",
@@ -56,7 +62,9 @@
         "widget": "data_input",
         "required": true,
         "input_type": "routed",
-        "visible_if": {"input_type": "user"},
+        "visible_if": {
+          "input_type": "user"
+        },
         "tooltip": "Roteado da saída da função anterior"
       },
       {
@@ -65,7 +73,9 @@
         "widget": "data_input",
         "required": false,
         "input_type": "routed",
-        "visible_if": {"input_type": "user"},
+        "visible_if": {
+          "input_type": "user"
+        },
         "tooltip": "Roteado da saída da função anterior"
       },
       {
@@ -76,7 +86,9 @@
         "default": "1",
         "required": true,
         "input_type": "inherited",
-        "visible_if": {"input_type": "user"},
+        "visible_if": {
+          "input_type": "user"
+        },
         "tooltip": "Automaticamente herdada da função Carregar Dados"
       }
     ]
@@ -86,69 +98,151 @@
       {
         "title": "Center & Normalize Comparison",
         "layout": "ew",
-        "condition": {"parameter": "nway_flag", "operator": "==", "value": "1"},
+        "condition": {
+          "parameter": "nway_flag",
+          "operator": "==",
+          "value": "1"
+        },
         "sections": [
           {
             "type": "graph",
             "config": {
               "graph_type": "line",
-              "x_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
-              "y_axis": {"data_source": "in.X_cal", "label": "Intensity"},
+              "x_axis": {
+                "data_source": "in.axis_n_info",
+                "index": 1,
+                "label": "in.dim_labels",
+                "l_index": 1
+              },
+              "y_axis": {
+                "data_source": "in.X_cal",
+                "label": "Intensity"
+              },
               "title": "Original Spectra",
               "dimension_labels": "in.dim_labels"
-            }
+            },
+            "short_description": "Displays Original Spectra as a line graph in the analysis section.",
+            "long_description": "This section visualizes 'Original Spectra' using a line graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
           },
           {
             "type": "graph",
             "config": {
               "graph_type": "line",
-              "x_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
-              "y_axis": {"data_source": "out.X_cal", "label": "Intensity"},
+              "x_axis": {
+                "data_source": "in.axis_n_info",
+                "index": 1,
+                "label": "in.dim_labels",
+                "l_index": 1
+              },
+              "y_axis": {
+                "data_source": "out.X_cal",
+                "label": "Intensity"
+              },
               "title": "Processed Spectra",
               "dimension_labels": "in.dim_labels"
-            }
+            },
+            "short_description": "Displays Processed Spectra as a line graph in the analysis section.",
+            "long_description": "This section visualizes 'Processed Spectra' using a line graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
           }
         ]
       },
       {
         "title": "Center & Normalize Comparison",
         "layout": "ew",
-        "condition": {"parameter": "nway_flag", "operator": "==", "value": "2"},
+        "condition": {
+          "parameter": "nway_flag",
+          "operator": "==",
+          "value": "2"
+        },
         "sections": [
           {
             "type": "graph",
             "config": {
               "graph_type": "contour",
-              "x_axis": {"data_source": "in.axis_n_info", "index": 2, "label": "in.dim_labels", "l_index": 2},
-              "y_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
-              "z_axis": {"data_source": "in.X_cal", "label": "Intensity"},
+              "x_axis": {
+                "data_source": "in.axis_n_info",
+                "index": 2,
+                "label": "in.dim_labels",
+                "l_index": 2
+              },
+              "y_axis": {
+                "data_source": "in.axis_n_info",
+                "index": 1,
+                "label": "in.dim_labels",
+                "l_index": 1
+              },
+              "z_axis": {
+                "data_source": "in.X_cal",
+                "label": "Intensity"
+              },
               "title": "Original Spectra",
               "dimension_labels": "in.dim_labels",
               "variable_labels": "in.axis_t_info",
-              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}]
-            }
+              "data_slicing": [
+                {
+                  "name": "Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "axis": "z",
+                  "show_navigation_menu": true
+                }
+              ]
+            },
+            "short_description": "Displays Original Spectra as a contour graph in the analysis section.",
+            "long_description": "This section visualizes 'Original Spectra' using a contour graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
           },
           {
             "type": "graph",
             "config": {
               "graph_type": "contour",
-              "x_axis": {"data_source": "in.axis_n_info", "index": 2, "label": "in.dim_labels", "l_index": 2},
-              "y_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
-              "z_axis": {"data_source": "out.X_cal", "label": "Intensity"},
+              "x_axis": {
+                "data_source": "in.axis_n_info",
+                "index": 2,
+                "label": "in.dim_labels",
+                "l_index": 2
+              },
+              "y_axis": {
+                "data_source": "in.axis_n_info",
+                "index": 1,
+                "label": "in.dim_labels",
+                "l_index": 1
+              },
+              "z_axis": {
+                "data_source": "out.X_cal",
+                "label": "Intensity"
+              },
               "title": "Processed Spectra",
               "dimension_labels": "in.dim_labels",
               "variable_labels": "in.axis_t_info",
-              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}]
-            }
+              "data_slicing": [
+                {
+                  "name": "Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "axis": "z",
+                  "show_navigation_menu": true
+                }
+              ]
+            },
+            "short_description": "Displays Processed Spectra as a contour graph in the analysis section.",
+            "long_description": "This section visualizes 'Processed Spectra' using a contour graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
           },
-          {"type": null},
-          {"type": null}
+          {
+            "type": null
+          },
+          {
+            "type": null
+          }
         ]
       },
       {
         "title": "Center & Normalize Comparison",
         "layout": "ew",
-        "condition": {"parameter": "nway_flag", "operator": ">", "value": "2"},
+        "condition": {
+          "parameter": "nway_flag",
+          "operator": ">",
+          "value": "2"
+        },
         "sections": [
           {
             "type": "graph",
@@ -158,13 +252,26 @@
                 "data_source": "in.axis_n_info",
                 "labels": "in.dim_labels"
               },
-              "z_axis": {"data_source": "in.X_cal", "label": "Intensity"},
+              "z_axis": {
+                "data_source": "in.X_cal",
+                "label": "Intensity"
+              },
               "title": "Original Spectra",
               "dimension_labels": "in.dim_labels",
               "variable_labels": "in.axis_t_info",
-              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}],
+              "data_slicing": [
+                {
+                  "name": "Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "axis": "z",
+                  "show_navigation_menu": true
+                }
+              ],
               "show_md_menu": true
-            }
+            },
+            "short_description": "Displays Original Spectra as a heatmap graph in the analysis section.",
+            "long_description": "This section visualizes 'Original Spectra' using a heatmap graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
           },
           {
             "type": "graph",
@@ -174,13 +281,26 @@
                 "data_source": "in.axis_n_info",
                 "labels": "in.dim_labels"
               },
-              "z_axis": {"data_source": "out.X_cal", "label": "Intensity"},
+              "z_axis": {
+                "data_source": "out.X_cal",
+                "label": "Intensity"
+              },
               "title": "Processed Spectra",
               "dimension_labels": "in.dim_labels",
               "variable_labels": "in.axis_t_info",
-              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}],
+              "data_slicing": [
+                {
+                  "name": "Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "axis": "z",
+                  "show_navigation_menu": true
+                }
+              ],
               "show_md_menu": true
-            }
+            },
+            "short_description": "Displays Processed Spectra as a heatmap graph in the analysis section.",
+            "long_description": "This section visualizes 'Processed Spectra' using a heatmap graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
           }
         ]
       }

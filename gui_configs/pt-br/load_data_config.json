@@ -28,14 +28,39 @@
     "cal_metadata": "Metadados de Amostras"
   },
   "output_synonyms": {
-    "X_cal": ["X", "X_train"],
-    "Y_cal": ["Y", "Y_train"],
-    "axis_t_info": ["axis_labels", "variable_labels"],
-    "smp_cal": ["sample_labels", "smp_train"],
-    "axis_n_info": ["axis_info", "axis_vectors", "variables"],
-    "dim_labels": ["dimension_labels"],
-    "class_data_cal": ["class_data", "class_labels", "class_data_train"],
-    "cal_metadata": ["metadata", "train_metadata"]
+    "X_cal": [
+      "X",
+      "X_train"
+    ],
+    "Y_cal": [
+      "Y",
+      "Y_train"
+    ],
+    "axis_t_info": [
+      "axis_labels",
+      "variable_labels"
+    ],
+    "smp_cal": [
+      "sample_labels",
+      "smp_train"
+    ],
+    "axis_n_info": [
+      "axis_info",
+      "axis_vectors",
+      "variables"
+    ],
+    "dim_labels": [
+      "dimension_labels"
+    ],
+    "class_data_cal": [
+      "class_data",
+      "class_labels",
+      "class_data_train"
+    ],
+    "cal_metadata": [
+      "metadata",
+      "train_metadata"
+    ]
   },
   "short_description": "Carrega dados espectroscópicos e de resposta de arquivos",
   "long_description": "Esta etapa carrega seu conjunto de dados de calibração, incluindo dados espectroscópicos (X), variáveis de resposta (Y) e metadados opcionais.\n\nComponentes de Dados de Entrada:\n- Dados X (Espectros): Principais medições espectroscópicas (obrigatório)\n- Dados Y (Respostas): Variáveis alvo/dependentes (opcional)\n- Rótulos de Variáveis: Comprimentos de onda, frequências ou nomes de variáveis (opcional)\n- Rótulos de Amostras: IDs de amostra ou identificadores (opcional)\n\nFormatos de Dados:\n- Arquivos CSV com delimitadores configuráveis (vírgula, tabulações, espaços)\n- Formato de matriz: amostras (linhas) x variáveis (colunas)\n- Formatos de vetor para tipos de dados especializados\n- Suporte para múltiplos arquivos via seleção de arquivo\n\nConfiguração:\n- Especifique o tipo de delimitador para seus arquivos\n- Defina o número de linhas de cabeçalho para pular\n- Escolha a estrutura de tipo de dados apropriada\n- Transponha se necessário (amostras em colunas em vez de linhas)\n\nOs dados carregados se tornam entrada para etapas de pré-processamento e validação.",
@@ -45,8 +70,16 @@
         "name": "d_specs_separator",
         "label": "Separador de Dados",
         "widget": "combobox",
-        "values": ["vírgula", "tabulações", "espaços"],
-        "value_aliases": ["Separado por Vírgula", "Separado por Tabulação", "Separado por Espaço"],
+        "values": [
+          "vírgula",
+          "tabulações",
+          "espaços"
+        ],
+        "value_aliases": [
+          "Separado por Vírgula",
+          "Separado por Tabulação",
+          "Separado por Espaço"
+        ],
         "default": "tabulações",
         "required": true,
         "input_type": "user",
@@ -66,8 +99,20 @@
         "name": "d_specs_type",
         "label": "Tipo de Dados",
         "widget": "combobox",
-        "values": ["x_vector", "xy_vector", "xyz_vector", "x_matrix", "xy_matrix"],
-        "value_aliases": ["Vetor X", "Vetor X-Y", "Vetor X-Y-Z", "Matriz X", "Matriz X-Y"],
+        "values": [
+          "x_vector",
+          "xy_vector",
+          "xyz_vector",
+          "x_matrix",
+          "xy_matrix"
+        ],
+        "value_aliases": [
+          "Vetor X",
+          "Vetor X-Y",
+          "Vetor X-Y-Z",
+          "Matriz X",
+          "Matriz X-Y"
+        ],
         "default": "x_matrix",
         "required": true,
         "input_type": "user",
@@ -111,7 +156,12 @@
         "required": false,
         "input_type": "user",
         "tooltip": "Habilitar quando cada amostra consiste de múltiplos arquivos de dados (arquivos serão divididos igualmente entre amostras)",
-        "visible_if": {"nway_flag": {"operator": ">=", "value": 3}}
+        "visible_if": {
+          "nway_flag": {
+            "operator": ">=",
+            "value": 3
+          }
+        }
       },
       {
         "name": "num_samples",
@@ -122,7 +172,9 @@
         "required": false,
         "input_type": "user",
         "tooltip": "Número de amostras (arquivos serão divididos igualmente em grupos)",
-        "visible_if": {"multi_file_per_sample": true}
+        "visible_if": {
+          "multi_file_per_sample": true
+        }
       },
       {
         "name": "y_path",
@@ -179,7 +231,12 @@
         "label": "Tipo de Escala",
         "widget": "combobox_list",
         "count_source": "nway_flag",
-        "values": ["Linear", "Log10", "Log2", "Ln"],
+        "values": [
+          "Linear",
+          "Log10",
+          "Log2",
+          "Ln"
+        ],
         "default": "Linear",
         "required": false,
         "input_type": "user",
@@ -220,20 +277,33 @@
               "max_rows": 50,
               "max_cols": 15,
               "title": "X Data (Spectra)"
-            }
+            },
+            "short_description": "Displays X Data (Spectra) as a table in the analysis section.",
+            "long_description": "This section presents 'X Data (Spectra)' in tabular form. Use this view to review numeric values, compare rows/columns, and inspect detailed outputs for this section."
           },
           {
             "type": "graph",
             "config": {
               "graph_type": "line",
-              "x_axis": {"data_source": "axis_n_info", "label": "Variables"},
-              "y_axis": {"data_source": "X_cal", "label": "Intensity"},
+              "x_axis": {
+                "data_source": "axis_n_info",
+                "label": "Variables"
+              },
+              "y_axis": {
+                "data_source": "X_cal",
+                "label": "Intensity"
+              },
               "title": "Spectral Data Overview",
-              "data_slicing": ["Samples"]
-            }
+              "data_slicing": [
+                "Samples"
+              ]
+            },
+            "short_description": "Displays Spectral Data Overview as a line graph in the analysis section.",
+            "long_description": "This section visualizes 'Spectral Data Overview' using a line graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
           }
         ]
       }
     ],
-    "current_page": 0  }
+    "current_page": 0
+  }
 }

@@ -6530,9 +6530,60 @@ Count:
     def _create_section_popup_button(self, parent: ttk.Frame, instance_alias: str, section_idx: int, section_data: dict):
         """Create a small floating button in the upper right corner of a section (hovering over content)."""
         try:
+            def get_section_help_content(data: dict) -> Tuple[str, str, str]:
+                if not isinstance(data, dict):
+                    return "", "", ""
+
+                section_config = data.get('config', {}) if isinstance(data.get('config', {}), dict) else {}
+                section_title = section_config.get(
+                    'title',
+                    self.language_manager.translate('ui.labels.section', 'Section')
+                )
+
+                short_desc = data.get('short_description', '') or section_config.get('short_description', '')
+                long_desc = data.get('long_description', '') or section_config.get('long_description', '')
+
+                # Fallback: if runtime analysis_data is stale, pull descriptions from function gui_config
+                if not short_desc and not long_desc:
+                    try:
+                        if instance_alias in self.methodology_list:
+                            selected_idx = self.methodology_list.index(instance_alias)
+                            if 0 <= selected_idx < len(self.function_base_aliases):
+                                base_alias = self.function_base_aliases[selected_idx]
+                                gui_analysis = self.gui_configs.get(base_alias, {}).get('analysis', {})
+                                gui_pages = gui_analysis.get('pages', [])
+                                current_page_idx = self.analysis_data.get(instance_alias, {}).get('current_page', 0)
+                                if 0 <= current_page_idx < len(gui_pages):
+                                    gui_sections = gui_pages[current_page_idx].get('sections', [])
+                                    if 0 <= section_idx < len(gui_sections):
+                                        gui_section = gui_sections[section_idx] if isinstance(gui_sections[section_idx], dict) else {}
+                                        gui_config = gui_section.get('config', {}) if isinstance(gui_section.get('config', {}), dict) else {}
+                                        short_desc = gui_section.get('short_description', '') or gui_config.get('short_description', '')
+                                        long_desc = gui_section.get('long_description', '') or gui_config.get('long_description', '')
+                                        if section_title == self.language_manager.translate('ui.labels.section', 'Section'):
+                                            section_title = gui_config.get('title', section_title)
+                    except Exception:
+                        pass
+
+                return section_title, str(short_desc), str(long_desc)
+
             # Defer button creation to allow content to render first
             def create_button():
-                # Create a small popup button using ttk.Button for consistent styling
+                section_title, short_desc, long_desc = get_section_help_content(section_data)
+
+                # Create a small help button using same size/shape as popup button
+                if short_desc or long_desc:
+                    help_btn = ttk.Button(
+                        parent,
+                        text="ℹ",
+                        width=2,
+                        command=lambda: self._show_help_popup(section_title, short_desc, long_desc)
+                    )
+                    help_btn.place(relx=1.0, rely=0.0, anchor="ne", x=-28, y=2)
+                    help_btn.lift()
+                    Tooltip(help_btn, short_desc if short_desc else self.language_manager.translate("ui.tooltips.click_for_info", "Click for more information"))
+
+                # Create popup button
                 popup_btn = ttk.Button(
                     parent, 
                     text="🗗",  # Icon to indicate opening in a new window
@@ -6540,7 +6591,7 @@ Count:
                     command=lambda: self._show_section_popup(instance_alias, section_idx, section_data)
                 )
                 # Position in upper right corner using place()
-                popup_btn.place(relx=1.0, rely=0.0, anchor="ne", x=5, y=-10)
+                popup_btn.place(relx=1.0, rely=0.0, anchor="ne", x=-2, y=2)
                 popup_btn.lift()
             
             # Schedule button creation for after all packing/rendering is done
