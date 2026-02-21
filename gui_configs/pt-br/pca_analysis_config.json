@@ -304,6 +304,7 @@
               "x_axis": {
                 "data_source": "__index__",
                 "label": "Componente Principal",
+                "force_integer": true,
                 "reference_source": "metrics",
                 "reference_nested_key": "calibration.pct_variance_explained"
               },
@@ -332,6 +333,7 @@
                   "x_axis": {
                     "data_source": "__index__",
                     "label": "Componente Principal",
+                    "force_integer": true,
                     "reference_source": "metrics",
                     "reference_nested_key": "calibration.pct_variance_explained"
                   },
@@ -348,6 +350,7 @@
                   "x_axis": {
                     "data_source": "__index__",
                     "label": "Componente Principal",
+                    "force_integer": true,
                     "reference_source": "metrics",
                     "reference_nested_key": "calibration.pct_variance_explained"
                   },

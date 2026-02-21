@@ -11,6 +11,7 @@ import numpy as np
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib import cm
+from matplotlib.ticker import MaxNLocator
 import tkinter as tk
 from tkinter import ttk
 
@@ -84,11 +85,35 @@ def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarr
     graph_title = config.get('graph_title')
     if graph_title:
         ax.set_title(graph_title)
+
+    # Optional integer-only ticks for line/scatter axes
+    if graph_type in ('line', 'scatter'):
+        _apply_axis_tick_options(ax, config, use_3d=use_3d)
     
     # constrained_layout handles margins automatically - no manual adjustment needed
     # This ensures tight bounds that adapt to any section geometry without clipping
     
     return fig, ax
+
+
+def _apply_axis_tick_options(ax, config: dict, use_3d: bool = False) -> None:
+    """Apply optional axis tick rendering options from config.
+
+    Supported per-axis options:
+        - force_integer: bool (if true, force integer-only major ticks)
+    """
+    x_axis_cfg = config.get('x_axis', {})
+    y_axis_cfg = config.get('y_axis', {})
+    z_axis_cfg = config.get('z_axis', {})
+
+    if x_axis_cfg.get('force_integer', False):
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+
+    if y_axis_cfg.get('force_integer', False):
+        ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+
+    if use_3d and z_axis_cfg.get('force_integer', False) and hasattr(ax, 'zaxis'):
+        ax.zaxis.set_major_locator(MaxNLocator(integer=True))
 
 
 def _render_scatter(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],

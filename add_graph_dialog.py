@@ -464,13 +464,26 @@ class AddGraphDialog:
         
         label_entry = ttk.Entry(frame, textvariable=label_var, width=30)
         label_entry.grid(row=2, column=1, sticky=tk.W+tk.E, pady=2, padx=5)
+
+        # Force integer ticks
+        force_integer_var = tk.BooleanVar(value=False)
+        setattr(self, f'{axis_key}_force_integer_var', force_integer_var)
+        force_integer_cb = ttk.Checkbutton(
+            frame,
+            text=self._t(
+                "ui.labels.force_integer_ticks",
+                "Force integer ticks"
+            ),
+            variable=force_integer_var
+        )
+        force_integer_cb.grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=2)
         
         # Data shape info
         info_var = tk.StringVar(value=self._t("ui.messages.select_data_source", "Select a data source"))
         setattr(self, f'{axis_key}_info_var', info_var)
         
         info_label = ttk.Label(frame, textvariable=info_var, foreground="gray", font=("Arial", 8))
-        info_label.grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=2)
+        info_label.grid(row=4, column=0, columnspan=2, sticky=tk.W, pady=2)
         
         frame.columnconfigure(1, weight=1)
     
@@ -644,6 +657,12 @@ class AddGraphDialog:
         x_nested_var = tk.StringVar(value=existing_config.get('x_axis', {}).get('nested_key', '') if existing_config else '')
         x_nested_combo = ttk.Combobox(x_frame, textvariable=x_nested_var, width=40)
         x_nested_combo.pack(fill=tk.X, pady=2)
+        x_force_integer_var = tk.BooleanVar(value=existing_config.get('x_axis', {}).get('force_integer', False) if existing_config else False)
+        ttk.Checkbutton(
+            x_frame,
+            text=self._t("ui.labels.force_integer_ticks", "Force integer ticks"),
+            variable=x_force_integer_var
+        ).pack(anchor=tk.W, pady=(5, 0))
         
         # Y-axis config
         y_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.y_axis_configuration", "Y-Axis Configuration"), padding=10)
@@ -659,6 +678,12 @@ class AddGraphDialog:
         y_nested_var = tk.StringVar(value=existing_config.get('y_axis', {}).get('nested_key', '') if existing_config else '')
         y_nested_combo = ttk.Combobox(y_frame, textvariable=y_nested_var, width=40)
         y_nested_combo.pack(fill=tk.X, pady=2)
+        y_force_integer_var = tk.BooleanVar(value=existing_config.get('y_axis', {}).get('force_integer', False) if existing_config else False)
+        ttk.Checkbutton(
+            y_frame,
+            text=self._t("ui.labels.force_integer_ticks", "Force integer ticks"),
+            variable=y_force_integer_var
+        ).pack(anchor=tk.W, pady=(5, 0))
         
         # Z-axis config (optional)
         z_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.z_axis_configuration_optional_3d", "Z-Axis Configuration (Optional, for 3D)"), padding=10)
@@ -674,6 +699,12 @@ class AddGraphDialog:
         z_nested_var = tk.StringVar(value=existing_config.get('z_axis', {}).get('nested_key', '') if existing_config else '')
         z_nested_combo = ttk.Combobox(z_frame, textvariable=z_nested_var, width=40)
         z_nested_combo.pack(fill=tk.X, pady=2)
+        z_force_integer_var = tk.BooleanVar(value=existing_config.get('z_axis', {}).get('force_integer', False) if existing_config else False)
+        ttk.Checkbutton(
+            z_frame,
+            text=self._t("ui.labels.force_integer_ticks", "Force integer ticks"),
+            variable=z_force_integer_var
+        ).pack(anchor=tk.W, pady=(5, 0))
 
         def _refresh_dataset_nested_keys(source_var: tk.StringVar, nested_combo: ttk.Combobox):
             source = source_var.get().strip()
@@ -731,6 +762,8 @@ class AddGraphDialog:
                 x_axis = {'data_source': x_source_var.get()}
                 if x_nested_var.get():
                     x_axis['nested_key'] = x_nested_var.get()
+                if x_force_integer_var.get():
+                    x_axis['force_integer'] = True
                 ds_config['x_axis'] = x_axis
             
             # Y-axis
@@ -738,6 +771,8 @@ class AddGraphDialog:
                 y_axis = {'data_source': y_source_var.get()}
                 if y_nested_var.get():
                     y_axis['nested_key'] = y_nested_var.get()
+                if y_force_integer_var.get():
+                    y_axis['force_integer'] = True
                 ds_config['y_axis'] = y_axis
             
             # Z-axis
@@ -745,6 +780,8 @@ class AddGraphDialog:
                 z_axis = {'data_source': z_source_var.get()}
                 if z_nested_var.get():
                     z_axis['nested_key'] = z_nested_var.get()
+                if z_force_integer_var.get():
+                    z_axis['force_integer'] = True
                 ds_config['z_axis'] = z_axis
             
             # Class labels
@@ -995,6 +1032,9 @@ class AddGraphDialog:
             x_label = self.x_label_var.get()
             if x_label:
                 x_config['label'] = x_label
+
+            if getattr(self, 'x_force_integer_var', None) and self.x_force_integer_var.get():
+                x_config['force_integer'] = True
             
             config['x_axis'] = x_config
         
@@ -1011,6 +1051,9 @@ class AddGraphDialog:
             y_label = self.y_label_var.get()
             if y_label:
                 y_config['label'] = y_label
+
+            if getattr(self, 'y_force_integer_var', None) and self.y_force_integer_var.get():
+                y_config['force_integer'] = True
             
             config['y_axis'] = y_config
         
@@ -1027,6 +1070,9 @@ class AddGraphDialog:
             z_label = self.z_label_var.get()
             if z_label:
                 z_config['label'] = z_label
+
+            if getattr(self, 'z_force_integer_var', None) and self.z_force_integer_var.get():
+                z_config['force_integer'] = True
             
             config['z_axis'] = z_config
         

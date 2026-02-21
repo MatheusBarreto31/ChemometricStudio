@@ -332,12 +332,14 @@
                   "name": "PC-X",
                   "dimension": 1,
                   "axis": "x",
+                  "default":0,
                   "show_navigation_menu": true
                 },
                 {
                   "name": "PC-Y",
                   "dimension": 1,
                   "axis": "y",
+                  "default":1,
                   "show_navigation_menu": true
                 }
               ]
@@ -407,6 +409,7 @@
               "x_axis": {
                 "data_source": "__index__",
                 "label": "Principal Component",
+                "force_integer": true,
                 "reference_source": "metrics",
                 "reference_nested_key": "calibration.pct_variance_explained"
               },
@@ -435,6 +438,7 @@
                   "x_axis": {
                     "data_source": "__index__",
                     "label": "Principal Component",
+                    "force_integer": true,
                     "reference_source": "metrics",
                     "reference_nested_key": "calibration.pct_variance_explained"
                   },
@@ -451,6 +455,7 @@
                   "x_axis": {
                     "data_source": "__index__",
                     "label": "Principal Component",
+                    "force_integer": true,
                     "reference_source": "metrics",
                     "reference_nested_key": "calibration.pct_variance_explained"
                   },
@@ -484,6 +489,7 @@
                   "x_axis": {
                     "data_source": "__index__",
                     "label": "Principal Component",
+                    "force_integer": true,
                     "reference_source": "metrics",
                     "reference_nested_key": "calibration.reconstruction_rmse"
                   },
@@ -500,6 +506,7 @@
                   "x_axis": {
                     "data_source": "__index__",
                     "label": "Principal Component",
+                    "force_integer": true,
                     "reference_source": "metrics",
                     "reference_nested_key": "calibration.reconstruction_rmse_cv"
                   },
@@ -516,6 +523,7 @@
                   "x_axis": {
                     "data_source": "__index__",
                     "label": "Principal Component",
+                    "force_integer": true,
                     "reference_source": "metrics",
                     "reference_nested_key": "validation.reconstruction_rmse"
                   },
