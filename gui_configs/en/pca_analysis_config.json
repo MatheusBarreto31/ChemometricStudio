@@ -469,6 +469,99 @@
             "long_description": "This section visualizes 'Scree Plot - Individual & Cumulative Variance' using a line graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
           }
         ]
+      },
+      {
+        "title": "Reconstruction RMSE",
+        "layout": "ew",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "title": "Reconstruction RMSE by Component",
+              "graph_type": "line",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "label": "Principal Component",
+                    "reference_source": "metrics",
+                    "reference_nested_key": "calibration.reconstruction_rmse"
+                  },
+                  "y_axis": {
+                    "data_source": "metrics",
+                    "nested_key": "calibration.reconstruction_rmse",
+                    "label": "Reconstruction RMSE"
+                  },
+                  "label": "Calibration Reconstruction RMSE",
+                  "marker": "o",
+                  "color": "#1f77b4"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "label": "Principal Component",
+                    "reference_source": "metrics",
+                    "reference_nested_key": "calibration.reconstruction_rmse_cv"
+                  },
+                  "y_axis": {
+                    "data_source": "metrics",
+                    "nested_key": "calibration.reconstruction_rmse_cv",
+                    "label": "Reconstruction RMSE"
+                  },
+                  "label": "CV Reconstruction RMSE",
+                  "marker": "s",
+                  "color": "#ff7f0e"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "label": "Principal Component",
+                    "reference_source": "metrics",
+                    "reference_nested_key": "validation.reconstruction_rmse"
+                  },
+                  "y_axis": {
+                    "data_source": "metrics",
+                    "nested_key": "validation.reconstruction_rmse",
+                    "label": "Reconstruction RMSE"
+                  },
+                  "label": "Validation Reconstruction RMSE",
+                  "marker": "^",
+                  "color": "#2ca02c"
+                }
+              ]
+            },
+            "short_description": "Displays calibration, CV, and validation reconstruction RMSE by principal component as a line graph.",
+            "long_description": "This section visualizes reconstruction RMSE across principal components for calibration, CV-based calibration, and validation data. Use this view to compare how reconstruction error changes as component count increases."
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Reconstruction RMSE Comparison",
+              "row_label": "PC",
+              "columns": [
+                {
+                  "data_source": "metrics",
+                  "nested_key": "calibration.reconstruction_rmse",
+                  "name": "Calibration"
+                },
+                {
+                  "data_source": "metrics",
+                  "nested_key": "calibration.reconstruction_rmse_cv",
+                  "name": "CV Calibration"
+                },
+                {
+                  "data_source": "metrics",
+                  "nested_key": "validation.reconstruction_rmse",
+                  "name": "Validation"
+                }
+              ],
+              "decimal_places": 4,
+              "max_rows": 50
+            },
+            "short_description": "Displays calibration, CV, and validation reconstruction RMSE values side-by-side by principal component.",
+            "long_description": "This section presents reconstruction RMSE values in tabular form for calibration, CV-based calibration, and validation data. Use this table to compare exact RMSE values across component counts."
+          }
+        ]
       }
     ]
   }

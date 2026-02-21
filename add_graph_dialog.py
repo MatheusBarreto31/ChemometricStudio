@@ -19,6 +19,13 @@ from pathlib import Path
 import platform
 from typing import Optional, Dict, List, Tuple, Any
 import graph_renderer
+from dialog_data_source_utils import (
+    append_prefixed_data_sources,
+    collect_nested_key_paths,
+    get_available_data_sources,
+    get_data_source_value,
+    get_nested_keys,
+)
 
 
 def _set_window_icon(window, base_name: str = "Icon"):
@@ -166,50 +173,12 @@ class AddGraphDialog:
 
     def _append_prefixed_data_sources(self, combined_sources: Dict[str, Any], execution_results: Dict[str, Any]) -> None:
         """Add explicit in./out. aliases while preserving unprefixed precedence behavior."""
-        if not isinstance(combined_sources, dict) or not isinstance(execution_results, dict):
-            return
-
-        inputs = execution_results.get('inputs', {})
-        outputs = execution_results.get('outputs', {})
-
-        if isinstance(inputs, dict):
-            for key, value in inputs.items():
-                combined_sources[f"in.{key}"] = value
-            if self.instance_alias in inputs and isinstance(inputs[self.instance_alias], dict):
-                for key, value in inputs[self.instance_alias].items():
-                    combined_sources[f"in.{key}"] = value
-
-        if hasattr(self.main_gui, '_resolve_routed_inputs'):
-            try:
-                routed_inputs = self.main_gui._resolve_routed_inputs(self.instance_alias)
-                if isinstance(routed_inputs, dict):
-                    for key, value in routed_inputs.items():
-                        combined_sources[f"in.{key}"] = value
-            except Exception:
-                pass
-
-        if hasattr(self.main_gui, '_resolve_inherited_upstream_outputs'):
-            try:
-                inherited_inputs = self.main_gui._resolve_inherited_upstream_outputs(self.instance_alias)
-                if isinstance(inherited_inputs, dict):
-                    for key, value in inherited_inputs.items():
-                        combined_sources.setdefault(f"in.{key}", value)
-            except Exception:
-                pass
-
-        if isinstance(outputs, dict):
-            for key, value in outputs.items():
-                combined_sources[f"out.{key}"] = value
-            if self.instance_alias in outputs and isinstance(outputs[self.instance_alias], dict):
-                for key, value in outputs[self.instance_alias].items():
-                    combined_sources[f"out.{key}"] = value
-
-        for key, value in list(combined_sources.items()):
-            if not isinstance(key, str):
-                continue
-            if key.startswith('in.') or key.startswith('out.'):
-                continue
-            combined_sources.setdefault(f"in.{key}", value)
+        append_prefixed_data_sources(
+            combined_sources,
+            execution_results,
+            main_gui=self.main_gui,
+            instance_alias=self.instance_alias,
+        )
     
     def _find_empty_sections(self) -> List[Tuple[int, int, str]]:
         """Find all empty sections in the current analysis pages.
@@ -233,31 +202,20 @@ class AddGraphDialog:
         return empty
     
     def _get_available_data_sources(self) -> List[str]:
-        """Get list of available data sources from outputs."""
-        if not self.outputs:
-            return []
-        return sorted(list(self.outputs.keys()))
+        """Get list of data sources from outputs."""
+        return get_available_data_sources(self.outputs)
+
+    def _get_data_source_value(self, data_source: str):
+        """Resolve a data source with prefixed/unprefixed compatibility."""
+        return get_data_source_value(self.outputs, data_source)
     
     def _get_nested_keys(self, data_source: str) -> List[str]:
         """Get nested key paths if data source is a dictionary."""
-        if not data_source or data_source not in self.outputs:
-            return []
-        
-        data = self.outputs[data_source]
-        if isinstance(data, dict):
-            return self._collect_nested_key_paths(data)
-        return []
+        return get_nested_keys(self.outputs, data_source)
 
     def _collect_nested_key_paths(self, data: dict, prefix: str = "") -> List[str]:
         """Collect nested dictionary paths in dot notation (e.g., 'a.b.c')."""
-        paths = []
-        for key, value in data.items():
-            key_str = str(key)
-            full_key = f"{prefix}.{key_str}" if prefix else key_str
-            paths.append(full_key)
-            if isinstance(value, dict):
-                paths.extend(self._collect_nested_key_paths(value, full_key))
-        return sorted(paths)
+        return collect_nested_key_paths(data, prefix)
 
     def _resolve_nested_data(self, data, nested_key: str = None):
         """Resolve nested data using dot notation path."""
@@ -684,8 +642,8 @@ class AddGraphDialog:
         
         ttk.Label(x_frame, text=self._t("ui.labels.nested_key_optional", "Nested Key (optional):")).pack(anchor=tk.W, pady=(5, 0))
         x_nested_var = tk.StringVar(value=existing_config.get('x_axis', {}).get('nested_key', '') if existing_config else '')
-        x_nested_entry = ttk.Entry(x_frame, textvariable=x_nested_var, width=40)
-        x_nested_entry.pack(fill=tk.X, pady=2)
+        x_nested_combo = ttk.Combobox(x_frame, textvariable=x_nested_var, width=40)
+        x_nested_combo.pack(fill=tk.X, pady=2)
         
         # Y-axis config
         y_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.y_axis_configuration", "Y-Axis Configuration"), padding=10)
@@ -699,8 +657,8 @@ class AddGraphDialog:
         
         ttk.Label(y_frame, text=self._t("ui.labels.nested_key_optional", "Nested Key (optional):")).pack(anchor=tk.W, pady=(5, 0))
         y_nested_var = tk.StringVar(value=existing_config.get('y_axis', {}).get('nested_key', '') if existing_config else '')
-        y_nested_entry = ttk.Entry(y_frame, textvariable=y_nested_var, width=40)
-        y_nested_entry.pack(fill=tk.X, pady=2)
+        y_nested_combo = ttk.Combobox(y_frame, textvariable=y_nested_var, width=40)
+        y_nested_combo.pack(fill=tk.X, pady=2)
         
         # Z-axis config (optional)
         z_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.z_axis_configuration_optional_3d", "Z-Axis Configuration (Optional, for 3D)"), padding=10)
@@ -714,8 +672,25 @@ class AddGraphDialog:
         
         ttk.Label(z_frame, text=self._t("ui.labels.nested_key_optional", "Nested Key (optional):")).pack(anchor=tk.W, pady=(5, 0))
         z_nested_var = tk.StringVar(value=existing_config.get('z_axis', {}).get('nested_key', '') if existing_config else '')
-        z_nested_entry = ttk.Entry(z_frame, textvariable=z_nested_var, width=40)
-        z_nested_entry.pack(fill=tk.X, pady=2)
+        z_nested_combo = ttk.Combobox(z_frame, textvariable=z_nested_var, width=40)
+        z_nested_combo.pack(fill=tk.X, pady=2)
+
+        def _refresh_dataset_nested_keys(source_var: tk.StringVar, nested_combo: ttk.Combobox):
+            source = source_var.get().strip()
+            nested_keys = self._get_nested_keys(source)
+            current = nested_combo.get().strip()
+            nested_combo['values'] = [''] + nested_keys
+            if current and current not in nested_keys:
+                nested_combo.set(current)
+
+        x_source_combo.bind('<<ComboboxSelected>>', lambda _e: _refresh_dataset_nested_keys(x_source_var, x_nested_combo))
+        y_source_combo.bind('<<ComboboxSelected>>', lambda _e: _refresh_dataset_nested_keys(y_source_var, y_nested_combo))
+        z_source_combo.bind('<<ComboboxSelected>>', lambda _e: _refresh_dataset_nested_keys(z_source_var, z_nested_combo))
+
+        # Initialize nested-key lists for edit mode and pre-filled values
+        _refresh_dataset_nested_keys(x_source_var, x_nested_combo)
+        _refresh_dataset_nested_keys(y_source_var, y_nested_combo)
+        _refresh_dataset_nested_keys(z_source_var, z_nested_combo)
         
         # Class labels (optional)
         class_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.class_labels_optional", "Class Labels (Optional)"), padding=10)

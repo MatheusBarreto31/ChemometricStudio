@@ -5664,6 +5664,7 @@ class ChemometricsGUI:
         """Render a comprehensive data table with sorting, filtering, and formatting."""
         try:
             config = section_data.get('config', {})
+            data_source = config.get('data_source')
             
             # Get execution results
             if instance_alias not in self.analysis_data:
@@ -5703,13 +5704,7 @@ class ChemometricsGUI:
                     col_data = self._get_data_from_source(outputs, col_data_source, col_nested_key)
                     
                     if col_data is None:
-                        label = ttk.Label(
-                            parent,
-                            text=self.language_manager.translate("ui.messages.column_data_source_not_found", "Column data source not found:") + f" '{col_data_source}'",
-                            foreground="red"
-                        )
-                        label.pack(expand=True)
-                        return
+                        continue
                     
                     # Convert to numpy array if needed
                     if not isinstance(col_data, np.ndarray):
@@ -5720,10 +5715,25 @@ class ChemometricsGUI:
                     
                     data_columns.append(col_data)
                     col_headers.append(col_name)
+
+                # Skip rendering only if no columns are available for current outputs
+                if not data_columns:
+                    label = ttk.Label(
+                        parent,
+                        text=self.language_manager.translate(
+                            "ui.messages.no_columns_available_current_run",
+                            "No configured table columns are available for the current run."
+                        ),
+                        foreground="gray"
+                    )
+                    label.pack(expand=True)
+                    return
                 
                 # Stack columns into a 2D array
                 try:
-                    data = np.column_stack(data_columns)
+                    min_len = min(len(col) for col in data_columns)
+                    trimmed_columns = [col[:min_len] for col in data_columns]
+                    data = np.column_stack(trimmed_columns)
                 except ValueError:
                     label = ttk.Label(parent, text=self.language_manager.translate("ui.messages.column_lengths_mismatch", "Column lengths do not match. All columns must have the same length."), foreground="red")
                     label.pack(expand=True)

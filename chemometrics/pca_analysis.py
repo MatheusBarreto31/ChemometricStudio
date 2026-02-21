@@ -54,7 +54,43 @@ def _is_cv_fold_call() -> bool:
     return False
 
 
-def _compute_pca_metrics(scores: np.ndarray, X_data: np.ndarray, loadings: np.ndarray) -> Dict[str, Any]:
+def _compute_reconstruction_rmse_vector(
+    scores: np.ndarray,
+    X_data: np.ndarray,
+    loadings: np.ndarray,
+    mean_vector: Optional[np.ndarray] = None,
+) -> np.ndarray:
+    """Compute reconstruction RMSE for 1..A components.
+    
+    Args:
+        scores: PCA scores (samples x n_components)
+        X_data: Data to reconstruct (samples x n_variables)
+        loadings: PCA loadings (n_variables x n_components)
+        mean_vector: Optional mean vector to add after reconstruction
+                    (required for sklearn PCA-consistent inverse transform)
+    
+    Returns:
+        Vector of length A where position i contains RMSE using i+1 components
+    """
+    n_components = min(scores.shape[1], loadings.shape[1])
+    rmse_vector = []
+    
+    for n_comp in range(1, n_components + 1):
+        X_reconstructed = scores[:, :n_comp] @ loadings[:, :n_comp].T
+        if mean_vector is not None:
+            X_reconstructed = X_reconstructed + mean_vector
+        mse = np.mean((X_data - X_reconstructed) ** 2)
+        rmse_vector.append(float(np.sqrt(mse)))
+    
+    return np.asarray(rmse_vector, dtype=float)
+
+
+def _compute_pca_metrics(
+    scores: np.ndarray,
+    X_data: np.ndarray,
+    loadings: np.ndarray,
+    mean_vector: Optional[np.ndarray] = None,
+) -> Dict[str, Any]:
     """Compute PCA-relevant metrics.
     
     Args:
@@ -69,18 +105,29 @@ def _compute_pca_metrics(scores: np.ndarray, X_data: np.ndarray, loadings: np.nd
     n_variables = X_data.shape[1]
     n_samples = X_data.shape[0]
     
-    # Compute variance explained by each component
-    explained_variance = np.sum(scores ** 2, axis=0) / (n_samples - 1)
-    total_variance = np.sum(np.var(X_data, axis=0) * (n_samples / (n_samples - 1)))
-    pct_var_explained = (explained_variance / total_variance) * 100
+    # Compute variance explained by each component.
+    # Guard against n_samples <= 1 (possible for CV test folds), where
+    # Bessel-corrected scaling n/(n-1) is undefined.
+    if n_samples > 1:
+        explained_variance = np.sum(scores ** 2, axis=0) / (n_samples - 1)
+        total_variance = np.sum(np.var(X_data, axis=0) * (n_samples / (n_samples - 1)))
+    else:
+        explained_variance = np.zeros(n_components, dtype=float)
+        total_variance = float(np.sum(np.var(X_data, axis=0))) if X_data.size else 0.0
+
+    if total_variance > 0:
+        pct_var_explained = (explained_variance / total_variance) * 100
+    else:
+        pct_var_explained = np.zeros(n_components, dtype=float)
     cumsum_pct_var = np.cumsum(pct_var_explained)
     
-    # Reconstruct data from scores and loadings
-    X_reconstructed = scores @ loadings.T
-    
-    # Reconstruction error
-    reconstruction_error = np.mean((X_data - X_reconstructed) ** 2)
-    rmse_reconstruction = np.sqrt(reconstruction_error)
+    # Reconstruction RMSE vector (1..A components)
+    rmse_reconstruction_vector = _compute_reconstruction_rmse_vector(
+        scores=scores,
+        X_data=X_data,
+        loadings=loadings,
+        mean_vector=mean_vector,
+    )
     
     return {
         'n_components': int(n_components),
@@ -90,7 +137,7 @@ def _compute_pca_metrics(scores: np.ndarray, X_data: np.ndarray, loadings: np.nd
         'pct_variance_explained': pct_var_explained.tolist(),
         'cumsum_pct_variance': cumsum_pct_var.tolist(),
         'total_variance': float(total_variance),
-        'reconstruction_rmse': float(rmse_reconstruction),
+        'reconstruction_rmse': rmse_reconstruction_vector.tolist(),
     }
 
 
@@ -235,6 +282,44 @@ def pca_analysis(
                 cv_model_loadings = np.array(_fold_loadings_collector)
             else:
                 cv_model_loadings = None
+
+            # Add CV-based reconstruction RMSE vector to calibration metrics.
+            # Uses fold-specific loadings/means aligned to each sample's test fold.
+            if cv_model_scores is not None and _fold_loadings_collector:
+                Xc_full, _ = _ensure_2d_matrix(X_cal)
+                n_samples, n_vars = Xc_full.shape
+                n_comp = cv_model_scores.shape[1]
+
+                sample_loadings = np.zeros((n_samples, n_vars, n_comp), dtype=float)
+                sample_means = np.zeros((n_samples, n_vars), dtype=float)
+                sample_assigned = np.zeros(n_samples, dtype=bool)
+
+                # Recreate fold indices using the same splitter/config used by pipeline
+                for fold_idx, (train_idx, test_idx) in enumerate(pipeline.splitter.get_splits(X_cal)):
+                    if fold_idx >= len(_fold_loadings_collector):
+                        break
+                    fold_loadings = _fold_loadings_collector[fold_idx]
+                    fold_mean = np.mean(Xc_full[train_idx], axis=0)
+
+                    sample_loadings[test_idx] = fold_loadings
+                    sample_means[test_idx] = fold_mean
+                    sample_assigned[test_idx] = True
+
+                # Fallback for any sample not covered by CV test folds
+                if not np.all(sample_assigned):
+                    fallback_mean = np.mean(Xc_full, axis=0)
+                    sample_loadings[~sample_assigned] = model_loadings
+                    sample_means[~sample_assigned] = fallback_mean
+
+                rmse_cv_vector = []
+                for n_comp_use in range(1, n_comp + 1):
+                    scores_k = cv_model_scores[:, :n_comp_use]
+                    loadings_k = sample_loadings[:, :, :n_comp_use]
+                    X_reconstructed_cv = np.einsum('sk,svk->sv', scores_k, loadings_k) + sample_means
+                    rmse_cv = float(np.sqrt(np.mean((Xc_full - X_reconstructed_cv) ** 2)))
+                    rmse_cv_vector.append(rmse_cv)
+
+                metrics['calibration']['reconstruction_rmse_cv'] = rmse_cv_vector
             
             # Build cv_results dict (remove the _cv suffixed keys which are outputs, not results)
             cv_results = {k: v for k, v in cv_results_dict.items() 
@@ -313,12 +398,12 @@ def _pca_analysis_single_fit(
     model_loadings = pca.components_.T  # Convert from (n_components, n_vars) to (n_vars, n_components)
     
     # Compute metrics for calibration
-    metrics_cal = _compute_pca_metrics(model_scores, Xc, model_loadings)
+    metrics_cal = _compute_pca_metrics(model_scores, Xc, model_loadings, mean_vector=pca.mean_)
     
     # Project validation data if provided
     if Xv is not None:
         val_scores = pca.transform(Xv)
-        metrics_val = _compute_pca_metrics(val_scores, Xv, model_loadings)
+        metrics_val = _compute_pca_metrics(val_scores, Xv, model_loadings, mean_vector=pca.mean_)
     else:
         val_scores = None
         metrics_val = None
@@ -328,7 +413,7 @@ def _pca_analysis_single_fit(
     metrics_cv = None
     if Xc_test is not None:
         scores_cv = pca.transform(Xc_test)
-        metrics_cv = _compute_pca_metrics(scores_cv, Xc_test, model_loadings)
+        metrics_cv = _compute_pca_metrics(scores_cv, Xc_test, model_loadings, mean_vector=pca.mean_)
     
     # Build cv_results following FoldSegregatedOutput structure if this is a CV call
     cv_results = None
