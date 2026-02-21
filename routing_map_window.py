@@ -18,6 +18,43 @@ from typing import Dict, List, Tuple, Optional, Any
 from pathlib import Path
 import json
 from PIL import Image, ImageDraw, ImageFont, ImageTk
+import platform
+
+
+def _set_window_icon(window, base_name: str = "Icon"):
+    base_dir = Path(__file__).parent
+    graphics_dir = base_dir / "Graphics"
+    ico_path = graphics_dir / f"{base_name}.ico"
+    png_path = graphics_dir / f"{base_name}.png"
+    if not ico_path.exists():
+        ico_path = base_dir / f"{base_name}.ico"
+    if not png_path.exists():
+        png_path = base_dir / f"{base_name}.png"
+
+    if platform.system().lower() == "windows" and ico_path.exists():
+        try:
+            window.iconbitmap(str(ico_path))
+            return
+        except tk.TclError:
+            pass
+
+    if png_path.exists():
+        try:
+            icon_photo = tk.PhotoImage(file=str(png_path))
+            window.iconphoto(True, icon_photo)
+            window._icon_photo = icon_photo
+            return
+        except tk.TclError:
+            pass
+
+    if ico_path.exists():
+        try:
+            icon_image = Image.open(ico_path)
+            icon_photo = ImageTk.PhotoImage(icon_image)
+            window.iconphoto(True, icon_photo)
+            window._icon_photo = icon_photo
+        except Exception:
+            pass
 
 
 class RoutingMapWindow:
@@ -73,6 +110,7 @@ class RoutingMapWindow:
         
         # Create window - responsive to parent screen size
         self.window = tk.Toplevel(parent)
+        _set_window_icon(self.window, "Icon")
         self.window.title("Routing Map - Full View")
         
         # Get parent window size and set routing map to use most of screen while leaving room for taskbar/title

@@ -12,7 +12,47 @@ Provides a dialog for adding tables to the analysis tab with:
 import tkinter as tk
 from tkinter import ttk, messagebox
 import numpy as np
+from pathlib import Path
+import platform
 from typing import Optional, Dict, List, Tuple
+
+
+def _set_window_icon(window, base_name: str = "Icon"):
+    base_dir = Path(__file__).parent
+    graphics_dir = base_dir / "Graphics"
+    ico_path = graphics_dir / f"{base_name}.ico"
+    png_path = graphics_dir / f"{base_name}.png"
+    if not ico_path.exists():
+        ico_path = base_dir / f"{base_name}.ico"
+    if not png_path.exists():
+        png_path = base_dir / f"{base_name}.png"
+
+    if platform.system().lower() == "windows" and ico_path.exists():
+        try:
+            window.iconbitmap(str(ico_path))
+            return
+        except tk.TclError:
+            pass
+
+    if png_path.exists():
+        try:
+            icon_photo = tk.PhotoImage(file=str(png_path))
+            window.iconphoto(True, icon_photo)
+            window._icon_photo = icon_photo
+            return
+        except tk.TclError:
+            pass
+
+    if ico_path.exists():
+        try:
+            from PIL import Image, ImageTk
+
+            icon_image = Image.open(ico_path)
+            icon_photo = ImageTk.PhotoImage(icon_image)
+            window.iconphoto(True, icon_photo)
+            window._icon_photo = icon_photo
+        except Exception:
+            pass
 
 
 class AddTableDialog:
@@ -44,6 +84,7 @@ class AddTableDialog:
         
         # Create dialog window
         self.dialog = tk.Toplevel(parent)
+        _set_window_icon(self.dialog, "Icon")
         self.dialog.title(self._t("ui.dialogs.add_table", "Add Table"))
         self.dialog.geometry("800x552")
         self._center_window(self.dialog, 800, 552)
@@ -457,6 +498,7 @@ class AddTableDialog:
     def _add_column_dialog(self):
         """Show dialog to add a new column."""
         dialog = tk.Toplevel(self.dialog)
+        _set_window_icon(dialog, "Icon")
         dialog.title(self._t("ui.dialogs.add_column", "Add Column"))
         dialog.geometry("400x300")
         self._center_window(dialog, 400, 300)
@@ -533,6 +575,7 @@ class AddTableDialog:
         col_config = self.columns_configs[idx]
         
         dialog = tk.Toplevel(self.dialog)
+        _set_window_icon(dialog, "Icon")
         dialog.title(self._t("ui.dialogs.edit_column", "Edit Column"))
         dialog.geometry("400x300")
         self._center_window(dialog, 400, 300)

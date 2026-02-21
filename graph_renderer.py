@@ -531,74 +531,136 @@ def _setup_scatter_tooltips(canvas: FigureCanvasTkAgg, fig: Figure) -> None:
     if not scatter_collections:
         return
     
-    # Store state for hover tracking
-    tooltip_state = {'annotation': None, 'last_ind': None}
+    # Store state for hover tracking and pinned annotations
+    tooltip_state = {
+        'hover_annotation': None,
+        'hover_key': None,
+        'pinned_annotations': {}
+    }
+
+    def _make_annotation(scatter, ind: int, is_pinned: bool = False):
+        """Create an annotation for a scatter point index."""
+        sample_labels = scatter.sample_labels
+        if ind >= len(sample_labels):
+            return None
+
+        if not (hasattr(scatter, 'x_data') and hasattr(scatter, 'y_data')):
+            return None
+
+        x_data = scatter.x_data
+        y_data = scatter.y_data
+        if ind >= len(x_data) or ind >= len(y_data):
+            return None
+
+        label = str(sample_labels[ind])
+        x = x_data[ind]
+        y = y_data[ind]
+
+        return ax.annotate(
+            label,
+            xy=(x, y),
+            xytext=(8, 8),
+            textcoords='offset points',
+            bbox=dict(
+                boxstyle='round,pad=0.5',
+                fc='lightyellow' if is_pinned else 'yellow',
+                alpha=0.85 if is_pinned else 0.7
+            ),
+            arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0', lw=1),
+            fontsize=9,
+            zorder=11 if is_pinned else 10
+        )
+
+    def _find_point_at_event(event):
+        """Return (scatter, ind) for the first point under the cursor, else (None, None)."""
+        for scatter in scatter_collections:
+            if not hasattr(scatter, 'sample_labels'):
+                continue
+
+            contains, inds = scatter.contains(event)
+            if not contains:
+                continue
+
+            ind = inds.get('ind', [None])[0] if isinstance(inds, dict) else (inds[0] if len(inds) > 0 else None)
+            if ind is not None:
+                return scatter, ind
+
+        return None, None
     
     def on_motion(event):
         """Handle mouse motion to show/hide tooltips."""
         if event.inaxes != ax:
-            # Mouse left the axes, hide tooltip
-            if tooltip_state['annotation']:
-                tooltip_state['annotation'].remove()
-                tooltip_state['annotation'] = None
+            # Mouse left the axes, hide only hover tooltip (keep pinned labels)
+            if tooltip_state['hover_annotation']:
+                tooltip_state['hover_annotation'].remove()
+                tooltip_state['hover_annotation'] = None
+            tooltip_state['hover_key'] = None
             canvas.draw_idle()
             return
-        
-        # Check each scatter collection for nearby points
-        for scatter in scatter_collections:
-            if not hasattr(scatter, 'sample_labels'):
-                continue
-            
-            contains, inds = scatter.contains(event)
-            
-            if contains:
-                # Found a point near the cursor
-                ind = inds.get('ind', [None])[0] if isinstance(inds, dict) else (inds[0] if len(inds) > 0 else None)
-                
-                if ind is not None and ind != tooltip_state['last_ind']:
-                    # Remove old annotation if it exists
-                    if tooltip_state['annotation']:
-                        tooltip_state['annotation'].remove()
-                        tooltip_state['annotation'] = None
-                    
-                    # Get sample label
-                    sample_labels = scatter.sample_labels
-                    if ind < len(sample_labels):
-                        label = str(sample_labels[ind])
-                        
-                        # Get point coordinates
-                        if hasattr(scatter, 'x_data') and hasattr(scatter, 'y_data'):
-                            x_data = scatter.x_data
-                            y_data = scatter.y_data
-                            if ind < len(x_data) and ind < len(y_data):
-                                x = x_data[ind]
-                                y = y_data[ind]
-                                
-                                # Create annotation (tooltip)
-                                tooltip_state['annotation'] = ax.annotate(
-                                    label,
-                                    xy=(x, y),
-                                    xytext=(8, 8),
-                                    textcoords='offset points',
-                                    bbox=dict(boxstyle='round,pad=0.5', fc='yellow', alpha=0.7),
-                                    arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0', lw=1),
-                                    fontsize=9,
-                                    zorder=10
-                                )
-                                tooltip_state['last_ind'] = ind
-                                canvas.draw_idle()
-                                return
-            else:
-                # Mouse not over this scatter plot
-                if tooltip_state['last_ind'] is not None:
-                    # Remove tooltip if we were showing one from this scatter
-                    if tooltip_state['annotation']:
-                        tooltip_state['annotation'].remove()
-                        tooltip_state['annotation'] = None
-                    tooltip_state['last_ind'] = None
+
+        scatter, ind = _find_point_at_event(event)
+        if scatter is None or ind is None:
+            if tooltip_state['hover_annotation']:
+                tooltip_state['hover_annotation'].remove()
+                tooltip_state['hover_annotation'] = None
+            tooltip_state['hover_key'] = None
+            canvas.draw_idle()
+            return
+
+        point_key = (id(scatter), ind)
+        if point_key == tooltip_state['hover_key']:
+            return
+
+        if tooltip_state['hover_annotation']:
+            tooltip_state['hover_annotation'].remove()
+            tooltip_state['hover_annotation'] = None
+
+        # If the point is pinned, do not draw a duplicate hover annotation
+        if point_key in tooltip_state['pinned_annotations']:
+            tooltip_state['hover_key'] = point_key
+            canvas.draw_idle()
+            return
+
+        hover_annotation = _make_annotation(scatter, ind, is_pinned=False)
+        tooltip_state['hover_annotation'] = hover_annotation
+        tooltip_state['hover_key'] = point_key
+        canvas.draw_idle()
+
+    def on_click(event):
+        """Toggle pin/unpin for the scatter label under the click position."""
+        if event.inaxes != ax:
+            return
+
+        scatter, ind = _find_point_at_event(event)
+        if scatter is None or ind is None:
+            return
+
+        point_key = (id(scatter), ind)
+        pinned_annotations = tooltip_state['pinned_annotations']
+
+        # Toggle off if this point is already pinned
+        if point_key in pinned_annotations:
+            pinned_annotations[point_key].remove()
+            del pinned_annotations[point_key]
+            canvas.draw_idle()
+            return
+
+        # Pin the currently hovered label for this point only when it is displayed
+        if tooltip_state['hover_key'] != point_key:
+            return
+
+        if tooltip_state['hover_annotation']:
+            tooltip_state['hover_annotation'].remove()
+            tooltip_state['hover_annotation'] = None
+
+        pinned_annotation = _make_annotation(scatter, ind, is_pinned=True)
+        if pinned_annotation is not None:
+            pinned_annotations[point_key] = pinned_annotation
+        canvas.draw_idle()
     
     # Connect the motion event
     canvas.mpl_connect('motion_notify_event', on_motion)
+    canvas.mpl_connect('button_press_event', on_click)
 from typing import Union, Tuple
 
 def update_embedded_figure(fig: Figure, instance_alias: str, section_id: Union[int, Tuple[int, int]],

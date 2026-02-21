@@ -15,8 +15,48 @@ import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
 import numpy as np
 import copy
+from pathlib import Path
+import platform
 from typing import Optional, Dict, List, Tuple, Any
 import graph_renderer
+
+
+def _set_window_icon(window, base_name: str = "Icon"):
+    base_dir = Path(__file__).parent
+    graphics_dir = base_dir / "Graphics"
+    ico_path = graphics_dir / f"{base_name}.ico"
+    png_path = graphics_dir / f"{base_name}.png"
+    if not ico_path.exists():
+        ico_path = base_dir / f"{base_name}.ico"
+    if not png_path.exists():
+        png_path = base_dir / f"{base_name}.png"
+
+    if platform.system().lower() == "windows" and ico_path.exists():
+        try:
+            window.iconbitmap(str(ico_path))
+            return
+        except tk.TclError:
+            pass
+
+    if png_path.exists():
+        try:
+            icon_photo = tk.PhotoImage(file=str(png_path))
+            window.iconphoto(True, icon_photo)
+            window._icon_photo = icon_photo
+            return
+        except tk.TclError:
+            pass
+
+    if ico_path.exists():
+        try:
+            from PIL import Image, ImageTk
+
+            icon_image = Image.open(ico_path)
+            icon_photo = ImageTk.PhotoImage(icon_image)
+            window.iconphoto(True, icon_photo)
+            window._icon_photo = icon_photo
+        except Exception:
+            pass
 
 
 class AddGraphDialog:
@@ -48,6 +88,7 @@ class AddGraphDialog:
         
         # Create dialog window
         self.dialog = tk.Toplevel(parent)
+        _set_window_icon(self.dialog, "Icon")
         self.dialog.title(self._t("ui.dialogs.add_graph", "Add Graph"))
         self.dialog.geometry("1000x552")
         self._center_window(self.dialog, 1000, 552)
@@ -575,6 +616,7 @@ class AddGraphDialog:
     def _show_dataset_config_dialog(self, edit_idx=None, existing_config=None):
         """Show dialog to configure a single dataset."""
         dialog = tk.Toplevel(self.dialog)
+        _set_window_icon(dialog, "Icon")
         dialog.title(
             self._t("ui.dialogs.configure_dataset", "Configure Dataset")
             if edit_idx is None else
@@ -1326,6 +1368,7 @@ Tips:
 """
         
         help_dialog = tk.Toplevel(self.dialog)
+        _set_window_icon(help_dialog, "Info")
         help_dialog.title(self._t("ui.buttons.help", "Help"))
         help_dialog.geometry("700x600")
         self._center_window(help_dialog, 700, 600)

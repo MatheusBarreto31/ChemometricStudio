@@ -35,6 +35,45 @@ with open(SPECS_PATH, encoding='utf-8') as f:
     FUNCTION_SPECS = json.load(f)
 
 
+def _set_window_icon(window, base_name: str = "Icon") -> None:
+    base_dir = Path(__file__).parent
+    graphics_dir = base_dir / "Graphics"
+    ico_path = graphics_dir / f"{base_name}.ico"
+    png_path = graphics_dir / f"{base_name}.png"
+    if not ico_path.exists():
+        ico_path = base_dir / f"{base_name}.ico"
+    if not png_path.exists():
+        png_path = base_dir / f"{base_name}.png"
+    current_system = platform.system().lower()
+
+    if current_system == "windows" and ico_path.exists():
+        try:
+            window.iconbitmap(str(ico_path))
+            return
+        except tk.TclError:
+            pass
+
+    if png_path.exists():
+        try:
+            icon_photo = tk.PhotoImage(file=str(png_path))
+            window.iconphoto(True, icon_photo)
+            window._icon_photo = icon_photo
+            return
+        except tk.TclError:
+            pass
+
+    if ico_path.exists():
+        try:
+            from PIL import Image, ImageTk
+
+            icon_image = Image.open(ico_path)
+            icon_photo = ImageTk.PhotoImage(icon_image)
+            window.iconphoto(True, icon_photo)
+            window._icon_photo = icon_photo
+        except Exception:
+            pass
+
+
 class Tooltip:
     """Create a tooltip for a given widget."""
     
@@ -477,6 +516,7 @@ class ChemometricsGUI:
             return
 
         report_win = tk.Toplevel(self.root)
+        _set_window_icon(report_win, "Icon")
         report_win.title(self.language_manager.translate("ui.dialogs.timing_report", "Timing Report"))
         report_win.geometry("640x460")
         report_win.transient(self.root)
@@ -605,6 +645,7 @@ class ChemometricsGUI:
         
         # Create the about window
         about_win = tk.Toplevel(self.root)
+        _set_window_icon(about_win, "Icon")
         about_win.title(lang_info.get("title", "About"))
         about_win.geometry("550x500")
         about_win.resizable(False, False)
@@ -625,7 +666,12 @@ class ChemometricsGUI:
         
         # Left side with icon
         try:
-            icon_path = Path(__file__).parent / "Icon.ico"
+            base_dir = Path(__file__).parent
+            icon_path = base_dir / "Graphics" / "Icon.png"
+            if not icon_path.exists():
+                icon_path = base_dir / "Graphics" / "Icon.ico"
+            if not icon_path.exists():
+                icon_path = base_dir / "Icon.ico"
             if icon_path.exists():
                 # Load and resize the icon
                 from PIL import Image, ImageTk
@@ -2685,13 +2731,7 @@ class ChemometricsGUI:
         popup.title(f"{self.language_manager.translate('ui.dialogs.help_for', 'Help:')} {title}")
         popup.geometry("600x400")
         
-        # Set the window icon to Info.ico
-        try:
-            info_icon_path = Path(__file__).parent / "Info.ico"
-            if info_icon_path.exists():
-                popup.iconbitmap(str(info_icon_path))
-        except Exception as e:
-            print(f"Warning: Could not set help window icon: {e}")
+        _set_window_icon(popup, "Info")
         
         # Create scrollable text area
         text_frame = ttk.Frame(popup)
@@ -5988,6 +6028,7 @@ class ChemometricsGUI:
         """Display statistical summary of table data."""
         try:
             stats_window = tk.Toplevel(self.root)
+            _set_window_icon(stats_window, "Icon")
             stats_window.title(f"{title} - {self.language_manager.translate('ui.labels.statistics', 'Statistics')}")
             stats_window.geometry("500x400")
             
@@ -6078,6 +6119,7 @@ Count:
         try:
             # Create a new popup window
             popup = tk.Toplevel(self.root)
+            _set_window_icon(popup, "Icon")
             popup.title(
                 self.language_manager.translate("ui.labels.section_prefix", "Section:") +
                 f" {section_data.get('config', {}).get('title', self.language_manager.translate('ui.labels.section', 'Section'))}"
@@ -7618,6 +7660,7 @@ Count:
         
         # Create dialog
         dialog = tk.Toplevel(self.root)
+        _set_window_icon(dialog, "Icon")
         dialog.title(self.language_manager.translate("ui.dialogs.remove_section", "Remove Section"))
         dialog.geometry("350x250")
         dialog.resizable(False, False)
@@ -7676,6 +7719,7 @@ Count:
             return
         
         dialog = tk.Toplevel(self.root)
+        _set_window_icon(dialog, "Icon")
         dialog.title(self.language_manager.translate("ui.dialogs.add_page", "Add Page"))
         dialog.geometry("500x520")
         dialog.resizable(False, False)
@@ -9620,6 +9664,7 @@ Count:
     def _show_save_model_dialog(self):
         """Show dialog to choose between saving with or without data."""
         dialog = tk.Toplevel(self.root)
+        _set_window_icon(dialog, "Icon")
         dialog.title(self.language_manager.translate("ui.buttons.save_model", "Save Model"))
         dialog.geometry("300x200")
         dialog.transient(self.root)
@@ -10388,11 +10433,19 @@ def main():
     show_splash = settings_manager.get("display_splashscreen", True)
 
     root = tk.Tk()
-    root.iconbitmap("Icon.ico")
+    root_transparent_start = False
+    if show_splash:
+        try:
+            root.attributes("-alpha", 0.0)
+            root_transparent_start = True
+        except tk.TclError:
+            root_transparent_start = False
+        root.withdraw()
+
+    _set_window_icon(root, "Icon")
 
     splash = None
     if show_splash:
-        root.withdraw()
         splash = tk.Toplevel(root)
         splash.overrideredirect(True)
         splash.resizable(False, False)
@@ -10480,6 +10533,11 @@ def main():
             splash.destroy()
 
     if show_splash:
+        if root_transparent_start:
+            try:
+                root.attributes("-alpha", 1.0)
+            except tk.TclError:
+                pass
         root.deiconify()
 
     root.mainloop()
