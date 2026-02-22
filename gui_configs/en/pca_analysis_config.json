@@ -280,6 +280,8 @@
             "config": {
               "graph_type": "scatter",
               "title": "PCA Scores",
+              "show_grid": false,
+              "show_origin": true,
               "datasets": [
                 {
                   "x_axis": {

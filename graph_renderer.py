@@ -86,8 +86,9 @@ def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarr
     if graph_title:
         ax.set_title(graph_title)
 
-    # Optional integer-only ticks for line/scatter axes
+    # Optional display and tick options for line/scatter axes
     if graph_type in ('line', 'scatter'):
+        _apply_graph_display_options(ax, config, use_3d=use_3d)
         _apply_axis_tick_options(ax, config, use_3d=use_3d)
     
     # constrained_layout handles margins automatically - no manual adjustment needed
@@ -114,6 +115,21 @@ def _apply_axis_tick_options(ax, config: dict, use_3d: bool = False) -> None:
 
     if use_3d and z_axis_cfg.get('force_integer', False) and hasattr(ax, 'zaxis'):
         ax.zaxis.set_major_locator(MaxNLocator(integer=True))
+
+
+def _apply_graph_display_options(ax, config: dict, use_3d: bool = False) -> None:
+    """Apply optional graph-level display options.
+
+    Supported options:
+        - show_grid: bool (show axis grid)
+        - show_origin: bool (draw dashed x=0 and y=0 reference lines for 2D)
+    """
+    if config.get('show_grid', False):
+        ax.grid(True)
+
+    if config.get('show_origin', False) and not use_3d:
+        ax.axhline(0, color='gray', linestyle='--', linewidth=1.0, alpha=0.7)
+        ax.axvline(0, color='gray', linestyle='--', linewidth=1.0, alpha=0.7)
 
 
 def _render_scatter(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],

@@ -858,6 +858,24 @@ class AddGraphDialog:
         sample_combo = ttk.Combobox(sample_frame, textvariable=self.sample_labels_var,
                                     values=[''] + self._get_available_data_sources(), width=40)
         sample_combo.pack(fill=tk.X, pady=5)
+
+        # Display options
+        display_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.display_options", "Display Options"), padding=10)
+        display_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        self.show_grid_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            display_frame,
+            text=self._t("ui.labels.show_grid", "Show grid"),
+            variable=self.show_grid_var
+        ).pack(anchor=tk.W, pady=2)
+
+        self.show_origin_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            display_frame,
+            text=self._t("ui.labels.show_origin", "Show origin (x=0, y=0)"),
+            variable=self.show_origin_var
+        ).pack(anchor=tk.W, pady=2)
         
         # Data slicing configuration
         slice_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.data_slicing_navigation", "Data Slicing / Navigation"), padding=10)
@@ -1085,6 +1103,12 @@ class AddGraphDialog:
         sample_source = self.sample_labels_var.get()
         if sample_source:
             config['sample_labels_source'] = sample_source
+
+        # Display options
+        if getattr(self, 'show_grid_var', None) and self.show_grid_var.get():
+            config['show_grid'] = True
+        if getattr(self, 'show_origin_var', None) and self.show_origin_var.get():
+            config['show_origin'] = True
         
         # Data slicing - build navigation controls
         data_slicing = []
