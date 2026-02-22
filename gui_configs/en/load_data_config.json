@@ -373,6 +373,7 @@
                 "label": "Intensity"
               },
               "graph_title": "Scatter test",
+              "variable_labels": "axis_t_info",
               "data_slicing": [
                 {
                   "name": "Sample",
@@ -598,6 +599,41 @@
             },
             "short_description": "Displays Spectral Data Heatmap (4D+) as a heatmap graph in the analysis section.",
             "long_description": "This section visualizes 'Spectral Data Heatmap (4D+)' using a heatmap graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
+          }
+        ]
+      },
+      {
+        "title": "Data Overview",
+        "layout": "ew",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {
+                "data_source": "axis_n_info",
+                "index": 1,
+                "label": "dim_labels",
+                "l_index": 1
+              },
+              "y_axis": {
+                "data_source": "out.X_cal",
+                "label": "Intensity"
+              },
+              "title": "Spectral Data Overview",
+              "dimension_labels": "dim_labels",
+              "variable_labels": "axis_t_info",
+              "data_slicing": [
+                {
+                  "name": "Sample",
+                  "dimension": 0,
+                  "axis": "y",
+                  "show_navigation_menu": true
+                }
+              ]
+            },
+            "short_description": "Displays Spectral Data Overview as a line graph in the analysis section.",
+            "long_description": "This section visualizes 'Spectral Data Overview' using a line graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
           }
         ]
       }

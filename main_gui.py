@@ -751,7 +751,7 @@ class ChemometricsGUI:
         
         # Workspace area (tabs + content)
         workspace_frame = ttk.Frame(self.root)
-        workspace_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=10)
+        workspace_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=(10, 4))
         self.workspace_frame = workspace_frame
 
         # Keep progress popup centered over workspace while window/layout changes
@@ -764,7 +764,7 @@ class ChemometricsGUI:
         
         # Tab content frame
         self.tab_content_frame = ttk.Frame(workspace_frame)
-        self.tab_content_frame.pack(fill=tk.BOTH, expand=True, padx=0, pady=10)
+        self.tab_content_frame.pack(fill=tk.BOTH, expand=True, padx=0, pady=(10, 3))
         
         # Initialize tabs as empty; will be created on demand
         self.current_tab = None
@@ -3506,18 +3506,23 @@ class ChemometricsGUI:
                 # Deep copy pages to prevent modifications from affecting gui_configs
                 self.analysis_data[instance_alias] = {
                     'pages': copy.deepcopy(analysis_config.get('pages', [{'title': 'Default', 'layout': 'fp', 'sections': [{'type': None}]}])),
-                    'current_page': analysis_config.get('current_page', 0)
+                    'current_page': analysis_config.get('current_page', 0),
+                    'active_sections': {}
                 }
             else:
                 # Fallback to default structure
                 self.analysis_data[instance_alias] = {
                     'pages': [{'title': 'Default', 'layout': 'fp', 'sections': [{'type': None}]}],
-                    'current_page': 0
+                    'current_page': 0,
+                    'active_sections': {}
                 }
         
         analysis_info = self.analysis_data[instance_alias]
+        if 'active_sections' not in analysis_info:
+            analysis_info['active_sections'] = {}
         self._ensure_analysis_result_selection(instance_alias)
         analysis_info = self.analysis_data[instance_alias]
+        self._ensure_analysis_section_styles()
         
         # Create top control bar
         control_frame = ttk.Frame(self.tab_content_frame)
@@ -3618,9 +3623,30 @@ class ChemometricsGUI:
         
         # Navigation frame (bottom): page navigation row + result navigation row
         nav_frame = ttk.Frame(self.tab_content_frame)
-        nav_frame.pack(fill=tk.X, padx=10, pady=(0, 10), side=tk.BOTTOM)
-        page_nav_row = ttk.Frame(nav_frame)
-        page_nav_row.pack(fill=tk.X)
+        nav_frame.pack(fill=tk.X, padx=10, pady=(0, 2), side=tk.BOTTOM)
+
+        left_nav_col = ttk.Frame(nav_frame)
+        left_nav_col.pack(side=tk.LEFT, fill=tk.BOTH, expand=False)
+        left_nav_col.pack_propagate(False)
+
+        right_nav_col = ttk.Frame(nav_frame)
+        right_nav_col.pack(side=tk.RIGHT, fill=tk.BOTH, expand=False, padx=(12, 0))
+        right_nav_col.pack_propagate(False)
+
+        self.analysis_data[instance_alias]['page_nav_host'] = left_nav_col
+        self.analysis_data[instance_alias]['active_nav_host'] = right_nav_col
+        self._update_analysis_bottom_split(instance_alias)
+        self.root.after_idle(lambda ia=instance_alias: self._update_analysis_bottom_split(ia))
+
+        current_page_data_for_layout = visible_pages[visible_page_idx][1] if visible_pages else None
+        if current_page_data_for_layout is not None:
+            self._update_active_nav_host_geometry(instance_alias, current_page_data_for_layout)
+
+        left_nav_stack = ttk.Frame(left_nav_col)
+        left_nav_stack.pack(side=tk.BOTTOM, anchor='sw', fill=tk.X)
+
+        page_nav_row = ttk.Frame(left_nav_stack)
+        page_nav_row.pack(side=tk.BOTTOM, fill=tk.X)
         
         # Page display label (first)
         if visible_pages:
@@ -3652,8 +3678,8 @@ class ChemometricsGUI:
             if isinstance(entry, dict)
         )
         if history_entries and has_contextual_history:
-            result_nav_row = ttk.Frame(nav_frame)
-            result_nav_row.pack(fill=tk.X, pady=(6, 0))
+            result_nav_row = ttk.Frame(left_nav_stack)
+            result_nav_row.pack(side=tk.BOTTOM, fill=tk.X, pady=(6, 0))
 
             result_prev_btn = ttk.Button(
                 result_nav_row,
@@ -3701,6 +3727,573 @@ class ChemometricsGUI:
         if visible_pages:
             current_idx, page_data = visible_pages[visible_page_idx]
             self._render_analysis_page(content_frame, instance_alias, page_data)
+
+    def _ensure_analysis_section_styles(self):
+        """Ensure deterministic ttk styles for active/inactive section outlines."""
+        if getattr(self, '_analysis_section_styles_initialized', False):
+            return
+
+        self._analysis_section_active_border = "#b5b5b5"
+
+        style = ttk.Style()
+
+        # Sample base Labelframe bevel colors from the active theme for consistency.
+        base_border = style.lookup("TLabelframe", "bordercolor") or "#dedede"
+        base_light = style.lookup("TLabelframe", "lightcolor") or "#eaeaea"
+        base_dark = style.lookup("TLabelframe", "darkcolor") or "#eeeeee"
+
+        self._analysis_section_inactive_border = base_border
+        self._analysis_section_inactive_light = base_light
+        self._analysis_section_inactive_dark = base_dark
+
+        # Keep active border darker while preserving light/dark bevel relationship.
+        self._analysis_section_active_light = base_light
+        self._analysis_section_active_dark = base_dark
+
+        # Build section-specific styles from clam border element to reduce theme dependency.
+        try:
+            style.element_create("AnalysisSectionInactive.border", "from", "clam", "Labelframe.border")
+        except tk.TclError:
+            pass
+        try:
+            style.element_create("AnalysisSectionActive.border", "from", "clam", "Labelframe.border")
+        except tk.TclError:
+            pass
+
+        def _replace_layout_element(layout_spec, old_element: str, new_element: str):
+            replaced = []
+            for element, options in layout_spec:
+                elem_name = new_element if element == old_element else element
+                opts = dict(options)
+                if 'children' in opts and isinstance(opts['children'], list):
+                    opts['children'] = _replace_layout_element(opts['children'], old_element, new_element)
+                replaced.append((elem_name, opts))
+            return replaced
+
+        try:
+            base_layout = style.layout("TLabelframe")
+            if base_layout:
+                inactive_layout = _replace_layout_element(copy.deepcopy(base_layout), "Labelframe.border", "AnalysisSectionInactive.border")
+                active_layout = _replace_layout_element(copy.deepcopy(base_layout), "Labelframe.border", "AnalysisSectionActive.border")
+                style.layout("AnalysisSectionInactive.TLabelframe", inactive_layout)
+                style.layout("AnalysisSectionActive.TLabelframe", active_layout)
+        except Exception:
+            pass
+
+        style.configure(
+            "AnalysisSectionInactive.TLabelframe",
+            bordercolor=self._analysis_section_inactive_border,
+            lightcolor=self._analysis_section_inactive_light,
+            darkcolor=self._analysis_section_inactive_dark,
+            borderwidth=1,
+            relief=tk.GROOVE
+        )
+        style.configure(
+            "AnalysisSectionActive.TLabelframe",
+            bordercolor=self._analysis_section_active_border,
+            lightcolor=self._analysis_section_active_light,
+            darkcolor=self._analysis_section_active_dark,
+            borderwidth=1,
+            relief=tk.GROOVE
+        )
+
+        self._analysis_section_styles_initialized = True
+
+    def _bind_section_activation(self, widget: tk.Widget, instance_alias: str, section_id: tuple):
+        """Bind click events so any click inside the section activates it."""
+        try:
+            widget.bind(
+                "<Button-1>",
+                lambda e, ia=instance_alias, sid=section_id: self._on_analysis_section_clicked(ia, sid),
+                add=True
+            )
+            for child in widget.winfo_children():
+                self._bind_section_activation(child, instance_alias, section_id)
+        except Exception:
+            pass
+
+    def _on_analysis_section_clicked(self, instance_alias: str, section_id: tuple):
+        """Handle section click and update active section state."""
+        self._set_active_analysis_section(instance_alias, section_id)
+
+    def _set_active_analysis_section(self, instance_alias: str, section_id: tuple):
+        """Persist and apply active section for current function/page in session."""
+        if instance_alias not in self.analysis_data:
+            return
+
+        analysis_info = self.analysis_data[instance_alias]
+        page_idx, section_idx = section_id
+        if 'active_sections' not in analysis_info:
+            analysis_info['active_sections'] = {}
+
+        if analysis_info['active_sections'].get(page_idx) == section_idx:
+            return
+
+        analysis_info['active_sections'][page_idx] = section_idx
+        self._apply_analysis_section_styles(instance_alias)
+        self._update_active_nav_host_geometry(instance_alias)
+        self._render_active_section_navigation(instance_alias)
+
+    def _update_analysis_bottom_split(self, instance_alias: str):
+        """Apply fixed 60/40 width split for page controls and active navigation host."""
+        analysis_info = self.analysis_data.get(instance_alias, {})
+        left_col = analysis_info.get('page_nav_host')
+        right_col = analysis_info.get('active_nav_host')
+        if left_col is None or right_col is None:
+            return
+
+        try:
+            if not left_col.winfo_exists() or not right_col.winfo_exists():
+                return
+        except Exception:
+            return
+
+        try:
+            self.tab_content_frame.update_idletasks()
+            total_width = self.tab_content_frame.winfo_width()
+        except Exception:
+            total_width = 0
+
+        if total_width <= 1:
+            total_width = 1200
+
+        spacing = 12
+        usable = max(320, total_width - 20 - spacing)
+        right_width = int(usable * 0.40)
+        left_width = usable - right_width
+
+        left_col.configure(width=left_width)
+        right_col.configure(width=right_width)
+
+    def _get_min_bottom_controls_height(self) -> int:
+        """Minimum height needed for page/cycle controls block."""
+        return 64
+
+    def _set_bottom_hosts_height(self, instance_alias: str, height: int):
+        """Apply the same reserved bottom height to left and right nav hosts."""
+        analysis_info = self.analysis_data.get(instance_alias, {})
+        nav_host = analysis_info.get('active_nav_host')
+        page_nav_host = analysis_info.get('page_nav_host')
+
+        if nav_host is not None:
+            try:
+                nav_host.configure(height=height)
+            except Exception:
+                pass
+
+        if page_nav_host is not None:
+            try:
+                page_nav_host.configure(height=height)
+            except Exception:
+                pass
+
+    def _get_cached_page_nav_height(self, instance_alias: str, page_idx: int) -> int:
+        analysis_info = self.analysis_data.get(instance_alias, {})
+        cache = analysis_info.get('page_nav_heights', {})
+        return int(cache.get(page_idx, 0) or 0)
+
+    def _set_cached_page_nav_height(self, instance_alias: str, page_idx: int, height: int):
+        if instance_alias not in self.analysis_data:
+            return
+        analysis_info = self.analysis_data[instance_alias]
+        if 'page_nav_heights' not in analysis_info:
+            analysis_info['page_nav_heights'] = {}
+        prev = int(analysis_info['page_nav_heights'].get(page_idx, 0) or 0)
+        analysis_info['page_nav_heights'][page_idx] = max(prev, int(height))
+
+    def _prime_page_nav_height_cache(self, instance_alias: str, page_idx: int, rendered_sections: list):
+        """Precompute max Data Slicing panel height for all rendered sections on a page."""
+        analysis_info = self.analysis_data.get(instance_alias, {})
+        nav_host = analysis_info.get('active_nav_host')
+        if nav_host is None:
+            return
+
+        try:
+            if not nav_host.winfo_exists():
+                return
+        except Exception:
+            return
+
+        min_height = self._get_min_bottom_controls_height()
+        max_required = min_height
+
+        execution_results = analysis_info.get('execution_results', {})
+        outputs = self._get_execution_data_sources(execution_results, instance_alias)
+
+        for entry in rendered_sections:
+            section_data = entry.get('section_data', {}) or {}
+            section_type = section_data.get('type')
+            config = section_data.get('config', {}) or {}
+            section_id = entry.get('section_id')
+            if section_type not in ('graph', 'table') or not section_id:
+                continue
+            nav_axes = config.get('data_slicing', [])
+            if not nav_axes:
+                continue
+
+            temp_panel = ttk.LabelFrame(nav_host, text=self.language_manager.translate("ui.labels.data_slicing", "Data Slicing"), padding=5)
+            temp_panel.pack_forget()
+            temp_panel.place(x=-10000, y=-10000)
+
+            try:
+                self._clear_navigation_labels_for_section(instance_alias, section_id)
+                if section_type == 'graph':
+                    slice_state = analysis_info.get('graph_slices', {}).get(section_id)
+                    if slice_state:
+                        self._create_navigation_controls(temp_panel, instance_alias, section_id, outputs, config, slice_state)
+                else:
+                    slice_state = analysis_info.get('table_slices', {}).get(section_id)
+                    if slice_state:
+                        self._create_table_navigation_controls(temp_panel, instance_alias, section_id, outputs, config, slice_state)
+
+                temp_panel.update_idletasks()
+                required = temp_panel.winfo_reqheight() + 8
+                if required > max_required:
+                    max_required = required
+            except Exception:
+                pass
+            finally:
+                try:
+                    temp_panel.destroy()
+                except Exception:
+                    pass
+
+        self._set_cached_page_nav_height(instance_alias, page_idx, max_required)
+        stable_height = max(self._get_cached_page_nav_height(instance_alias, page_idx), min_height)
+        self._set_bottom_hosts_height(instance_alias, stable_height)
+
+    def _estimate_section_navigation_footprint(self, instance_alias: str, section_entry: dict, outputs: dict) -> tuple:
+        """Estimate (rows, items_per_row) needed by a section navigation UI."""
+        rows = 0
+        items_per_row = 0
+
+        section_data = section_entry.get('section_data', {}) if isinstance(section_entry, dict) else {}
+        section_type = section_data.get('type')
+        config = section_data.get('config', {}) if isinstance(section_data, dict) else {}
+        nav_axes = config.get('data_slicing', []) if isinstance(config, dict) else []
+
+        if section_type not in ('graph', 'table') or not nav_axes:
+            return rows, items_per_row
+
+        if section_type == 'table':
+            visible_nav = 0
+            for nav_item in nav_axes:
+                if isinstance(nav_item, dict):
+                    if nav_item.get('show_navigation_menu', True):
+                        visible_nav += 1
+                else:
+                    visible_nav += 1
+            if visible_nav > 0:
+                rows += visible_nav
+                items_per_row = max(items_per_row, 1)
+            return rows, items_per_row
+
+        # Graph footprint
+        visible_nav = 0
+        for nav_item in nav_axes:
+            if isinstance(nav_item, dict):
+                if nav_item.get('show_navigation_menu', False):
+                    visible_nav += 1
+            else:
+                visible_nav += 1
+        if visible_nav > 0:
+            rows += visible_nav
+            items_per_row = max(items_per_row, 1)
+
+        # MD controls footprint (if applicable)
+        if config.get('show_md_menu', False):
+            data_source = None
+            nested_key = None
+            graph_type = config.get('graph_type', '')
+            if 'aux_axis' in config:
+                data_source = config.get('z_axis', {}).get('data_source')
+                nested_key = config.get('z_axis', {}).get('nested_key')
+            elif graph_type in ('heatmap', 'contour', '3d_surf'):
+                data_source = config.get('z_axis', {}).get('data_source')
+                nested_key = config.get('z_axis', {}).get('nested_key')
+            elif 'datasets' in config:
+                datasets_cfg = config.get('datasets', [])
+                for ds_cfg in datasets_cfg:
+                    ds_y_source = ds_cfg.get('y_axis', {}).get('data_source')
+                    if ds_y_source and ds_y_source in outputs:
+                        data_source = ds_y_source
+                        nested_key = ds_cfg.get('y_axis', {}).get('nested_key')
+                        break
+                    ds_x_source = ds_cfg.get('x_axis', {}).get('data_source')
+                    if ds_x_source and ds_x_source in outputs:
+                        data_source = ds_x_source
+                        nested_key = ds_cfg.get('x_axis', {}).get('nested_key')
+                        break
+            else:
+                axis_config = config.get('y_axis', {}) or config.get('x_axis', {})
+                data_source = axis_config.get('data_source')
+                nested_key = axis_config.get('nested_key')
+
+            data = self._get_data_from_source(outputs, data_source, nested_key) if data_source else None
+            if data is not None and not isinstance(data, np.ndarray):
+                try:
+                    data = np.array(data)
+                except (ValueError, TypeError):
+                    data = None
+
+            if isinstance(data, np.ndarray) and data.ndim >= 4:
+                specified_dims = set()
+                for nav_item in nav_axes:
+                    if isinstance(nav_item, dict):
+                        dim = nav_item.get('dimension')
+                        if dim is not None:
+                            specified_dims.add(dim)
+                md_combinations = self._compute_dimension_combinations(data.shape, specified_dims, 2)
+                if md_combinations:
+                    rows += 1  # combobox row
+                    # Reserve using worst-case navigable dimensions across combinations
+                    all_dims = set(range(len(data.shape)))
+                    max_navigable_dims = 0
+                    for combo in md_combinations:
+                        navigable_dims = all_dims - set(combo) - specified_dims
+                        max_navigable_dims = max(max_navigable_dims, len(navigable_dims))
+                    if max_navigable_dims > 0:
+                        rows += max_navigable_dims
+                        items_per_row = max(items_per_row, 1)
+
+        return rows, items_per_row
+
+    def _update_active_nav_host_geometry(self, instance_alias: str, page_data: Optional[dict] = None):
+        """Reserve nav host space using the largest navigation needs on current page."""
+        analysis_info = self.analysis_data.get(instance_alias)
+        if not analysis_info:
+            return
+
+        nav_host = analysis_info.get('active_nav_host')
+        page_nav_host = analysis_info.get('page_nav_host')
+        if nav_host is None:
+            return
+
+        try:
+            if not nav_host.winfo_exists():
+                return
+        except Exception:
+            return
+
+        if page_data is None:
+            current_page = analysis_info.get('current_page', 0)
+            pages = analysis_info.get('pages', [])
+            if current_page < 0 or current_page >= len(pages):
+                return
+            page_data = pages[current_page]
+        else:
+            current_page = analysis_info.get('current_page', 0)
+
+        execution_results = analysis_info.get('execution_results', {})
+        outputs = self._get_execution_data_sources(execution_results, instance_alias)
+
+        sections = page_data.get('sections', []) if isinstance(page_data, dict) else []
+        section_entries = []
+        for section_idx, section_data in enumerate(sections):
+            if not isinstance(section_data, dict):
+                continue
+            if section_data.get('type') is None:
+                continue
+            if section_data.get('condition'):
+                if not self._evaluate_condition(instance_alias, section_data.get('condition')):
+                    continue
+            section_entries.append({
+                'section_id': (current_page, section_idx),
+                'section_data': section_data
+            })
+
+        has_md_menu = False
+
+        max_rows = 0
+        max_items = 0
+        for entry in section_entries:
+            cfg = (entry.get('section_data', {}) or {}).get('config', {}) or {}
+            if cfg.get('show_md_menu', False):
+                has_md_menu = True
+            rows, items = self._estimate_section_navigation_footprint(instance_alias, entry, outputs)
+            max_rows = max(max_rows, rows)
+            max_items = max(max_items, items)
+
+        # Ensure left-side page/result controls always fit within reserved bottom height.
+        history_entries = analysis_info.get('execution_history', [])
+        min_left_height = self._get_min_bottom_controls_height()
+
+        if max_rows <= 0:
+            nav_host.configure(width=1, height=min_left_height)
+            cached_height = self._get_cached_page_nav_height(instance_alias, current_page)
+            stable_height = max(min_left_height, cached_height)
+            self._set_cached_page_nav_height(instance_alias, current_page, stable_height)
+            self._set_bottom_hosts_height(instance_alias, stable_height)
+            analysis_info['active_nav_host_width'] = 1
+            analysis_info['active_nav_wrap_columns'] = 1
+            return
+
+        self._update_analysis_bottom_split(instance_alias)
+
+        try:
+            nav_host.update_idletasks()
+            width = nav_host.winfo_width()
+        except Exception:
+            width = 0
+        if width <= 1:
+            width = 420 if has_md_menu else 320
+
+        wrap_columns = 1
+        total_rows = max_rows
+        if has_md_menu:
+            base_height = 34
+            row_height = 38
+        else:
+            base_height = 16
+            row_height = 38
+        height = base_height + total_rows * row_height
+        height = max(height, min_left_height)
+
+        nav_host.configure(width=width, height=height)
+        cached_height = self._get_cached_page_nav_height(instance_alias, current_page)
+        stable_height = max(height, min_left_height, cached_height)
+        self._set_cached_page_nav_height(instance_alias, current_page, stable_height)
+        self._set_bottom_hosts_height(instance_alias, stable_height)
+        analysis_info['active_nav_host_width'] = width
+        analysis_info['active_nav_wrap_columns'] = wrap_columns
+
+    def _apply_analysis_section_styles(self, instance_alias: str):
+        """Apply active/inactive border styles to rendered section containers."""
+        if instance_alias not in self.analysis_data:
+            return
+
+        analysis_info = self.analysis_data[instance_alias]
+        current_page = analysis_info.get('current_page', 0)
+        active_sections = analysis_info.get('active_sections', {})
+        active_section_idx = active_sections.get(current_page)
+
+        rendered_sections = analysis_info.get('rendered_sections', [])
+        for entry in rendered_sections:
+            container = entry.get('container')
+            section_id = entry.get('section_id')
+            if not container or not section_id:
+                continue
+            _, section_idx = section_id
+            style_name = "AnalysisSectionActive.TLabelframe" if section_idx == active_section_idx else "AnalysisSectionInactive.TLabelframe"
+            try:
+                container.configure(style=style_name)
+            except Exception:
+                pass
+
+    def _clear_navigation_labels_for_section(self, instance_alias: str, section_id: tuple):
+        """Remove stale navigation label references for a section."""
+        if hasattr(self, '_nav_labels'):
+            keys_to_remove = [k for k in self._nav_labels.keys() if k[0] == instance_alias and k[1] == section_id]
+            for key in keys_to_remove:
+                del self._nav_labels[key]
+
+        if hasattr(self, '_md_nav_labels'):
+            keys_to_remove = [k for k in self._md_nav_labels.keys() if k[0] == instance_alias and k[1] == section_id]
+            for key in keys_to_remove:
+                del self._md_nav_labels[key]
+
+        if hasattr(self, '_table_nav_labels'):
+            keys_to_remove = [k for k in self._table_nav_labels.keys() if k[0] == instance_alias and k[1] == section_id]
+            for key in keys_to_remove:
+                del self._table_nav_labels[key]
+
+        if hasattr(self, '_var_labels'):
+            keys_to_remove = [k for k in self._var_labels.keys() if k[0] == instance_alias and k[1] == section_id]
+            for key in keys_to_remove:
+                del self._var_labels[key]
+
+    def _render_active_section_navigation(self, instance_alias: str):
+        """Render data slicing navigation for the active section in bottom-right host."""
+        if instance_alias not in self.analysis_data:
+            return
+
+        analysis_info = self.analysis_data[instance_alias]
+        nav_host = analysis_info.get('active_nav_host')
+        if nav_host is None:
+            return
+
+        try:
+            if not nav_host.winfo_exists():
+                return
+        except Exception:
+            return
+
+        for widget in nav_host.winfo_children():
+            widget.destroy()
+
+        self._update_active_nav_host_geometry(instance_alias)
+
+        current_page = analysis_info.get('current_page', 0)
+        stable_page_height = max(
+            self._get_min_bottom_controls_height(),
+            self._get_cached_page_nav_height(instance_alias, current_page)
+        )
+        active_sections = analysis_info.get('active_sections', {})
+        active_section_idx = active_sections.get(current_page)
+        if active_section_idx is None:
+            self._set_bottom_hosts_height(instance_alias, stable_page_height)
+            return
+
+        rendered_sections = analysis_info.get('rendered_sections', [])
+        active_entry = None
+        for entry in rendered_sections:
+            section_id = entry.get('section_id')
+            if section_id == (current_page, active_section_idx):
+                active_entry = entry
+                break
+
+        if not active_entry:
+            self._set_bottom_hosts_height(instance_alias, stable_page_height)
+            return
+
+        section_data = active_entry.get('section_data', {}) or {}
+        section_type = section_data.get('type')
+        config = section_data.get('config', {}) or {}
+        section_id = active_entry.get('section_id')
+        if not section_id:
+            return
+
+        if section_type not in ('graph', 'table'):
+            self._set_bottom_hosts_height(instance_alias, stable_page_height)
+            return
+
+        nav_axes = config.get('data_slicing', [])
+        if not nav_axes:
+            self._set_bottom_hosts_height(instance_alias, stable_page_height)
+            return
+
+        nav_panel = ttk.LabelFrame(
+            nav_host,
+            text=self.language_manager.translate("ui.labels.data_slicing", "Data Slicing"),
+            padding=5
+        )
+        nav_panel.pack(side=tk.BOTTOM, fill=tk.X, anchor='sw')
+
+        execution_results = analysis_info.get('execution_results', {})
+        outputs = self._get_execution_data_sources(execution_results, instance_alias)
+
+        self._clear_navigation_labels_for_section(instance_alias, section_id)
+
+        if section_type == 'graph':
+            slice_state = analysis_info.get('graph_slices', {}).get(section_id)
+            if slice_state:
+                self._create_navigation_controls(nav_panel, instance_alias, section_id, outputs, config, slice_state)
+        elif section_type == 'table':
+            slice_state = analysis_info.get('table_slices', {}).get(section_id)
+            if slice_state:
+                self._create_table_navigation_controls(nav_panel, instance_alias, section_id, outputs, config, slice_state)
+
+        # Final height sync based on actual rendered navigation content.
+        try:
+            nav_panel.update_idletasks()
+            required_height = nav_panel.winfo_reqheight() + 8
+        except Exception:
+            required_height = stable_page_height
+        min_height = stable_page_height
+        cached_height = self._get_cached_page_nav_height(instance_alias, current_page)
+        stable_height = max(required_height, min_height, cached_height)
+        self._set_cached_page_nav_height(instance_alias, current_page, stable_height)
+        self._set_bottom_hosts_height(instance_alias, stable_height)
     
     def _switch_analysis_page(self, instance_alias: str, page_idx: int):
         """Switch to a different analysis page."""
@@ -3971,6 +4564,8 @@ class ChemometricsGUI:
         """Render the current analysis page with the specified layout."""
         layout_type = page_data.get('layout', 'fp')
         sections = page_data.get('sections', [])
+        current_page = self.analysis_data.get(instance_alias, {}).get('current_page', 0)
+        rendered_sections = []
         
         # Create layout containers
         containers = self._create_layout_containers(parent, layout_type)
@@ -3993,18 +4588,54 @@ class ChemometricsGUI:
                         continue  # Skip this section, try next
                 
                 # Render the section
-                self._render_section(container, instance_alias, section_data, section_idx - 1)
+                resolved_section_idx = section_idx - 1
+                self._render_section(container, instance_alias, section_data, resolved_section_idx)
+
+                section_id = (current_page, resolved_section_idx)
+                rendered_sections.append({
+                    'section_id': section_id,
+                    'container': container,
+                    'section_data': section_data
+                })
+                self._bind_section_activation(container, instance_alias, section_id)
                 break
             else:
                 # No more sections with passing conditions
                 placeholder = ttk.Label(container, text=self.language_manager.translate("ui.messages.empty_section", "[Empty Section]"), foreground="gray")
                 placeholder.pack(expand=True)
+
+        analysis_info = self.analysis_data.get(instance_alias, {})
+        analysis_info['rendered_sections'] = rendered_sections
+
+        if rendered_sections:
+            active_sections = analysis_info.get('active_sections', {})
+            selected_section_idx = active_sections.get(current_page)
+            rendered_indices = {entry['section_id'][1] for entry in rendered_sections}
+            if selected_section_idx not in rendered_indices:
+                first_section_idx = rendered_sections[0]['section_id'][1]
+                active_sections[current_page] = first_section_idx
+                analysis_info['active_sections'] = active_sections
+
+        # Lock page bottom reservation to the largest data-slicing panel on this page.
+        self._prime_page_nav_height_cache(instance_alias, current_page, rendered_sections)
+
+        self._apply_analysis_section_styles(instance_alias)
+        self._render_active_section_navigation(instance_alias)
     
     def _create_layout_containers(self, parent: ttk.Frame, layout_type: str) -> list:
         """Create layout containers based on layout type."""
         containers = []
         # Use consistent padding for all section containers to prevent border clipping
         section_padding = 8
+
+        def _create_section_container(parent_widget):
+            section_frame = ttk.LabelFrame(
+                parent_widget,
+                text=self.language_manager.translate("ui.labels.section", "Section"),
+                padding=section_padding,
+                style="AnalysisSectionInactive.TLabelframe"
+            )
+            return section_frame
         
         if layout_type == 'fd':  # Four sections (2x2 grid)
             # Use nested paned windows to ensure equal space distribution
@@ -4015,7 +4646,7 @@ class ChemometricsGUI:
             top_paned = ttk.PanedWindow(main_paned, orient=tk.HORIZONTAL)
             main_paned.add(top_paned, weight=1)
             for j in range(2):
-                container = ttk.LabelFrame(top_paned, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
+                container = _create_section_container(top_paned)
                 top_paned.add(container, weight=1)
                 containers.append(container)
             
@@ -4023,7 +4654,7 @@ class ChemometricsGUI:
             bottom_paned = ttk.PanedWindow(main_paned, orient=tk.HORIZONTAL)
             main_paned.add(bottom_paned, weight=1)
             for j in range(2):
-                container = ttk.LabelFrame(bottom_paned, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
+                container = _create_section_container(bottom_paned)
                 bottom_paned.add(container, weight=1)
                 containers.append(container)
             
@@ -4031,16 +4662,16 @@ class ChemometricsGUI:
             parent.after_idle(lambda: self._position_fd_sashes(main_paned, top_paned, bottom_paned))
         
         elif layout_type == 'fp':  # Full page (1 section)
-            container = ttk.LabelFrame(parent, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
+            container = _create_section_container(parent)
             container.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
             containers.append(container)
         
         elif layout_type == 'ns':  # North-South (2 sections: top, bottom)
-            top_frame = ttk.LabelFrame(parent, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
+            top_frame = _create_section_container(parent)
             top_frame.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
             containers.append(top_frame)
             
-            bottom_frame = ttk.LabelFrame(parent, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
+            bottom_frame = _create_section_container(parent)
             bottom_frame.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
             containers.append(bottom_frame)
         
@@ -4048,11 +4679,11 @@ class ChemometricsGUI:
             paned = ttk.PanedWindow(parent, orient=tk.HORIZONTAL)
             paned.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
             
-            left_container = ttk.LabelFrame(paned, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
+            left_container = _create_section_container(paned)
             paned.add(left_container, weight=1)
             containers.append(left_container)
             
-            right_container = ttk.LabelFrame(paned, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
+            right_container = _create_section_container(paned)
             paned.add(right_container, weight=1)
             containers.append(right_container)
             
@@ -4064,7 +4695,7 @@ class ChemometricsGUI:
             main_paned.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
             
             # Top section
-            top_frame = ttk.LabelFrame(main_paned, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
+            top_frame = _create_section_container(main_paned)
             main_paned.add(top_frame, weight=1)
             containers.append(top_frame)
             
@@ -4072,7 +4703,7 @@ class ChemometricsGUI:
             bottom_paned = ttk.PanedWindow(main_paned, orient=tk.HORIZONTAL)
             main_paned.add(bottom_paned, weight=1)
             for j in range(2):
-                container = ttk.LabelFrame(bottom_paned, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
+                container = _create_section_container(bottom_paned)
                 bottom_paned.add(container, weight=1)
                 containers.append(container)
         
@@ -4085,12 +4716,12 @@ class ChemometricsGUI:
             top_paned = ttk.PanedWindow(main_paned, orient=tk.HORIZONTAL)
             main_paned.add(top_paned, weight=1)
             for j in range(2):
-                container = ttk.LabelFrame(top_paned, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
+                container = _create_section_container(top_paned)
                 top_paned.add(container, weight=1)
                 containers.append(container)
             
             # Bottom section
-            bottom_frame = ttk.LabelFrame(main_paned, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
+            bottom_frame = _create_section_container(main_paned)
             main_paned.add(bottom_frame, weight=1)
             containers.append(bottom_frame)
         
@@ -4099,7 +4730,7 @@ class ChemometricsGUI:
             paned.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
             
             # Left side (single container)
-            left_container = ttk.LabelFrame(paned, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
+            left_container = _create_section_container(paned)
             paned.add(left_container, weight=1)
             containers.append(left_container)
             
@@ -4108,7 +4739,7 @@ class ChemometricsGUI:
             paned.add(right_paned, weight=1)
             
             for i in range(2):
-                container = ttk.LabelFrame(right_paned, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
+                container = _create_section_container(right_paned)
                 right_paned.add(container, weight=1)
                 containers.append(container)
             
@@ -4123,12 +4754,12 @@ class ChemometricsGUI:
             paned.add(left_paned, weight=1)
             
             for i in range(2):
-                container = ttk.LabelFrame(left_paned, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
+                container = _create_section_container(left_paned)
                 left_paned.add(container, weight=1)
                 containers.append(container)
             
             # Right side (single container)
-            right_container = ttk.LabelFrame(paned, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
+            right_container = _create_section_container(paned)
             paned.add(right_container, weight=1)
             containers.append(right_container)
             
@@ -4136,7 +4767,7 @@ class ChemometricsGUI:
         
         else:
             # Default to full page for unknown layouts
-            container = ttk.LabelFrame(parent, text=self.language_manager.translate("ui.labels.section", "Section"), padding=section_padding)
+            container = _create_section_container(parent)
             container.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
             containers.append(container)
         
@@ -4645,20 +5276,7 @@ class ChemometricsGUI:
             # Pass x_data or y_data as reference for row index generation if needed
             z_data = self._extract_axis_data(outputs, config.get('z_axis', {}), z_indices, ref_data=x_data if x_data is not None else y_data)
             
-            # Create container with navigation controls on top
-            control_frame = ttk.Frame(parent)
-            control_frame.pack(fill=tk.X, padx=5, pady=5)
-            
-            # Store control frame reference for later updates (e.g., when combo changes)
-            if 'graph_control_frames' not in self.analysis_data[instance_alias]:
-                self.analysis_data[instance_alias]['graph_control_frames'] = {}
-            self.analysis_data[instance_alias]['graph_control_frames'][section_id] = control_frame
-            
-            # Add navigation controls if axes are navigable
-            nav_axes = config.get('data_slicing', [])
-            if nav_axes:
-                self._create_navigation_controls(control_frame, instance_alias, section_id, 
-                                                 outputs, config, current_slice)
+            # Navigation controls are rendered globally for the active section
             
             # Create a copy of config with resolved axis labels for rendering
             render_config = config.copy()
@@ -5369,7 +5987,7 @@ class ChemometricsGUI:
         return combos
     
     def _create_table_navigation_controls(self, parent_frame: ttk.Frame, instance_alias: str,
-                                         section_id: int, outputs: dict, config: dict,
+                                         section_id: tuple, outputs: dict, config: dict,
                                          slice_state: dict) -> None:
         """Create navigation controls for table data slicing.
         
@@ -5402,7 +6020,7 @@ class ChemometricsGUI:
             
             # Create navigation frame
             nav_frame = ttk.Frame(parent_frame)
-            nav_frame.pack(fill=tk.X, padx=5, pady=5)
+            nav_frame.pack(anchor='w', padx=4, pady=2)
             
             # For each navigable axis, create controls
             for nav_item in nav_axes:
@@ -5422,7 +6040,7 @@ class ChemometricsGUI:
                     continue
                 
                 axis_frame = ttk.Frame(nav_frame)
-                axis_frame.pack(fill=tk.X, padx=5, pady=2)
+                axis_frame.pack(anchor='w', pady=1)
                 
                 # Get max index from data shape
                 max_index = data.shape[dimension] - 1 if dimension < len(data.shape) else 0
@@ -5433,8 +6051,8 @@ class ChemometricsGUI:
                 
                 # Axis label
                 label_text = f"{axis_name}: {current_index + 1}/{max_index + 1}"
-                label = ttk.Label(axis_frame, text=label_text, width=15)
-                label.pack(side=tk.LEFT, padx=5)
+                label = ttk.Label(axis_frame, text=label_text, width=14)
+                label.pack(side=tk.LEFT, padx=3)
                 
                 # Previous button
                 prev_btn = ttk.Button(
@@ -5445,11 +6063,11 @@ class ChemometricsGUI:
                         instance_alias, section_id, -1, d, an, max_index
                     )
                 )
-                prev_btn.pack(side=tk.LEFT, padx=2)
+                prev_btn.pack(side=tk.LEFT, padx=1)
                 
                 # Index display
                 index_label = ttk.Label(axis_frame, text=str(current_index + 1), width=3)
-                index_label.pack(side=tk.LEFT, padx=2)
+                index_label.pack(side=tk.LEFT, padx=1)
                 
                 # Next button
                 next_btn = ttk.Button(
@@ -5460,7 +6078,7 @@ class ChemometricsGUI:
                         instance_alias, section_id, 1, d, an, max_index
                     )
                 )
-                next_btn.pack(side=tk.LEFT, padx=2)
+                next_btn.pack(side=tk.LEFT, padx=1)
                 
                 # Store reference for updates
                 if not hasattr(self, '_table_nav_labels'):
@@ -5703,12 +6321,6 @@ class ChemometricsGUI:
             info_label = ttk.Label(main_frame, text=info_text, font=('Arial', 8), foreground='gray')
             info_label.pack(anchor='w', pady=(0, 5))
             
-            # Add navigation controls if data_slicing is configured
-            nav_axes = config.get('data_slicing', [])
-            if nav_axes:
-                self._create_table_navigation_controls(main_frame, instance_alias, section_id,
-                                                      outputs, config, current_slice)
-            
             # Create toolbar for table controls
             toolbar = ttk.Frame(main_frame)
             toolbar.pack(fill=tk.X, pady=(0, 5))
@@ -5931,7 +6543,7 @@ Count:
         except Exception as e:
             print(f"Error showing statistics: {str(e)}")
     
-    def _refresh_table(self, instance_alias: str, section_id: int) -> None:
+    def _refresh_table(self, instance_alias: str, section_id: tuple) -> None:
         """Refresh the table display with current slicing."""
         try:
             if instance_alias not in self.analysis_data:
@@ -5939,37 +6551,8 @@ Count:
             
             if 'execution_results' not in self.analysis_data[instance_alias]:
                 return
-            
-            # Get all analysis pages and sections to find and update the matching table
-            analysis_info = self.analysis_data[instance_alias]
-            pages = analysis_info.get('pages', [])
-            current_page_idx = analysis_info.get('current_page', 0)
-            
-            if current_page_idx >= len(pages):
-                return
-            
-            page_data = pages[current_page_idx]
-            sections = page_data.get('sections', [])
-            
-            # Find the matching section and re-render it
-            for idx, section in enumerate(sections):
-                if id(section) == section_id:
-                    # Found matching section - get its parent frame and clear it
-                    # We need to find the actual frame widget for this section
-                    # This is a bit tricky since we need to locate the frame by content
-                    
-                    # For now, trigger a full page re-render which is safer
-                    # Get the current tab frame
-                    if hasattr(self, 'tab_content_frame'):
-                        # Clear the tab content
-                        for widget in self.tab_content_frame.winfo_children():
-                            widget.destroy()
-                        
-                        # Re-render the current page
-                        self._render_analysis_page(self.tab_content_frame, instance_alias, page_data)
-                    
-                    print(f"✅ Table refreshed")
-                    return
+
+            self._show_analysis_tab()
             
         except Exception as e:
             print(f"Error refreshing table: {str(e)}")
@@ -6657,11 +7240,11 @@ Count:
                     # Create UI for multi-dimensional slicing ONLY if show_md_menu is True
                     if show_md_menu:
                         md_frame = ttk.LabelFrame(parent_frame, text=self.language_manager.translate("ui.labels.multi_dim_slicing", "Multi-Dimensional Slicing (4D+)"), padding=5)
-                        md_frame.pack(fill=tk.X, padx=5, pady=5)
+                        md_frame.pack(anchor='w', padx=4, pady=2)
                         
                         # Combination selector
                         combo_select_frame = ttk.Frame(md_frame)
-                        combo_select_frame.pack(fill=tk.X, padx=5, pady=2)
+                        combo_select_frame.pack(anchor='w', padx=5, pady=2)
                         
                         ttk.Label(combo_select_frame, text=self.language_manager.translate("ui.labels.dimension_combination", "Dimension Combination:"), width=20).pack(side=tk.LEFT, padx=5)
                         
@@ -6683,8 +7266,10 @@ Count:
                         
                         current_combo_idx = slice_state.get('md_combo_index', 0)
                         
+                        host_width = self.analysis_data.get(instance_alias, {}).get('active_nav_host_width', 420)
+                        combo_width = max(22, min(42, int((host_width - 140) / 7)))
                         combo_dropdown = ttk.Combobox(combo_select_frame, 
-                                                     values=combo_options, state='readonly', width=30)
+                                                     values=combo_options, state='readonly', width=combo_width)
                         combo_dropdown.current(current_combo_idx if current_combo_idx < len(combo_options) else 0)
                         combo_dropdown.pack(side=tk.LEFT, padx=5)
                         combo_dropdown.bind('<<ComboboxSelected>>', 
@@ -6701,7 +7286,7 @@ Count:
                             
                             for dim in navigable_dims:
                                 dim_frame = ttk.Frame(md_frame)
-                                dim_frame.pack(fill=tk.X, padx=5, pady=2)
+                                dim_frame.pack(anchor='w', padx=4, pady=1)
                                 
                                 # Get max index for this dimension
                                 max_index = data.shape[dim] - 1 if dim < len(data.shape) else 0
@@ -6712,8 +7297,8 @@ Count:
                                 # Dimension label - use dimension labels if available
                                 dim_name = dim_labels.get(dim, f"Dimension {dim}")
                                 label_text = f"{dim_name}: {current_index + 1}/{max_index + 1}"
-                                label = ttk.Label(dim_frame, text=label_text, width=20)
-                                label.pack(side=tk.LEFT, padx=5)
+                                label = ttk.Label(dim_frame, text=label_text, width=16)
+                                label.pack(side=tk.LEFT, padx=3)
                                 
                                 # Previous button - capture max_index by value with m=max_index
                                 prev_btn = ttk.Button(
@@ -6724,11 +7309,11 @@ Count:
                                         instance_alias, section_id, -1, d, m
                                     )
                                 )
-                                prev_btn.pack(side=tk.LEFT, padx=2)
+                                prev_btn.pack(side=tk.LEFT, padx=1)
                                 
                                 # Index display
                                 index_label = ttk.Label(dim_frame, text=str(current_index + 1), width=3)
-                                index_label.pack(side=tk.LEFT, padx=2)
+                                index_label.pack(side=tk.LEFT, padx=1)
                                 
                                 # Next button - capture max_index by value with m=max_index
                                 next_btn = ttk.Button(
@@ -6739,7 +7324,7 @@ Count:
                                         instance_alias, section_id, 1, d, m
                                     )
                                 )
-                                next_btn.pack(side=tk.LEFT, padx=2)
+                                next_btn.pack(side=tk.LEFT, padx=1)
                                 
                                 # Variable labels - show current value label between buttons if configured
                                 var_labels_config = config.get('variable_labels')
@@ -6761,6 +7346,9 @@ Count:
                                 self._md_nav_labels[label_key] = (index_label, label, dim_labels.get(dim))
             
             # For each navigable axis, create controls if enabled for that item
+            axes_frame = ttk.Frame(parent_frame)
+            axes_frame.pack(anchor='w', padx=4, pady=1)
+
             for nav_item in nav_axes:
                 # Parse navigation item - support both old and new formats
                 if isinstance(nav_item, dict):
@@ -6781,8 +7369,8 @@ Count:
                 if not show_nav:
                     continue
                 
-                axis_frame = ttk.Frame(parent_frame)
-                axis_frame.pack(fill=tk.X, padx=5, pady=2)
+                axis_frame = ttk.Frame(axes_frame)
+                axis_frame.pack(anchor='w', pady=1)
                 
                 # Get max index from data shape
                 max_index = data.shape[dimension] - 1 if dimension < len(data.shape) else 0
@@ -6814,8 +7402,8 @@ Count:
                 
                 # Axis label - display 1-based for user (current_index + 1 and max_index + 1)
                 label_text = f"{axis_name}: {current_index + 1}/{max_index + 1}"
-                label = ttk.Label(axis_frame, text=label_text, width=15)
-                label.pack(side=tk.LEFT, padx=5)
+                label = ttk.Label(axis_frame, text=label_text, width=14)
+                label.pack(side=tk.LEFT, padx=3)
                 
                 # Previous button - capture max_index by value with m=max_index
                 prev_btn = ttk.Button(
@@ -6826,11 +7414,11 @@ Count:
                         instance_alias, section_id, -1, d, an, m, ax
                     )
                 )
-                prev_btn.pack(side=tk.LEFT, padx=2)
+                prev_btn.pack(side=tk.LEFT, padx=1)
                 
                 # Index display - show 1-based for user
                 index_label = ttk.Label(axis_frame, text=str(current_index + 1), width=3)
-                index_label.pack(side=tk.LEFT, padx=2)
+                index_label.pack(side=tk.LEFT, padx=1)
                 
                 # Next button - capture max_index by value with m=max_index
                 next_btn = ttk.Button(
@@ -6841,7 +7429,7 @@ Count:
                         instance_alias, section_id, 1, d, an, m, ax
                     )
                 )
-                next_btn.pack(side=tk.LEFT, padx=2)
+                next_btn.pack(side=tk.LEFT, padx=1)
                 
                 # Variable labels - show current value label after buttons if configured
                 var_labels_config = config.get('variable_labels')
@@ -7020,30 +7608,8 @@ Count:
                             max_idx = data.shape[dim] - 1 if dim < len(data.shape) else 0
                             current_state['md_slice_indices'][dim] = 0
             
-            # Rebuild navigation controls to reflect new navigable dimensions
-            config = current_state.get('config', {})
-            outputs = current_state.get('outputs', {})
-            
-            # Get stored control frame and rebuild controls
-            if 'graph_control_frames' in self.analysis_data[instance_alias]:
-                control_frame = self.analysis_data[instance_alias]['graph_control_frames'].get(section_id)
-                if control_frame:
-                    # Clear existing controls
-                    for widget in control_frame.winfo_children():
-                        widget.destroy()
-                    
-                    # Clear stored label references for this section
-                    if hasattr(self, '_md_nav_labels'):
-                        keys_to_remove = [k for k in self._md_nav_labels.keys() 
-                                         if k[0] == instance_alias and k[1] == section_id]
-                        for k in keys_to_remove:
-                            del self._md_nav_labels[k]
-                    
-                    # Rebuild navigation controls
-                    nav_axes = config.get('data_slicing', [])
-                    if nav_axes:
-                        self._create_navigation_controls(control_frame, instance_alias, section_id,
-                                                        outputs, config, current_state)
+            # Rebuild shared active-section navigation controls
+            self._render_active_section_navigation(instance_alias)
             
             # Update the graph with the new slice
             self._update_graph_with_slice(instance_alias, section_id, 0)
