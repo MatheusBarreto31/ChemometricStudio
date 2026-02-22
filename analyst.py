@@ -96,6 +96,21 @@ def analyst_main(
         base_alias = info['base_alias']
         unique_funcs.add(base_alias)
     
+    executed_steps = 0
+    total_functions = len(functions_list)
+    if stop_at_function_idx is not None:
+        function_execution_target = min(total_functions, max(0, stop_at_function_idx + 1))
+    else:
+        function_execution_target = total_functions
+    progress_total = function_execution_target + 1
+
+    if progress_callback:
+        try:
+            progress_callback(executed_steps, progress_total, "", "__lazy_loading__")
+        except Exception:
+            pass
+
+    lazy_loading_start_time = perf_counter()
     for func in unique_funcs:
         if func in workflow_control_aliases:
             continue
@@ -103,6 +118,16 @@ def analyst_main(
             module_name, attr_name = import_map[func]
             module = importlib.import_module(module_name)
             globals()[func] = getattr(module, attr_name)
+    lazy_loading_elapsed_seconds = perf_counter() - lazy_loading_start_time
+
+    executed_steps = 1
+    if progress_callback and executed_steps >= progress_total:
+        try:
+            progress_callback(executed_steps, progress_total, "", "__lazy_loading__")
+        except Exception:
+            pass
+
+    pipeline_start_time = perf_counter()
     
     def _convert_param_types(base_alias, param_name, value, type_info):
         """Convert a parameter value to its specified type."""
@@ -287,23 +312,8 @@ def analyst_main(
 
         return parsed_values
 
-    executed_steps = 0
-    
-    total_functions = len(functions_list)
-    if stop_at_function_idx is not None:
-        progress_total = min(total_functions, max(0, stop_at_function_idx + 1))
-    else:
-        progress_total = total_functions
-
-    if progress_callback:
-        try:
-            progress_callback(0, progress_total, "", "")
-        except Exception:
-            pass
-
     function_timings = []
     execution_history_by_instance: Dict[str, List[Dict[str, Any]]] = {}
-    model_start_time = perf_counter()
     loop_stack_context: List[Dict[str, Any]] = []
     parallel_stack_context: List[Dict[str, Any]] = []
     sweep_override_stack: List[Dict[str, set]] = []
@@ -634,9 +644,12 @@ def analyst_main(
         for name, value in out_dict.items():
             print(f"  {name}: {value}")
     
-    model_elapsed_seconds = perf_counter() - model_start_time
+    pipeline_elapsed_seconds = perf_counter() - pipeline_start_time
+    model_elapsed_seconds = lazy_loading_elapsed_seconds + pipeline_elapsed_seconds
     timing_report: Dict[str, Any] = {
         "total_execution_time": model_elapsed_seconds,
+        "lazy_loading_time": lazy_loading_elapsed_seconds,
+        "pipeline_execution_time": pipeline_elapsed_seconds,
         "function_timings": function_timings,
         "execution_history_by_instance": execution_history_by_instance,
         "executed_function_count": len(function_timings),

@@ -371,11 +371,16 @@
       "title": "Execution Timing Report",
       "run_type": "Run type",
       "total_time": "Total run time",
+      "lazy_loading_time": "Library loading stage",
+      "pipeline_execution_time": "Pipeline execution stage",
       "executed_count": "Executed functions",
       "run_to_here_target": "Run to here target",
       "per_function": "Per-function run time:",
       "no_functions": "No function timing data recorded.",
       "unknown": "Unknown"
+    },
+    "progress": {
+      "lazy_loading_stage": "Loading libraries"
     }
   },
   "data": {

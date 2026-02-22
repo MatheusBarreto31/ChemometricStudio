@@ -371,11 +371,16 @@
       "title": "Relatório de Tempo de Execução",
       "run_type": "Tipo de execução",
       "total_time": "Tempo total de execução",
+      "lazy_loading_time": "Etapa de carregamento de bibliotecas",
+      "pipeline_execution_time": "Etapa de execução do pipeline",
       "executed_count": "Funções executadas",
       "run_to_here_target": "Destino do Executar até aqui",
       "per_function": "Tempo por função:",
       "no_functions": "Nenhum dado de tempo por função foi registrado.",
       "unknown": "Desconhecido"
+    },
+    "progress": {
+      "lazy_loading_stage": "Carregando bibliotecas"
     }
   },
   "data": {

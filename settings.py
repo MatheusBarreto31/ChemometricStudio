@@ -11,7 +11,8 @@ class SettingsManager:
     DEFAULT_SETTINGS = {
         "language": "en",
         "colormap": "jet",
-        "display_splashscreen": True
+        "display_splashscreen": True,
+        "import_loading_mode": "lazy"
     }
     
     def __init__(self, settings_dir: Optional[Path] = None):

@@ -126,6 +126,26 @@ class ChemometricsGUI:
         # Initialize language manager with saved language
         self.language_manager = get_language_manager()
         self.language_manager.set_language(saved_language)
+
+        self.language_var = tk.StringVar(value=saved_language)
+        self.colormap_var = tk.StringVar(value=self.settings_manager.get("colormap", "jet"))
+        self.qualitative_colormap_var = tk.StringVar(value=self.settings_manager.get("qualitative_colormap", "tab10"))
+
+        saved_import_loading_mode = self.settings_manager.get("import_loading_mode", "lazy")
+        self.import_loading_mode = self._normalize_import_loading_mode(saved_import_loading_mode)
+        if self.import_loading_mode != saved_import_loading_mode:
+            self.settings_manager.set("import_loading_mode", self.import_loading_mode)
+
+        self.import_loading_mode_var = tk.StringVar(value=self.import_loading_mode)
+        self._graph_renderer = None
+        self._reporting_funcs = None
+        self._add_graph_dialog_fn = None
+        self._add_table_dialog_fn = None
+        self._routing_map_window_cls = None
+        self._matplotlib_pyplot = None
+
+        if self.import_loading_mode == "eager":
+            self._preload_heavy_dependencies()
         
         self.root.title(self.language_manager.translate("ui.main_title", "Chemometric Studio"))
         self.root.geometry("1280x720")
@@ -194,6 +214,48 @@ class ChemometricsGUI:
         self._build_ui()
         self._load_theme()
 
+    def _normalize_import_loading_mode(self, mode: Any) -> str:
+        """Normalize persisted import-loading mode."""
+        normalized = str(mode).strip().lower() if mode is not None else "lazy"
+        return normalized if normalized in {"lazy", "eager"} else "lazy"
+
+    def _preload_heavy_dependencies(self):
+        """Preload heavy/optional modules when eager mode is selected."""
+        self._get_graph_renderer()
+        self._get_reporting_functions()
+        self._get_add_graph_dialog_func()
+        self._get_add_table_dialog_func()
+        self._get_routing_map_window_class()
+        self._get_matplotlib_pyplot()
+
+    def _set_import_loading_mode(self, mode: str):
+        """Persist and apply import loading mode preference."""
+        normalized = self._normalize_import_loading_mode(mode)
+        if self.import_loading_mode_var.get() != normalized:
+            self.import_loading_mode_var.set(normalized)
+
+        if normalized == self.import_loading_mode:
+            return
+
+        self.import_loading_mode = normalized
+        self.settings_manager.set("import_loading_mode", normalized)
+
+        if normalized == "eager":
+            self._preload_heavy_dependencies()
+            self._show_fading_message(
+                self.language_manager.translate(
+                    "ui.messages.import_mode_eager_enabled",
+                    "Eager loading enabled. Heavy modules are preloaded now and on startup."
+                )
+            )
+        else:
+            self._show_fading_message(
+                self.language_manager.translate(
+                    "ui.messages.import_mode_lazy_enabled",
+                    "Lazy loading enabled. Full startup impact applies on next launch."
+                )
+            )
+
     def _get_graph_renderer(self):
         """Lazy-load graph renderer to reduce startup import time."""
         if not hasattr(self, "_graph_renderer") or self._graph_renderer is None:
@@ -207,6 +269,34 @@ class ChemometricsGUI:
             from chemometrics.reporting import build_latex_document, compile_latex_to_pdf
             self._reporting_funcs = (build_latex_document, compile_latex_to_pdf)
         return self._reporting_funcs
+
+    def _get_add_graph_dialog_func(self):
+        """Lazy-load add-graph dialog callable."""
+        if not hasattr(self, "_add_graph_dialog_fn") or self._add_graph_dialog_fn is None:
+            from add_graph_dialog import show_add_graph_dialog
+            self._add_graph_dialog_fn = show_add_graph_dialog
+        return self._add_graph_dialog_fn
+
+    def _get_add_table_dialog_func(self):
+        """Lazy-load add-table dialog callable."""
+        if not hasattr(self, "_add_table_dialog_fn") or self._add_table_dialog_fn is None:
+            from add_table_dialog import show_add_table_dialog
+            self._add_table_dialog_fn = show_add_table_dialog
+        return self._add_table_dialog_fn
+
+    def _get_routing_map_window_class(self):
+        """Lazy-load routing map window class."""
+        if not hasattr(self, "_routing_map_window_cls") or self._routing_map_window_cls is None:
+            from routing_map_window import RoutingMapWindow
+            self._routing_map_window_cls = RoutingMapWindow
+        return self._routing_map_window_cls
+
+    def _get_matplotlib_pyplot(self):
+        """Lazy-load matplotlib pyplot for figure cleanup/export helpers."""
+        if not hasattr(self, "_matplotlib_pyplot") or self._matplotlib_pyplot is None:
+            from matplotlib import pyplot as plt
+            self._matplotlib_pyplot = plt
+        return self._matplotlib_pyplot
 
     def _disable_combobox_mousewheel(self):
         """Prevent mouse wheel from changing ttk.Combobox selections."""
@@ -421,11 +511,35 @@ class ChemometricsGUI:
         settings_menu.add_cascade(label=self.language_manager.translate("menu.language", "Language"), menu=lang_menu)
         
         for lang_code, lang_name in self.language_manager.SUPPORTED_LANGUAGES.items():
-            lang_menu.add_command(label=lang_name, command=lambda code=lang_code: self._change_language(code))
+            lang_menu.add_radiobutton(
+                label=lang_name,
+                variable=self.language_var,
+                value=lang_code,
+                command=lambda code=lang_code: self._change_language(code)
+            )
         
         # Colormap submenu
         colormap_menu = tk.Menu(settings_menu, tearoff=0)
         settings_menu.add_cascade(label=self.language_manager.translate("menu.colormap", "Colormap"), menu=colormap_menu)
+
+        # Import loading mode submenu
+        loading_menu = tk.Menu(settings_menu, tearoff=0)
+        settings_menu.add_cascade(
+            label=self.language_manager.translate("menu.import_loading_mode", "Import Loading"),
+            menu=loading_menu
+        )
+        loading_menu.add_radiobutton(
+            label=self.language_manager.translate("menu.import_loading_lazy", "Lazy (faster startup)"),
+            variable=self.import_loading_mode_var,
+            value="lazy",
+            command=lambda: self._set_import_loading_mode("lazy")
+        )
+        loading_menu.add_radiobutton(
+            label=self.language_manager.translate("menu.import_loading_eager", "Eager (load all at startup)"),
+            variable=self.import_loading_mode_var,
+            value="eager",
+            command=lambda: self._set_import_loading_mode("eager")
+        )
         
         # Load available colormaps
         try:
@@ -444,20 +558,35 @@ class ChemometricsGUI:
         if isinstance(continuous_data, list):
             # Old flat structure - treat as a single category
             for cmap in continuous_data:
-                continuous_menu.add_command(label=cmap, command=lambda cm=cmap: self._change_colormap(cm))
+                continuous_menu.add_radiobutton(
+                    label=cmap,
+                    variable=self.colormap_var,
+                    value=cmap,
+                    command=lambda cm=cmap: self._change_colormap(cm)
+                )
         else:
             # New nested structure with subcategories
             for category, cmaps in continuous_data.items():
                 category_menu = tk.Menu(continuous_menu, tearoff=0)
                 continuous_menu.add_cascade(label=category, menu=category_menu)
                 for cmap in cmaps:
-                    category_menu.add_command(label=cmap, command=lambda cm=cmap: self._change_colormap(cm))
+                    category_menu.add_radiobutton(
+                        label=cmap,
+                        variable=self.colormap_var,
+                        value=cmap,
+                        command=lambda cm=cmap: self._change_colormap(cm)
+                    )
         
         # Qualitative colormaps submenu
         qualitative_menu = tk.Menu(colormap_menu, tearoff=0)
         colormap_menu.add_cascade(label=self.language_manager.translate("menu.colormap_qualitative", "Qualitative"), menu=qualitative_menu)
         for cmap in colormaps_data.get("qualitative", []):
-            qualitative_menu.add_command(label=cmap, command=lambda cm=cmap: self._change_qualitative_colormap(cm))
+            qualitative_menu.add_radiobutton(
+                label=cmap,
+                variable=self.qualitative_colormap_var,
+                value=cmap,
+                command=lambda cm=cmap: self._change_qualitative_colormap(cm)
+            )
         
         # Help Menu
         help_menu = tk.Menu(menubar, tearoff=0)
@@ -486,6 +615,8 @@ class ChemometricsGUI:
             'run_type': run_type_label,
             'stop_at_function_alias': stop_at_function_alias,
             'total_execution_time': timing_report.get('total_execution_time', 0.0),
+            'lazy_loading_time': timing_report.get('lazy_loading_time', 0.0),
+            'pipeline_execution_time': timing_report.get('pipeline_execution_time', 0.0),
             'function_timings': timing_report.get('function_timings', []),
             'executed_function_count': timing_report.get('executed_function_count', 0),
             'partial_run': timing_report.get('partial_run', False),
@@ -541,6 +672,8 @@ class ChemometricsGUI:
             "",
             f"{self.language_manager.translate('ui.timing_report.run_type', 'Run type')}: {report.get('run_type', 'N/A')}",
             f"{self.language_manager.translate('ui.timing_report.total_time', 'Total run time')}: {self._format_execution_seconds(report.get('total_execution_time', 0.0))}",
+            f"{self.language_manager.translate('ui.timing_report.lazy_loading_time', 'Library loading stage')}: {self._format_execution_seconds(report.get('lazy_loading_time', 0.0))}",
+            f"{self.language_manager.translate('ui.timing_report.pipeline_execution_time', 'Pipeline execution stage')}: {self._format_execution_seconds(report.get('pipeline_execution_time', 0.0))}",
             f"{self.language_manager.translate('ui.timing_report.executed_count', 'Executed functions')}: {report.get('executed_function_count', 0)}",
         ]
 
@@ -602,12 +735,14 @@ class ChemometricsGUI:
     
     def _change_language(self, language_code: str):
         """Change the application language and save setting."""
+        self.language_var.set(language_code)
         self.language_manager.set_language(language_code)
         self.settings_manager.set("language", language_code)
         self._refresh_ui_text()
     
     def _change_colormap(self, colormap_name: str):
         """Change the default continuous colormap and save setting."""
+        self.colormap_var.set(colormap_name)
         self.settings_manager.set("colormap", colormap_name)
         self._show_fading_message(
             self.language_manager.translate("ui.messages.colormap_changed_to", "Colormap changed to") +
@@ -617,6 +752,7 @@ class ChemometricsGUI:
     
     def _change_qualitative_colormap(self, colormap_name: str):
         """Change the qualitative colormap and save setting."""
+        self.qualitative_colormap_var.set(colormap_name)
         self.settings_manager.set("qualitative_colormap", colormap_name)
         self._show_fading_message(
             self.language_manager.translate("ui.messages.qual_colormap_changed_to", "Qualitative colormap changed to") +
@@ -1555,6 +1691,7 @@ class ChemometricsGUI:
 
         total = max(1, int(total_steps))
         completed = min(max(0, int(completed_steps)), total)
+        active_stage = completed if completed >= total else min(total, completed + 1)
         percent = int((completed / total) * 100)
 
         self.execution_progress_bar.configure(maximum=total)
@@ -1579,12 +1716,18 @@ class ChemometricsGUI:
                 config = self.gui_configs.get(resolved_base_alias, {}) if resolved_base_alias else {}
                 display_name = config.get("display_name", resolved_base_alias or instance_alias)
 
+            if base_alias == "__lazy_loading__":
+                display_name = self.language_manager.translate(
+                    "ui.progress.lazy_loading_stage",
+                    "Loading libraries"
+                )
+
             if display_name:
                 current_func_label = f" • {display_name}"
 
         if self.execution_progress_status_label:
             mode = self.execution_progress_mode or self.language_manager.translate("ui.buttons.run_model", "Run Model")
-            self.execution_progress_status_label.configure(text=f"{mode}: {completed}/{total}{current_func_label}")
+            self.execution_progress_status_label.configure(text=f"{mode}: {active_stage}/{total}{current_func_label}")
         if self.execution_progress_percent_label:
             self.execution_progress_percent_label.configure(text=f"{percent}%")
 
@@ -3424,7 +3567,7 @@ class ChemometricsGUI:
             return
         
         # Open routing map window
-        from routing_map_window import RoutingMapWindow
+        RoutingMapWindow = self._get_routing_map_window_class()
         RoutingMapWindow(
             self.root,
             self.methodology_list,
@@ -8256,12 +8399,12 @@ Count:
     
     def _show_add_graph_dialog(self, instance_alias: str):
         """Show the Add Graph dialog."""
-        from add_graph_dialog import show_add_graph_dialog
+        show_add_graph_dialog = self._get_add_graph_dialog_func()
         show_add_graph_dialog(self.root, self, instance_alias)
     
     def _show_add_table_dialog(self, instance_alias: str):
         """Show the Add Table dialog."""
-        from add_table_dialog import show_add_table_dialog
+        show_add_table_dialog = self._get_add_table_dialog_func()
         show_add_table_dialog(self.root, self, instance_alias)
     
     def _show_add_page_dialog(self, instance_alias: str):
@@ -8451,7 +8594,7 @@ Count:
             stop_at_idx = self.methodology_list.index(instance_alias)
 
             self._begin_execution_progress(
-                total_steps=stop_at_idx + 1,
+                total_steps=stop_at_idx + 2,
                 mode_label=self.language_manager.translate("ui.buttons.run_to_here", "Run to here")
             )
             
@@ -9683,7 +9826,7 @@ Count:
                 qualitative_cmap=self.settings_manager.get('qualitative_colormap', 'tab10')
             )
             fig.savefig(str(image_path), dpi=220, bbox_inches='tight')
-            from matplotlib import pyplot as plt
+            plt = self._get_matplotlib_pyplot()
             plt.close(fig)
             return str(image_path).replace('\\', '/')
         except Exception:
@@ -10862,7 +11005,7 @@ Count:
             return
 
         self._begin_execution_progress(
-            total_steps=len(self.methodology_list),
+            total_steps=len(self.methodology_list) + 1,
             mode_label=self.language_manager.translate("ui.buttons.run_model", "Run Model")
         )
         

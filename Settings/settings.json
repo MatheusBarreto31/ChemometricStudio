@@ -2,5 +2,6 @@
   "language": "en",
   "colormap": "jet",
   "display_splashscreen": true,
+  "import_loading_mode": "eager",
   "qualitative_colormap": "Set1"
 }
