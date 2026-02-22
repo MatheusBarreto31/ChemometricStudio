@@ -465,6 +465,19 @@ class AddGraphDialog:
         label_entry = ttk.Entry(frame, textvariable=label_var, width=30)
         label_entry.grid(row=2, column=1, sticky=tk.W+tk.E, pady=2, padx=5)
 
+        # Axis type / scale
+        ttk.Label(frame, text=self._t("ui.labels.axis_type", "Axis Type:")).grid(row=3, column=0, sticky=tk.W, pady=2)
+        axis_type_var = tk.StringVar(value='linear')
+        setattr(self, f'{axis_key}_axis_type_var', axis_type_var)
+        axis_type_combo = ttk.Combobox(
+            frame,
+            textvariable=axis_type_var,
+            values=['linear', 'log10', 'log2', 'ln'],
+            width=27,
+            state='readonly'
+        )
+        axis_type_combo.grid(row=3, column=1, sticky=tk.W+tk.E, pady=2, padx=5)
+
         # Force integer ticks
         force_integer_var = tk.BooleanVar(value=False)
         setattr(self, f'{axis_key}_force_integer_var', force_integer_var)
@@ -476,14 +489,14 @@ class AddGraphDialog:
             ),
             variable=force_integer_var
         )
-        force_integer_cb.grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=2)
+        force_integer_cb.grid(row=4, column=0, columnspan=2, sticky=tk.W, pady=2)
         
         # Data shape info
         info_var = tk.StringVar(value=self._t("ui.messages.select_data_source", "Select a data source"))
         setattr(self, f'{axis_key}_info_var', info_var)
         
         info_label = ttk.Label(frame, textvariable=info_var, foreground="gray", font=("Arial", 8))
-        info_label.grid(row=4, column=0, columnspan=2, sticky=tk.W, pady=2)
+        info_label.grid(row=5, column=0, columnspan=2, sticky=tk.W, pady=2)
         
         frame.columnconfigure(1, weight=1)
     
@@ -657,6 +670,15 @@ class AddGraphDialog:
         x_nested_var = tk.StringVar(value=existing_config.get('x_axis', {}).get('nested_key', '') if existing_config else '')
         x_nested_combo = ttk.Combobox(x_frame, textvariable=x_nested_var, width=40)
         x_nested_combo.pack(fill=tk.X, pady=2)
+        ttk.Label(x_frame, text=self._t("ui.labels.axis_type", "Axis Type:")).pack(anchor=tk.W, pady=(5, 0))
+        x_axis_type_var = tk.StringVar(value=existing_config.get('x_axis', {}).get('axis_type', 'linear') if existing_config else 'linear')
+        ttk.Combobox(
+            x_frame,
+            textvariable=x_axis_type_var,
+            values=['linear', 'log10', 'log2', 'ln'],
+            state='readonly',
+            width=20
+        ).pack(anchor=tk.W, pady=2)
         x_force_integer_var = tk.BooleanVar(value=existing_config.get('x_axis', {}).get('force_integer', False) if existing_config else False)
         ttk.Checkbutton(
             x_frame,
@@ -678,6 +700,15 @@ class AddGraphDialog:
         y_nested_var = tk.StringVar(value=existing_config.get('y_axis', {}).get('nested_key', '') if existing_config else '')
         y_nested_combo = ttk.Combobox(y_frame, textvariable=y_nested_var, width=40)
         y_nested_combo.pack(fill=tk.X, pady=2)
+        ttk.Label(y_frame, text=self._t("ui.labels.axis_type", "Axis Type:")).pack(anchor=tk.W, pady=(5, 0))
+        y_axis_type_var = tk.StringVar(value=existing_config.get('y_axis', {}).get('axis_type', 'linear') if existing_config else 'linear')
+        ttk.Combobox(
+            y_frame,
+            textvariable=y_axis_type_var,
+            values=['linear', 'log10', 'log2', 'ln'],
+            state='readonly',
+            width=20
+        ).pack(anchor=tk.W, pady=2)
         y_force_integer_var = tk.BooleanVar(value=existing_config.get('y_axis', {}).get('force_integer', False) if existing_config else False)
         ttk.Checkbutton(
             y_frame,
@@ -699,6 +730,15 @@ class AddGraphDialog:
         z_nested_var = tk.StringVar(value=existing_config.get('z_axis', {}).get('nested_key', '') if existing_config else '')
         z_nested_combo = ttk.Combobox(z_frame, textvariable=z_nested_var, width=40)
         z_nested_combo.pack(fill=tk.X, pady=2)
+        ttk.Label(z_frame, text=self._t("ui.labels.axis_type", "Axis Type:")).pack(anchor=tk.W, pady=(5, 0))
+        z_axis_type_var = tk.StringVar(value=existing_config.get('z_axis', {}).get('axis_type', 'linear') if existing_config else 'linear')
+        ttk.Combobox(
+            z_frame,
+            textvariable=z_axis_type_var,
+            values=['linear', 'log10', 'log2', 'ln'],
+            state='readonly',
+            width=20
+        ).pack(anchor=tk.W, pady=2)
         z_force_integer_var = tk.BooleanVar(value=existing_config.get('z_axis', {}).get('force_integer', False) if existing_config else False)
         ttk.Checkbutton(
             z_frame,
@@ -733,12 +773,12 @@ class AddGraphDialog:
                                    values=[''] + self._get_available_data_sources(), width=40)
         class_combo.pack(fill=tk.X, pady=2)
         
-        # Sample labels (optional)
-        sample_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.sample_labels_optional", "Sample Labels (Optional)"), padding=10)
+        # Point labels (optional)
+        sample_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.point_labels_optional", "Point Labels (Optional)"), padding=10)
         sample_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        ttk.Label(sample_frame, text=self._t("ui.labels.sample_labels_source", "Sample Labels Source:")).pack(anchor=tk.W)
-        sample_var = tk.StringVar(value=existing_config.get('sample_labels_source', '') if existing_config else '')
+        ttk.Label(sample_frame, text=self._t("ui.labels.point_labels_source", "Point Labels Source:")).pack(anchor=tk.W)
+        sample_var = tk.StringVar(value=existing_config.get('point_labels_source', existing_config.get('sample_labels_source', '')) if existing_config else '')
         sample_combo = ttk.Combobox(sample_frame, textvariable=sample_var,
                                     values=[''] + self._get_available_data_sources(), width=40)
         sample_combo.pack(fill=tk.X, pady=2)
@@ -762,6 +802,8 @@ class AddGraphDialog:
                 x_axis = {'data_source': x_source_var.get()}
                 if x_nested_var.get():
                     x_axis['nested_key'] = x_nested_var.get()
+                if x_axis_type_var.get() and x_axis_type_var.get() != 'linear':
+                    x_axis['axis_type'] = x_axis_type_var.get()
                 if x_force_integer_var.get():
                     x_axis['force_integer'] = True
                 ds_config['x_axis'] = x_axis
@@ -771,6 +813,8 @@ class AddGraphDialog:
                 y_axis = {'data_source': y_source_var.get()}
                 if y_nested_var.get():
                     y_axis['nested_key'] = y_nested_var.get()
+                if y_axis_type_var.get() and y_axis_type_var.get() != 'linear':
+                    y_axis['axis_type'] = y_axis_type_var.get()
                 if y_force_integer_var.get():
                     y_axis['force_integer'] = True
                 ds_config['y_axis'] = y_axis
@@ -780,6 +824,8 @@ class AddGraphDialog:
                 z_axis = {'data_source': z_source_var.get()}
                 if z_nested_var.get():
                     z_axis['nested_key'] = z_nested_var.get()
+                if z_axis_type_var.get() and z_axis_type_var.get() != 'linear':
+                    z_axis['axis_type'] = z_axis_type_var.get()
                 if z_force_integer_var.get():
                     z_axis['force_integer'] = True
                 ds_config['z_axis'] = z_axis
@@ -788,9 +834,9 @@ class AddGraphDialog:
             if class_var.get():
                 ds_config['class_labels'] = class_var.get()
             
-            # Sample labels
+            # Point labels
             if sample_var.get():
-                ds_config['sample_labels_source'] = sample_var.get()
+                ds_config['point_labels_source'] = sample_var.get()
             
             # Validate
             if not ds_config.get('x_axis') or not ds_config.get('y_axis'):
@@ -849,11 +895,11 @@ class AddGraphDialog:
                                    values=[''] + self._get_available_data_sources(), width=40)
         class_combo.pack(fill=tk.X, pady=5)
         
-        # Sample labels
-        sample_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.sample_labels_for_tooltips", "Sample Labels (for tooltips)"), padding=10)
+        # Point labels
+        sample_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.point_labels_for_scatter", "Point Labels (for scatter)"), padding=10)
         sample_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        ttk.Label(sample_frame, text=self._t("ui.labels.sample_labels_source", "Sample Labels Source:")).pack(anchor=tk.W)
+        ttk.Label(sample_frame, text=self._t("ui.labels.point_labels_source", "Point Labels Source:")).pack(anchor=tk.W)
         self.sample_labels_var = tk.StringVar()
         sample_combo = ttk.Combobox(sample_frame, textvariable=self.sample_labels_var,
                                     values=[''] + self._get_available_data_sources(), width=40)
@@ -876,6 +922,30 @@ class AddGraphDialog:
             text=self._t("ui.labels.show_origin", "Show origin (x=0, y=0)"),
             variable=self.show_origin_var
         ).pack(anchor=tk.W, pady=2)
+
+        self.show_labels_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            display_frame,
+            text=self._t("ui.labels.show_labels", "Show point labels (scatter)"),
+            variable=self.show_labels_var
+        ).pack(anchor=tk.W, pady=2)
+
+        # Confidence ellipse options (scatter)
+        conf_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.confidence_ellipses_scatter", "Confidence Ellipses (scatter)"), padding=10)
+        conf_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        self.confidence_ellipses_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            conf_frame,
+            text=self._t("ui.labels.enable_confidence_ellipses", "Enable confidence ellipses"),
+            variable=self.confidence_ellipses_var
+        ).pack(anchor=tk.W, pady=2)
+
+        level_row = ttk.Frame(conf_frame)
+        level_row.pack(fill=tk.X, pady=(4, 0))
+        ttk.Label(level_row, text=self._t("ui.labels.confidence_level", "Confidence level (%):")).pack(side=tk.LEFT)
+        self.confidence_level_var = tk.StringVar(value="95")
+        ttk.Entry(level_row, textvariable=self.confidence_level_var, width=10).pack(side=tk.LEFT, padx=(8, 0))
         
         # Data slicing configuration
         slice_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.data_slicing_navigation", "Data Slicing / Navigation"), padding=10)
@@ -1051,6 +1121,10 @@ class AddGraphDialog:
             if x_label:
                 x_config['label'] = x_label
 
+            x_axis_type = self.x_axis_type_var.get().strip() if hasattr(self, 'x_axis_type_var') else 'linear'
+            if x_axis_type and x_axis_type != 'linear':
+                x_config['axis_type'] = x_axis_type
+
             if getattr(self, 'x_force_integer_var', None) and self.x_force_integer_var.get():
                 x_config['force_integer'] = True
             
@@ -1069,6 +1143,10 @@ class AddGraphDialog:
             y_label = self.y_label_var.get()
             if y_label:
                 y_config['label'] = y_label
+
+            y_axis_type = self.y_axis_type_var.get().strip() if hasattr(self, 'y_axis_type_var') else 'linear'
+            if y_axis_type and y_axis_type != 'linear':
+                y_config['axis_type'] = y_axis_type
 
             if getattr(self, 'y_force_integer_var', None) and self.y_force_integer_var.get():
                 y_config['force_integer'] = True
@@ -1089,6 +1167,10 @@ class AddGraphDialog:
             if z_label:
                 z_config['label'] = z_label
 
+            z_axis_type = self.z_axis_type_var.get().strip() if hasattr(self, 'z_axis_type_var') else 'linear'
+            if z_axis_type and z_axis_type != 'linear':
+                z_config['axis_type'] = z_axis_type
+
             if getattr(self, 'z_force_integer_var', None) and self.z_force_integer_var.get():
                 z_config['force_integer'] = True
             
@@ -1099,16 +1181,23 @@ class AddGraphDialog:
         if class_source:
             config['class_labels'] = class_source
         
-        # Sample labels
+        # Point labels
         sample_source = self.sample_labels_var.get()
         if sample_source:
-            config['sample_labels_source'] = sample_source
+            config['point_labels_source'] = sample_source
 
         # Display options
         if getattr(self, 'show_grid_var', None) and self.show_grid_var.get():
             config['show_grid'] = True
         if getattr(self, 'show_origin_var', None) and self.show_origin_var.get():
             config['show_origin'] = True
+        if getattr(self, 'show_labels_var', None) and self.show_labels_var.get():
+            config['show_labels'] = True
+        if getattr(self, 'confidence_ellipses_var', None) and self.confidence_ellipses_var.get():
+            config['confidence_ellipses'] = True
+            confidence_level = self.confidence_level_var.get().strip() if getattr(self, 'confidence_level_var', None) else ''
+            if confidence_level:
+                config['confidence_level'] = confidence_level
         
         # Data slicing - build navigation controls
         data_slicing = []
@@ -1199,6 +1288,8 @@ class AddGraphDialog:
             
             # Extract data - handle multi-dataset or single dataset
             datasets = None
+            sample_labels = None
+            sample_labels_by_dataset = None
             x_data = None
             y_data = None
             z_data = None
@@ -1206,6 +1297,7 @@ class AddGraphDialog:
             if config.get('datasets'):
                 # Multi-dataset mode: extract data for each dataset
                 datasets = []
+                sample_labels_by_dataset = {}
                 for ds_cfg in config['datasets']:
                     ds_x = None
                     ds_y = None
@@ -1242,15 +1334,28 @@ class AddGraphDialog:
                     
                     if ds_cfg.get('color'):
                         dataset_entry['color'] = ds_cfg['color']
+
+                    ds_label_source = ds_cfg.get('point_labels_source', ds_cfg.get('sample_labels_source'))
+                    if ds_label_source and ds_label_source in self.outputs:
+                        ds_labels = self.outputs[ds_label_source]
+                        if isinstance(ds_labels, (list, np.ndarray)):
+                            sample_labels_by_dataset[dataset_entry['label']] = [str(lbl) for lbl in ds_labels]
                     
                     datasets.append(dataset_entry)
                 
                 if not datasets:
                     raise ValueError("No valid datasets found. Check your dataset configurations.")
+                if not sample_labels_by_dataset:
+                    sample_labels_by_dataset = None
             else:
                 # Single dataset mode
                 if config.get('x_axis'):
                     x_data = self.main_gui._extract_axis_data(self.outputs, config['x_axis'], {})
+                point_labels_source = config.get('point_labels_source', config.get('sample_labels_source'))
+                if point_labels_source and point_labels_source in self.outputs:
+                    labels_data = self.outputs[point_labels_source]
+                    if isinstance(labels_data, (list, np.ndarray)):
+                        sample_labels = [str(lbl) for lbl in labels_data]
             y_data = None
             z_data = None
             
@@ -1281,7 +1386,9 @@ class AddGraphDialog:
                 graph_type, config, x_data, y_data, z_data,
                 x_axis_config, y_axis_config,
                 default_cmap=self.main_gui.settings_manager.get('colormap', 'viridis'),
-                datasets=datasets
+                datasets=datasets,
+                sample_labels=sample_labels,
+                sample_labels_by_dataset=sample_labels_by_dataset
             )
             
             # Embed in preview container
@@ -1376,6 +1483,12 @@ This dialog allows you to add a new graph to an empty section in your analysis.
    - Data Source: Select the output variable to use
    - Nested Key: If the data source is a dictionary, select the key
    - Axis Label: Custom label for the axis
+    - Axis Type: linear, log10, log2, or ln scale
+
+    Axis label formatting:
+    - Greek letters are supported (e.g., α, β, μ)
+    - Unicode superscript/subscript is supported (e.g., cm², H₂O)
+    - Matplotlib math-text is supported using $...$ (e.g., CO$_2$, x$^2$, $\alpha$)
 
    Special data sources:
    - __index__: Auto-generate row indices (1, 2, 3, ...)
@@ -1388,7 +1501,10 @@ This dialog allows you to add a new graph to an empty section in your analysis.
 
 4. ADVANCED TAB:
    - Class Labels: Select a data source for coloring points by class
-   - Sample Labels: Select a data source for sample tooltips
+    - Point Labels Source: Select data source used for point labels and scatter tooltips
+    - Show point labels (scatter): draw labels directly on each point
+     - Confidence ellipses (scatter): draw per-class ellipses (or one global ellipse if no classes)
+         * Confidence level (%): defaults to 95 when omitted
    - Data Slicing/Navigation: Enable navigation controls for multi-dimensional data
      * Enable axis navigation (X/Y/Z) with dimension and default value
      * Dim 0=samples, 1=first variable dimension (e.g., PCs)

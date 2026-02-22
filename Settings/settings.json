@@ -1,6 +1,7 @@
 {
   "language": "en",
   "colormap": "jet",
+  "graph_font_scale": 1.0,
   "display_splashscreen": true,
   "import_loading_mode": "eager",
   "qualitative_colormap": "Set1"

@@ -134,13 +134,15 @@
               "graph_type": "scatter",
               "x_axis": {
                 "data_source": "model_scores",
+                "axis_type": "linear",
                 "label": "Score"
               },
               "y_axis": {
                 "data_source": "model_scores",
+                "axis_type": "linear",
                 "label": "Score"
               },
-              "sample_labels_source": "smp_cal",
+              "point_labels_source": "smp_cal",
               "title": "Scores de Calibração",
               "data_slicing": [
                 {
@@ -166,13 +168,15 @@
               "graph_type": "scatter",
               "x_axis": {
                 "data_source": "val_scores",
+                "axis_type": "linear",
                 "label": "Score"
               },
               "y_axis": {
                 "data_source": "val_scores",
+                "axis_type": "linear",
                 "label": "Score"
               },
-              "sample_labels_source": "smp_val",
+              "point_labels_source": "smp_val",
               "title": "Scores de Validação",
               "condition": {
                 "parameter": "val_scores",
@@ -202,12 +206,14 @@
               "graph_type": "line",
               "x_axis": {
                 "data_source": "__index__",
+                "axis_type": "linear",
                 "label": "Componente",
                 "reference_source": "metrics",
                 "reference_nested_key": "calibration.pct_variance_explained"
               },
               "y_axis": {
                 "data_source": "metrics",
+                "axis_type": "linear",
                 "nested_key": "calibration.pct_variance_explained",
                 "label": "Variância Explicada (%)"
               },
@@ -223,10 +229,12 @@
               "graph_type": "line",
               "x_axis": {
                 "data_source": "axis_n_info",
+                "axis_type": "linear",
                 "label": "Variável"
               },
               "y_axis": {
                 "data_source": "model_loadings",
+                "axis_type": "linear",
                 "label": "Peso (Loading)"
               },
               "title": "Pesos (Loadings) da PCA",
@@ -303,6 +311,7 @@
               "graph_type": "scatter",
               "x_axis": {
                 "data_source": "__index__",
+                "axis_type": "linear",
                 "label": "Componente Principal",
                 "force_integer": true,
                 "reference_source": "metrics",
@@ -310,6 +319,7 @@
               },
               "y_axis": {
                 "data_source": "metrics",
+                "axis_type": "linear",
                 "nested_key": "calibration.pct_variance_explained",
                 "label": "Variância Explicada (%)"
               }
@@ -332,6 +342,7 @@
                 {
                   "x_axis": {
                     "data_source": "__index__",
+                    "axis_type": "linear",
                     "label": "Componente Principal",
                     "force_integer": true,
                     "reference_source": "metrics",
@@ -339,6 +350,7 @@
                   },
                   "y_axis": {
                     "data_source": "metrics",
+                    "axis_type": "linear",
                     "nested_key": "calibration.pct_variance_explained",
                     "label": "Variância Explicada (%)"
                   },
@@ -349,6 +361,7 @@
                 {
                   "x_axis": {
                     "data_source": "__index__",
+                    "axis_type": "linear",
                     "label": "Componente Principal",
                     "force_integer": true,
                     "reference_source": "metrics",
@@ -356,6 +369,7 @@
                   },
                   "y_axis": {
                     "data_source": "metrics",
+                    "axis_type": "linear",
                     "nested_key": "calibration.cumsum_pct_variance",
                     "label": "Variância Cumulativa (%)"
                   },

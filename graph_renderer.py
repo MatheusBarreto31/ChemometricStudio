@@ -11,9 +11,61 @@ import numpy as np
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib import cm
-from matplotlib.ticker import MaxNLocator
+from matplotlib.patches import Ellipse
+from matplotlib.ticker import MaxNLocator, FuncFormatter
 import tkinter as tk
 from tkinter import ttk
+
+
+def _normalize_axis_type(axis_config: dict) -> str:
+    """Return normalized axis type from config, defaulting to linear."""
+    axis_type = str(axis_config.get('axis_type', 'linear')).strip().lower()
+    if axis_type in ('linear', 'log10', 'log2', 'ln'):
+        return axis_type
+    return 'linear'
+
+
+def _apply_axis_scale_options(ax, config: dict, use_3d: bool = False) -> None:
+    """Apply optional per-axis scaling from config.
+
+    Supported per-axis options:
+        - axis_type: str in {'linear', 'log10', 'log2', 'ln'}
+    """
+
+    def _format_ln_tick(value, _pos):
+        if value <= 0:
+            return ""
+        exponent = np.log(value)
+        rounded = int(np.round(exponent))
+        if np.isclose(exponent, rounded, atol=1e-9):
+            return rf"$e^{{{rounded}}}$"
+        return rf"$e^{{{exponent:.2g}}}$"
+
+    def _apply_scale(axis_obj, set_scale_func, axis_cfg: dict) -> None:
+        axis_type = _normalize_axis_type(axis_cfg)
+        if axis_type == 'linear':
+            set_scale_func('linear')
+            return
+
+        if axis_type == 'log10':
+            base = 10
+        elif axis_type == 'log2':
+            base = 2
+        else:  # ln
+            base = np.e
+
+        set_scale_func('log', base=base)
+        if axis_type == 'ln' and axis_obj is not None:
+            axis_obj.set_major_formatter(FuncFormatter(_format_ln_tick))
+
+    x_axis_cfg = config.get('x_axis', {})
+    y_axis_cfg = config.get('y_axis', {})
+    z_axis_cfg = config.get('z_axis', {})
+
+    _apply_scale(ax.xaxis, ax.set_xscale, x_axis_cfg)
+    _apply_scale(ax.yaxis, ax.set_yscale, y_axis_cfg)
+    if use_3d and hasattr(ax, 'set_zscale'):
+        _apply_scale(getattr(ax, 'zaxis', None), ax.set_zscale, z_axis_cfg)
 
 
 def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarray],
@@ -22,7 +74,8 @@ def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarr
                        datasets: Optional[List[Dict[str, Any]]] = None, 
                        qualitative_cmap: str = 'tab10',
                        sample_labels: Optional[List[str]] = None,
-                       sample_labels_by_dataset: Optional[Dict[str, List[str]]] = None) -> Tuple[Figure, any]:
+                       sample_labels_by_dataset: Optional[Dict[str, List[str]]] = None,
+                       font_scale: float = 1.0) -> Tuple[Figure, any]:
     """Create and render a matplotlib figure for the specified graph type.
     
     Args:
@@ -86,6 +139,8 @@ def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarr
     if graph_title:
         ax.set_title(graph_title)
 
+    _apply_axis_scale_options(ax, config, use_3d=use_3d)
+
     # Optional display and tick options for line/scatter axes
     if graph_type in ('line', 'scatter'):
         _apply_graph_display_options(ax, config, use_3d=use_3d)
@@ -93,8 +148,63 @@ def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarr
     
     # constrained_layout handles margins automatically - no manual adjustment needed
     # This ensures tight bounds that adapt to any section geometry without clipping
+    _apply_relative_font_scale(fig, font_scale)
+    fig._graph_font_scale = float(font_scale) if font_scale else 1.0
     
     return fig, ax
+
+
+def _apply_relative_font_scale(fig: Figure, font_scale: float) -> None:
+    """Apply relative font scaling to all figure text artists."""
+    try:
+        scale = float(font_scale)
+    except (TypeError, ValueError):
+        return
+
+    if scale <= 0 or abs(scale - 1.0) < 1e-9:
+        return
+
+    def _scale_text(text_obj):
+        if text_obj is None:
+            return
+        try:
+            size = text_obj.get_fontsize()
+            if size is not None:
+                text_obj.set_fontsize(float(size) * scale)
+        except Exception:
+            pass
+
+    for axes_obj in fig.axes:
+        _scale_text(getattr(axes_obj, 'title', None))
+
+        for axis_name in ('xaxis', 'yaxis', 'zaxis'):
+            axis_obj = getattr(axes_obj, axis_name, None)
+            if axis_obj is None:
+                continue
+            _scale_text(getattr(axis_obj, 'label', None))
+            try:
+                _scale_text(axis_obj.get_offset_text())
+            except Exception:
+                pass
+
+        for getter_name in ('get_xticklabels', 'get_yticklabels', 'get_zticklabels'):
+            getter = getattr(axes_obj, getter_name, None)
+            if getter is None:
+                continue
+            try:
+                for tick_text in getter():
+                    _scale_text(tick_text)
+            except Exception:
+                continue
+
+        for text_obj in getattr(axes_obj, 'texts', []):
+            _scale_text(text_obj)
+
+        legend = axes_obj.get_legend() if hasattr(axes_obj, 'get_legend') else None
+        if legend is not None:
+            _scale_text(legend.get_title())
+            for text_obj in legend.get_texts():
+                _scale_text(text_obj)
 
 
 def _apply_axis_tick_options(ax, config: dict, use_3d: bool = False) -> None:
@@ -130,6 +240,96 @@ def _apply_graph_display_options(ax, config: dict, use_3d: bool = False) -> None
     if config.get('show_origin', False) and not use_3d:
         ax.axhline(0, color='gray', linestyle='--', linewidth=1.0, alpha=0.7)
         ax.axvline(0, color='gray', linestyle='--', linewidth=1.0, alpha=0.7)
+
+
+def _is_confidence_ellipses_enabled(config: dict) -> bool:
+    """Return whether confidence ellipse rendering is enabled in config."""
+    value = config.get('confidence_ellipses', False)
+    if isinstance(value, str):
+        return value.strip().lower() in ('1', 'true', 'yes', 'on')
+    return bool(value)
+
+
+def _parse_confidence_level(config: dict) -> float:
+    """Parse confidence level from config and return a probability in (0, 1)."""
+    raw_value = config.get('confidence_level', '95')
+    if raw_value is None:
+        raw_value = '95'
+
+    try:
+        value = str(raw_value).strip().replace('%', '')
+        confidence = float(value)
+    except (TypeError, ValueError):
+        confidence = 95.0
+
+    if confidence > 1.0:
+        confidence /= 100.0
+
+    if confidence <= 0.0 or confidence >= 1.0:
+        confidence = 0.95
+
+    return confidence
+
+
+def _draw_confidence_ellipse(ax, x_data: np.ndarray, y_data: np.ndarray,
+                             color: Any, confidence: float) -> None:
+    """Draw a covariance-based confidence ellipse for 2D points."""
+    if x_data is None or y_data is None:
+        return
+
+    x = np.asarray(x_data, dtype=float)
+    y = np.asarray(y_data, dtype=float)
+    if x.ndim != 1 or y.ndim != 1:
+        return
+
+    n = min(len(x), len(y))
+    if n < 3:
+        return
+
+    x = x[:n]
+    y = y[:n]
+    finite_mask = np.isfinite(x) & np.isfinite(y)
+    if np.count_nonzero(finite_mask) < 3:
+        return
+
+    x = x[finite_mask]
+    y = y[finite_mask]
+
+    cov = np.cov(x, y)
+    if cov.shape != (2, 2):
+        return
+
+    eigvals, eigvecs = np.linalg.eigh(cov)
+    eigvals = np.maximum(eigvals, 0.0)
+    if np.allclose(eigvals, 0.0):
+        return
+
+    order = np.argsort(eigvals)[::-1]
+    eigvals = eigvals[order]
+    eigvecs = eigvecs[:, order]
+
+    chi2_quantile = -2.0 * np.log(1.0 - confidence)
+    width = 2.0 * np.sqrt(eigvals[0] * chi2_quantile)
+    height = 2.0 * np.sqrt(eigvals[1] * chi2_quantile)
+
+    if width <= 0.0 or height <= 0.0:
+        return
+
+    major_axis = eigvecs[:, 0]
+    angle_deg = np.degrees(np.arctan2(major_axis[1], major_axis[0]))
+
+    ellipse = Ellipse(
+        xy=(float(np.mean(x)), float(np.mean(y))),
+        width=float(width),
+        height=float(height),
+        angle=float(angle_deg),
+        facecolor='none',
+        edgecolor=color,
+        linewidth=1.8,
+        alpha=0.9,
+        zorder=4
+    )
+    ax.add_patch(ellipse)
 
 
 def _render_scatter(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],
@@ -181,6 +381,44 @@ def _render_scatter(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarra
             scatter.sample_labels = sample_labels
             scatter.x_data = x_data
             scatter.y_data = y_data
+
+        if config.get('show_labels', False) and sample_labels is not None:
+            _render_point_labels(ax, x_data, y_data, sample_labels, use_3d=use_3d, z_data=z_data)
+
+        if not use_3d and _is_confidence_ellipses_enabled(config):
+            default_color = 'C0'
+            facecolors = scatter.get_facecolors() if hasattr(scatter, 'get_facecolors') else None
+            if facecolors is not None and len(facecolors) > 0:
+                default_color = facecolors[0]
+            confidence = _parse_confidence_level(config)
+            _draw_confidence_ellipse(ax, x_data, y_data, default_color, confidence)
+
+
+def _render_point_labels(ax, x_data, y_data, labels, use_3d: bool = False, z_data=None) -> None:
+    """Render point labels for scatter plots when enabled."""
+    if x_data is None or y_data is None or labels is None:
+        return
+
+    n_points = min(len(x_data), len(y_data), len(labels))
+    if n_points <= 0:
+        return
+
+    for idx in range(n_points):
+        label_text = str(labels[idx])
+        if not label_text:
+            continue
+
+        if use_3d and z_data is not None and idx < len(z_data):
+            ax.text(x_data[idx], y_data[idx], z_data[idx], label_text, fontsize=8, alpha=0.85)
+        else:
+            ax.annotate(
+                label_text,
+                xy=(x_data[idx], y_data[idx]),
+                xytext=(4, 4),
+                textcoords='offset points',
+                fontsize=8,
+                alpha=0.85
+            )
 
 
 def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: dict, 
@@ -251,6 +489,7 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
     dataset_legend_items = []  # List of (label, marker, muted_color) for datasets
     
     # Plot each dataset
+    show_labels = config.get('show_labels', False)
     for dataset in datasets:
         x_data = dataset.get('x_data')
         y_data = dataset.get('y_data')
@@ -284,6 +523,16 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
                 scatter.sample_labels = sample_labels_by_dataset[dataset_label]
                 scatter.x_data = x_data
                 scatter.y_data = y_data
+
+                if show_labels:
+                    _render_point_labels(
+                        ax,
+                        x_data,
+                        y_data,
+                        sample_labels_by_dataset[dataset_label],
+                        use_3d=use_3d,
+                        z_data=z_data
+                    )
             
             # Track for legend
             dataset_legend_items.append((dataset_label, marker, fallback_color or 'gray'))
@@ -317,6 +566,16 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
                         scatter.sample_labels = labels_subset
                         scatter.x_data = x_subset
                         scatter.y_data = y_subset
+
+            if show_labels and sample_labels_by_dataset and dataset_label in sample_labels_by_dataset:
+                _render_point_labels(
+                    ax,
+                    x_data,
+                    y_data,
+                    sample_labels_by_dataset[dataset_label],
+                    use_3d=use_3d,
+                    z_data=z_data
+                )
             
             # Track dataset for legend
             dataset_legend_items.append((dataset_label, marker, 'gray'))  # muted/gray color for dataset marker
@@ -362,6 +621,27 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
     # Add legend if we have entries to show
     if legend_handles:
         ax.legend(legend_handles, legend_labels, loc='best', fontsize='small')
+
+    if not use_3d and _is_confidence_ellipses_enabled(config) and len(datasets) > 0:
+        confidence = _parse_confidence_level(config)
+        first_dataset = datasets[0]
+        first_x = first_dataset.get('x_data')
+        first_y = first_dataset.get('y_data')
+        first_class_data = first_dataset.get('class_data')
+        first_color = first_dataset.get('color', 'C0')
+
+        if first_x is not None and first_y is not None:
+            if first_class_data is not None:
+                first_class_data = np.asarray(first_class_data)
+                classes = np.unique(first_class_data)
+                for cls in classes:
+                    class_mask = first_class_data == cls
+                    if not np.any(class_mask):
+                        continue
+                    class_color = class_to_color.get(cls, first_color)
+                    _draw_confidence_ellipse(ax, first_x[class_mask], first_y[class_mask], class_color, confidence)
+            else:
+                _draw_confidence_ellipse(ax, first_x, first_y, first_color, confidence)
 
 
 def _render_line(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],
@@ -578,6 +858,7 @@ def _setup_scatter_tooltips(canvas: FigureCanvasTkAgg, fig: Figure) -> None:
         'hover_key': None,
         'pinned_annotations': {}
     }
+    graph_font_scale = getattr(fig, '_graph_font_scale', 1.0)
 
     def _make_annotation(scatter, ind: int, is_pinned: bool = False):
         """Create an annotation for a scatter point index."""
@@ -608,7 +889,7 @@ def _setup_scatter_tooltips(canvas: FigureCanvasTkAgg, fig: Figure) -> None:
                 alpha=0.85 if is_pinned else 0.7
             ),
             arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0', lw=1),
-            fontsize=9,
+            fontsize=max(1.0, 9 * float(graph_font_scale)),
             zorder=11 if is_pinned else 10
         )
 
@@ -669,6 +950,9 @@ def _setup_scatter_tooltips(canvas: FigureCanvasTkAgg, fig: Figure) -> None:
 
     def on_click(event):
         """Toggle pin/unpin for the scatter label under the click position."""
+        if getattr(event, 'button', None) not in (1,):
+            return
+
         if event.inaxes != ax:
             return
 

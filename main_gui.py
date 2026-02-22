@@ -4,12 +4,12 @@ Provides Setup, Routing, Analysis, and Report tabs for building analysis pipelin
 """
 
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import ttk, messagebox, filedialog, simpledialog
 import json
 import os
 import copy
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, List, Tuple, Optional, Any, Callable
 import subprocess
 import sys
 from io import StringIO
@@ -115,6 +115,16 @@ class Tooltip:
 
 class ChemometricsGUI:
     """Main GUI class for building and executing chemometrics pipelines."""
+
+    GRAPH_FONT_SCALE_DEFAULT = 1.0
+    GRAPH_FONT_SCALE_OPTIONS = (0.8, 0.9, 1.0, 1.1, 1.25)
+    GRAPH_FONT_SCALE_LABEL_KEYS = {
+        0.8: "menu.font_scale_very_small",
+        0.9: "menu.font_scale_small",
+        1.0: "menu.font_scale_normal",
+        1.1: "menu.font_scale_large",
+        1.25: "menu.font_scale_very_large"
+    }
     
     def __init__(self, root: tk.Tk):
         self.root = root
@@ -135,6 +145,12 @@ class ChemometricsGUI:
         self.import_loading_mode = self._normalize_import_loading_mode(saved_import_loading_mode)
         if self.import_loading_mode != saved_import_loading_mode:
             self.settings_manager.set("import_loading_mode", self.import_loading_mode)
+
+        saved_graph_font_scale = self.settings_manager.get("graph_font_scale", self.GRAPH_FONT_SCALE_DEFAULT)
+        self.graph_font_scale = self._normalize_graph_font_scale(saved_graph_font_scale)
+        self.graph_font_scale_var = tk.StringVar(value=self._format_graph_font_scale_value(self.graph_font_scale))
+        if self.graph_font_scale != saved_graph_font_scale:
+            self.settings_manager.set("graph_font_scale", self.graph_font_scale)
 
         self.import_loading_mode_var = tk.StringVar(value=self.import_loading_mode)
         self._graph_renderer = None
@@ -219,6 +235,547 @@ class ChemometricsGUI:
         normalized = str(mode).strip().lower() if mode is not None else "lazy"
         return normalized if normalized in {"lazy", "eager"} else "lazy"
 
+    def _normalize_graph_font_scale(self, value: Any) -> float:
+        """Normalize persisted graph relative font scale to a supported option."""
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return self.GRAPH_FONT_SCALE_DEFAULT
+
+        for option in self.GRAPH_FONT_SCALE_OPTIONS:
+            if abs(numeric - option) < 1e-9:
+                return option
+        return self.GRAPH_FONT_SCALE_DEFAULT
+
+    def _format_graph_font_scale_value(self, scale: float) -> str:
+        """Format graph font scale for Tk menu variable values."""
+        return f"{float(scale):.2f}"
+
+    def _graph_font_scale_label(self, scale: float) -> str:
+        """Build language-aware menu label for graph font scale options."""
+        key = self.GRAPH_FONT_SCALE_LABEL_KEYS.get(scale, "menu.font_scale_normal")
+        fallback_map = {
+            0.8: "Very Small",
+            0.9: "Small",
+            1.0: "Normal",
+            1.1: "Large",
+            1.25: "Very Large"
+        }
+        base_label = self.language_manager.translate(key, fallback_map.get(scale, "Normal"))
+        percent_text = f"{int(round(scale * 100))}%"
+        default_suffix = ""
+        if abs(scale - self.GRAPH_FONT_SCALE_DEFAULT) < 1e-9:
+            default_suffix = " " + self.language_manager.translate("menu.default_tag", "(default)")
+        return f"{base_label} ({percent_text}){default_suffix}"
+
+    def _populate_graph_font_scale_menu(self, menu: tk.Menu, variable: tk.StringVar, on_select) -> None:
+        """Populate a Tk menu with graph font scale radiobutton options."""
+        for scale in self.GRAPH_FONT_SCALE_OPTIONS:
+            menu.add_radiobutton(
+                label=self._graph_font_scale_label(scale),
+                variable=variable,
+                value=self._format_graph_font_scale_value(scale),
+                command=lambda val=scale: on_select(val)
+            )
+
+    def _load_colormaps_catalog(self) -> dict:
+        """Load colormap catalog from Settings/colormaps.json with safe fallback."""
+        try:
+            colormaps_path = Path(__file__).parent / "Settings" / "colormaps.json"
+            with open(colormaps_path, encoding='utf-8') as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                return data
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            pass
+
+        return {
+            "continuous": {"Perceptually Uniform": ["viridis", "plasma", "inferno"]},
+            "qualitative": []
+        }
+
+    def _get_continuous_colormap_options(self) -> List[str]:
+        """Return flattened list of available continuous colormap names."""
+        colormaps_data = self._load_colormaps_catalog()
+        continuous_data = colormaps_data.get("continuous", {})
+
+        options: List[str] = []
+        if isinstance(continuous_data, list):
+            options.extend(str(name) for name in continuous_data)
+        elif isinstance(continuous_data, dict):
+            for _category, cmaps in continuous_data.items():
+                if isinstance(cmaps, list):
+                    options.extend(str(name) for name in cmaps)
+
+        deduped: List[str] = []
+        seen = set()
+        for name in options:
+            if name and name not in seen:
+                deduped.append(name)
+                seen.add(name)
+        return deduped
+
+    def _is_graph_option_supported(self, graph_type: str, option_key: str, config: Optional[dict] = None) -> bool:
+        """Return whether a context-menu option applies to a graph type/config."""
+        cfg = config or {}
+        normalized_type = str(graph_type or "").strip().lower()
+        has_z_axis = isinstance(cfg.get('z_axis'), dict) and bool(cfg.get('z_axis'))
+        is_scatter_3d = normalized_type == 'scatter' and has_z_axis
+
+        if option_key == 'show_grid':
+            return normalized_type in {'line', 'scatter'}
+        if option_key == 'show_origin':
+            return normalized_type in {'line', 'scatter'} and not is_scatter_3d
+        if option_key == 'show_labels':
+            return normalized_type == 'scatter'
+        if option_key == 'confidence_ellipses':
+            return normalized_type == 'scatter' and not is_scatter_3d
+        if option_key == 'confidence_level':
+            return normalized_type == 'scatter' and not is_scatter_3d
+        if option_key == 'cmap':
+            return normalized_type in {'heatmap', '3d_surf', 'contour'}
+        if option_key == 'use_wireframe':
+            return normalized_type == '3d_surf'
+        if option_key == 'contour_filled':
+            return normalized_type == 'contour'
+        if option_key in {'x_axis_type', 'y_axis_type'}:
+            return normalized_type in {'line', 'scatter', 'heatmap', 'contour', '3d_surf', 'bar', 'histogram'}
+        if option_key == 'z_axis_type':
+            return normalized_type in {'scatter', '3d_surf'} and has_z_axis
+        if option_key in {'x_force_integer', 'y_force_integer'}:
+            return normalized_type in {'line', 'scatter'}
+        if option_key == 'z_force_integer':
+            return normalized_type == 'scatter' and has_z_axis
+        return False
+
+    def _update_graph_axis_config_option(self, instance_alias: str, section_id: Tuple[int, int],
+                                         axis_key: str, option_key: str, option_value: Any,
+                                         popup_refresh_callback: Optional[Callable[[], None]] = None,
+                                         refresh_analysis: bool = True) -> None:
+        """Persist a graph axis option under config[axis_key] and refresh graph view."""
+        try:
+            analysis_info = self.analysis_data.get(instance_alias)
+            if not isinstance(analysis_info, dict):
+                return
+
+            page_idx, section_idx = section_id
+            pages = analysis_info.get('pages', [])
+            if page_idx < 0 or page_idx >= len(pages):
+                return
+
+            sections = pages[page_idx].get('sections', []) if isinstance(pages[page_idx], dict) else []
+            if section_idx < 0 or section_idx >= len(sections):
+                return
+
+            section = sections[section_idx]
+            config = section.setdefault('config', {}) if isinstance(section, dict) else {}
+            if not isinstance(config, dict):
+                return
+
+            axis_config = config.get(axis_key)
+            if not isinstance(axis_config, dict):
+                axis_config = {}
+                config[axis_key] = axis_config
+
+            axis_config[option_key] = option_value
+
+            graph_slices = analysis_info.get('graph_slices', {})
+            if section_id in graph_slices and isinstance(graph_slices[section_id], dict):
+                graph_slices[section_id]['config'] = config
+
+            self._generate_model_json()
+
+            if refresh_analysis:
+                has_slice_state = section_id in analysis_info.get('graph_slices', {})
+                has_canvas = section_id in analysis_info.get('graph_canvases', {})
+                if has_slice_state and has_canvas:
+                    self._update_graph_with_slice(instance_alias, section_id, -1)
+                else:
+                    self._show_analysis_tab()
+
+            if popup_refresh_callback is not None:
+                popup_refresh_callback()
+        except Exception as e:
+            self._show_fading_error(
+                self.language_manager.translate("ui.messages.generate_model_json_failed", "Failed to generate model.json") + f": {e}"
+            )
+
+    def _normalize_confidence_level_percent(self, value: Any) -> str:
+        """Normalize confidence level to percent string (e.g., '95')."""
+        raw_value = value if value is not None else '95'
+        try:
+            parsed = float(str(raw_value).strip().replace('%', ''))
+        except (TypeError, ValueError):
+            parsed = 95.0
+
+        if parsed <= 0:
+            parsed = 95.0
+        if parsed <= 1.0:
+            parsed *= 100.0
+
+        if abs(parsed - round(parsed)) < 1e-9:
+            return str(int(round(parsed)))
+        return f"{parsed:.2f}".rstrip('0').rstrip('.')
+
+    def _update_graph_section_config_option(self, instance_alias: str, section_id: Tuple[int, int],
+                                            option_key: str, option_value: Any,
+                                            popup_refresh_callback: Optional[Callable[[], None]] = None,
+                                            refresh_analysis: bool = True) -> None:
+        """Persist a graph option into analysis config and regenerate model.json."""
+        try:
+            analysis_info = self.analysis_data.get(instance_alias)
+            if not isinstance(analysis_info, dict):
+                return
+
+            page_idx, section_idx = section_id
+            pages = analysis_info.get('pages', [])
+            if page_idx < 0 or page_idx >= len(pages):
+                return
+
+            sections = pages[page_idx].get('sections', []) if isinstance(pages[page_idx], dict) else []
+            if section_idx < 0 or section_idx >= len(sections):
+                return
+
+            section = sections[section_idx]
+            config = section.setdefault('config', {}) if isinstance(section, dict) else {}
+            if not isinstance(config, dict):
+                return
+
+            config[option_key] = option_value
+
+            graph_slices = analysis_info.get('graph_slices', {})
+            if section_id in graph_slices and isinstance(graph_slices[section_id], dict):
+                graph_slices[section_id]['config'] = config
+
+            self._generate_model_json()
+
+            if refresh_analysis:
+                has_slice_state = section_id in analysis_info.get('graph_slices', {})
+                has_canvas = section_id in analysis_info.get('graph_canvases', {})
+                if has_slice_state and has_canvas:
+                    self._update_graph_with_slice(instance_alias, section_id, -1)
+                else:
+                    self._show_analysis_tab()
+
+            if popup_refresh_callback is not None:
+                popup_refresh_callback()
+        except Exception as e:
+            self._show_fading_error(
+                self.language_manager.translate("ui.messages.generate_model_json_failed", "Failed to generate model.json") + f": {e}"
+            )
+
+    def _build_graph_context_menu(self, graph_type: str, config: dict, instance_alias: str,
+                                  section_id: Tuple[int, int],
+                                  popup_refresh_callback: Optional[Callable[[], None]] = None) -> Optional[tk.Menu]:
+        """Build graph-specific right-click menu. Returns None when no options apply."""
+        menu = tk.Menu(self.root, tearoff=0)
+        menu._var_refs = []
+        item_count = 0
+
+        def _keep_var_ref(var_obj: Any) -> None:
+            try:
+                menu._var_refs.append(var_obj)
+            except Exception:
+                pass
+
+        def _add_toggle(option_key: str, label_key: str, fallback: str) -> None:
+            nonlocal item_count
+            if not self._is_graph_option_supported(graph_type, option_key, config):
+                return
+
+            current = bool(config.get(option_key, False))
+            state_var = tk.BooleanVar(value=current)
+            _keep_var_ref(state_var)
+
+            def _on_toggle() -> None:
+                self._update_graph_section_config_option(
+                    instance_alias,
+                    section_id,
+                    option_key,
+                    bool(state_var.get()),
+                    popup_refresh_callback=popup_refresh_callback,
+                    refresh_analysis=True
+                )
+
+            menu.add_checkbutton(
+                label=self.language_manager.translate(label_key, fallback),
+                variable=state_var,
+                onvalue=True,
+                offvalue=False,
+                command=_on_toggle
+            )
+            item_count += 1
+
+        _add_toggle('show_grid', 'menu.graph_context.grid', 'Grid')
+        _add_toggle('show_origin', 'menu.graph_context.origin_axis', 'Origin Axis')
+        _add_toggle('show_labels', 'menu.graph_context.labels', 'Labels')
+        _add_toggle('confidence_ellipses', 'menu.graph_context.ellipses', 'Ellipses')
+        _add_toggle('use_wireframe', 'menu.graph_context.use_wireframe', 'Wireframe')
+
+        if self._is_graph_option_supported(graph_type, 'contour_filled', config):
+            current_contour_type = str(config.get('contour_type', 'contourf')).strip().lower()
+            filled_var = tk.BooleanVar(value=(current_contour_type == 'contourf'))
+
+            def _set_contour_filled() -> None:
+                contour_type = 'contourf' if bool(filled_var.get()) else 'contour'
+                self._update_graph_section_config_option(
+                    instance_alias,
+                    section_id,
+                    'contour_type',
+                    contour_type,
+                    popup_refresh_callback=popup_refresh_callback,
+                    refresh_analysis=True
+                )
+
+            menu.add_checkbutton(
+                label=self.language_manager.translate('menu.graph_context.filled_contour', 'Filled Contour'),
+                variable=filled_var,
+                onvalue=True,
+                offvalue=False,
+                command=_set_contour_filled
+            )
+            item_count += 1
+
+        if self._is_graph_option_supported(graph_type, 'confidence_level', config):
+            confidence_menu = tk.Menu(menu, tearoff=0)
+            confidence_var = tk.StringVar(value=self._normalize_confidence_level_percent(config.get('confidence_level', '95')))
+            _keep_var_ref(confidence_var)
+
+            current_prefix = self.language_manager.translate('menu.graph_context.current_value', 'Current')
+            confidence_menu.add_command(
+                label=f"{current_prefix}: {confidence_var.get()}%",
+                state=tk.DISABLED
+            )
+            confidence_menu.add_separator()
+
+            def _set_confidence_level(value: str) -> None:
+                self._update_graph_section_config_option(
+                    instance_alias,
+                    section_id,
+                    'confidence_level',
+                    str(value),
+                    popup_refresh_callback=popup_refresh_callback,
+                    refresh_analysis=True
+                )
+
+            for preset in ('90', '95', '99'):
+                confidence_menu.add_radiobutton(
+                    label=f"{preset}%",
+                    variable=confidence_var,
+                    value=preset,
+                    command=lambda v=preset, setter=_set_confidence_level: setter(v)
+                )
+
+            confidence_menu.add_separator()
+
+            def _set_custom_confidence() -> None:
+                title = self.language_manager.translate('menu.graph_context.confidence_level', 'Confidence Level')
+                prompt = self.language_manager.translate(
+                    'menu.graph_context.custom_confidence_prompt',
+                    'Type confidence level (%) between 0 and 100:'
+                )
+                default_value = self._normalize_confidence_level_percent(config.get('confidence_level', '95'))
+                user_value = simpledialog.askstring(title=title, prompt=prompt, initialvalue=default_value, parent=self.root)
+                if user_value is None:
+                    return
+
+                normalized = self._normalize_confidence_level_percent(user_value)
+                numeric = float(normalized)
+                if numeric <= 0.0 or numeric >= 100.0:
+                    return
+
+                _set_confidence_level(normalized)
+
+            confidence_menu.add_command(
+                label=self.language_manager.translate('menu.graph_context.custom', 'Custom'),
+                command=_set_custom_confidence
+            )
+
+            menu.add_cascade(
+                label=self.language_manager.translate('menu.graph_context.confidence_level', 'Confidence Level'),
+                menu=confidence_menu
+            )
+            item_count += 1
+
+        if self._is_graph_option_supported(graph_type, 'cmap', config):
+            colormaps_data = self._load_colormaps_catalog()
+            continuous_data = colormaps_data.get("continuous", {})
+            cmap_menu = tk.Menu(menu, tearoff=0)
+            current_cmap = str(config.get('cmap') or self.settings_manager.get('colormap', 'viridis'))
+            cmap_var = tk.StringVar(value=current_cmap)
+            _keep_var_ref(cmap_var)
+
+            def _set_cmap(value: str) -> None:
+                self._update_graph_section_config_option(
+                    instance_alias,
+                    section_id,
+                    'cmap',
+                    str(value),
+                    popup_refresh_callback=popup_refresh_callback,
+                    refresh_analysis=True
+                )
+
+            has_any_cmap = False
+
+            if isinstance(continuous_data, list):
+                for cmap_name in continuous_data:
+                    cmap_menu.add_radiobutton(
+                        label=cmap_name,
+                        variable=cmap_var,
+                        value=cmap_name,
+                        command=lambda v=cmap_name, setter=_set_cmap: setter(v)
+                    )
+                    has_any_cmap = True
+            elif isinstance(continuous_data, dict):
+                for category, cmaps in continuous_data.items():
+                    if not isinstance(cmaps, list) or not cmaps:
+                        continue
+                    category_menu = tk.Menu(cmap_menu, tearoff=0)
+                    for cmap_name in cmaps:
+                        category_menu.add_radiobutton(
+                            label=cmap_name,
+                            variable=cmap_var,
+                            value=cmap_name,
+                            command=lambda v=cmap_name, setter=_set_cmap: setter(v)
+                        )
+                    cmap_menu.add_cascade(label=category, menu=category_menu)
+                    has_any_cmap = True
+
+            if has_any_cmap:
+                menu.add_cascade(
+                    label=self.language_manager.translate('menu.graph_context.colormap', 'Colormap'),
+                    menu=cmap_menu
+                )
+                item_count += 1
+
+        axis_type_values = ('linear', 'log10', 'log2', 'ln')
+        axis_scale_label = self.language_manager.translate('menu.graph_context.axis_scale', 'Axis Scale')
+        axis_scale_labels = {
+            'linear': self.language_manager.translate('menu.graph_context.axis_scale_linear', 'Linear'),
+            'log10': self.language_manager.translate('menu.graph_context.axis_scale_log10', 'Log10'),
+            'log2': self.language_manager.translate('menu.graph_context.axis_scale_log2', 'Log2'),
+            'ln': self.language_manager.translate('menu.graph_context.axis_scale_ln', 'Ln')
+        }
+
+        axis_root_menu = tk.Menu(menu, tearoff=0)
+        axis_root_count = 0
+
+        axis_specs = [
+            ('x_axis', 'x_axis_type', 'x_force_integer', 'menu.graph_context.axis_x', 'X Axis'),
+            ('y_axis', 'y_axis_type', 'y_force_integer', 'menu.graph_context.axis_y', 'Y Axis'),
+            ('z_axis', 'z_axis_type', 'z_force_integer', 'menu.graph_context.axis_z', 'Z Axis')
+        ]
+
+        for axis_key, axis_type_option, axis_force_option, axis_label_key, axis_fallback in axis_specs:
+            has_axis_type = self._is_graph_option_supported(graph_type, axis_type_option, config)
+            has_force_integer = self._is_graph_option_supported(graph_type, axis_force_option, config)
+            if not has_axis_type and not has_force_integer:
+                continue
+
+            axis_menu = tk.Menu(axis_root_menu, tearoff=0)
+            axis_cfg = config.get(axis_key, {}) if isinstance(config.get(axis_key), dict) else {}
+
+            if has_axis_type:
+                scale_menu = tk.Menu(axis_menu, tearoff=0)
+                axis_type_var = tk.StringVar(value=str(axis_cfg.get('axis_type', 'linear')).strip().lower())
+                if axis_type_var.get() not in axis_type_values:
+                    axis_type_var.set('linear')
+                _keep_var_ref(axis_type_var)
+
+                def _set_axis_type(value: str, _axis_key=axis_key) -> None:
+                    self._update_graph_axis_config_option(
+                        instance_alias,
+                        section_id,
+                        _axis_key,
+                        'axis_type',
+                        value,
+                        popup_refresh_callback=popup_refresh_callback,
+                        refresh_analysis=True
+                    )
+
+                for axis_type_name in axis_type_values:
+                    scale_menu.add_radiobutton(
+                        label=axis_scale_labels.get(axis_type_name, axis_type_name),
+                        variable=axis_type_var,
+                        value=axis_type_name,
+                        command=lambda v=axis_type_name, setter=_set_axis_type: setter(v)
+                    )
+
+                axis_menu.add_cascade(label=axis_scale_label, menu=scale_menu)
+
+            if has_force_integer:
+                force_var = tk.BooleanVar(value=bool(axis_cfg.get('force_integer', False)))
+                _keep_var_ref(force_var)
+
+                def _set_force_integer(_axis_key=axis_key, _force_var=force_var) -> None:
+                    self._update_graph_axis_config_option(
+                        instance_alias,
+                        section_id,
+                        _axis_key,
+                        'force_integer',
+                        bool(_force_var.get()),
+                        popup_refresh_callback=popup_refresh_callback,
+                        refresh_analysis=True
+                    )
+
+                axis_menu.add_checkbutton(
+                    label=self.language_manager.translate('menu.graph_context.force_integer_ticks', 'Force Integer Ticks'),
+                    variable=force_var,
+                    onvalue=True,
+                    offvalue=False,
+                    command=_set_force_integer
+                )
+
+            axis_root_menu.add_cascade(
+                label=self.language_manager.translate(axis_label_key, axis_fallback),
+                menu=axis_menu
+            )
+            axis_root_count += 1
+
+        if axis_root_count > 0:
+            menu.add_cascade(
+                label=self.language_manager.translate('menu.graph_context.axes', 'Axes'),
+                menu=axis_root_menu
+            )
+            item_count += 1
+
+        return menu if item_count > 0 else None
+
+    def _attach_graph_context_menu(self, canvas, graph_type: str, config: dict,
+                                   instance_alias: str, section_id: Tuple[int, int],
+                                   popup_refresh_callback: Optional[Callable[[], None]] = None) -> None:
+        """Attach right-click graph context menu when graph type has supported options."""
+        if not any(
+            self._is_graph_option_supported(graph_type, key, config)
+            for key in ('show_grid', 'show_origin', 'show_labels', 'confidence_ellipses', 'confidence_level', 'cmap')
+        ):
+            return
+
+        try:
+            widget = canvas.get_tk_widget()
+        except Exception:
+            return
+
+        def _on_right_click(event) -> None:
+            self._set_active_analysis_section(instance_alias, section_id)
+
+            context_menu = self._build_graph_context_menu(
+                graph_type,
+                config,
+                instance_alias,
+                section_id,
+                popup_refresh_callback=popup_refresh_callback
+            )
+            if context_menu is None:
+                return
+
+            try:
+                context_menu.tk_popup(event.x_root, event.y_root)
+            finally:
+                context_menu.grab_release()
+
+        widget.bind("<Button-3>", _on_right_click, add="+")
+
     def _preload_heavy_dependencies(self):
         """Preload heavy/optional modules when eager mode is selected."""
         self._get_graph_renderer()
@@ -255,6 +812,32 @@ class ChemometricsGUI:
                     "Lazy loading enabled. Full startup impact applies on next launch."
                 )
             )
+
+    def _set_graph_font_scale(self, scale: float, notify: bool = True):
+        """Persist and apply graph relative font scale preference."""
+        normalized = self._normalize_graph_font_scale(scale)
+        normalized_str = self._format_graph_font_scale_value(normalized)
+
+        if self.graph_font_scale_var.get() != normalized_str:
+            self.graph_font_scale_var.set(normalized_str)
+
+        if abs(normalized - self.graph_font_scale) < 1e-9:
+            return
+
+        self.graph_font_scale = normalized
+        self.settings_manager.set("graph_font_scale", normalized)
+
+        if notify:
+            percent_text = f"{int(round(normalized * 100))}%"
+            self._show_fading_message(
+                self.language_manager.translate(
+                    "ui.messages.graph_font_scale_changed_to",
+                    "Graph font size changed to"
+                ) + f" {percent_text}."
+            )
+
+        if getattr(self, "current_tab", None) == "analysis":
+            self._show_analysis_tab()
 
     def _get_graph_renderer(self):
         """Lazy-load graph renderer to reduce startup import time."""
@@ -540,14 +1123,20 @@ class ChemometricsGUI:
             value="eager",
             command=lambda: self._set_import_loading_mode("eager")
         )
+
+        graph_font_menu = tk.Menu(settings_menu, tearoff=0)
+        settings_menu.add_cascade(
+            label=self.language_manager.translate("menu.graph_font_size", "Graph Font Size"),
+            menu=graph_font_menu
+        )
+        self._populate_graph_font_scale_menu(
+            graph_font_menu,
+            self.graph_font_scale_var,
+            lambda scale: self._set_graph_font_scale(scale)
+        )
         
         # Load available colormaps
-        try:
-            colormaps_path = Path(__file__).parent / "Settings" / "colormaps.json"
-            with open(colormaps_path, encoding='utf-8') as f:
-                colormaps_data = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            colormaps_data = {"continuous": {"Perceptually Uniform": ["viridis", "plasma", "inferno"]}, "qualitative": []}
+        colormaps_data = self._load_colormaps_catalog()
         
         # Continuous colormaps submenu
         continuous_menu = tk.Menu(colormap_menu, tearoff=0)
@@ -3763,6 +4352,10 @@ class ChemometricsGUI:
             if idx == current_page:
                 visible_page_idx = i
                 break
+
+        if visible_pages:
+            resolved_current_page_idx = visible_pages[visible_page_idx][0]
+            analysis_info['current_page'] = resolved_current_page_idx
         
         # Navigation frame (bottom): page navigation row + result navigation row
         nav_frame = ttk.Frame(self.tab_content_frame)
@@ -5039,7 +5632,9 @@ class ChemometricsGUI:
         
         return containers
     
-    def _render_section(self, parent: ttk.Frame, instance_alias: str, section_data: dict, section_idx: int = 0, is_popup: bool = False):
+    def _render_section(self, parent: ttk.Frame, instance_alias: str, section_data: dict, section_idx: int = 0,
+                        is_popup: bool = False, graph_font_scale_override: Optional[float] = None,
+                        popup_refresh_callback: Optional[Callable[[], None]] = None):
         """Render a section (either graph or table)."""
         section_type = section_data.get('type')
         
@@ -5053,7 +5648,15 @@ class ChemometricsGUI:
                 pass  # Parent may not be a LabelFrame
         
         if section_type == 'graph':
-            self._render_graph_section(parent, instance_alias, section_data, section_idx)
+            self._render_graph_section(
+                parent,
+                instance_alias,
+                section_data,
+                section_idx,
+                graph_font_scale_override=graph_font_scale_override,
+                is_popup=is_popup,
+                popup_refresh_callback=popup_refresh_callback
+            )
         elif section_type == 'table':
             self._render_table_section(parent, instance_alias, section_data, section_idx)
         else:
@@ -5228,7 +5831,10 @@ class ChemometricsGUI:
         
         return dim_labels
     
-    def _render_graph_section(self, parent: ttk.Frame, instance_alias: str, section_data: dict, section_idx: int = 0):
+    def _render_graph_section(self, parent: ttk.Frame, instance_alias: str, section_data: dict,
+                              section_idx: int = 0, graph_font_scale_override: Optional[float] = None,
+                              is_popup: bool = False,
+                              popup_refresh_callback: Optional[Callable[[], None]] = None):
         """Render a graph using matplotlib with optional navigation controls."""
         try:
             config = section_data.get('config', {})
@@ -5418,6 +6024,9 @@ class ChemometricsGUI:
                 aux_axis_config = config['aux_axis']
                 data_source = aux_axis_config.get('data_source')
                 labels_config = aux_axis_config.get('labels', [])
+
+                existing_x_axis = config.get('x_axis', {}) if isinstance(config.get('x_axis'), dict) else {}
+                existing_y_axis = config.get('y_axis', {}) if isinstance(config.get('y_axis'), dict) else {}
                 
                 # Resolve labels - can be array or variable name
                 labels = []
@@ -5436,14 +6045,16 @@ class ChemometricsGUI:
                 if len(md_active_dims) > 0:
                     dim_idx = md_active_dims[0]
                     x_label = labels[dim_idx] if dim_idx < len(labels) else f"Axis {dim_idx}"
-                    x_axis_config = {'data_source': data_source, 'index': dim_idx, 'label': x_label}
+                    x_axis_config = existing_x_axis.copy()
+                    x_axis_config.update({'data_source': data_source, 'index': dim_idx, 'label': x_label})
                 
                 # y-axis uses second dimension in active combination
                 y_axis_config = None
                 if len(md_active_dims) > 1:
                     dim_idx = md_active_dims[1]
                     y_label = labels[dim_idx] if dim_idx < len(labels) else f"Axis {dim_idx}"
-                    y_axis_config = {'data_source': data_source, 'index': dim_idx, 'label': y_label}
+                    y_axis_config = existing_y_axis.copy()
+                    y_axis_config.update({'data_source': data_source, 'index': dim_idx, 'label': y_label})
             else:
                 # Traditional x_axis/y_axis config
                 x_axis_config = config.get('x_axis', {})
@@ -5616,9 +6227,10 @@ class ChemometricsGUI:
                     # Include color if specified (used as fallback when no class_data)
                     if 'color' in dataset_cfg:
                         dataset_entry['color'] = dataset_cfg['color']
-                    # Include sample_labels_source if specified per-dataset
-                    if 'sample_labels_source' in dataset_cfg:
-                        dataset_entry['sample_labels_source'] = dataset_cfg['sample_labels_source']
+                    # Include point_labels_source if specified per-dataset
+                    ds_point_labels_source = dataset_cfg.get('point_labels_source', dataset_cfg.get('sample_labels_source'))
+                    if ds_point_labels_source:
+                        dataset_entry['point_labels_source'] = ds_point_labels_source
                     extracted_datasets.append(dataset_entry)
             
             # If main plot has class_labels config, treat it as a dataset for proper class coloring with qualitative colormap
@@ -5643,9 +6255,10 @@ class ChemometricsGUI:
                         }
                         if z_data is not None:
                             main_dataset['z_data'] = z_data
-                        # Include sample_labels_source if specified at config level
-                        if 'sample_labels_source' in config:
-                            main_dataset['sample_labels_source'] = config['sample_labels_source']
+                        # Include point_labels_source if specified at config level
+                        cfg_point_labels_source = config.get('point_labels_source', config.get('sample_labels_source'))
+                        if cfg_point_labels_source:
+                            main_dataset['point_labels_source'] = cfg_point_labels_source
                         
                         # Add main dataset at the beginning of the list
                         extracted_datasets.insert(0, main_dataset)
@@ -5659,23 +6272,23 @@ class ChemometricsGUI:
             sample_labels = None
             sample_labels_by_dataset = None
             
-            # If we have extracted datasets, collect their sample_labels_source
+            # If we have extracted datasets, collect their point_labels_source
             if extracted_datasets and len(extracted_datasets) > 0:
                 sample_labels_by_dataset = {}
                 for dataset_entry in extracted_datasets:
                     ds_label = dataset_entry.get('label')
-                    ds_source = dataset_entry.get('sample_labels_source')
+                    ds_source = dataset_entry.get('point_labels_source')
                     if ds_label and ds_source and ds_source in outputs:
                         labels_data = outputs[ds_source]
                         if isinstance(labels_data, (list, np.ndarray)):
                             sample_labels_by_dataset[ds_label] = [str(lbl) for lbl in labels_data]
             else:
-                # For single dataset, check for sample_labels_source in config
-                sample_labels_source = config.get('sample_labels_source')
-                if isinstance(sample_labels_source, str):
+                # For single dataset, check for point_labels_source in config
+                point_labels_source = config.get('point_labels_source', config.get('sample_labels_source'))
+                if isinstance(point_labels_source, str):
                     # Single sample labels source
-                    if sample_labels_source in outputs:
-                        labels_data = outputs[sample_labels_source]
+                    if point_labels_source in outputs:
+                        labels_data = outputs[point_labels_source]
                         if isinstance(labels_data, (list, np.ndarray)):
                             sample_labels = [str(lbl) for lbl in labels_data]
             
@@ -5690,13 +6303,17 @@ class ChemometricsGUI:
             
             # Render graph using graph_renderer module
             graph_renderer = self._get_graph_renderer()
+            active_graph_font_scale = self._normalize_graph_font_scale(
+                graph_font_scale_override if graph_font_scale_override is not None else self.graph_font_scale
+            )
             fig, ax = graph_renderer.render_graph_figure(
                 graph_type, render_config, x_data, y_data, z_data, x_axis_config, y_axis_config,
                 default_cmap=self.settings_manager.get('colormap', 'viridis'),
                 datasets=extracted_datasets,
                 qualitative_cmap=self.settings_manager.get('qualitative_colormap', 'tab10'),
                 sample_labels=sample_labels,
-                sample_labels_by_dataset=sample_labels_by_dataset
+                sample_labels_by_dataset=sample_labels_by_dataset,
+                font_scale=active_graph_font_scale
             )
             
             # Embed figure in tkinter within a managed frame
@@ -5732,6 +6349,15 @@ class ChemometricsGUI:
                 'outputs': outputs,  # Store outputs for accessing any additional data sources
                 'config': config  # Store config for accessing class_labels and other metadata
             }
+
+            self._attach_graph_context_menu(
+                canvas,
+                graph_type,
+                config,
+                instance_alias,
+                section_id,
+                popup_refresh_callback=popup_refresh_callback if is_popup else None
+            )
             
         except Exception as e:
             label = ttk.Label(
@@ -6836,6 +7462,53 @@ Count:
                 f" {section_data.get('config', {}).get('title', self.language_manager.translate('ui.labels.section', 'Section'))}"
             )
             popup.geometry("900x700")
+
+            popup_graph_font_scale = self.graph_font_scale
+            popup_graph_font_scale_var = tk.StringVar(value=self._format_graph_font_scale_value(popup_graph_font_scale))
+
+            content_frame = ttk.Frame(popup)
+
+            def render_popup_content():
+                for widget in content_frame.winfo_children():
+                    widget.destroy()
+
+                self._render_section(
+                    content_frame,
+                    instance_alias,
+                    section_data,
+                    section_idx,
+                    is_popup=True,
+                    graph_font_scale_override=popup_graph_font_scale if section_data.get('type') == 'graph' else None,
+                    popup_refresh_callback=render_popup_content
+                )
+
+            if section_data.get('type') == 'graph':
+                popup_menubar = tk.Menu(popup)
+                popup.config(menu=popup_menubar)
+
+                popup_settings_menu = tk.Menu(popup_menubar, tearoff=0)
+                popup_menubar.add_cascade(
+                    label=self.language_manager.translate("menu.settings", "Settings"),
+                    menu=popup_settings_menu
+                )
+
+                popup_graph_font_menu = tk.Menu(popup_settings_menu, tearoff=0)
+                popup_settings_menu.add_cascade(
+                    label=self.language_manager.translate("menu.graph_font_size", "Graph Font Size"),
+                    menu=popup_graph_font_menu
+                )
+
+                def _set_popup_graph_font_scale(scale: float):
+                    nonlocal popup_graph_font_scale
+                    popup_graph_font_scale = self._normalize_graph_font_scale(scale)
+                    popup_graph_font_scale_var.set(self._format_graph_font_scale_value(popup_graph_font_scale))
+                    render_popup_content()
+
+                self._populate_graph_font_scale_menu(
+                    popup_graph_font_menu,
+                    popup_graph_font_scale_var,
+                    _set_popup_graph_font_scale
+                )
             
             # Add button frame at top for action buttons
             button_frame = ttk.Frame(popup)
@@ -6863,11 +7536,10 @@ Count:
             close_btn.pack(side=tk.RIGHT, padx=5)
             
             # Create a frame for the content
-            content_frame = ttk.Frame(popup)
             content_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-            
+
             # Render the section in the popup (with is_popup=True to skip popup button)
-            self._render_section(content_frame, instance_alias, section_data, section_idx, is_popup=True)
+            render_popup_content()
         
         except Exception as e:
             self._show_fading_error(
@@ -8032,6 +8704,9 @@ Count:
                 aux_axis_config = config['aux_axis']
                 data_source = aux_axis_config.get('data_source')
                 labels_config = aux_axis_config.get('labels', [])
+
+                existing_x_axis = config.get('x_axis', {}) if isinstance(config.get('x_axis'), dict) else {}
+                existing_y_axis = config.get('y_axis', {}) if isinstance(config.get('y_axis'), dict) else {}
                 
                 # Resolve labels - can be array or variable name
                 labels = []
@@ -8050,14 +8725,16 @@ Count:
                 if len(md_active_dims) > 0:
                     dim_idx = md_active_dims[0]
                     x_label = labels[dim_idx] if dim_idx < len(labels) else f"Axis {dim_idx}"
-                    x_axis_config = {'data_source': data_source, 'index': dim_idx, 'label': x_label}
+                    x_axis_config = existing_x_axis.copy()
+                    x_axis_config.update({'data_source': data_source, 'index': dim_idx, 'label': x_label})
                 
                 # y-axis uses second dimension in active combination
                 y_axis_config = None
                 if len(md_active_dims) > 1:
                     dim_idx = md_active_dims[1]
                     y_label = labels[dim_idx] if dim_idx < len(labels) else f"Axis {dim_idx}"
-                    y_axis_config = {'data_source': data_source, 'index': dim_idx, 'label': y_label}
+                    y_axis_config = existing_y_axis.copy()
+                    y_axis_config.update({'data_source': data_source, 'index': dim_idx, 'label': y_label})
             else:
                 # Traditional x_axis/y_axis config
                 x_axis_config = config.get('x_axis', {})
@@ -8242,9 +8919,10 @@ Count:
                     # Include color if specified (used as fallback when no class_data)
                     if 'color' in dataset_cfg:
                         dataset_entry['color'] = dataset_cfg['color']
-                    # Include sample_labels_source if specified per-dataset
-                    if 'sample_labels_source' in dataset_cfg:
-                        dataset_entry['sample_labels_source'] = dataset_cfg['sample_labels_source']
+                    # Include point_labels_source if specified per-dataset
+                    ds_point_labels_source = dataset_cfg.get('point_labels_source', dataset_cfg.get('sample_labels_source'))
+                    if ds_point_labels_source:
+                        dataset_entry['point_labels_source'] = ds_point_labels_source
                     extracted_datasets.append(dataset_entry)
             
             # If main plot has class_labels config, treat it as a dataset for proper class coloring with qualitative colormap
@@ -8269,9 +8947,10 @@ Count:
                         }
                         if z_data is not None:
                             main_dataset['z_data'] = z_data
-                        # Include sample_labels_source if specified at config level
-                        if 'sample_labels_source' in config:
-                            main_dataset['sample_labels_source'] = config['sample_labels_source']
+                        # Include point_labels_source if specified at config level
+                        cfg_point_labels_source = config.get('point_labels_source', config.get('sample_labels_source'))
+                        if cfg_point_labels_source:
+                            main_dataset['point_labels_source'] = cfg_point_labels_source
                         
                         # Add main dataset at the beginning of the list
                         extracted_datasets.insert(0, main_dataset)
@@ -8285,23 +8964,23 @@ Count:
             sample_labels = None
             sample_labels_by_dataset = None
             
-            # If we have extracted datasets, collect their sample_labels_source
+            # If we have extracted datasets, collect their point_labels_source
             if extracted_datasets and len(extracted_datasets) > 0:
                 sample_labels_by_dataset = {}
                 for dataset_entry in extracted_datasets:
                     ds_label = dataset_entry.get('label')
-                    ds_source = dataset_entry.get('sample_labels_source')
+                    ds_source = dataset_entry.get('point_labels_source')
                     if ds_label and ds_source and ds_source in outputs:
                         labels_data = outputs[ds_source]
                         if isinstance(labels_data, (list, np.ndarray)):
                             sample_labels_by_dataset[ds_label] = [str(lbl) for lbl in labels_data]
             else:
-                # For single dataset, check for sample_labels_source in config
-                sample_labels_source = config.get('sample_labels_source')
-                if isinstance(sample_labels_source, str):
+                # For single dataset, check for point_labels_source in config
+                point_labels_source = config.get('point_labels_source', config.get('sample_labels_source'))
+                if isinstance(point_labels_source, str):
                     # Single sample labels source
-                    if sample_labels_source in outputs:
-                        labels_data = outputs[sample_labels_source]
+                    if point_labels_source in outputs:
+                        labels_data = outputs[point_labels_source]
                         if isinstance(labels_data, (list, np.ndarray)):
                             sample_labels = [str(lbl) for lbl in labels_data]
             
@@ -8322,12 +9001,26 @@ Count:
                 datasets=extracted_datasets,
                 qualitative_cmap=self.settings_manager.get('qualitative_colormap', 'tab10'),
                 sample_labels=sample_labels,
-                sample_labels_by_dataset=sample_labels_by_dataset
+                sample_labels_by_dataset=sample_labels_by_dataset,
+                font_scale=self.graph_font_scale
             )
             
             # Update existing canvas with new figure
             graph_renderer.update_embedded_figure(fig, instance_alias, section_id, 
                                                  self.analysis_data, None)
+
+            updated_canvas_data = self.analysis_data.get(instance_alias, {}).get('graph_canvases', {}).get(section_id)
+            if updated_canvas_data:
+                updated_canvas, _updated_frame = updated_canvas_data
+                self._bind_section_activation(updated_canvas.get_tk_widget(), instance_alias, section_id)
+                self._attach_graph_context_menu(
+                    updated_canvas,
+                    graph_type,
+                    config,
+                    instance_alias,
+                    section_id,
+                    popup_refresh_callback=None
+                )
             
         except Exception as e:
             print(f"Error updating graph with slice: {str(e)}")
@@ -9823,7 +10516,8 @@ Count:
                 y_axis,
                 default_cmap=self.settings_manager.get('colormap', 'viridis'),
                 datasets=datasets,
-                qualitative_cmap=self.settings_manager.get('qualitative_colormap', 'tab10')
+                qualitative_cmap=self.settings_manager.get('qualitative_colormap', 'tab10'),
+                font_scale=self.graph_font_scale
             )
             fig.savefig(str(image_path), dpi=220, bbox_inches='tight')
             plt = self._get_matplotlib_pyplot()

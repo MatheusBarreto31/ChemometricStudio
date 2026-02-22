@@ -158,14 +158,16 @@
               "graph_type": "scatter",
               "x_axis": {
                 "data_source": "model_scores",
+                "axis_type": "linear",
                 "axis_labels": "pc_labels"
               },
               "y_axis": {
                 "data_source": "model_scores",
+                "axis_type": "linear",
                 "axis_labels": "pc_labels"
               },
               "class_labels": "class_data_cal",
-              "sample_labels_source": "smp_cal",
+              "point_labels_source": "smp_cal",
               "title": "Calibration Scores",
               "data_slicing": [
                 {
@@ -191,14 +193,16 @@
               "graph_type": "scatter",
               "x_axis": {
                 "data_source": "val_scores",
+                "axis_type": "linear",
                 "axis_labels": "pc_labels"
               },
               "y_axis": {
                 "data_source": "val_scores",
+                "axis_type": "linear",
                 "axis_labels": "pc_labels"
               },
               "class_labels": "class_data_val",
-              "sample_labels_source": "smp_val",
+              "point_labels_source": "smp_val",
               "title": "Validation Scores",
               "condition": {
                 "parameter": "val_scores",
@@ -228,12 +232,14 @@
               "graph_type": "line",
               "x_axis": {
                 "data_source": "__index__",
+                "axis_type": "linear",
                 "label": "PC",
                 "reference_source": "metrics",
                 "reference_nested_key": "calibration.pct_variance_explained"
               },
               "y_axis": {
                 "data_source": "metrics",
+                "axis_type": "linear",
                 "nested_key": "calibration.pct_variance_explained",
                 "label": "Variance Explained (%)"
               },
@@ -249,11 +255,13 @@
               "graph_type": "line",
               "x_axis": {
                 "data_source": "axis_n_info",
+                "axis_type": "linear",
                 "index": 1,
                 "label": "Variable"
               },
               "y_axis": {
                 "data_source": "model_loadings",
+                "axis_type": "linear",
                 "axis_labels": "pc_labels"
               },
               "title": "PCA Loadings",
@@ -282,18 +290,24 @@
               "title": "PCA Scores",
               "show_grid": false,
               "show_origin": true,
+              "show_labels": true,
+              "confidence_ellipses": true,
+              "confidence_level": "95",
+
               "datasets": [
                 {
                   "x_axis": {
                     "data_source": "model_scores",
+                    "axis_type": "linear",
                     "axis_labels": "pc_labels"
                   },
                   "y_axis": {
                     "data_source": "model_scores",
+                    "axis_type": "linear",
                     "axis_labels": "pc_labels"
                   },
                   "class_labels": "class_data_cal",
-                  "sample_labels_source": "smp_cal",
+                  "point_labels_source": "smp_cal",
                   "label": "Calibration",
                   "marker": "o",
                   "color": "#1f77b4"
@@ -301,14 +315,16 @@
                 {
                   "x_axis": {
                     "data_source": "model_scores_cv",
+                    "axis_type": "linear",
                     "axis_labels": "pc_labels"
                   },
                   "y_axis": {
                     "data_source": "model_scores_cv",
+                    "axis_type": "linear",
                     "axis_labels": "pc_labels"
                   },
                   "class_labels": "class_data_cal",
-                  "sample_labels_source": "smp_cal",
+                  "point_labels_source": "smp_cal",
                   "label": "CV Calibration",
                   "marker": "s",
                   "color": "#ff7f0e"
@@ -316,14 +332,16 @@
                 {
                   "x_axis": {
                     "data_source": "val_scores",
+                    "axis_type": "linear",
                     "axis_labels": "pc_labels"
                   },
                   "y_axis": {
                     "data_source": "val_scores",
+                    "axis_type": "linear",
                     "axis_labels": "pc_labels"
                   },
                   "class_labels": "class_data_val",
-                  "sample_labels_source": "smp_val",
+                  "point_labels_source": "smp_val",
                   "label": "Validation",
                   "marker": "^",
                   "color": "#2ca02c"
@@ -410,6 +428,7 @@
               "graph_type": "scatter",
               "x_axis": {
                 "data_source": "__index__",
+                "axis_type": "linear",
                 "label": "Principal Component",
                 "force_integer": true,
                 "reference_source": "metrics",
@@ -417,6 +436,7 @@
               },
               "y_axis": {
                 "data_source": "metrics",
+                "axis_type": "linear",
                 "nested_key": "calibration.pct_variance_explained",
                 "label": "Explained Variance (%)"
               }
@@ -439,6 +459,7 @@
                 {
                   "x_axis": {
                     "data_source": "__index__",
+                    "axis_type": "linear",
                     "label": "Principal Component",
                     "force_integer": true,
                     "reference_source": "metrics",
@@ -446,6 +467,7 @@
                   },
                   "y_axis": {
                     "data_source": "metrics",
+                    "axis_type": "linear",
                     "nested_key": "calibration.pct_variance_explained",
                     "label": "Explained Variance (%)"
                   },
@@ -456,6 +478,7 @@
                 {
                   "x_axis": {
                     "data_source": "__index__",
+                    "axis_type": "linear",
                     "label": "Principal Component",
                     "force_integer": true,
                     "reference_source": "metrics",
@@ -463,6 +486,7 @@
                   },
                   "y_axis": {
                     "data_source": "metrics",
+                    "axis_type": "linear",
                     "nested_key": "calibration.cumsum_pct_variance",
                     "label": "Cumulative Variance (%)"
                   },
@@ -490,6 +514,7 @@
                 {
                   "x_axis": {
                     "data_source": "__index__",
+                    "axis_type": "linear",
                     "label": "Principal Component",
                     "force_integer": true,
                     "reference_source": "metrics",
@@ -497,6 +522,7 @@
                   },
                   "y_axis": {
                     "data_source": "metrics",
+                    "axis_type": "linear",
                     "nested_key": "calibration.reconstruction_rmse",
                     "label": "Reconstruction RMSE"
                   },
@@ -507,6 +533,7 @@
                 {
                   "x_axis": {
                     "data_source": "__index__",
+                    "axis_type": "linear",
                     "label": "Principal Component",
                     "force_integer": true,
                     "reference_source": "metrics",
@@ -514,6 +541,7 @@
                   },
                   "y_axis": {
                     "data_source": "metrics",
+                    "axis_type": "linear",
                     "nested_key": "calibration.reconstruction_rmse_cv",
                     "label": "Reconstruction RMSE"
                   },
@@ -524,6 +552,7 @@
                 {
                   "x_axis": {
                     "data_source": "__index__",
+                    "axis_type": "linear",
                     "label": "Principal Component",
                     "force_integer": true,
                     "reference_source": "metrics",
@@ -531,6 +560,7 @@
                   },
                   "y_axis": {
                     "data_source": "metrics",
+                    "axis_type": "linear",
                     "nested_key": "validation.reconstruction_rmse",
                     "label": "Reconstruction RMSE"
                   },

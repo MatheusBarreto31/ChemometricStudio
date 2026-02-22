@@ -11,6 +11,7 @@ class SettingsManager:
     DEFAULT_SETTINGS = {
         "language": "en",
         "colormap": "jet",
+        "graph_font_scale": 1.0,
         "display_splashscreen": True,
         "import_loading_mode": "lazy"
     }
