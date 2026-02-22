@@ -263,6 +263,7 @@
       "unknown_os": "SO desconhecido",
       "report_footer_template": "Modelo criado no Chemometric Studio v{version} em um sistema {os_name} às {timestamp}",
       "analysis_running": "Executando análise...",
+      "loading": "Carregando...",
       "analysis_complete": "Análise concluída",
       "routing_help": "Roteamento: Conecte Saídas de Funções a Entradas",
       "output": "Saída",

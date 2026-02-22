@@ -3722,11 +3722,134 @@ class ChemometricsGUI:
         # Main content area - PACK THIS AFTER so it expands into remaining space
         content_frame = ttk.Frame(self.tab_content_frame)
         content_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10, side=tk.TOP)
+
+        overlay_visible = self._show_analysis_loading_overlay(nav_frame)
+        if overlay_visible:
+            try:
+                self.root.update_idletasks()
+            except Exception:
+                pass
         
         # Display current page
-        if visible_pages:
-            current_idx, page_data = visible_pages[visible_page_idx]
-            self._render_analysis_page(content_frame, instance_alias, page_data)
+        try:
+            if visible_pages:
+                current_idx, page_data = visible_pages[visible_page_idx]
+                self._render_analysis_page(content_frame, instance_alias, page_data)
+        finally:
+            if overlay_visible:
+                self._hide_analysis_loading_overlay()
+
+    def _show_analysis_loading_overlay(self, bottom_anchor: tk.Widget = None) -> bool:
+        """Display muted loading overlay above bottom page/nav controls."""
+        try:
+            if self.tab_content_frame is None or not self.tab_content_frame.winfo_exists():
+                return False
+        except Exception:
+            return False
+
+        style = ttk.Style()
+        overlay_bg = (
+            style.lookup("TLabelframe", "bordercolor")
+            or style.lookup("TFrame", "background")
+            or self.tab_content_frame.cget("background")
+            or "#d9d9d9"
+        )
+        overlay_fg = style.lookup("TLabel", "foreground") or "black"
+
+        overlay = getattr(self, '_analysis_loading_overlay', None)
+        overlay_exists = False
+        if overlay is not None:
+            try:
+                overlay_exists = bool(overlay.winfo_exists())
+            except Exception:
+                overlay_exists = False
+
+        if overlay_exists:
+            try:
+                overlay_exists = str(overlay.master) == str(self.tab_content_frame)
+            except Exception:
+                overlay_exists = False
+
+        label = getattr(self, '_analysis_loading_label', None)
+        label_exists = False
+        if label is not None:
+            try:
+                label_exists = bool(label.winfo_exists())
+            except Exception:
+                label_exists = False
+
+        if not overlay_exists:
+            self._analysis_loading_overlay = tk.Frame(self.tab_content_frame, bg=overlay_bg, bd=0, highlightthickness=0)
+            self._analysis_loading_label = tk.Label(
+                self._analysis_loading_overlay,
+                text=self.language_manager.translate("ui.messages.loading", "Loading..."),
+                bg=overlay_bg,
+                fg=overlay_fg,
+                font=("Arial", 11, "bold")
+            )
+            self._analysis_loading_label.place(relx=0.5, rely=0.5, anchor="center")
+        else:
+            self._analysis_loading_overlay.configure(bg=overlay_bg)
+            if not label_exists:
+                self._analysis_loading_label = tk.Label(
+                    self._analysis_loading_overlay,
+                    text=self.language_manager.translate("ui.messages.loading", "Loading..."),
+                    bg=overlay_bg,
+                    fg=overlay_fg,
+                    font=("Arial", 11, "bold")
+                )
+                self._analysis_loading_label.place(relx=0.5, rely=0.5, anchor="center")
+            else:
+                self._analysis_loading_label.configure(
+                text=self.language_manager.translate("ui.messages.loading", "Loading..."),
+                bg=overlay_bg,
+                fg=overlay_fg
+                )
+
+        self._position_analysis_loading_overlay(bottom_anchor)
+        self._analysis_loading_overlay.lift()
+        return True
+
+    def _position_analysis_loading_overlay(self, bottom_anchor: tk.Widget = None):
+        """Position loading overlay to only cover area above bottom controls."""
+        try:
+            self.tab_content_frame.update_idletasks()
+        except Exception:
+            pass
+
+        total_height = 0
+        try:
+            total_height = int(self.tab_content_frame.winfo_height())
+        except Exception:
+            total_height = 0
+
+        anchor_y = 0
+        if bottom_anchor is not None:
+            try:
+                if bottom_anchor.winfo_exists():
+                    anchor_y = int(bottom_anchor.winfo_y())
+            except Exception:
+                anchor_y = 0
+
+        cover_height = anchor_y if anchor_y > 1 else total_height
+        if cover_height <= 1:
+            cover_height = 400
+
+        try:
+            self._analysis_loading_overlay.place(x=0, y=0, relwidth=1, height=cover_height)
+        except Exception:
+            pass
+
+    def _hide_analysis_loading_overlay(self):
+        """Hide analysis loading overlay if currently displayed."""
+        overlay = getattr(self, '_analysis_loading_overlay', None)
+        if overlay is None:
+            return
+        try:
+            if overlay.winfo_exists():
+                overlay.place_forget()
+        except Exception:
+            pass
 
     def _ensure_analysis_section_styles(self):
         """Ensure deterministic ttk styles for active/inactive section outlines."""
