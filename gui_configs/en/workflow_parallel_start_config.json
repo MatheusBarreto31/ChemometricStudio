@@ -1,6 +1,6 @@
 {
   "display_name": "Parallel Start",
-  "category": "Workflow",
+  "category": "7.Workflow\\2.Parallel",
   "data_type": "workflow",
   "input_aliases": {
     "merge_strategy": "Merge Strategy"

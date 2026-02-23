@@ -291,12 +291,23 @@ class AddTableDialog:
         def _on_mousewheel(event):
             if isinstance(event.widget, ttk.Combobox):
                 return "break"
+
+            step = 0
             if event.delta:
-                canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+                step = int(-1 * (event.delta / 120))
             elif getattr(event, 'num', None) == 4:
-                canvas.yview_scroll(-1, "units")
+                step = -1
             elif getattr(event, 'num', None) == 5:
-                canvas.yview_scroll(1, "units")
+                step = 1
+
+            if step == 0:
+                return "break"
+
+            first, last = canvas.yview()
+            if (step < 0 and first <= 0.0) or (step > 0 and last >= 1.0):
+                return "break"
+
+            canvas.yview_scroll(step, "units")
             return "break"
 
         def _bind_wheel(_event):
@@ -314,6 +325,21 @@ class AddTableDialog:
         canvas.bind("<Leave>", _unbind_wheel)
         scrollable_frame.bind("<Enter>", _bind_wheel)
         scrollable_frame.bind("<Leave>", _unbind_wheel)
+
+    def _bind_canvas_scrollregion(self, canvas, scrollable_frame):
+        """Keep canvas scroll region in sync and avoid stale offset when content is short."""
+        def _update_scrollregion(_event=None):
+            bbox = canvas.bbox("all")
+            if bbox is None:
+                return
+            canvas.configure(scrollregion=bbox)
+
+            content_height = bbox[3] - bbox[1]
+            viewport_height = max(1, canvas.winfo_height())
+            if content_height <= viewport_height:
+                canvas.yview_moveto(0.0)
+
+        scrollable_frame.bind("<Configure>", _update_scrollregion)
     
     def _build_basic_tab(self, parent):
         """Build the basic configuration tab."""
@@ -322,10 +348,7 @@ class AddTableDialog:
         scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
         scrollable_frame = ttk.Frame(canvas)
         
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
+        self._bind_canvas_scrollregion(canvas, scrollable_frame)
         
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
@@ -409,10 +432,7 @@ class AddTableDialog:
         scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
         scrollable_frame = ttk.Frame(canvas)
         
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
+        self._bind_canvas_scrollregion(canvas, scrollable_frame)
         
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
@@ -637,10 +657,7 @@ class AddTableDialog:
         scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
         scrollable_frame = ttk.Frame(canvas)
         
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
+        self._bind_canvas_scrollregion(canvas, scrollable_frame)
         
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)

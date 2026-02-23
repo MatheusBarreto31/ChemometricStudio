@@ -8,6 +8,7 @@ from tkinter import ttk, messagebox, filedialog, simpledialog
 import json
 import os
 import copy
+import re
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Any, Callable
 import subprocess
@@ -33,6 +34,21 @@ from settings import get_settings_manager
 SPECS_PATH = Path(__file__).parent / "function_specs.json"
 with open(SPECS_PATH, encoding='utf-8') as f:
     FUNCTION_SPECS = json.load(f)
+
+
+def _normalize_bool_setting(value: Any, default: bool = False) -> bool:
+    """Normalize persisted bool-like values."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return default
 
 
 def _set_window_icon(window, base_name: str = "Icon") -> None:
@@ -146,6 +162,16 @@ class ChemometricsGUI:
         if self.import_loading_mode != saved_import_loading_mode:
             self.settings_manager.set("import_loading_mode", self.import_loading_mode)
 
+        saved_display_splashscreen = self.settings_manager.get("display_splashscreen", True)
+        self.display_splashscreen = _normalize_bool_setting(saved_display_splashscreen, True)
+        if self.display_splashscreen != saved_display_splashscreen:
+            self.settings_manager.set("display_splashscreen", self.display_splashscreen)
+
+        saved_categories_start_collapsed = self.settings_manager.get("categories_start_collapsed", False)
+        self.categories_start_collapsed = _normalize_bool_setting(saved_categories_start_collapsed, False)
+        if self.categories_start_collapsed != saved_categories_start_collapsed:
+            self.settings_manager.set("categories_start_collapsed", self.categories_start_collapsed)
+
         saved_graph_font_scale = self.settings_manager.get("graph_font_scale", self.GRAPH_FONT_SCALE_DEFAULT)
         self.graph_font_scale = self._normalize_graph_font_scale(saved_graph_font_scale)
         self.graph_font_scale_var = tk.StringVar(value=self._format_graph_font_scale_value(self.graph_font_scale))
@@ -153,6 +179,8 @@ class ChemometricsGUI:
             self.settings_manager.set("graph_font_scale", self.graph_font_scale)
 
         self.import_loading_mode_var = tk.StringVar(value=self.import_loading_mode)
+        self.display_splashscreen_var = tk.BooleanVar(value=self.display_splashscreen)
+        self.categories_start_collapsed_var = tk.BooleanVar(value=self.categories_start_collapsed)
         self._graph_renderer = None
         self._reporting_funcs = None
         self._add_graph_dialog_fn = None
@@ -813,6 +841,26 @@ class ChemometricsGUI:
                 )
             )
 
+    def _set_display_splashscreen(self, enabled: Any):
+        """Persist startup splashscreen visibility preference."""
+        normalized = _normalize_bool_setting(enabled, True)
+        if bool(self.display_splashscreen_var.get()) != normalized:
+            self.display_splashscreen_var.set(normalized)
+        if normalized == self.display_splashscreen:
+            return
+        self.display_splashscreen = normalized
+        self.settings_manager.set("display_splashscreen", normalized)
+
+    def _set_categories_start_collapsed(self, enabled: Any):
+        """Persist whether function categories should start collapsed."""
+        normalized = _normalize_bool_setting(enabled, False)
+        if bool(self.categories_start_collapsed_var.get()) != normalized:
+            self.categories_start_collapsed_var.set(normalized)
+        if normalized == self.categories_start_collapsed:
+            return
+        self.categories_start_collapsed = normalized
+        self.settings_manager.set("categories_start_collapsed", normalized)
+
     def _set_graph_font_scale(self, scale: float, notify: bool = True):
         """Persist and apply graph relative font scale preference."""
         normalized = self._normalize_graph_font_scale(scale)
@@ -1050,6 +1098,12 @@ class ChemometricsGUI:
                        font=("Arial", 9),
                        padding=8)
 
+        style.configure(
+            "FunctionsPanel.TButton",
+            anchor="w",
+            justify="left"
+        )
+
         # Modern progress bar style for model execution feedback
         style.configure(
             "Execution.Horizontal.TProgressbar",
@@ -1105,9 +1159,15 @@ class ChemometricsGUI:
         colormap_menu = tk.Menu(settings_menu, tearoff=0)
         settings_menu.add_cascade(label=self.language_manager.translate("menu.colormap", "Colormap"), menu=colormap_menu)
 
+        startup_menu = tk.Menu(settings_menu, tearoff=0)
+        settings_menu.add_cascade(
+            label=self.language_manager.translate("menu.startup", "Startup"),
+            menu=startup_menu
+        )
+
         # Import loading mode submenu
         loading_menu = tk.Menu(settings_menu, tearoff=0)
-        settings_menu.add_cascade(
+        startup_menu.add_cascade(
             label=self.language_manager.translate("menu.import_loading_mode", "Import Loading"),
             menu=loading_menu
         )
@@ -1122,6 +1182,21 @@ class ChemometricsGUI:
             variable=self.import_loading_mode_var,
             value="eager",
             command=lambda: self._set_import_loading_mode("eager")
+        )
+        startup_menu.add_separator()
+        startup_menu.add_checkbutton(
+            label=self.language_manager.translate("menu.display_splashscreen", "Display Splashscreen"),
+            variable=self.display_splashscreen_var,
+            onvalue=True,
+            offvalue=False,
+            command=lambda: self._set_display_splashscreen(self.display_splashscreen_var.get())
+        )
+        startup_menu.add_checkbutton(
+            label=self.language_manager.translate("menu.categories_start_collapsed", "Start Categories Collapsed"),
+            variable=self.categories_start_collapsed_var,
+            onvalue=True,
+            offvalue=False,
+            command=lambda: self._set_categories_start_collapsed(self.categories_start_collapsed_var.get())
         )
 
         graph_font_menu = tk.Menu(settings_menu, tearoff=0)
@@ -1511,45 +1586,106 @@ class ChemometricsGUI:
         
         scrollable_frame = ttk.Frame(canvas)
         
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
+        def _update_scrollregion(_event=None):
+            bbox = canvas.bbox("all")
+            if bbox is None:
+                return
+            canvas.configure(scrollregion=bbox)
+
+            content_height = bbox[3] - bbox[1]
+            viewport_height = max(1, canvas.winfo_height())
+            if content_height <= viewport_height:
+                canvas.yview_moveto(0.0)
+
+        scrollable_frame.bind("<Configure>", _update_scrollregion)
         
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
         
         # Bind mousewheel to canvas for scrolling
         def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            step = int(-1 * (event.delta / 120))
+            if step == 0:
+                return
+
+            first, last = canvas.yview()
+            if (step < 0 and first <= 0.0) or (step > 0 and last >= 1.0):
+                return
+
+            canvas.yview_scroll(step, "units")
         canvas.bind("<MouseWheel>", _on_mousewheel)
         scrollable_frame.bind("<MouseWheel>", _on_mousewheel)
         
         gui_listing = FUNCTION_SPECS.get("gui_listing", {})
-        categories = {}
-        
-        # Group by category
+        category_tree: Dict[str, Any] = {"children": {}, "functions": []}
+
         for func_alias in gui_listing.keys():
-            # Get config from loaded gui_configs
             config = self.gui_configs.get(func_alias, {})
-            category = config.get("category", "Uncategorized")
-            if category not in categories:
-                categories[category] = []
-            categories[category].append((func_alias, config))
-        
-        # Create collapsible categories
-        for category in sorted(categories.keys()):
-            self._add_collapsible_category(scrollable_frame, category, categories[category], canvas)
-    
-    def _add_collapsible_category(self, parent: ttk.Frame, category: str, functions: List[Tuple], canvas: tk.Canvas):
-        """Create collapsible category with function buttons."""
+            parsed_path = self._parse_category_path(config.get("category", "Uncategorized"))
+
+            node = category_tree
+            for segment in parsed_path:
+                node = node["children"].setdefault(segment, {"children": {}, "functions": []})
+            node["functions"].append((func_alias, config))
+
+        for category_key in sorted(category_tree["children"].keys(), key=self._category_sort_key):
+            self._add_collapsible_category(
+                scrollable_frame,
+                category_key[1],
+                category_tree["children"][category_key],
+                canvas,
+                depth=0
+            )
+
+    def _parse_category_segment(self, segment: Any) -> Tuple[Optional[int], str]:
+        """Parse optional numeric ordering prefix from a category segment."""
+        raw_segment = str(segment).strip() if segment is not None else ""
+        if not raw_segment:
+            return None, "Uncategorized"
+
+        match = re.match(r"^(\d+)\.\s*(.+)$", raw_segment)
+        if match:
+            return int(match.group(1)), match.group(2).strip()
+        return None, raw_segment
+
+    def _parse_category_path(self, category_value: Any) -> List[Tuple[Optional[int], str]]:
+        """Split category path by backslashes and parse ordering prefixes."""
+        raw_category = str(category_value).strip() if category_value is not None else ""
+        if not raw_category:
+            raw_category = "Uncategorized"
+
+        raw_segments = [part.strip() for part in raw_category.split("\\") if part.strip()]
+        if not raw_segments:
+            raw_segments = ["Uncategorized"]
+
+        return [self._parse_category_segment(part) for part in raw_segments]
+
+    def _category_sort_key(self, category_key: Tuple[Optional[int], str]) -> Tuple[int, int, str]:
+        """Sort indexed categories by number, then regular categories alphabetically."""
+        order_index, label = category_key
+        normalized_label = label.lower()
+        if order_index is None:
+            return 1, 0, normalized_label
+        return 0, order_index, normalized_label
+
+    def _add_collapsible_category(self, parent: ttk.Frame, category: str, category_node: Dict[str, Any], canvas: tk.Canvas, depth: int = 0):
+        """Create nested collapsible category with function buttons."""
         category_frame = ttk.Frame(parent)
-        category_frame.pack(fill=tk.X, padx=5, pady=5)
+        left_indent = 5 + depth * 6
+        category_frame.pack(fill=tk.X, padx=(left_indent, 0), pady=3)
         
         # Mousewheel binding helper
         def bind_mousewheel(widget):
             def _on_mousewheel(event):
-                canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+                step = int(-1 * (event.delta / 120))
+                if step == 0:
+                    return
+
+                first, last = canvas.yview()
+                if (step < 0 and first <= 0.0) or (step > 0 and last >= 1.0):
+                    return
+
+                canvas.yview_scroll(step, "units")
             widget.bind("<MouseWheel>", _on_mousewheel)
         
         # Bind to category frame so scrolling works on empty space
@@ -1559,30 +1695,50 @@ class ChemometricsGUI:
         button_frame.pack(fill=tk.X)
         bind_mousewheel(button_frame)
         
-        collapsed = tk.BooleanVar(value=False)
+        collapsed = tk.BooleanVar(value=self.categories_start_collapsed)
+
+        functions_container = ttk.Frame(category_frame)
+        bind_mousewheel(functions_container)
+
+        def apply_state():
+            if collapsed.get():
+                functions_container.pack_forget()
+            else:
+                functions_container.pack(fill=tk.X, padx=(6, 0), pady=5)
+            toggle_btn.configure(text=f"{'▶' if collapsed.get() else '▼'} {category}")
         
         def toggle():
             collapsed.set(not collapsed.get())
-            functions_container.pack_forget() if collapsed.get() else functions_container.pack(fill=tk.X, padx=10, pady=5)
+            apply_state()
         
-        toggle_btn = ttk.Button(button_frame, text=f"▶ {category}", command=toggle, width=30)
+        toggle_button_width = max(18, 30 - depth * 3)
+        toggle_btn = ttk.Button(button_frame, command=toggle, width=toggle_button_width, style="FunctionsPanel.TButton")
         toggle_btn.pack(fill=tk.X)
         bind_mousewheel(toggle_btn)
-        
-        functions_container = ttk.Frame(category_frame)
-        functions_container.pack(fill=tk.X, padx=10, pady=5)
-        bind_mousewheel(functions_container)
-        
-        for func_alias, func_info in functions:
+
+        for child_key in sorted(category_node.get("children", {}).keys(), key=self._category_sort_key):
+            self._add_collapsible_category(
+                functions_container,
+                child_key[1],
+                category_node["children"][child_key],
+                canvas,
+                depth=depth + 1
+            )
+
+        for func_alias, func_info in category_node.get("functions", []):
             display_name = func_info.get("display_name", func_alias)
+            function_button_width = max(14, 25 - depth * 3)
             func_btn = ttk.Button(
                 functions_container,
                 text=display_name,
                 command=lambda alias=func_alias: self._add_to_methodology(alias),
-                width=25
+                width=function_button_width,
+                style="FunctionsPanel.TButton"
             )
             func_btn.pack(fill=tk.X, pady=2)
             bind_mousewheel(func_btn)
+
+        apply_state()
     
     def _add_to_methodology(self, func_alias: str):
         """Add function to methodology list (with duplicate handling using function aliasing)."""
@@ -2447,10 +2603,18 @@ class ChemometricsGUI:
         scrollable_frame = ttk.Frame(form_canvas)
         
         # Configure scrolling
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: form_canvas.configure(scrollregion=form_canvas.bbox("all"))
-        )
+        def _update_form_scrollregion(_event=None):
+            bbox = form_canvas.bbox("all")
+            if bbox is None:
+                return
+            form_canvas.configure(scrollregion=bbox)
+
+            content_height = bbox[3] - bbox[1]
+            viewport_height = max(1, form_canvas.winfo_height())
+            if content_height <= viewport_height:
+                form_canvas.yview_moveto(0.0)
+
+        scrollable_frame.bind("<Configure>", _update_form_scrollregion)
         form_canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         form_canvas.configure(yscrollcommand=scrollbar.set)
         
@@ -2461,7 +2625,15 @@ class ChemometricsGUI:
         # Bind mousewheel to canvas (only when over this specific canvas/frame)
         def _on_mousewheel(event):
             try:
-                form_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+                step = int(-1 * (event.delta / 120))
+                if step == 0:
+                    return
+
+                first, last = form_canvas.yview()
+                if (step < 0 and first <= 0.0) or (step > 0 and last >= 1.0):
+                    return
+
+                form_canvas.yview_scroll(step, "units")
             except tk.TclError:
                 # Canvas was destroyed, ignore the scroll event
                 pass
@@ -3795,7 +3967,15 @@ class ChemometricsGUI:
         
         # Bind mousewheel to canvas for vertical scrolling
         def _on_mousewheel(event):
-            self.routing_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            step = int(-1 * (event.delta / 120))
+            if step == 0:
+                return
+
+            first, last = self.routing_canvas.yview()
+            if (step < 0 and first <= 0.0) or (step > 0 and last >= 1.0):
+                return
+
+            self.routing_canvas.yview_scroll(step, "units")
         self.routing_canvas.bind("<MouseWheel>", _on_mousewheel)
         
         # Initialize UI-specific state variables (but preserve routing_lines data)
@@ -3983,7 +4163,14 @@ class ChemometricsGUI:
                 max_y = max(max_y, current_y)
         
         # Set scroll region to encompass all content
-        self.routing_canvas.configure(scrollregion=self.routing_canvas.bbox("all"))
+        bbox = self.routing_canvas.bbox("all")
+        if bbox is not None:
+            self.routing_canvas.configure(scrollregion=bbox)
+
+            content_height = bbox[3] - bbox[1]
+            viewport_height = max(1, self.routing_canvas.winfo_height())
+            if content_height <= viewport_height:
+                self.routing_canvas.yview_moveto(0.0)
         
         # Redraw existing connections
         self._redraw_existing_lines()
@@ -9491,11 +9678,31 @@ Count:
 
         elements_inner = ttk.Frame(elements_canvas)
         elements_canvas.create_window((0, 0), window=elements_inner, anchor="nw")
-        elements_inner.bind("<Configure>", lambda e: elements_canvas.configure(scrollregion=elements_canvas.bbox("all")))
+
+        def _update_elements_scrollregion(_event=None):
+            bbox = elements_canvas.bbox("all")
+            if bbox is None:
+                return
+            elements_canvas.configure(scrollregion=bbox)
+
+            content_height = bbox[3] - bbox[1]
+            viewport_height = max(1, elements_canvas.winfo_height())
+            if content_height <= viewport_height:
+                elements_canvas.yview_moveto(0.0)
+
+        elements_inner.bind("<Configure>", _update_elements_scrollregion)
 
         def _elements_mousewheel(event):
             try:
-                elements_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+                step = int(-1 * (event.delta / 120))
+                if step == 0:
+                    return
+
+                first, last = elements_canvas.yview()
+                if (step < 0 and first <= 0.0) or (step > 0 and last >= 1.0):
+                    return
+
+                elements_canvas.yview_scroll(step, "units")
             except Exception:
                 pass
 
@@ -11818,7 +12025,7 @@ Count:
 def main():
     """Main entry point for the GUI."""
     settings_manager = get_settings_manager()
-    show_splash = settings_manager.get("display_splashscreen", True)
+    show_splash = _normalize_bool_setting(settings_manager.get("display_splashscreen", True), True)
 
     root = tk.Tk()
     root_transparent_start = False

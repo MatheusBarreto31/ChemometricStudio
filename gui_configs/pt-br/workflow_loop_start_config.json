@@ -1,6 +1,6 @@
 {
   "display_name": "Início do Loop",
-  "category": "Fluxo",
+  "category": "7.Fluxo\\1.Loop",
   "data_type": "workflow",
   "input_aliases": {
     "iterations": "Ciclos",

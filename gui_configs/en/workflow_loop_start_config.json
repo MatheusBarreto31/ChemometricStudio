@@ -1,6 +1,6 @@
 {
   "display_name": "Loop Start",
-  "category": "Workflow",
+  "category": "7.Workflow\\1.Loop",
   "data_type": "workflow",
   "input_aliases": {
     "iterations": "Iterations",

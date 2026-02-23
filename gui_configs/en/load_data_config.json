@@ -1,6 +1,6 @@
 {
   "display_name": "Load Data",
-  "category": "Data Import",
+  "category": "1.Data Import",
   "data_type": "all",
   "input_aliases": {
     "d_specs_separator": "Data Separator",

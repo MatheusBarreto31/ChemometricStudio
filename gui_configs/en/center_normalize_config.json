@@ -1,6 +1,6 @@
 {
   "display_name": "Center & Normalize",
-  "category": "Preprocessing",
+  "category": "2.Preprocessing",
   "data_type": "all",
   "input_aliases": {
     "X_cal": "X Calibration",

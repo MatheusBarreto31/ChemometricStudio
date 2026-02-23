@@ -13,7 +13,8 @@ class SettingsManager:
         "colormap": "jet",
         "graph_font_scale": 1.0,
         "display_splashscreen": True,
-        "import_loading_mode": "lazy"
+        "import_loading_mode": "lazy",
+        "categories_start_collapsed": False
     }
     
     def __init__(self, settings_dir: Optional[Path] = None):

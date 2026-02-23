@@ -1,6 +1,6 @@
 {
   "display_name": "Smoothing",
-  "category": "Preprocessing",
+  "category": "2.Preprocessing",
   "data_type": "firstorder",
   "input_aliases": {
     "X_cal": "X Calibration",

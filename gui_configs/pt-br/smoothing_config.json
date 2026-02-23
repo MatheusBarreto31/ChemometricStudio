@@ -1,6 +1,6 @@
 {
   "display_name": "Suavização",
-  "category": "Pré-Processamento",
+  "category": "2.Pré-Processamento",
   "data_type": "firstorder",
   "input_aliases": {
     "X_cal": "X Calibração",

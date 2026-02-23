@@ -1,6 +1,6 @@
 {
   "display_name": "PCA Analysis",
-  "category": "Dimensionality Reduction",
+  "category": "4.Dimensionality Reduction",
   "data_type": "firstorder",
   "input_aliases": {
     "X_cal": "X Calibration",

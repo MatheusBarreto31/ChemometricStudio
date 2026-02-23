@@ -1,6 +1,6 @@
 {
   "display_name": "Carregar Dados",
-  "category": "Importação de Dados",
+  "category": "1.Importação de Dados",
   "data_type": "all",
   "input_aliases": {
     "d_specs_separator": "Separador de Dados",

@@ -4,5 +4,6 @@
   "graph_font_scale": 1.0,
   "display_splashscreen": true,
   "import_loading_mode": "eager",
+  "categories_start_collapsed": true,
   "qualitative_colormap": "Set1"
 }
