@@ -1,0 +1,26 @@
+Selawik Font Notice
+===================
+
+Font family: Selawik
+Copyright: Copyright 2015, Microsoft Corporation (www.microsoft.com)
+Trademark: Selawik is a trademark of Microsoft Corporation
+License: SIL Open Font License, Version 1.1 (OFL-1.1)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+
+Authoritative license text:
+- https://openfontlicense.org/documents/OFL.txt
+
+Project/source reference:
+- https://github.com/microsoft/Selawik
+
+Bundled font files in this project:
+- Fonts/Selawik/selawk.ttf
+- Fonts/Selawik/selawksb.ttf
+
+Bundled license text in this project:
+- Licenses/Fonts/Selawik/OFL-1.1.txt
+
+Notes for redistribution:
+- Keep this notice with distributed font files.
+- If the font is modified, follow OFL requirements (including Reserved Font Name rules).

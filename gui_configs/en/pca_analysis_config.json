@@ -290,8 +290,8 @@
               "title": "PCA Scores",
               "show_grid": false,
               "show_origin": true,
-              "show_labels": true,
-              "confidence_ellipses": true,
+              "show_labels": false,
+              "confidence_ellipses": false,
               "confidence_level": "95",
 
               "datasets": [

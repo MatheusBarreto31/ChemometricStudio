@@ -4,6 +4,7 @@ Provides Setup, Routing, Analysis, and Report tabs for building analysis pipelin
 """
 
 import tkinter as tk
+import tkinter.font as tkfont
 from tkinter import ttk, messagebox, filedialog, simpledialog
 import json
 import os
@@ -11,6 +12,7 @@ import copy
 import re
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Any, Callable
+from functools import lru_cache
 import subprocess
 import sys
 from io import StringIO
@@ -34,6 +36,67 @@ from settings import get_settings_manager
 SPECS_PATH = Path(__file__).parent / "function_specs.json"
 with open(SPECS_PATH, encoding='utf-8') as f:
     FUNCTION_SPECS = json.load(f)
+
+BASE_DIR = Path(__file__).parent
+GRAPHICS_DIR = BASE_DIR / "Graphics"
+FONTS_DIR = BASE_DIR / "Fonts"
+LICENSES_DIR = BASE_DIR / "Licenses"
+PYPROJECT_PATH = BASE_DIR / "pyproject.toml"
+SELAWIK_TTF_PATH = FONTS_DIR / "Selawik" / "selawk.ttf"
+SPLASH_VERSION_FONT_SIZE = 14
+SPLASH_SUBTITLE_FONT_SIZE = 13
+SPLASH_TEXT_LINE_SPACING = 6
+SPLASH_VERSION_RELATIVE_POS = (0.07, 0.5)
+SPLASH_VERSION_MARGIN_RATIO = 0.02
+
+
+def _get_ui_font_family(preferred: str = "Selawik", fallback: str = "Arial") -> str:
+    """Resolve a UI font family available on this system."""
+    try:
+        families = set(tkfont.families())
+        if preferred in families:
+            return preferred
+    except Exception:
+        pass
+    return fallback
+
+
+@lru_cache(maxsize=1)
+def _get_application_version(default: str = "0.0") -> str:
+    """Read application version from pyproject.toml [project]."""
+    if not PYPROJECT_PATH.exists():
+        return default
+
+    try:
+        import tomllib  # Python 3.11+
+
+        with open(PYPROJECT_PATH, "rb") as f:
+            data = tomllib.load(f)
+        version = str(data.get("project", {}).get("version", "")).strip()
+        if version:
+            return version
+    except Exception:
+        pass
+
+    try:
+        in_project_section = False
+        with open(PYPROJECT_PATH, encoding="utf-8") as f:
+            for raw_line in f:
+                line = raw_line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if line.startswith("[") and line.endswith("]"):
+                    in_project_section = line == "[project]"
+                    continue
+                if in_project_section and line.startswith("version") and "=" in line:
+                    _, value = line.split("=", 1)
+                    cleaned = value.strip().strip('"').strip("'")
+                    if cleaned:
+                        return cleaned
+    except Exception:
+        pass
+
+    return default
 
 
 def _normalize_bool_setting(value: Any, default: bool = False) -> bool:
@@ -235,6 +298,7 @@ class ChemometricsGUI:
         self.execution_progress_bar = None
         self.execution_progress_mode = ""
         self.execution_progress_hide_after_id = None
+        self._pending_language_refresh_id = None
         self._execution_progress_root_bind_set = False
         self.latest_timing_report: Optional[Dict[str, Any]] = None
         self.tools_menu = None
@@ -1255,6 +1319,8 @@ class ChemometricsGUI:
         # Help Menu
         help_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label=self.language_manager.translate("menu.help", "Help"), menu=help_menu)
+        help_menu.add_command(label=self.language_manager.translate("menu.licenses", "Licenses"), command=self._show_licenses_dialog)
+        help_menu.add_separator()
         help_menu.add_command(label=self.language_manager.translate("menu.about", "About"), command=self._show_about_dialog)
 
     def _set_timing_report_menu_state(self, enabled: bool):
@@ -1402,7 +1468,22 @@ class ChemometricsGUI:
         self.language_var.set(language_code)
         self.language_manager.set_language(language_code)
         self.settings_manager.set("language", language_code)
-        self._refresh_ui_text()
+        if self._pending_language_refresh_id is not None:
+            try:
+                self.root.after_cancel(self._pending_language_refresh_id)
+            except Exception:
+                pass
+
+        self._pending_language_refresh_id = self.root.after_idle(self._apply_language_refresh)
+
+    def _apply_language_refresh(self):
+        """Apply deferred UI refresh after language change."""
+        self._pending_language_refresh_id = None
+        try:
+            self._refresh_ui_text()
+        except tk.TclError:
+            # Avoid hard crash if widgets are in a transient state during refresh.
+            self.root.after(25, self._refresh_ui_text)
     
     def _change_colormap(self, colormap_name: str):
         """Change the default continuous colormap and save setting."""
@@ -1484,17 +1565,18 @@ class ChemometricsGUI:
         text_frame.pack(side=tk.LEFT, expand=True, fill=tk.BOTH)
         
         program_name = about_data.get("program_name", "Chemometric Studio")
-        version = about_data.get("version", "1.0.0")
-        
-        name_label = ttk.Label(text_frame, text=program_name, font=("Arial", 16, "bold"))
+        version = _get_application_version("1.0.0")
+        ui_font_family = _get_ui_font_family()
+
+        name_label = ttk.Label(text_frame, text=program_name, font=(ui_font_family, 16, "bold"))
         name_label.pack(anchor=tk.W)
-        
-        version_label = ttk.Label(text_frame, text=f"Version {version}", font=("Arial", 10))
+
+        version_label = ttk.Label(text_frame, text=f"Version {version}", font=(ui_font_family, 10))
         version_label.pack(anchor=tk.W)
-        
+
         version_text = lang_info.get("version_text", "")
         if version_text:
-            version_text_label = ttk.Label(text_frame, text=version_text, font=("Arial", 9))
+            version_text_label = ttk.Label(text_frame, text=version_text, font=(ui_font_family, 9))
             version_text_label.pack(anchor=tk.W)
         
         # Description frame
@@ -1516,7 +1598,7 @@ class ChemometricsGUI:
         website_url = about_data.get("website", "https://github.com")
         website_label = lang_info.get("website_label", "Visit our website")
         
-        link_label = tk.Label(link_frame, text=website_label, fg="blue", cursor="hand2", font=("Arial", 9, "underline"))
+        link_label = tk.Label(link_frame, text=website_label, fg="blue", cursor="hand2", font=(ui_font_family, 9, "underline"))
         link_label.pack()
         
         def open_link(event=None):
@@ -1528,6 +1610,174 @@ class ChemometricsGUI:
         # Close button
         close_btn = ttk.Button(about_win, text=self.language_manager.translate("ui.buttons.close", "Close"), command=about_win.destroy)
         close_btn.pack(pady=(0, 10))
+
+    def _open_path_with_system_default(self, target_path: Path):
+        """Open file/folder with system default app."""
+        if not target_path.exists():
+            messagebox.showerror(
+                self.language_manager.translate("ui.dialogs.error", "Error"),
+                self.language_manager.translate("ui.messages.license_path_missing", "License file or folder not found:") + f"\n{target_path}"
+            )
+            return
+
+        try:
+            if sys.platform.startswith("win"):
+                os.startfile(str(target_path))
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", str(target_path)])
+            else:
+                subprocess.Popen(["xdg-open", str(target_path)])
+        except Exception as exc:
+            messagebox.showerror(
+                self.language_manager.translate("ui.dialogs.error", "Error"),
+                self.language_manager.translate("ui.messages.license_open_failed", "Could not open license file or folder:") +
+                f"\n{target_path}\n\n{exc}"
+            )
+
+    def _show_license_file_popup(self, title: str, file_path: Path):
+        """Show a license/notice text file inside a scrollable popup."""
+        if not file_path.exists():
+            messagebox.showerror(
+                self.language_manager.translate("ui.dialogs.error", "Error"),
+                self.language_manager.translate("ui.messages.license_path_missing", "License file or folder not found:") + f"\n{file_path}"
+            )
+            return
+
+        try:
+            try:
+                content = file_path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                content = file_path.read_text(encoding="latin-1", errors="replace")
+        except Exception as exc:
+            messagebox.showerror(
+                self.language_manager.translate("ui.dialogs.error", "Error"),
+                self.language_manager.translate("ui.messages.license_open_failed", "Could not open license file or folder:") +
+                f"\n{file_path}\n\n{exc}"
+            )
+            return
+
+        viewer = tk.Toplevel(self.root)
+        _set_window_icon(viewer, "Icon")
+        viewer.title(f"{title}")
+        viewer.geometry("840x620")
+        viewer.resizable(True, True)
+        viewer.transient(self.root)
+        viewer.grab_set()
+
+        viewer.update_idletasks()
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - (viewer.winfo_width() // 2)
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - (viewer.winfo_height() // 2)
+        viewer.geometry(f"+{x}+{y}")
+
+        container = ttk.Frame(viewer, padding=12)
+        container.pack(fill=tk.BOTH, expand=True)
+
+        text_frame = ttk.Frame(container)
+        text_frame.pack(fill=tk.BOTH, expand=True)
+
+        text_widget = tk.Text(text_frame, wrap=tk.WORD, bg="#f8f8f8", fg="#000000")
+        text_widget.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        scrollbar = ttk.Scrollbar(text_frame, orient=tk.VERTICAL, command=text_widget.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        text_widget.configure(yscrollcommand=scrollbar.set)
+
+        text_widget.insert("1.0", content)
+        text_widget.configure(state=tk.DISABLED)
+
+        close_btn = ttk.Button(
+            container,
+            text=self.language_manager.translate("ui.buttons.close", "Close"),
+            command=viewer.destroy,
+        )
+        close_btn.pack(anchor="e", pady=(10, 0))
+
+    def _show_licenses_dialog(self):
+        """Show licenses dialog with quick links to third-party notices."""
+        licenses_win = tk.Toplevel(self.root)
+        _set_window_icon(licenses_win, "Icon")
+        licenses_win.title(self.language_manager.translate("licenses.title", "Licenses"))
+        licenses_win.geometry("680x420")
+        licenses_win.resizable(False, False)
+        licenses_win.transient(self.root)
+        licenses_win.grab_set()
+
+        licenses_win.update_idletasks()
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - (licenses_win.winfo_width() // 2)
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - (licenses_win.winfo_height() // 2)
+        licenses_win.geometry(f"+{x}+{y}")
+
+        container = ttk.Frame(licenses_win, padding=16)
+        container.pack(fill=tk.BOTH, expand=True)
+
+        description = ttk.Label(
+            container,
+            text=self.language_manager.translate(
+                "licenses.description",
+                "Open bundled license and third-party notice files."
+            ),
+            justify=tk.LEFT,
+            wraplength=620,
+        )
+        description.pack(anchor=tk.W, pady=(0, 10))
+
+        files_to_show = [
+            (
+                self.language_manager.translate("licenses.overview", "Licenses Overview"),
+                LICENSES_DIR / "README.md",
+            ),
+            (
+                self.language_manager.translate("licenses.font_notice", "Selawik Notice"),
+                LICENSES_DIR / "Fonts" / "Selawik" / "NOTICE.txt",
+            ),
+            (
+                self.language_manager.translate("licenses.font_ofl", "Selawik OFL-1.1"),
+                LICENSES_DIR / "Fonts" / "Selawik" / "OFL-1.1.txt",
+            ),
+            (
+                self.language_manager.translate("licenses.python_notices", "Python Third-Party Notices"),
+                LICENSES_DIR / "Python" / "THIRD-PARTY-NOTICES.md",
+            ),
+        ]
+
+        files_frame = ttk.Frame(container)
+        files_frame.pack(fill=tk.BOTH, expand=True)
+
+        missing_suffix = self.language_manager.translate("licenses.missing", "(missing)")
+        for title, path in files_to_show:
+            row = ttk.Frame(files_frame)
+            row.pack(fill=tk.X, pady=4)
+
+            exists = path.exists()
+            display_title = title if exists else f"{title} {missing_suffix}"
+            label = ttk.Label(row, text=f"{display_title}: {path}", anchor=tk.W)
+            label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+            open_btn = ttk.Button(
+                row,
+                text=self.language_manager.translate("licenses.open", "Open"),
+                command=lambda t=title, p=path: self._show_license_file_popup(t, p),
+            )
+            if not exists:
+                open_btn.configure(state=tk.DISABLED)
+            open_btn.pack(side=tk.RIGHT, padx=(10, 0))
+
+        footer = ttk.Frame(container)
+        footer.pack(fill=tk.X, pady=(10, 0))
+
+        open_folder_btn = ttk.Button(
+            footer,
+            text=self.language_manager.translate("licenses.open_folder", "Open Licenses Folder"),
+            command=lambda: self._open_path_with_system_default(LICENSES_DIR),
+        )
+        open_folder_btn.pack(side=tk.LEFT)
+
+        close_btn = ttk.Button(
+            footer,
+            text=self.language_manager.translate("ui.buttons.close", "Close"),
+            command=licenses_win.destroy,
+        )
+        close_btn.pack(side=tk.RIGHT)
     
 
     def _build_ui(self):
@@ -10559,15 +10809,7 @@ Count:
 
     def _build_report_footer_text(self) -> str:
         """Build mandatory report footer text with version, OS, and timestamp."""
-        version = "0.0"
-        try:
-            about_path = Path(__file__).parent / "about_us.json"
-            if about_path.exists():
-                with open(about_path, encoding='utf-8') as f:
-                    about_data = json.load(f)
-                version = about_data.get('version', version)
-        except Exception:
-            pass
+        version = _get_application_version("0.0")
 
         def _build_os_name_with_version() -> str:
             unknown_os = self.language_manager.translate('ui.messages.unknown_os', 'Unknown OS')
@@ -12026,6 +12268,10 @@ def main():
     """Main entry point for the GUI."""
     settings_manager = get_settings_manager()
     show_splash = _normalize_bool_setting(settings_manager.get("display_splashscreen", True), True)
+    splash_language = settings_manager.get("language", "en")
+    splash_language_manager = get_language_manager()
+    splash_language_manager.set_language(splash_language)
+    splash_starting_text = splash_language_manager.translate("ui.messages.starting", "Starting...")
 
     root = tk.Tk()
     root_transparent_start = False
@@ -12051,11 +12297,44 @@ def main():
         loaded_image = False
         if splash_image_path.exists():
             try:
-                from PIL import Image, ImageTk
+                from PIL import Image, ImageTk, ImageDraw, ImageFont
                 splash_image = Image.open(splash_image_path)
 
                 if splash_image.mode != "RGBA":
                     splash_image = splash_image.convert("RGBA")
+
+                try:
+                    app_version = _get_application_version("0.0")
+                    version_text = f"v{app_version}"
+                    if SELAWIK_TTF_PATH.exists():
+                        version_font = ImageFont.truetype(str(SELAWIK_TTF_PATH), SPLASH_VERSION_FONT_SIZE)
+                        subtitle_font = ImageFont.truetype(str(SELAWIK_TTF_PATH), SPLASH_SUBTITLE_FONT_SIZE)
+                    else:
+                        version_font = ImageFont.load_default()
+                        subtitle_font = ImageFont.load_default()
+
+                    draw = ImageDraw.Draw(splash_image)
+                    version_bbox = draw.textbbox((0, 0), version_text, font=version_font)
+                    version_width = max(1, version_bbox[2] - version_bbox[0])
+                    version_height = max(1, version_bbox[3] - version_bbox[1])
+                    subtitle_bbox = draw.textbbox((0, 0), splash_starting_text, font=subtitle_font)
+                    subtitle_width = max(1, subtitle_bbox[2] - subtitle_bbox[0])
+                    subtitle_height = max(1, subtitle_bbox[3] - subtitle_bbox[1])
+                    text_block_width = max(version_width, subtitle_width)
+                    text_block_height = version_height + SPLASH_TEXT_LINE_SPACING + subtitle_height
+
+                    margin = max(4, int(min(splash_image.width, splash_image.height) * SPLASH_VERSION_MARGIN_RATIO))
+                    anchor_x = int(splash_image.width * SPLASH_VERSION_RELATIVE_POS[0])
+                    anchor_y = int(splash_image.height * SPLASH_VERSION_RELATIVE_POS[1])
+
+                    text_x = min(max(margin, anchor_x), splash_image.width - text_block_width - margin)
+                    text_y = min(max(margin, anchor_y), splash_image.height - text_block_height - margin)
+
+                    draw.text((text_x, text_y), version_text, font=version_font, fill=(0, 0, 0, 255))
+                    subtitle_y = text_y + version_height + SPLASH_TEXT_LINE_SPACING
+                    draw.text((text_x, subtitle_y), splash_starting_text, font=subtitle_font, fill=(0, 0, 0, 255))
+                except Exception:
+                    pass
 
                 if platform.system().lower() == "windows":
                     key_rgb = (255, 0, 255)

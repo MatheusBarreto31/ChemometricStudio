@@ -270,6 +270,7 @@
       "unknown_os": "SO desconhecido",
       "report_footer_template": "Modelo criado no Chemometric Studio v{version} em um sistema {os_name} às {timestamp}",
       "analysis_running": "Executando análise...",
+      "starting": "Iniciando...",
       "loading": "Carregando...",
       "analysis_complete": "Análise concluída",
       "routing_help": "Roteamento: Conecte Saídas de Funções a Entradas",
@@ -314,6 +315,8 @@
       "no_data_found_save_graph": "Nenhum dado encontrado para salvar neste gráfico.",
       "pandas_required_csv": "A biblioteca pandas é necessária para salvar dados como CSV.\n\nInstale usando: pip install pandas",
       "graph_data_save_failed": "Falha ao salvar dados do gráfico:",
+      "license_open_failed": "Não foi possível abrir o arquivo ou pasta de licença:",
+      "license_path_missing": "Arquivo ou pasta de licença não encontrado:",
       "cannot_remove_last_page": "Não é possível remover a última página",
       "function_not_found_methodology": "Função não encontrada na metodologia",
       "generate_model_json_failed": "Falha ao gerar model.json",
@@ -444,7 +447,19 @@
       "force_integer_ticks": "Forçar Ticks Inteiros"
     },
     "help": "Ajuda",
+    "licenses": "Licenças",
     "about": "Sobre"
+  },
+  "licenses": {
+    "title": "Licenças",
+    "description": "Abrir arquivos de licença e avisos de terceiros incluídos.",
+    "overview": "Visão geral de licenças",
+    "font_notice": "Aviso Selawik",
+    "font_ofl": "Selawik OFL-1.1",
+    "python_notices": "Avisos de terceiros do Python",
+    "open": "Abrir",
+    "open_folder": "Abrir pasta de licenças",
+    "missing": "(ausente)"
   },
   "tooltips": {
     "add_function": "Clique para adicionar esta função à sua metodologia",

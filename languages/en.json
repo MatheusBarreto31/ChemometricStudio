@@ -270,6 +270,7 @@
       "unknown_os": "Unknown OS",
       "report_footer_template": "Model created in Chemometric Studio v{version} on a {os_name} system at {timestamp}",
       "analysis_running": "Running analysis...",
+      "starting": "Starting...",
       "loading": "Loading...",
       "analysis_complete": "Analysis complete",
       "routing_help": "Routing: Connect Function Outputs to Inputs",
@@ -314,6 +315,8 @@
       "no_data_found_save_graph": "No data found to save for this graph.",
       "pandas_required_csv": "pandas library is required to save data as CSV.\n\nPlease install it using: pip install pandas",
       "graph_data_save_failed": "Failed to save graph data:",
+      "license_open_failed": "Could not open license file or folder:",
+      "license_path_missing": "License file or folder not found:",
       "cannot_remove_last_page": "Cannot remove the last page",
       "function_not_found_methodology": "Function not found in methodology",
       "generate_model_json_failed": "Failed to generate model.json",
@@ -444,7 +447,19 @@
       "force_integer_ticks": "Force Integer Ticks"
     },
     "help": "Help",
+    "licenses": "Licenses",
     "about": "About"
+  },
+  "licenses": {
+    "title": "Licenses",
+    "description": "Open bundled license and third-party notice files.",
+    "overview": "Licenses Overview",
+    "font_notice": "Selawik Notice",
+    "font_ofl": "Selawik OFL-1.1",
+    "python_notices": "Python Third-Party Notices",
+    "open": "Open",
+    "open_folder": "Open Licenses Folder",
+    "missing": "(missing)"
   },
   "tooltips": {
     "add_function": "Click to add this function to your methodology",
