@@ -10,6 +10,7 @@ This folder centralizes those notices.
 ## Contents
 
 - `../LICENSE`: Apache License 2.0 text for the Chemometric Studio project code.
+- `../EULA.md`: End-user license terms for distributed application use.
 - `Fonts/Selawik/NOTICE.txt`: Notice for Microsoft Selawik font distribution under SIL OFL 1.1.
 - `Fonts/Selawik/OFL-1.1.txt`: Bundled SIL Open Font License text.
 - `Python/THIRD-PARTY-NOTICES.md`: Third-party Python dependency notice list for pinned dependencies.
@@ -23,4 +24,4 @@ Bundled splash/about font assets currently come from:
 The corresponding license text provided with the font is:
 - `Licenses/Fonts/Selawik/OFL-1.1.txt`
 
-When redistributing this application, include this `Licenses` folder together with the project `LICENSE` file.
+When redistributing this application, include this `Licenses` folder together with `LICENSE`, `NOTICE`, and `EULA.md`.

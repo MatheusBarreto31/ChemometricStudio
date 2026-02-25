@@ -448,6 +448,7 @@
     },
     "help": "Help",
     "project_license": "Project License (Apache-2.0)",
+    "eula": "End-User License Agreement",
     "licenses": "Third-Party Licenses",
     "about": "About"
   },
@@ -455,6 +456,7 @@
     "title": "Third-Party Licenses",
     "description": "Open bundled license and third-party notice files.",
     "project_license": "Project License (Apache-2.0)",
+    "eula": "End-User License Agreement",
     "overview": "Licenses Overview",
     "font_notice": "Selawik Notice",
     "font_ofl": "Selawik OFL-1.1",

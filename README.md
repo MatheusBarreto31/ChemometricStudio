@@ -116,5 +116,7 @@ For detailed development and contribution guidelines, see the [Documentation](Do
 
 This project is licensed under the Apache License 2.0. See [LICENSE](LICENSE).
 
+For end-user application use terms in distributed builds, see [EULA.md](EULA.md).
+
 Third-party notices and bundled asset licenses are available in [Licenses/](Licenses/).
 

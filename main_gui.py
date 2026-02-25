@@ -42,6 +42,7 @@ GRAPHICS_DIR = BASE_DIR / "Graphics"
 FONTS_DIR = BASE_DIR / "Fonts"
 LICENSES_DIR = BASE_DIR / "Licenses"
 PROJECT_LICENSE_PATH = BASE_DIR / "LICENSE"
+EULA_PATH = BASE_DIR / "EULA.md"
 PYPROJECT_PATH = BASE_DIR / "pyproject.toml"
 SELAWIK_TTF_PATH = FONTS_DIR / "Selawik" / "selawk.ttf"
 SPLASH_VERSION_FONT_SIZE = 14
@@ -1327,6 +1328,13 @@ class ChemometricsGUI:
                 PROJECT_LICENSE_PATH,
             ),
         )
+        help_menu.add_command(
+            label=self.language_manager.translate("menu.eula", "End-User License Agreement"),
+            command=lambda: self._show_license_file_popup(
+                self.language_manager.translate("licenses.eula", "End-User License Agreement"),
+                EULA_PATH,
+            ),
+        )
         help_menu.add_command(label=self.language_manager.translate("menu.licenses", "Third-Party Licenses"), command=self._show_licenses_dialog)
         help_menu.add_separator()
         help_menu.add_command(label=self.language_manager.translate("menu.about", "About"), command=self._show_about_dialog)
@@ -1730,10 +1738,6 @@ class ChemometricsGUI:
         description.pack(anchor=tk.W, pady=(0, 10))
 
         files_to_show = [
-            (
-                self.language_manager.translate("licenses.project_license", "Project License (Apache-2.0)"),
-                PROJECT_LICENSE_PATH,
-            ),
             (
                 self.language_manager.translate("licenses.overview", "Licenses Overview"),
                 LICENSES_DIR / "README.md",

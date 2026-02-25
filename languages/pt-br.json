@@ -448,6 +448,7 @@
     },
     "help": "Ajuda",
     "project_license": "Licença do projeto (Apache-2.0)",
+    "eula": "Contrato de Licença do Usuário Final",
     "licenses": "Licenças de terceiros",
     "about": "Sobre"
   },
@@ -455,6 +456,7 @@
     "title": "Licenças de terceiros",
     "description": "Abrir arquivos de licença e avisos de terceiros incluídos.",
     "project_license": "Licença do projeto (Apache-2.0)",
+    "eula": "Contrato de Licença do Usuário Final",
     "overview": "Visão geral de licenças",
     "font_notice": "Aviso Selawik",
     "font_ofl": "Selawik OFL-1.1",
