@@ -447,12 +447,14 @@
       "force_integer_ticks": "Forçar Ticks Inteiros"
     },
     "help": "Ajuda",
-    "licenses": "Licenças",
+    "project_license": "Licença do projeto (Apache-2.0)",
+    "licenses": "Licenças de terceiros",
     "about": "Sobre"
   },
   "licenses": {
-    "title": "Licenças",
+    "title": "Licenças de terceiros",
     "description": "Abrir arquivos de licença e avisos de terceiros incluídos.",
+    "project_license": "Licença do projeto (Apache-2.0)",
     "overview": "Visão geral de licenças",
     "font_notice": "Aviso Selawik",
     "font_ofl": "Selawik OFL-1.1",

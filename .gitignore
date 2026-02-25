@@ -161,3 +161,7 @@ model_log.txt
 # Test folder
 tests/Documentation/
 Documentation/
+
+# Local maintainer-only licensing notes
+Licenses/*.local.md
+Licenses/Python/*.local.md

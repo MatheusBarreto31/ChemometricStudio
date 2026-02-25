@@ -112,3 +112,9 @@ For detailed development and contribution guidelines, see the [Documentation](Do
 - API references
 - Architecture documentation
 
+## License
+
+This project is licensed under the Apache License 2.0. See [LICENSE](LICENSE).
+
+Third-party notices and bundled asset licenses are available in [Licenses/](Licenses/).
+

@@ -41,6 +41,7 @@ BASE_DIR = Path(__file__).parent
 GRAPHICS_DIR = BASE_DIR / "Graphics"
 FONTS_DIR = BASE_DIR / "Fonts"
 LICENSES_DIR = BASE_DIR / "Licenses"
+PROJECT_LICENSE_PATH = BASE_DIR / "LICENSE"
 PYPROJECT_PATH = BASE_DIR / "pyproject.toml"
 SELAWIK_TTF_PATH = FONTS_DIR / "Selawik" / "selawk.ttf"
 SPLASH_VERSION_FONT_SIZE = 14
@@ -1319,7 +1320,14 @@ class ChemometricsGUI:
         # Help Menu
         help_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label=self.language_manager.translate("menu.help", "Help"), menu=help_menu)
-        help_menu.add_command(label=self.language_manager.translate("menu.licenses", "Licenses"), command=self._show_licenses_dialog)
+        help_menu.add_command(
+            label=self.language_manager.translate("menu.project_license", "Project License (Apache-2.0)"),
+            command=lambda: self._show_license_file_popup(
+                self.language_manager.translate("licenses.project_license", "Project License (Apache-2.0)"),
+                PROJECT_LICENSE_PATH,
+            ),
+        )
+        help_menu.add_command(label=self.language_manager.translate("menu.licenses", "Third-Party Licenses"), command=self._show_licenses_dialog)
         help_menu.add_separator()
         help_menu.add_command(label=self.language_manager.translate("menu.about", "About"), command=self._show_about_dialog)
 
@@ -1696,7 +1704,7 @@ class ChemometricsGUI:
         """Show licenses dialog with quick links to third-party notices."""
         licenses_win = tk.Toplevel(self.root)
         _set_window_icon(licenses_win, "Icon")
-        licenses_win.title(self.language_manager.translate("licenses.title", "Licenses"))
+        licenses_win.title(self.language_manager.translate("licenses.title", "Third-Party Licenses"))
         licenses_win.geometry("680x420")
         licenses_win.resizable(False, False)
         licenses_win.transient(self.root)
@@ -1722,6 +1730,10 @@ class ChemometricsGUI:
         description.pack(anchor=tk.W, pady=(0, 10))
 
         files_to_show = [
+            (
+                self.language_manager.translate("licenses.project_license", "Project License (Apache-2.0)"),
+                PROJECT_LICENSE_PATH,
+            ),
             (
                 self.language_manager.translate("licenses.overview", "Licenses Overview"),
                 LICENSES_DIR / "README.md",

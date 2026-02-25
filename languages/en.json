@@ -447,12 +447,14 @@
       "force_integer_ticks": "Force Integer Ticks"
     },
     "help": "Help",
-    "licenses": "Licenses",
+    "project_license": "Project License (Apache-2.0)",
+    "licenses": "Third-Party Licenses",
     "about": "About"
   },
   "licenses": {
-    "title": "Licenses",
+    "title": "Third-Party Licenses",
     "description": "Open bundled license and third-party notice files.",
+    "project_license": "Project License (Apache-2.0)",
     "overview": "Licenses Overview",
     "font_notice": "Selawik Notice",
     "font_ofl": "Selawik OFL-1.1",

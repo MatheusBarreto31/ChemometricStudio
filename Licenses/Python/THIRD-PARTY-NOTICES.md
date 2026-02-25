@@ -2,8 +2,6 @@
 
 This project depends on the following pinned Python packages (from `requirements.txt`).
 
-> These license labels are the typical upstream licenses. The release process should verify exact metadata in the target environment using `Licenses/Python/generate_notices.py`.
-
 | Package | Version | Typical License |
 |---|---:|---|
 | numpy | 2.3.5 | BSD-3-Clause |
@@ -14,10 +12,4 @@ This project depends on the following pinned Python packages (from `requirements
 | pylatex | 1.4.2 | MIT |
 | pandas | 2.3.3 | BSD-3-Clause |
 
-## Verification command
-
-Run this in the project root inside the release environment:
-
-`python Licenses/Python/generate_notices.py`
-
-This updates `Licenses/Python/THIRD-PARTY-NOTICES.md` with installed metadata (`License` and license classifiers).
+These entries summarize the licenses associated with bundled Python dependencies.
