@@ -150,8 +150,6 @@ update_gui.py
 old_main.py
 test_*.py
 error_log.txt
-functions.txt
-routing.txt
 test_d_specs_refactoring.py
 test_load_data_params.py
 ANALYSIS_CONFIG_IMPLEMENTATION_SUMMARY.txt

@@ -1,5 +1,6 @@
 from typing import Optional, Callable, Dict, Any, List, Tuple
 from time import perf_counter
+from execution_reporting import execution_report_context, set_last_execution_report
 
 def analyst_main(
     stop_at_function_idx: Optional[int] = None,
@@ -22,6 +23,7 @@ def analyst_main(
     import importlib
     import json
     import re
+    import warnings
     from datetime import datetime
     
     # Load model configuration from model.json
@@ -313,6 +315,53 @@ def analyst_main(
         return parsed_values
 
     function_timings = []
+    execution_report: Dict[str, Any] = {
+        'entries': [],
+        'counts': {
+            'message': 0,
+            'warning': 0,
+            'error': 0,
+        }
+    }
+
+    def _append_execution_report_entry(
+        instance_alias: str,
+        base_alias: str,
+        level: str,
+        text: str,
+        code: Optional[str] = None,
+        source: str = "function",
+        details: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        normalized_level = str(level or "message").lower()
+        if normalized_level not in execution_report['counts']:
+            normalized_level = 'message'
+        entry = {
+            'instance_alias': instance_alias,
+            'base_alias': base_alias,
+            'level': normalized_level,
+            'code': code,
+            'text': text,
+            'source': source,
+            'details': copy.deepcopy(details) if isinstance(details, dict) else None,
+            'timestamp': datetime.now().isoformat(),
+        }
+        execution_report['entries'].append(entry)
+        execution_report['counts'][normalized_level] = execution_report['counts'].get(normalized_level, 0) + 1
+
+    def _build_function_event_handler(instance_alias: str, base_alias: str):
+        def _handler(level: str, code: Optional[str], text: str, details: Optional[Dict[str, Any]]):
+            _append_execution_report_entry(
+                instance_alias=instance_alias,
+                base_alias=base_alias,
+                level=level,
+                text=text,
+                code=code,
+                source="function",
+                details=details,
+            )
+        return _handler
+
     execution_history_by_instance: Dict[str, List[Dict[str, Any]]] = {}
     loop_stack_context: List[Dict[str, Any]] = []
     parallel_stack_context: List[Dict[str, Any]] = []
@@ -394,7 +443,30 @@ def analyst_main(
 
         if base_alias in globals():
             function_start_time = perf_counter()
-            result = globals()[base_alias](**params)
+            function_handler = _build_function_event_handler(instance_alias, base_alias)
+            try:
+                with warnings.catch_warnings(record=True) as captured_warnings:
+                    warnings.simplefilter("always")
+                    with execution_report_context(function_handler):
+                        result = globals()[base_alias](**params)
+                for warning_item in captured_warnings:
+                    warning_text = str(getattr(warning_item, 'message', warning_item))
+                    _append_execution_report_entry(
+                        instance_alias=instance_alias,
+                        base_alias=base_alias,
+                        level='warning',
+                        text=warning_text,
+                        source='python_warning',
+                    )
+            except Exception as exc:
+                _append_execution_report_entry(
+                    instance_alias=instance_alias,
+                    base_alias=base_alias,
+                    level='error',
+                    text=str(exc),
+                    source='exception',
+                )
+                raise
             function_elapsed_seconds = perf_counter() - function_start_time
             function_outputs = {}
             if base_alias in return_specs:
@@ -632,7 +704,10 @@ def analyst_main(
 
         return idx
 
-    _execute_range(0, len(functions_list) - 1, outputs)
+    try:
+        _execute_range(0, len(functions_list) - 1, outputs)
+    finally:
+        set_last_execution_report(copy.deepcopy(execution_report))
 
     if stop_at_function_idx is not None:
         print(f"\nStopped after function index {stop_at_function_idx}")
@@ -652,6 +727,7 @@ def analyst_main(
         "pipeline_execution_time": pipeline_elapsed_seconds,
         "function_timings": function_timings,
         "execution_history_by_instance": execution_history_by_instance,
+        "execution_report": execution_report,
         "executed_function_count": len(function_timings),
         "partial_run": stop_at_function_idx is not None,
         "stop_at_function_idx": stop_at_function_idx

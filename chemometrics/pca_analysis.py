@@ -3,6 +3,12 @@ from typing import Optional, Dict, Any, List, Tuple
 import numpy as np
 from sklearn.decomposition import PCA
 
+try:
+    from execution_reporting import emit_execution_message
+except ImportError:
+    def emit_execution_message(code: Optional[str] = None, text: str = "", details: Optional[Dict[str, Any]] = None) -> None:
+        return
+
 # Import CV pipeline
 try:
     from chemometrics.cv_pipeline import CVPipeline, CVConfig
@@ -217,6 +223,18 @@ def pca_analysis(
     # Handle CV routing - unwrap cv_config if it's been wrapped in a dict by routing
     if cv_config is not None and isinstance(cv_config, dict) and 'cv_config' in cv_config:
         cv_config = cv_config['cv_config']
+
+    # Emit one informational event per top-level PCA execution when U-PCA is used.
+    # This avoids duplicate messages from helper calls during validation/CV folds.
+    try:
+        x_cal_ndim = np.asarray(X_cal).ndim
+    except Exception:
+        x_cal_ndim = 0
+    if x_cal_ndim >= 3:
+        emit_execution_message(
+            code="upca_used",
+            text="Higher-order input data was unfolded and processed with U-PCA.",
+        )
     
     # Handle CV routing
     if cv_config is not None and HAS_CV and cv_config.is_enabled():

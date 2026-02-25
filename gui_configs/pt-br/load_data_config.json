@@ -302,6 +302,108 @@
             "long_description": "This section visualizes 'Spectral Data Overview' using a line graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
           }
         ]
+      },
+      {
+        "title": "Resumo de Carga",
+        "layout": "fp",
+        "sections": [
+          {
+            "type": "text",
+            "config": {
+              "title": "Relatório de Carga de Dados",
+              "text_template": "Relatório de Carga de Dados\n========================\nAmostras carregadas: {samples_loaded}\nDimensionalidade (ndim): {x_ndim}\nTotal de valores em X: {x_size}\nFormato de X: {x_shape}\nVariáveis no último eixo: {x_last_axis}\nRótulos de amostra disponíveis: {sample_labels_count}\nRótulos de dimensão: {dim_labels}\nVetores de eixo disponíveis: {axis_vector_count}\nValores de Y carregados: {y_size}\nRótulos de classe carregados: {class_size}",
+              "bindings": [
+                {
+                  "name": "samples_loaded",
+                  "data_source": "X_cal",
+                  "nested_key": "shape",
+                  "selector": {
+                    "mode": "index",
+                    "index": "first"
+                  }
+                },
+                {
+                  "name": "x_ndim",
+                  "data_source": "X_cal",
+                  "nested_key": "ndim",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "x_size",
+                  "data_source": "X_cal",
+                  "nested_key": "size",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "x_shape",
+                  "data_source": "X_cal",
+                  "nested_key": "shape",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "separator": " × "
+                },
+                {
+                  "name": "x_last_axis",
+                  "data_source": "X_cal",
+                  "nested_key": "shape",
+                  "selector": {
+                    "mode": "index",
+                    "index": "last"
+                  }
+                },
+                {
+                  "name": "sample_labels_count",
+                  "data_source": "smp_cal",
+                  "nested_key": "len",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "dim_labels",
+                  "data_source": "dim_labels",
+                  "selector": {
+                    "mode": "range",
+                    "start": "first",
+                    "end": "last"
+                  },
+                  "separator": ", "
+                },
+                {
+                  "name": "axis_vector_count",
+                  "data_source": "axis_n_info",
+                  "nested_key": "len",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "y_size",
+                  "data_source": "Y_cal",
+                  "nested_key": "size",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "class_size",
+                  "data_source": "class_data_cal",
+                  "nested_key": "size",
+                  "selector": {
+                    "mode": "value"
+                  }
+                }
+              ]
+            },
+            "short_description": "Mostra um relatório textual compacto sobre dimensões e contagens dos dados carregados.",
+            "long_description": "Esta seção fornece um resumo textual em tempo de execução incluindo número de amostras carregadas, dimensionalidade, tamanho total, formato e disponibilidade de rótulos/alvos."
+          }
+        ]
       }
     ],
     "current_page": 0

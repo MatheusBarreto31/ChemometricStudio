@@ -250,6 +250,7 @@ class ChemometricsGUI:
         self._reporting_funcs = None
         self._add_graph_dialog_fn = None
         self._add_table_dialog_fn = None
+        self._add_text_dialog_fn = None
         self._routing_map_window_cls = None
         self._matplotlib_pyplot = None
 
@@ -303,6 +304,7 @@ class ChemometricsGUI:
         self._pending_language_refresh_id = None
         self._execution_progress_root_bind_set = False
         self.latest_timing_report: Optional[Dict[str, Any]] = None
+        self.latest_execution_report: Optional[Dict[str, Any]] = None
         self.tools_menu = None
         self.timing_report_menu_index: Optional[int] = None
         self.report_data: Dict[str, Any] = {
@@ -876,6 +878,7 @@ class ChemometricsGUI:
         self._get_reporting_functions()
         self._get_add_graph_dialog_func()
         self._get_add_table_dialog_func()
+        self._get_add_text_dialog_func()
         self._get_routing_map_window_class()
         self._get_matplotlib_pyplot()
 
@@ -980,6 +983,13 @@ class ChemometricsGUI:
             from add_table_dialog import show_add_table_dialog
             self._add_table_dialog_fn = show_add_table_dialog
         return self._add_table_dialog_fn
+
+    def _get_add_text_dialog_func(self):
+        """Lazy-load add-text dialog callable."""
+        if not hasattr(self, "_add_text_dialog_fn") or self._add_text_dialog_fn is None:
+            from add_text_dialog import show_add_text_dialog
+            self._add_text_dialog_fn = show_add_text_dialog
+        return self._add_text_dialog_fn
 
     def _get_routing_map_window_class(self):
         """Lazy-load routing map window class."""
@@ -1470,6 +1480,141 @@ class ChemometricsGUI:
             lines.append(self.language_manager.translate("ui.timing_report.no_functions", "No function timing data recorded."))
 
         report_text.insert(tk.END, "\n".join(lines))
+        report_text.config(state=tk.DISABLED)
+
+        close_btn = ttk.Button(
+            container,
+            text=self.language_manager.translate("ui.buttons.close", "Close"),
+            command=report_win.destroy
+        )
+        close_btn.pack(anchor="e", pady=(10, 0))
+
+    def _has_execution_report_entries(self, execution_report: Optional[Dict[str, Any]]) -> bool:
+        if not isinstance(execution_report, dict):
+            return False
+        entries = execution_report.get('entries', [])
+        return isinstance(entries, list) and len(entries) > 0
+
+    def _store_execution_report(self, execution_report: Optional[Dict[str, Any]]) -> None:
+        if not self._has_execution_report_entries(execution_report):
+            self.latest_execution_report = None
+            return
+        self.latest_execution_report = copy.deepcopy(execution_report)
+
+    def _resolve_execution_report_entry_text(self, entry: Dict[str, Any]) -> str:
+        level = str(entry.get('level', 'message') or 'message').lower()
+        code = entry.get('code')
+        fallback_text = str(entry.get('text', '') or '')
+        base_alias = str(entry.get('base_alias', '') or '')
+
+        if code and base_alias:
+            config = self.gui_configs.get(base_alias, {})
+            specs = config.get('execution_report_specs', {}) if isinstance(config, dict) else {}
+            bucket_key = {
+                'message': 'messages',
+                'warning': 'warnings',
+                'error': 'errors',
+            }.get(level, 'messages')
+            bucket = specs.get(bucket_key, {}) if isinstance(specs, dict) else {}
+            mapped_text = bucket.get(code) if isinstance(bucket, dict) else None
+            if mapped_text:
+                return str(mapped_text)
+
+        return fallback_text
+
+    def _get_instance_display_name(self, instance_alias: str, base_alias: str) -> str:
+        config = self.gui_configs.get(base_alias, {})
+        config_display_name = config.get("display_name", base_alias)
+        if instance_alias in self.methodology_list:
+            idx = self.methodology_list.index(instance_alias)
+            existing_count = self.function_base_aliases[:idx].count(base_alias)
+            if existing_count > 0:
+                return f"{config_display_name} #{existing_count + 1}"
+        return config_display_name
+
+    def _show_execution_report_popup(self, execution_report: Optional[Dict[str, Any]], run_type_label: str) -> None:
+        if not self._has_execution_report_entries(execution_report):
+            return
+
+        report_win = tk.Toplevel(self.root)
+        _set_window_icon(report_win, "Icon")
+        report_win.title(self.language_manager.translate("ui.dialogs.execution_report", "Execution Report"))
+        report_win.geometry("700x500")
+        report_win.transient(self.root)
+        report_win.grab_set()
+
+        container = ttk.Frame(report_win, padding=12)
+        container.pack(fill=tk.BOTH, expand=True)
+
+        text_frame = ttk.Frame(container)
+        text_frame.pack(fill=tk.BOTH, expand=True)
+
+        scrollbar = ttk.Scrollbar(text_frame, orient=tk.VERTICAL)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        report_text = tk.Text(
+            text_frame,
+            wrap=tk.WORD,
+            yscrollcommand=scrollbar.set,
+            font=("Consolas", 10),
+            padx=8,
+            pady=8
+        )
+        report_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=report_text.yview)
+
+        entries = execution_report.get('entries', [])
+        grouped: Dict[str, List[Dict[str, Any]]] = {}
+        for entry in entries:
+            group_key = str(entry.get('instance_alias', '') or '')
+            grouped.setdefault(group_key, []).append(entry)
+
+        ordered_groups: List[Tuple[str, List[Dict[str, Any]]]] = []
+        for instance_alias in self.methodology_list:
+            if instance_alias in grouped:
+                ordered_groups.append((instance_alias, grouped.pop(instance_alias)))
+        for remaining_alias, remaining_entries in grouped.items():
+            ordered_groups.append((remaining_alias, remaining_entries))
+
+        counts = execution_report.get('counts', {}) if isinstance(execution_report, dict) else {}
+        message_count = int(counts.get('message', 0) or 0)
+        warning_count = int(counts.get('warning', 0) or 0)
+        error_count = int(counts.get('error', 0) or 0)
+
+        lines = [
+            self.language_manager.translate("ui.execution_report.title", "Execution Report"),
+            "",
+            f"{self.language_manager.translate('ui.execution_report.run_type', 'Run type')}: {run_type_label}",
+            (
+                f"{self.language_manager.translate('ui.execution_report.summary', 'Summary')}: "
+                f"{self.language_manager.translate('ui.execution_report.messages', 'Messages')}={message_count}, "
+                f"{self.language_manager.translate('ui.execution_report.warnings', 'Warnings')}={warning_count}, "
+                f"{self.language_manager.translate('ui.execution_report.errors', 'Errors')}={error_count}"
+            ),
+            "",
+        ]
+
+        for instance_alias, func_entries in ordered_groups:
+            first_entry = func_entries[0] if func_entries else {}
+            base_alias = str(first_entry.get('base_alias', '') or '')
+            display_name = self._get_instance_display_name(instance_alias, base_alias) if base_alias else instance_alias
+            lines.append(f"{self.language_manager.translate('ui.execution_report.function', 'Function')}: {display_name}")
+
+            for item in func_entries:
+                level = str(item.get('level', 'message') or 'message').lower()
+                level_label = {
+                    'message': self.language_manager.translate('ui.execution_report.messages_singular', 'Message'),
+                    'warning': self.language_manager.translate('ui.execution_report.warning_singular', 'Warning'),
+                    'error': self.language_manager.translate('ui.execution_report.error_singular', 'Error'),
+                }.get(level, self.language_manager.translate('ui.execution_report.messages_singular', 'Message'))
+
+                entry_text = self._resolve_execution_report_entry_text(item)
+                if not entry_text:
+                    entry_text = str(item.get('text', '') or '')
+                lines.append(f"  - [{level_label}] {entry_text}")
+            lines.append("")
+
+        report_text.insert(tk.END, "\n".join(lines).rstrip())
         report_text.config(state=tk.DISABLED)
 
         close_btn = ttk.Button(
@@ -4760,6 +4905,11 @@ class ChemometricsGUI:
         add_table_btn = ttk.Button(control_frame, text=self.language_manager.translate("ui.buttons.add_table", "Add table"), 
                                    command=lambda: self._show_add_table_dialog(instance_alias))
         add_table_btn.pack(side=tk.LEFT, padx=5)
+
+        # Add text button
+        add_text_btn = ttk.Button(control_frame, text=self.language_manager.translate("ui.buttons.add_text", "Add text"),
+                      command=lambda: self._show_add_text_dialog(instance_alias))
+        add_text_btn.pack(side=tk.LEFT, padx=5)
         
         # Remove section button
         remove_section_btn = ttk.Button(control_frame, text=self.language_manager.translate("ui.buttons.remove_section", "Remove section"), 
@@ -6088,7 +6238,7 @@ class ChemometricsGUI:
     def _render_section(self, parent: ttk.Frame, instance_alias: str, section_data: dict, section_idx: int = 0,
                         is_popup: bool = False, graph_font_scale_override: Optional[float] = None,
                         popup_refresh_callback: Optional[Callable[[], None]] = None):
-        """Render a section (either graph or table)."""
+        """Render a section (graph, table, or text)."""
         section_type = section_data.get('type')
         
         # Set the section frame title from config's 'title' field if parent is a LabelFrame
@@ -6112,6 +6262,8 @@ class ChemometricsGUI:
             )
         elif section_type == 'table':
             self._render_table_section(parent, instance_alias, section_data, section_idx)
+        elif section_type == 'text':
+            self._render_text_section(parent, instance_alias, section_data)
         else:
             # Empty section
             label = ttk.Label(parent, text=self.language_manager.translate("ui.messages.empty", "[Empty]"), foreground="gray")
@@ -6864,6 +7016,35 @@ class ChemometricsGUI:
         # If no nested key, return the base data
         if not nested_key:
             return data
+
+        nested_key_normalized = str(nested_key).strip().lower() if nested_key is not None else ''
+
+        # Pseudo keys for common metadata on array/list-like values
+        if nested_key_normalized in ('shape', 'ndim', 'size', 'len', 'length'):
+            try:
+                if nested_key_normalized == 'shape':
+                    if isinstance(data, np.ndarray):
+                        return tuple(data.shape)
+                    if isinstance(data, (list, tuple)):
+                        return (len(data),)
+                    return None
+                if nested_key_normalized == 'ndim':
+                    if isinstance(data, np.ndarray):
+                        return int(data.ndim)
+                    if isinstance(data, (list, tuple)):
+                        return 1
+                    return 0
+                if nested_key_normalized == 'size':
+                    if isinstance(data, np.ndarray):
+                        return int(data.size)
+                    if isinstance(data, (list, tuple)):
+                        return int(len(data))
+                    return 1
+                if isinstance(data, (list, tuple, dict, np.ndarray)):
+                    return int(len(data))
+                return None
+            except Exception:
+                return None
         
         # Handle nested access for dictionaries
         if isinstance(data, dict):
@@ -6890,6 +7071,188 @@ class ChemometricsGUI:
                 pass
         
         return None
+
+    def _resolve_text_selector_index(self, token: Any, length: int, default: int = 0) -> int:
+        """Resolve index token for text selectors (supports int, first, last)."""
+        if length <= 0:
+            return 0
+
+        if token is None:
+            idx = default
+        elif isinstance(token, (int, np.integer)):
+            idx = int(token)
+        else:
+            raw = str(token).strip().lower()
+            if raw in ('', 'none'):
+                idx = default
+            elif raw == 'first':
+                idx = 0
+            elif raw == 'last':
+                idx = length - 1
+            else:
+                try:
+                    idx = int(raw)
+                except (TypeError, ValueError):
+                    idx = default
+
+        if idx < 0:
+            idx = length + idx
+        return max(0, min(length - 1, idx))
+
+    def _format_text_binding_atom(self, value: Any, value_format: str = '') -> str:
+        """Format a single text-binding value with optional numeric format."""
+        if value is None:
+            return ''
+
+        if isinstance(value, (dict, list, tuple)):
+            try:
+                return json.dumps(value, ensure_ascii=False)
+            except Exception:
+                return str(value)
+
+        if isinstance(value, np.ndarray):
+            try:
+                return json.dumps(value.tolist(), ensure_ascii=False)
+            except Exception:
+                return str(value)
+
+        fmt = str(value_format or '').strip()
+        if fmt:
+            try:
+                return format(value, fmt)
+            except Exception:
+                return str(value)
+
+        return str(value)
+
+    def _extract_text_binding_value(self, outputs: dict, binding: dict) -> Any:
+        """Resolve one text binding from configured source + selector."""
+        if not isinstance(binding, dict):
+            return None
+
+        data_source = binding.get('data_source')
+        nested_key = binding.get('nested_key')
+        value = self._get_data_from_source(outputs, data_source, nested_key)
+        if value is None:
+            return None
+
+        selector = binding.get('selector', {}) if isinstance(binding.get('selector', {}), dict) else {}
+        mode = str(selector.get('mode', 'value')).strip().lower() or 'value'
+
+        if mode == 'value':
+            return value
+
+        if not isinstance(value, np.ndarray):
+            if isinstance(value, (list, tuple)):
+                array_value = np.array(value, dtype=object)
+            else:
+                array_value = None
+        else:
+            array_value = value
+
+        if array_value is None:
+            return value if mode == 'value' else None
+
+        flat_values = list(array_value.reshape(-1).tolist())
+        if not flat_values:
+            return None
+
+        if mode == 'index':
+            token = selector.get('index')
+            idx = self._resolve_text_selector_index(token, len(flat_values), default=0)
+            return flat_values[idx]
+
+        if mode == 'range':
+            start_token = selector.get('start')
+            end_token = selector.get('end')
+            start_idx = self._resolve_text_selector_index(start_token, len(flat_values), default=0)
+            end_idx = self._resolve_text_selector_index(end_token, len(flat_values), default=len(flat_values) - 1)
+            if end_idx < start_idx:
+                start_idx, end_idx = end_idx, start_idx
+            return flat_values[start_idx:end_idx + 1]
+
+        return value
+
+    def _resolve_text_section_content(self, outputs: dict, config: dict) -> str:
+        """Resolve text template using configured bindings and extracted data."""
+        if not isinstance(config, dict):
+            return ''
+
+        template = config.get('text_template', '')
+        if not isinstance(template, str):
+            template = str(template)
+
+        bindings = config.get('bindings', [])
+        if not isinstance(bindings, list):
+            bindings = []
+
+        values_map: Dict[str, str] = {}
+        for binding in bindings:
+            if not isinstance(binding, dict):
+                continue
+            name = str(binding.get('name', '')).strip()
+            if not name:
+                continue
+
+            extracted = self._extract_text_binding_value(outputs, binding)
+            value_format = binding.get('value_format', '')
+            separator = binding.get('separator', ', ')
+
+            if isinstance(extracted, np.ndarray):
+                extracted = extracted.reshape(-1).tolist()
+
+            if isinstance(extracted, (list, tuple)):
+                values_map[name] = str(separator).join(
+                    self._format_text_binding_atom(item, value_format=value_format)
+                    for item in extracted
+                )
+            else:
+                values_map[name] = self._format_text_binding_atom(extracted, value_format=value_format)
+
+        class _SafeMap(dict):
+            def __missing__(self, key):
+                return '{' + str(key) + '}'
+
+        try:
+            return template.format_map(_SafeMap(values_map))
+        except Exception:
+            return template
+
+    def _render_text_section(self, parent: ttk.Frame, instance_alias: str, section_data: dict):
+        """Render a resolved text section in the analysis tab."""
+        try:
+            config = section_data.get('config', {}) if isinstance(section_data, dict) else {}
+
+            if instance_alias not in self.analysis_data:
+                label = ttk.Label(parent, text=self.language_manager.translate("ui.messages.no_data_run_first", "No data available. Please run 'Run Model' or 'Run to here' first."), foreground="gray")
+                label.pack(expand=True)
+                return
+
+            execution_results = self.analysis_data[instance_alias].get('execution_results', {})
+            if not execution_results:
+                label = ttk.Label(parent, text=self.language_manager.translate("ui.messages.no_data_run_first", "No data available. Please run 'Run Model' or 'Run to here' first."), foreground="gray")
+                label.pack(expand=True)
+                return
+
+            if execution_results.get('status') != 'success':
+                label = ttk.Label(parent, text=self.language_manager.translate("ui.messages.execution_failed_check_log", "Execution failed. Check model_log.txt for details."), foreground="red")
+                label.pack(expand=True)
+                return
+
+            outputs = self._get_execution_data_sources(execution_results, instance_alias)
+            resolved_text = self._resolve_text_section_content(outputs, config)
+
+            text_widget = tk.Text(parent, wrap=tk.WORD, relief=tk.FLAT, borderwidth=0)
+            text_widget.pack(fill=tk.BOTH, expand=True)
+            text_widget.insert('1.0', resolved_text)
+            text_widget.configure(state=tk.DISABLED)
+        except Exception as e:
+            label = ttk.Label(
+                parent,
+                text=self.language_manager.translate("ui.messages.error_rendering_text", "Error rendering text:") + f" {str(e)}",
+                foreground="red"
+            )
+            label.pack(expand=True)
 
     def _get_execution_data_sources(self, execution_results: dict, instance_alias: str = None) -> dict:
         """Get combined execution data sources (inputs + routed inputs + outputs).
@@ -9552,6 +9915,11 @@ Count:
         """Show the Add Table dialog."""
         show_add_table_dialog = self._get_add_table_dialog_func()
         show_add_table_dialog(self.root, self, instance_alias)
+
+    def _show_add_text_dialog(self, instance_alias: str):
+        """Show the Add Text dialog."""
+        show_add_text_dialog = self._get_add_text_dialog_func()
+        show_add_text_dialog(self.root, self, instance_alias)
     
     def _show_add_page_dialog(self, instance_alias: str):
         """Show dialog to add a new page."""
@@ -9771,6 +10139,9 @@ Count:
                     progress_callback=_progress_callback,
                     return_timing=True
                 )
+
+                execution_report = timing_report.get('execution_report', {}) if timing_report else {}
+                self._store_execution_report(execution_report)
                 
             finally:
                 sys.stdout = old_stdout
@@ -9849,12 +10220,25 @@ Count:
                 f" {instance_alias}\n\n" +
                 self.language_manager.translate("ui.messages.results_loaded_analysis", "Results loaded for analysis.")
             )
+            self._show_execution_report_popup(
+                self.latest_execution_report,
+                run_type_label=self.language_manager.translate("ui.buttons.run_to_here", "Run to here")
+            )
             self._finish_execution_progress(success=True)
             
             # Refresh the analysis tab to show results
             self._show_analysis_tab()
             
         except Exception as e:
+            try:
+                from execution_reporting import consume_last_execution_report
+                self._store_execution_report(consume_last_execution_report())
+                self._show_execution_report_popup(
+                    self.latest_execution_report,
+                    run_type_label=self.language_manager.translate("ui.buttons.run_to_here", "Run to here")
+                )
+            except Exception:
+                pass
             self._finish_execution_progress(success=False)
             error_msg = self.language_manager.translate("ui.messages.run_model_failed", "Failed to run model:") + f" {str(e)}"
             self._show_fading_error(error_msg)
@@ -11977,8 +12361,6 @@ Count:
                         if src_file.is_file():
                             shutil.copy2(src_file, self.tempfiles_dir / src_file.name)
             
-            # Load functions.txt
-            functions_file = tmpdir_path / "functions.txt"
             # Load model.json
             model_file = tmpdir_path / "model.json"
             if model_file.exists():
@@ -12134,9 +12516,10 @@ Count:
                 if 'graph_control_frames' in self.analysis_data[instance_alias]:
                     del self.analysis_data[instance_alias]['graph_control_frames']
 
-            # Timing report is valid only for the latest successful run
-            self.latest_timing_report = None
-            self._set_timing_report_menu_state(False)
+        # Timing/report popups are valid only for the latest successful run
+        self.latest_timing_report = None
+        self.latest_execution_report = None
+        self._set_timing_report_menu_state(False)
     
     def _refresh_gui_from_config(self):
         """Refresh GUI to reflect loaded configuration."""
@@ -12186,6 +12569,9 @@ Count:
                 
                 # Run the full model and capture outputs
                 outputs, timing_report = analyst_main(progress_callback=_progress_callback, return_timing=True)
+
+                execution_report = timing_report.get('execution_report', {}) if timing_report else {}
+                self._store_execution_report(execution_report)
                 
             finally:
                 sys.stdout = old_stdout
@@ -12261,6 +12647,10 @@ Count:
             self._show_fading_success(
                 self.language_manager.translate("ui.messages.model_executed", "Model executed successfully. Results loaded for analysis.")
             )
+            self._show_execution_report_popup(
+                self.latest_execution_report,
+                run_type_label=self.language_manager.translate("ui.buttons.run_model", "Run Model")
+            )
             self._finish_execution_progress(success=True)
             
             # Switch to analysis tab to show results
@@ -12268,6 +12658,15 @@ Count:
                 self._show_analysis_tab()
             
         except Exception as e:
+            try:
+                from execution_reporting import consume_last_execution_report
+                self._store_execution_report(consume_last_execution_report())
+                self._show_execution_report_popup(
+                    self.latest_execution_report,
+                    run_type_label=self.language_manager.translate("ui.buttons.run_model", "Run Model")
+                )
+            except Exception:
+                pass
             self._finish_execution_progress(success=False)
             error_log_path = Path(__file__).parent / "model_log.txt"
             with open(error_log_path, "w") as f:
