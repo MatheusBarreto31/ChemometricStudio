@@ -30,7 +30,6 @@
       "selected_functions": "Funções Selecionadas"
     },
     "buttons": {
-      "run_pca": "Executar PCA de Amostra",
       "add_to_methodology": "Adicionar à Metodologia",
       "remove_from_methodology": "Remover Selecionado",
       "clear_methodology": "Limpar Tudo",
