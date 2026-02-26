@@ -58,26 +58,24 @@ def append_prefixed_data_sources(
 
 
 def get_available_data_sources(outputs: Optional[Dict[str, Any]]) -> List[str]:
-    """Return UI source keys with redundant out.<key> aliases removed."""
+    """Return UI source keys with unprefixed outputs and explicit in.* inputs.
+
+    out.* aliases are intentionally hidden from listings.
+    """
     if not outputs:
         return []
 
     keys = [str(key) for key in outputs.keys() if isinstance(key, str)]
-    key_set = set(keys)
     filtered: List[str] = []
 
     for key in keys:
         if key.startswith('out.'):
-            unprefixed = key.split('.', 1)[1]
-            if unprefixed in key_set:
-                continue
+            continue
         filtered.append(key)
 
     def _sort_key(value: str):
         if value.startswith('in.'):
             return (1, value)
-        if value.startswith('out.'):
-            return (2, value)
         return (0, value)
 
     return sorted(set(filtered), key=_sort_key)

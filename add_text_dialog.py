@@ -22,6 +22,43 @@ from dialog_data_source_utils import (
 )
 
 
+class _Tooltip:
+    """Minimal tooltip helper for dialog widgets."""
+
+    def __init__(self, widget, text: str):
+        self.widget = widget
+        self.text = text or ""
+        self.tip_window = None
+        self.widget.bind("<Enter>", self._show)
+        self.widget.bind("<Leave>", self._hide)
+
+    def _show(self, _event=None):
+        if self.tip_window is not None or not self.text:
+            return
+        x = self.widget.winfo_rootx() + 14
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 6
+        self.tip_window = tw = tk.Toplevel(self.widget)
+        tw.wm_overrideredirect(True)
+        tw.wm_geometry(f"+{x}+{y}")
+        label = tk.Label(
+            tw,
+            text=self.text,
+            justify=tk.LEFT,
+            background="#ffffe0",
+            relief=tk.SOLID,
+            borderwidth=1,
+            padx=6,
+            pady=4,
+            font=("TkDefaultFont", 9)
+        )
+        label.pack()
+
+    def _hide(self, _event=None):
+        if self.tip_window is not None:
+            self.tip_window.destroy()
+            self.tip_window = None
+
+
 def _set_window_icon(window, base_name: str = "Icon"):
     base_dir = Path(__file__).parent
     graphics_dir = base_dir / "Graphics"
@@ -83,8 +120,7 @@ class AddTextDialog:
         self.dialog = tk.Toplevel(parent)
         _set_window_icon(self.dialog, "Icon")
         self.dialog.title(self._t("ui.dialogs.add_text", "Add Text"))
-        self.dialog.geometry("920x620")
-        self._center_window(self.dialog, 920, 620)
+        self._set_initial_geometry(920, 700)
 
         self._build_ui()
 
@@ -108,9 +144,21 @@ class AddTextDialog:
         window.update_idletasks()
         screen_width = window.winfo_screenwidth()
         screen_height = window.winfo_screenheight()
-        x = (screen_width - width) // 2
-        y = (screen_height - height) // 2
+        x = max(0, (screen_width - width) // 2)
+        y = max(0, (screen_height - height) // 2)
         window.geometry(f"{width}x{height}+{x}+{y}")
+
+    def _set_initial_geometry(self, preferred_width: int, preferred_height: int):
+        """Set initial dialog size constrained to screen bounds."""
+        self.dialog.update_idletasks()
+        screen_width = max(640, self.dialog.winfo_screenwidth())
+        screen_height = max(480, self.dialog.winfo_screenheight())
+
+        width = min(preferred_width, max(700, screen_width - 80))
+        height = min(preferred_height, max(520, screen_height - 100))
+
+        self.dialog.minsize(760, 560)
+        self._center_window(self.dialog, width, height)
 
     def _get_execution_outputs(self) -> Optional[Dict[str, Any]]:
         if self.instance_alias not in self.main_gui.analysis_data:
@@ -158,9 +206,11 @@ class AddTextDialog:
     def _build_ui(self):
         root = ttk.Frame(self.dialog)
         root.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
+        root.columnconfigure(0, weight=1)
+        root.rowconfigure(2, weight=1)
 
         top_frame = ttk.LabelFrame(root, text=self._t("ui.labels.target_section", "Target Section"), padding=8)
-        top_frame.pack(fill=tk.X, pady=(0, 8))
+        top_frame.grid(row=0, column=0, sticky='ew', pady=(0, 8))
 
         self.section_var = tk.StringVar()
         section_combo = ttk.Combobox(
@@ -175,33 +225,38 @@ class AddTextDialog:
             section_combo.current(0)
 
         title_frame = ttk.LabelFrame(root, text=self._t("ui.labels.section_title", "Section Title"), padding=8)
-        title_frame.pack(fill=tk.X, pady=(0, 8))
+        title_frame.grid(row=1, column=0, sticky='ew', pady=(0, 8))
         self.title_var = tk.StringVar(value=self._t("ui.labels.text", "Text"))
         ttk.Entry(title_frame, textvariable=self.title_var).pack(fill=tk.X)
 
         main_paned = ttk.PanedWindow(root, orient=tk.HORIZONTAL)
-        main_paned.pack(fill=tk.BOTH, expand=True)
+        main_paned.grid(row=2, column=0, sticky='nsew')
 
         left = ttk.Frame(main_paned)
         right = ttk.Frame(main_paned)
         main_paned.add(left, weight=3)
         main_paned.add(right, weight=2)
 
-        template_frame = ttk.LabelFrame(left, text=self._t("ui.labels.text_template", "Text Template"), padding=8)
-        template_frame.pack(fill=tk.BOTH, expand=True)
+        left.columnconfigure(0, weight=1)
+        left.rowconfigure(0, weight=3)
+        left.rowconfigure(1, weight=1)
 
-        hint = ttk.Label(
-            template_frame,
-            text=self._t(
+        template_frame = ttk.LabelFrame(left, text=self._t("ui.labels.text_template", "Text Template"), padding=8)
+        template_frame.grid(row=0, column=0, sticky='nsew')
+
+        template_hint_label = tk.Label(template_frame, text="ℹ", font=("Arial", 9), fg="#666666", cursor="question_arrow")
+        template_hint_label.pack(anchor='e', pady=(0, 2))
+        _Tooltip(
+            template_hint_label,
+            self._t(
                 "ui.messages.text_template_hint",
                 "Use placeholders like {metric}, {vector_item}, {range_values}. Numeric format in bindings uses Python format syntax (e.g., .4f)."
-            ),
-            foreground='gray'
+            )
         )
-        hint.pack(anchor='w', pady=(0, 6))
 
         self.template_text = scrolledtext.ScrolledText(template_frame, wrap=tk.WORD, height=18)
         self.template_text.pack(fill=tk.BOTH, expand=True)
+        self.template_text.configure(font="TkFixedFont")
         self.template_text.insert(
             '1.0',
             "Model Summary\n"
@@ -211,26 +266,37 @@ class AddTextDialog:
             "Top values: {top_values}\n"
         )
 
+        preview_frame = ttk.LabelFrame(left, text=self._t("ui.labels.preview", "Preview"), padding=8)
+        preview_frame.grid(row=1, column=0, sticky='nsew', pady=(8, 0))
+        preview_frame.columnconfigure(0, weight=1)
+        preview_frame.rowconfigure(0, weight=1)
+        self.preview_text = scrolledtext.ScrolledText(preview_frame, wrap=tk.WORD, height=8)
+        self.preview_text.grid(row=0, column=0, sticky='nsew')
+        self.preview_text.configure(font="TkFixedFont")
+        self.preview_text.configure(state=tk.DISABLED)
+
         binding_frame = ttk.LabelFrame(right, text=self._t("ui.labels.bindings", "Bindings"), padding=8)
         binding_frame.pack(fill=tk.BOTH, expand=True)
 
         self._build_binding_editor(binding_frame)
 
-        preview_frame = ttk.LabelFrame(root, text=self._t("ui.labels.preview", "Preview"), padding=8)
-        preview_frame.pack(fill=tk.BOTH, expand=False, pady=(8, 0))
-        self.preview_text = scrolledtext.ScrolledText(preview_frame, wrap=tk.WORD, height=8)
-        self.preview_text.pack(fill=tk.BOTH, expand=True)
-        self.preview_text.configure(state=tk.DISABLED)
-
         button_bar = ttk.Frame(root)
-        button_bar.pack(fill=tk.X, pady=(8, 0))
+        button_bar.grid(row=3, column=0, sticky='ew', pady=(8, 0))
 
         ttk.Button(button_bar, text="⟳ " + self._t("ui.buttons.preview", "Preview"), command=self._preview).pack(side=tk.LEFT, padx=4)
         ttk.Button(button_bar, text="✓ " + self._t("ui.buttons.add_text", "Add Text"), command=self._add_text).pack(side=tk.LEFT, padx=4)
         ttk.Button(button_bar, text="✗ " + self._t("ui.buttons.cancel", "Cancel"), command=self.dialog.destroy).pack(side=tk.LEFT, padx=4)
 
     def _build_binding_editor(self, parent):
-        form = ttk.Frame(parent)
+        notebook = ttk.Notebook(parent)
+        notebook.pack(fill=tk.X)
+
+        value_tab = ttk.Frame(notebook)
+        table_tab = ttk.Frame(notebook)
+        notebook.add(value_tab, text=self._t("ui.labels.value_binding", "Value Binding"))
+        notebook.add(table_tab, text=self._t("ui.labels.table_binding", "Table Binding"))
+
+        form = ttk.Frame(value_tab)
         form.pack(fill=tk.X)
 
         self.bind_name_var = tk.StringVar()
@@ -299,13 +365,161 @@ class AddTextDialog:
         mode_combo.bind('<<ComboboxSelected>>', _on_mode_change)
         _on_mode_change()
 
-        controls = ttk.Frame(parent)
+        controls = ttk.Frame(value_tab)
         controls.pack(fill=tk.X, pady=(8, 4))
         ttk.Button(controls, text=self._t("ui.buttons.add_binding", "Add Binding"), command=self._add_binding).pack(side=tk.LEFT, padx=(0, 4))
         ttk.Button(controls, text=self._t("ui.buttons.remove_binding", "Remove Binding"), command=self._remove_binding).pack(side=tk.LEFT)
 
+        self._build_table_binding_editor(table_tab)
+
         self.bindings_list = tk.Listbox(parent, height=10)
         self.bindings_list.pack(fill=tk.BOTH, expand=True)
+
+    def _build_table_binding_editor(self, parent):
+        """Build quick controls for adding text-table bindings."""
+        frame = ttk.Frame(parent)
+        frame.pack(fill=tk.X, pady=(4, 2))
+        frame.columnconfigure(1, weight=1)
+
+        self.tbl_name_var = tk.StringVar()
+        self.tbl_dict_mode_var = tk.StringVar(value='values')
+        self.tbl_row_count_mode_var = tk.StringVar(value='max')
+        self.tbl_missing_var = tk.StringVar(value='-')
+        self.tbl_col_header_var = tk.StringVar()
+        self.tbl_col_source_var = tk.StringVar()
+        self.tbl_columns: List[Dict[str, Any]] = []
+
+        available_sources = get_available_data_sources(self.outputs)
+
+        ttk.Label(frame, text=self._t("ui.labels.placeholder_name", "Placeholder Name")).grid(row=0, column=0, sticky='w', padx=(0, 6), pady=2)
+        ttk.Entry(frame, textvariable=self.tbl_name_var).grid(row=0, column=1, sticky='ew', pady=2)
+
+        columns_frame = ttk.LabelFrame(frame, text=self._t("ui.labels.columns", "Columns"), padding=6)
+        columns_frame.grid(row=1, column=0, columnspan=2, sticky='ew', pady=(4, 6))
+        columns_frame.columnconfigure(1, weight=1)
+        columns_frame.columnconfigure(2, weight=0)
+
+        ttk.Label(columns_frame, text=self._t("ui.labels.column_name", "Column Name:")).grid(row=0, column=0, sticky='w', padx=(0, 6), pady=2)
+        ttk.Entry(columns_frame, textvariable=self.tbl_col_header_var).grid(row=0, column=1, sticky='ew', pady=2)
+        col_name_hint = tk.Label(columns_frame, text="ℹ", font=("Arial", 9), fg="#666666", cursor="question_arrow")
+        col_name_hint.grid(row=0, column=2, sticky='w', padx=(6, 0), pady=2)
+        _Tooltip(
+            col_name_hint,
+            self._t("ui.messages.table_binding_hint", "Columns are paired by position: header[i] with source[i]. Leave header empty to use source names.")
+        )
+
+        ttk.Label(columns_frame, text=self._t("ui.labels.input_output_source", "Input/Output Source")).grid(row=1, column=0, sticky='w', padx=(0, 6), pady=2)
+        self.tbl_source_combo = ttk.Combobox(columns_frame, textvariable=self.tbl_col_source_var, values=available_sources, state='readonly')
+        self.tbl_source_combo.grid(row=1, column=1, sticky='ew', pady=2)
+        if available_sources:
+            self.tbl_source_combo.current(0)
+
+        col_btn_row = ttk.Frame(columns_frame)
+        col_btn_row.grid(row=2, column=0, columnspan=2, sticky='w', pady=(4, 2))
+        add_col_btn = ttk.Button(col_btn_row, text="➕", width=3, command=self._add_table_column)
+        add_col_btn.pack(side=tk.LEFT, padx=(0, 3))
+        _Tooltip(add_col_btn, self._t("ui.buttons.add_column", "Add Column"))
+
+        remove_col_btn = ttk.Button(col_btn_row, text="✕", width=3, command=self._remove_table_column)
+        remove_col_btn.pack(side=tk.LEFT, padx=(0, 3))
+        _Tooltip(remove_col_btn, self._t("ui.buttons.remove_selected", "Remove Selected"))
+
+        clear_col_btn = ttk.Button(col_btn_row, text=self._t("ui.buttons.clear", "Clear"), command=self._clear_table_columns)
+        clear_col_btn.pack(side=tk.LEFT)
+
+        self.tbl_columns_listbox = tk.Listbox(columns_frame, height=5)
+        self.tbl_columns_listbox.grid(row=3, column=0, columnspan=2, sticky='ew', pady=(4, 0))
+
+        ttk.Label(frame, text=self._t("ui.labels.dict_mode", "Dict mode")).grid(row=4, column=0, sticky='w', padx=(0, 6), pady=2)
+        ttk.Combobox(frame, textvariable=self.tbl_dict_mode_var, values=['values', 'keys', 'items'], state='readonly').grid(row=4, column=1, sticky='w', pady=2)
+
+        ttk.Label(frame, text=self._t("ui.labels.row_count_mode", "Row count mode")).grid(row=5, column=0, sticky='w', padx=(0, 6), pady=2)
+        ttk.Combobox(frame, textvariable=self.tbl_row_count_mode_var, values=['max', 'min'], state='readonly').grid(row=5, column=1, sticky='w', pady=2)
+
+        ttk.Label(frame, text=self._t("ui.labels.missing_value", "Missing value")).grid(row=6, column=0, sticky='w', padx=(0, 6), pady=2)
+        ttk.Entry(frame, textvariable=self.tbl_missing_var).grid(row=6, column=1, sticky='ew', pady=2)
+
+        missing_hint_label = tk.Label(frame, text="ℹ", font=("Arial", 9), fg="#666666", cursor="question_arrow")
+        missing_hint_label.grid(row=6, column=2, sticky='w', padx=(6, 0), pady=2)
+        _Tooltip(
+            missing_hint_label,
+            self._t("ui.messages.missing_value_hint", "Used only when columns have different lengths and row_count_mode is 'max'.")
+        )
+
+        btn_row = ttk.Frame(parent)
+        btn_row.pack(fill=tk.X, pady=(0, 2))
+        ttk.Button(btn_row, text=self._t("ui.buttons.add_table_binding", "Add Table Binding"), command=self._add_table_binding).pack(side=tk.LEFT)
+
+    def _add_table_column(self):
+        source = self.tbl_col_source_var.get().strip()
+        if not source:
+            self._notify(self._t("ui.messages.binding_source_required", "Input/Output source is required"), level="warning")
+            return
+
+        header = self.tbl_col_header_var.get().strip() or source
+        self.tbl_columns.append({'header': header, 'data_source': source})
+        self.tbl_columns_listbox.insert(tk.END, f"{header} <- {source}")
+
+        self.tbl_col_header_var.set('')
+
+    def _remove_table_column(self):
+        selection = self.tbl_columns_listbox.curselection()
+        if not selection:
+            return
+        idx = selection[0]
+        del self.tbl_columns[idx]
+        self.tbl_columns_listbox.delete(idx)
+
+    def _clear_table_columns(self):
+        self.tbl_columns.clear()
+        self.tbl_columns_listbox.delete(0, tk.END)
+
+    def _add_table_binding(self):
+        name = self.tbl_name_var.get().strip()
+        dict_mode = self.tbl_dict_mode_var.get().strip() or 'values'
+        row_count_mode = self.tbl_row_count_mode_var.get().strip() or 'max'
+        missing_value = self.tbl_missing_var.get()
+
+        if not name:
+            self._notify(self._t("ui.messages.binding_name_required", "Placeholder name is required"), level="warning")
+            return
+        if any(item.get('name') == name for item in self.bindings):
+            self._notify(self._t("ui.messages.binding_name_unique", "Placeholder name must be unique"), level="warning")
+            return
+        if not self.tbl_columns:
+            self._notify(self._t("ui.messages.binding_source_required", "Input/Output source is required"), level="warning")
+            return
+
+        columns = []
+        for column_cfg in self.tbl_columns:
+            source = str(column_cfg.get('data_source', '')).strip()
+            if not source:
+                continue
+            header = str(column_cfg.get('header', '')).strip() or source
+            columns.append({
+                'header': header,
+                'data_source': source,
+                'dict_mode': dict_mode
+            })
+
+        if not columns:
+            self._notify(self._t("ui.messages.binding_source_required", "Input/Output source is required"), level="warning")
+            return
+
+        binding = {
+            'name': name,
+            'table': {
+                'columns': columns,
+                'column_separator': '\t',
+                'row_separator': '\n',
+                'missing_value': missing_value,
+                'include_header': True,
+                'row_count_mode': row_count_mode
+            }
+        }
+
+        self.bindings.append(binding)
+        self.bindings_list.insert(tk.END, f"{name} <- [table: {len(columns)} columns]")
 
     def _add_binding(self):
         name = self.bind_name_var.get().strip()

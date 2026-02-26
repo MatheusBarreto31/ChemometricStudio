@@ -7125,6 +7125,31 @@ class ChemometricsGUI:
 
         return str(value)
 
+    def _coerce_text_binding_sequence(self, value: Any, dict_mode: str = 'values', value_format: str = '') -> List[str]:
+        """Normalize value to a 1D list of formatted strings for text-table rendering."""
+        if value is None:
+            return []
+
+        if isinstance(value, np.ndarray):
+            try:
+                flat_values = value.reshape(-1).tolist()
+            except Exception:
+                flat_values = [value]
+        elif isinstance(value, (list, tuple)):
+            flat_values = list(value)
+        elif isinstance(value, dict):
+            mode = str(dict_mode or 'values').strip().lower()
+            if mode == 'keys':
+                flat_values = list(value.keys())
+            elif mode == 'items':
+                flat_values = [f"{k}: {v}" for k, v in value.items()]
+            else:
+                flat_values = list(value.values())
+        else:
+            flat_values = [value]
+
+        return [self._format_text_binding_atom(item, value_format=value_format) for item in flat_values]
+
     def _extract_text_binding_value(self, outputs: dict, binding: dict) -> Any:
         """Resolve one text binding from configured source + selector."""
         if not isinstance(binding, dict):
@@ -7145,6 +7170,8 @@ class ChemometricsGUI:
         if not isinstance(value, np.ndarray):
             if isinstance(value, (list, tuple)):
                 array_value = np.array(value, dtype=object)
+            elif isinstance(value, dict):
+                array_value = np.array(list(value.values()), dtype=object)
             else:
                 array_value = None
         else:
@@ -7173,6 +7200,85 @@ class ChemometricsGUI:
 
         return value
 
+    def _resolve_text_table_binding(self, outputs: dict, binding: dict) -> str:
+        """Resolve advanced table binding into text rows.
+
+        Expected binding shape:
+        {
+            "name": "table_name",
+            "table": {
+                "columns": [
+                    {"header": "A", "data_source": "vec_a"},
+                    {"header": "B", "data_source": "vec_b"},
+                    {"header": "Info", "data_source": "my_dict", "dict_mode": "items"}
+                ],
+                "column_separator": "\t",
+                "row_separator": "\n",
+                "missing_value": "",
+                "include_header": true,
+                "row_count_mode": "max"
+            }
+        }
+        """
+        table_cfg = binding.get('table', {}) if isinstance(binding.get('table', {}), dict) else {}
+        columns_cfg = table_cfg.get('columns', [])
+        if not isinstance(columns_cfg, list) or not columns_cfg:
+            return ''
+
+        column_separator = str(table_cfg.get('column_separator', '\t'))
+        row_separator = str(table_cfg.get('row_separator', '\n'))
+        missing_value = str(table_cfg.get('missing_value', ''))
+        include_header = bool(table_cfg.get('include_header', True))
+        row_count_mode = str(table_cfg.get('row_count_mode', 'max')).strip().lower() or 'max'
+
+        headers: List[str] = []
+        columns_data: List[List[str]] = []
+
+        for idx, col_cfg in enumerate(columns_cfg):
+            if not isinstance(col_cfg, dict):
+                continue
+
+            data_source = col_cfg.get('data_source')
+            nested_key = col_cfg.get('nested_key')
+            selector = col_cfg.get('selector', {'mode': 'value'})
+            dict_mode = str(col_cfg.get('dict_mode', 'values'))
+            value_format = str(col_cfg.get('value_format', ''))
+
+            header = col_cfg.get('header')
+            if header is None or str(header).strip() == '':
+                header = str(col_cfg.get('name', data_source if data_source is not None else f"C{idx + 1}"))
+            headers.append(str(header))
+
+            temp_binding = {
+                'data_source': data_source,
+                'nested_key': nested_key,
+                'selector': selector if isinstance(selector, dict) else {'mode': 'value'}
+            }
+            extracted = self._extract_text_binding_value(outputs, temp_binding)
+            sequence = self._coerce_text_binding_sequence(extracted, dict_mode=dict_mode, value_format=value_format)
+            columns_data.append(sequence)
+
+        if not columns_data:
+            return ''
+
+        lengths = [len(col) for col in columns_data]
+        if row_count_mode == 'min':
+            row_count = min(lengths) if lengths else 0
+        else:
+            row_count = max(lengths) if lengths else 0
+
+        lines: List[str] = []
+        if include_header and headers:
+            lines.append(column_separator.join(headers))
+
+        for row_idx in range(row_count):
+            row_values: List[str] = []
+            for col in columns_data:
+                row_values.append(col[row_idx] if row_idx < len(col) else missing_value)
+            lines.append(column_separator.join(row_values))
+
+        return row_separator.join(lines)
+
     def _resolve_text_section_content(self, outputs: dict, config: dict) -> str:
         """Resolve text template using configured bindings and extracted data."""
         if not isinstance(config, dict):
@@ -7192,6 +7298,10 @@ class ChemometricsGUI:
                 continue
             name = str(binding.get('name', '')).strip()
             if not name:
+                continue
+
+            if isinstance(binding.get('table', None), dict):
+                values_map[name] = self._resolve_text_table_binding(outputs, binding)
                 continue
 
             extracted = self._extract_text_binding_value(outputs, binding)
@@ -7244,6 +7354,7 @@ class ChemometricsGUI:
 
             text_widget = tk.Text(parent, wrap=tk.WORD, relief=tk.FLAT, borderwidth=0)
             text_widget.pack(fill=tk.BOTH, expand=True)
+            text_widget.configure(font="TkFixedFont")
             text_widget.insert('1.0', resolved_text)
             text_widget.configure(state=tk.DISABLED)
         except Exception as e:
