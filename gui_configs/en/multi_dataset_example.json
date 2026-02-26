@@ -14,6 +14,27 @@
             "config": {
               "graph_type": "scatter",
               "title": "PCA Scores: Calibration vs Validation by Class",
+              "legend_show_mode": "auto",
+              "legend_elements": {
+                "datasets": true,
+                "color": true,
+                "marker": false,
+                "fill": false,
+                "edge": false
+              },
+              "legend_position": "auto",
+              "legend_location": "inside",
+              "class_layer_order": ["color", "marker", "edge"],
+              "class_layer_map": {
+                "color": 1,
+                "marker": 2,
+                "edge": 3
+              },
+              "class_layer_nature": {
+                "1": "discrete",
+                "2": "discrete",
+                "3": "continuous"
+              },
               "datasets": [
                 {
                   "x_axis": {"data_source": "model_scores"},

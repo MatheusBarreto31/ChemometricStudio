@@ -107,7 +107,17 @@ class AddGraphDialog:
             'y_axis': {},
             'z_axis': {},
             'title': 'New Graph',
-            'data_slicing': []
+            'data_slicing': [],
+            'legend_show_mode': 'auto',
+            'legend_elements': {
+                'datasets': True,
+                'color': True,
+                'marker': False,
+                'fill': False,
+                'edge': False,
+            },
+            'legend_position': 'auto',
+            'legend_location': 'inside',
         }
         
         # Multi-dataset configuration

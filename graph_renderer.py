@@ -423,6 +423,76 @@ def _render_point_labels(ax, x_data, y_data, labels, use_3d: bool = False, z_dat
             )
 
 
+def _normalize_scatter_legend_show_mode(config: dict) -> str:
+    """Normalize scatter legend display mode: auto, yes, no."""
+    mode = str(config.get('legend_show_mode', '')).strip().lower()
+    if mode in {'auto', 'yes', 'no'}:
+        return mode
+
+    legacy_value = config.get('show_legend')
+    if isinstance(legacy_value, bool):
+        return 'yes' if legacy_value else 'no'
+
+    return 'auto'
+
+
+def _normalize_scatter_legend_elements(config: dict) -> Dict[str, bool]:
+    """Normalize per-element legend toggle config with defaults."""
+    defaults = {
+        'datasets': True,
+        'color': True,
+        'marker': False,
+        'fill': False,
+        'edge': False,
+    }
+    raw = config.get('legend_elements', {})
+    if isinstance(raw, dict):
+        for key in list(defaults.keys()):
+            if key in raw:
+                defaults[key] = bool(raw.get(key))
+    return defaults
+
+
+def _get_scatter_legend_placement(config: dict) -> Dict[str, Any]:
+    """Return Matplotlib legend placement kwargs for scatter legend config."""
+    position = str(config.get('legend_position', 'auto')).strip().lower()
+    if position not in {'auto', 'nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'}:
+        position = 'auto'
+
+    location = str(config.get('legend_location', 'inside')).strip().lower()
+    if location not in {'inside', 'outside'}:
+        location = 'inside'
+
+    inside_loc_map = {
+        'auto': 'best',
+        'nw': 'upper left',
+        'n': 'upper center',
+        'ne': 'upper right',
+        'e': 'center right',
+        'se': 'lower right',
+        's': 'lower center',
+        'sw': 'lower left',
+        'w': 'center left',
+    }
+
+    if location == 'inside':
+        return {'loc': inside_loc_map.get(position, 'best')}
+
+    outside_map = {
+        'auto': ('upper left', (1.02, 1.0)),
+        'nw': ('upper right', (-0.02, 1.0)),
+        'n': ('lower center', (0.5, 1.02)),
+        'ne': ('upper left', (1.02, 1.0)),
+        'e': ('center left', (1.02, 0.5)),
+        'se': ('lower left', (1.02, 0.0)),
+        's': ('upper center', (0.5, -0.02)),
+        'sw': ('lower right', (-0.02, 0.0)),
+        'w': ('center right', (-0.02, 0.5)),
+    }
+    loc, anchor = outside_map.get(position, outside_map['auto'])
+    return {'loc': loc, 'bbox_to_anchor': anchor, 'borderaxespad': 0.0}
+
+
 def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: dict, 
                                  use_3d: bool, qualitative_cmap: str,
                                  sample_labels_by_dataset: Optional[Dict[str, List[str]]] = None) -> None:
@@ -543,7 +613,10 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
     marker_cycle = ['o', 's', '^', 'D', 'v', 'P', 'X', '*', '<', '>']
     fill_style_cycle = ['full', 'none', 'left', 'right', 'bottom', 'top']
     dataset_legend_items = []
-    class_legend_mapping: Dict[str, Any] = {}
+    color_legend_mapping: Dict[str, Any] = {}
+    marker_legend_mapping: Dict[str, str] = {}
+    fill_legend_mapping: Dict[str, str] = {}
+    edge_legend_mapping: Dict[str, Any] = {}
 
     color_cmap_cont = str(config.get('class_color_cmap_continuous', config.get('cmap', 'viridis')))
     edge_cmap_cont = str(config.get('class_edge_cmap_continuous', config.get('cmap', 'viridis')))
@@ -644,6 +717,8 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
                 unique_markers = np.unique(marker_values)
                 marker_map = {str(v): marker_cycle[i % len(marker_cycle)] for i, v in enumerate(unique_markers)}
                 marker_vector = np.asarray([marker_map[str(v)] for v in marker_values], dtype=object)
+                for key, marker_symbol in marker_map.items():
+                    marker_legend_mapping[key] = str(marker_symbol)
 
             fillstyle_vector = np.asarray([
                 dataset_fillstyle if is_multi_dataset else 'full'
@@ -665,6 +740,8 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
                     unique_fill = np.unique(fill_values)
                     fill_map = {str(v): fill_style_cycle[i % len(fill_style_cycle)] for i, v in enumerate(unique_fill)}
                     fillstyle_vector = np.asarray([fill_map[str(v)] for v in fill_values], dtype=object)
+                    for key, fillstyle_name in fill_map.items():
+                        fill_legend_mapping[key] = str(fillstyle_name)
 
             if 'color' in aspect_layer_values:
                 color_values = np.asarray(aspect_layer_values['color'], dtype=object)
@@ -674,7 +751,7 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
                 else:
                     face_rgba, discrete_map = _discrete_color_map(color_values, color_cmap_qual)
                     for key, rgba in discrete_map.items():
-                        class_legend_mapping[key] = rgba
+                        color_legend_mapping[key] = rgba
             else:
                 if fallback_color:
                     fallback_rgba = np.asarray(mcolors.to_rgba(fallback_color), dtype=float)
@@ -688,7 +765,9 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
                 if use_cont_edge:
                     edge_rgba = _continuous_color_map(edge_values, edge_cmap_cont)
                 else:
-                    edge_rgba, _ = _discrete_color_map(edge_values, edge_cmap_qual)
+                    edge_rgba, edge_discrete_map = _discrete_color_map(edge_values, edge_cmap_qual)
+                    for key, rgba in edge_discrete_map.items():
+                        edge_legend_mapping[key] = rgba
             else:
                 edge_rgba = np.copy(face_rgba)
                 edge_rgba[:, 3] = np.maximum(edge_rgba[:, 3], 0.85)
@@ -878,40 +957,84 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
     if use_3d:
         ax.set_zlabel(config.get('z_axis', {}).get('label', 'Z'))
     
-    # Build custom legend with two groups: Datasets and Classes
+    # Build custom legend with configurable groups: datasets and class-layer aspects
+    legend_show_mode = _normalize_scatter_legend_show_mode(config)
+    legend_elements = _normalize_scatter_legend_elements(config)
+
     legend_handles = []
     legend_labels = []
-    
-    # Add dataset entries only if multiple datasets (single dataset is implicit)
-    if len(dataset_legend_items) > 1:
-        # Add section header or separator (using an invisible entry)
-        if class_legend_mapping:  # Only add if we also have classes
-            legend_handles.append(Line2D([0], [0], marker='', color='none', linewidth=0))
-            legend_labels.append('Datasets:')
-        
-        for dataset_label, marker, color, fillstyle in dataset_legend_items:
-            handle = Line2D([0], [0], marker=marker, color='none', markerfacecolor=color, 
-                           markeredgecolor='gray', markersize=6, alpha=0.6, linewidth=0,
-                           fillstyle=fillstyle)
-            legend_handles.append(handle)
-            legend_labels.append(dataset_label)
-    
-    # Add class entries (only if we have classes)
-    if class_legend_mapping:
-        # Add section header
-        if dataset_legend_items:  # Only add if we also have datasets
-            legend_handles.append(Line2D([0], [0], marker='', color='none', linewidth=0))
-            legend_labels.append('Classes:')
 
-        for cls, color in class_legend_mapping.items():
-            handle = Line2D([0], [0], marker='o', color='none', markerfacecolor=color, 
+    legend_groups: List[Tuple[str, List[Tuple[Any, str]]]] = []
+
+    if legend_elements.get('datasets', True) and len(dataset_legend_items) > 1:
+        dataset_entries: List[Tuple[Any, str]] = []
+        for dataset_label, marker, color, fillstyle in dataset_legend_items:
+            handle = Line2D(
+                [0],
+                [0],
+                marker=marker,
+                color='none',
+                markerfacecolor=color,
+                markeredgecolor='gray',
+                markersize=6,
+                alpha=0.6,
+                linewidth=0,
+                fillstyle=fillstyle,
+            )
+            dataset_entries.append((handle, str(dataset_label)))
+        if dataset_entries:
+            legend_groups.append(('Datasets:', dataset_entries))
+
+    if legend_elements.get('color', True) and color_legend_mapping:
+        color_entries: List[Tuple[Any, str]] = []
+        for cls, color in color_legend_mapping.items():
+            handle = Line2D([0], [0], marker='o', color='none', markerfacecolor=color,
                            markeredgecolor='darkgray', markersize=6, alpha=0.6, linewidth=0)
+            color_entries.append((handle, str(cls)))
+        if color_entries:
+            legend_groups.append(('Class Color:', color_entries))
+
+    if legend_elements.get('marker', False) and marker_legend_mapping:
+        marker_entries: List[Tuple[Any, str]] = []
+        for cls, marker_symbol in marker_legend_mapping.items():
+            handle = Line2D([0], [0], marker=str(marker_symbol), color='none', markerfacecolor='gray',
+                           markeredgecolor='gray', markersize=6, alpha=0.7, linewidth=0)
+            marker_entries.append((handle, str(cls)))
+        if marker_entries:
+            legend_groups.append(('Class Marker:', marker_entries))
+
+    if legend_elements.get('fill', False) and fill_legend_mapping:
+        fill_entries: List[Tuple[Any, str]] = []
+        for cls, fillstyle_name in fill_legend_mapping.items():
+            handle = Line2D([0], [0], marker='o', color='none', markerfacecolor='gray',
+                           markeredgecolor='gray', markersize=6, alpha=0.7, linewidth=0,
+                           fillstyle=str(fillstyle_name))
+            fill_entries.append((handle, str(cls)))
+        if fill_entries:
+            legend_groups.append(('Class Fill:', fill_entries))
+
+    if legend_elements.get('edge', False) and edge_legend_mapping:
+        edge_entries: List[Tuple[Any, str]] = []
+        for cls, edge_color in edge_legend_mapping.items():
+            handle = Line2D([0], [0], marker='o', color='none', markerfacecolor='white',
+                           markeredgecolor=edge_color, markersize=6, alpha=0.8, linewidth=0,
+                           markeredgewidth=1.6)
+            edge_entries.append((handle, str(cls)))
+        if edge_entries:
+            legend_groups.append(('Class Edge:', edge_entries))
+
+    show_group_titles = len(legend_groups) > 1
+    for title, entries in legend_groups:
+        if show_group_titles:
+            legend_handles.append(Line2D([0], [0], marker='', color='none', linewidth=0))
+            legend_labels.append(title)
+        for handle, label in entries:
             legend_handles.append(handle)
-            legend_labels.append(str(cls))
-    
-    # Add legend if we have entries to show
-    if legend_handles:
-        ax.legend(legend_handles, legend_labels, loc='best', fontsize='small')
+            legend_labels.append(label)
+
+    if legend_show_mode != 'no' and legend_handles:
+        legend_place_kwargs = _get_scatter_legend_placement(config)
+        ax.legend(legend_handles, legend_labels, fontsize='small', **legend_place_kwargs)
 
     if not use_3d and _is_confidence_ellipses_enabled(config) and len(datasets) > 0:
         confidence = _parse_confidence_level(config)
@@ -929,7 +1052,7 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
                     class_mask = first_class_data == cls
                     if not np.any(class_mask):
                         continue
-                    class_color = class_legend_mapping.get(str(cls), first_color)
+                    class_color = color_legend_mapping.get(str(cls), first_color)
                     _draw_confidence_ellipse(ax, first_x[class_mask], first_y[class_mask], class_color, confidence)
             else:
                 _draw_confidence_ellipse(ax, first_x, first_y, first_color, confidence)

@@ -1101,6 +1101,188 @@ class ChemometricsGUI:
                 item_count += 1
 
         if str(graph_type).strip().lower() == 'scatter':
+            legend_menu = tk.Menu(menu, tearoff=0)
+
+            default_suffix = " " + self.language_manager.translate('menu.default_tag', '(default)')
+
+            raw_show_mode = str(config.get('legend_show_mode', '')).strip().lower()
+            if raw_show_mode not in {'auto', 'yes', 'no'}:
+                legacy_show_legend = config.get('show_legend')
+                if isinstance(legacy_show_legend, bool):
+                    raw_show_mode = 'yes' if legacy_show_legend else 'no'
+                else:
+                    raw_show_mode = 'auto'
+
+            show_mode_var = tk.StringVar(value=raw_show_mode)
+            _keep_var_ref(show_mode_var)
+
+            def _set_legend_show_mode(value: str) -> None:
+                self._update_graph_section_config_option(
+                    instance_alias,
+                    section_id,
+                    'legend_show_mode',
+                    str(value),
+                    popup_refresh_callback=popup_refresh_callback,
+                    refresh_analysis=True
+                )
+
+            show_menu = tk.Menu(legend_menu, tearoff=0)
+            show_menu.add_radiobutton(
+                label=self.language_manager.translate('menu.graph_context.legend_show_auto', 'Auto') + default_suffix,
+                variable=show_mode_var,
+                value='auto',
+                command=lambda: _set_legend_show_mode('auto')
+            )
+            show_menu.add_radiobutton(
+                label=self.language_manager.translate('menu.graph_context.legend_show_yes', 'Yes'),
+                variable=show_mode_var,
+                value='yes',
+                command=lambda: _set_legend_show_mode('yes')
+            )
+            show_menu.add_radiobutton(
+                label=self.language_manager.translate('menu.graph_context.legend_show_no', 'No'),
+                variable=show_mode_var,
+                value='no',
+                command=lambda: _set_legend_show_mode('no')
+            )
+            legend_menu.add_cascade(
+                label=self.language_manager.translate('menu.graph_context.legend_show', 'Show Legend'),
+                menu=show_menu
+            )
+
+            legend_elements_cfg = config.get('legend_elements', {}) if isinstance(config.get('legend_elements', {}), dict) else {}
+            legend_elements_state = dict(legend_elements_cfg)
+
+            def _legend_element_default(key: str) -> bool:
+                return key in {'datasets', 'color'}
+
+            def _set_legend_element(element_key: str, enabled: bool) -> None:
+                legend_elements_state[element_key] = bool(enabled)
+                self._update_graph_section_config_option(
+                    instance_alias,
+                    section_id,
+                    'legend_elements',
+                    dict(legend_elements_state),
+                    popup_refresh_callback=popup_refresh_callback,
+                    refresh_analysis=True
+                )
+
+            legend_elements_menu = tk.Menu(legend_menu, tearoff=0)
+            legend_element_specs = [
+                ('datasets', 'menu.graph_context.legend_element_datasets', 'Datasets'),
+                ('color', 'menu.graph_context.legend_element_color', 'Color'),
+                ('marker', 'menu.graph_context.legend_element_marker', 'Marker'),
+                ('fill', 'menu.graph_context.legend_element_fill', 'Fill Type'),
+                ('edge', 'menu.graph_context.legend_element_edge', 'Edge Color'),
+            ]
+
+            for element_key, label_key, fallback in legend_element_specs:
+                current_enabled = bool(legend_elements_cfg.get(element_key, _legend_element_default(element_key)))
+                element_var = tk.BooleanVar(value=current_enabled)
+                _keep_var_ref(element_var)
+                legend_elements_menu.add_checkbutton(
+                    label=self.language_manager.translate(label_key, fallback),
+                    variable=element_var,
+                    onvalue=True,
+                    offvalue=False,
+                    command=lambda k=element_key, v=element_var: _set_legend_element(k, bool(v.get()))
+                )
+
+            legend_menu.add_cascade(
+                label=self.language_manager.translate('menu.graph_context.legend_elements', 'Elements'),
+                menu=legend_elements_menu
+            )
+
+            raw_position = str(config.get('legend_position', 'auto')).strip().lower()
+            if raw_position not in {'auto', 'nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'}:
+                raw_position = 'auto'
+
+            raw_location = str(config.get('legend_location', 'inside')).strip().lower()
+            if raw_location not in {'inside', 'outside'}:
+                raw_location = 'inside'
+
+            legend_position_root_menu = tk.Menu(legend_menu, tearoff=0)
+            legend_position_menu = tk.Menu(legend_position_root_menu, tearoff=0)
+            legend_location_menu = tk.Menu(legend_position_root_menu, tearoff=0)
+
+            legend_position_var = tk.StringVar(value=raw_position)
+            legend_location_var = tk.StringVar(value=raw_location)
+            _keep_var_ref(legend_position_var)
+            _keep_var_ref(legend_location_var)
+
+            def _set_legend_position(value: str) -> None:
+                self._update_graph_section_config_option(
+                    instance_alias,
+                    section_id,
+                    'legend_position',
+                    str(value),
+                    popup_refresh_callback=popup_refresh_callback,
+                    refresh_analysis=True
+                )
+
+            def _set_legend_location(value: str) -> None:
+                self._update_graph_section_config_option(
+                    instance_alias,
+                    section_id,
+                    'legend_location',
+                    str(value),
+                    popup_refresh_callback=popup_refresh_callback,
+                    refresh_analysis=True
+                )
+
+            legend_position_specs = [
+                ('auto', self.language_manager.translate('menu.graph_context.legend_show_auto', 'Auto') + default_suffix),
+                ('nw', 'NW'),
+                ('n', 'N'),
+                ('ne', 'NE'),
+                ('e', 'E'),
+                ('se', 'SE'),
+                ('s', 'S'),
+                ('sw', 'SW'),
+                ('w', 'W'),
+            ]
+
+            for position_value, position_label in legend_position_specs:
+                legend_position_menu.add_radiobutton(
+                    label=position_label,
+                    variable=legend_position_var,
+                    value=position_value,
+                    command=lambda v=position_value: _set_legend_position(v)
+                )
+
+            legend_location_menu.add_radiobutton(
+                label=self.language_manager.translate('menu.graph_context.legend_location_inside', 'Inside') + default_suffix,
+                variable=legend_location_var,
+                value='inside',
+                command=lambda: _set_legend_location('inside')
+            )
+            legend_location_menu.add_radiobutton(
+                label=self.language_manager.translate('menu.graph_context.legend_location_outside', 'Outside'),
+                variable=legend_location_var,
+                value='outside',
+                command=lambda: _set_legend_location('outside')
+            )
+
+            legend_position_root_menu.add_cascade(
+                label=self.language_manager.translate('menu.graph_context.legend_position_value', 'Position'),
+                menu=legend_position_menu
+            )
+            legend_position_root_menu.add_cascade(
+                label=self.language_manager.translate('menu.graph_context.legend_location', 'Location'),
+                menu=legend_location_menu
+            )
+
+            legend_menu.add_cascade(
+                label=self.language_manager.translate('menu.graph_context.legend_position_root', 'Position'),
+                menu=legend_position_root_menu
+            )
+
+            menu.add_cascade(
+                label=self.language_manager.translate('menu.graph_context.legend', 'Legend'),
+                menu=legend_menu
+            )
+            item_count += 1
+
             execution_results = self.analysis_data.get(instance_alias, {}).get('execution_results', {})
             outputs = self._get_execution_data_sources(execution_results, instance_alias) if isinstance(execution_results, dict) else {}
             datasets_cfg = config.get('datasets') if isinstance(config.get('datasets'), list) else None
@@ -3252,24 +3434,33 @@ class ChemometricsGUI:
         """Remove selected item from methodology."""
         idx = self._get_active_methodology_index()
         if idx is not None:
-            item_count = len(self.methodology_list)
-            if idx < 0 or idx >= item_count:
-                return
-
             instance_alias = self.methodology_list.pop(idx)
             self.function_base_aliases.pop(idx)
             
             # Remove config for this instance
             if instance_alias in self.function_configs:
                 del self.function_configs[instance_alias]
-
-            old_to_new_idx = {
-                old_idx: (old_idx - 1 if old_idx > idx else old_idx)
-                for old_idx in range(item_count)
-                if old_idx != idx
-            }
-            self._remap_routing_indices(old_to_new_idx)
-            self._recalculate_auto_routing()
+            
+            # Remove routing lines involving this index
+            keys_to_remove = [key for key in self.routing_lines.keys() 
+                            if isinstance(key, tuple) and (key[0] == idx or key[2] == idx)]
+            for key in keys_to_remove:
+                del self.routing_lines[key]
+            
+            # Update indices in remaining routing lines
+            for key in list(self.routing_lines.keys()):
+                if isinstance(key, tuple):
+                    src_idx, src_param, dst_idx, dst_param = key
+                    # Decrement indices that are > removed idx
+                    new_src_idx = src_idx - 1 if src_idx > idx else src_idx
+                    new_dst_idx = dst_idx - 1 if dst_idx > idx else dst_idx
+                    if new_src_idx != src_idx or new_dst_idx != dst_idx:
+                        old_key = key
+                        new_key = (new_src_idx, src_param, new_dst_idx, dst_param)
+                        self.routing_lines[new_key] = self.routing_lines.pop(old_key)
+                        # Update internal indices in the routing info
+                        self.routing_lines[new_key]["src_idx"] = new_src_idx
+                        self.routing_lines[new_key]["dst_idx"] = new_dst_idx
             
             self.selected_function_idx = None
             self._refresh_methodology_listbox()
@@ -12593,18 +12784,7 @@ Count:
                         continue
                     
                     # Special handling for file paths
-                    if key in (
-                        "data_path",
-                        "var_path",
-                        "smp_path",
-                        "y_path",
-                        "y_val_path",
-                        "X_val_path",
-                        "Y_val_path",
-                        "val_labels_path",
-                        "selection_file",
-                        "cdata_path",
-                    ):
+                    if key in ("data_path", "var_path", "smp_path", "y_path", "y_val_path", "X_val_path", "Y_val_path"):
                         # Check if value is already a list
                         if isinstance(value, list):
                             # Already a list - normalize the paths inside
@@ -12873,53 +13053,6 @@ Count:
             metadata["modified_time"] = None
 
         return metadata
-
-    def _looks_like_file_parameter(self, param_name: str) -> bool:
-        """Heuristically determine whether a parameter likely represents file path input."""
-        key = str(param_name or "").strip().lower()
-        if not key:
-            return False
-        if key in {"source_metadata_overrides", "file_size_bytes", "created_time", "modified_time"}:
-            return False
-        return (
-            key == "path"
-            or key.endswith("_path")
-            or key.endswith("_paths")
-            or key.endswith("_file")
-            or key.endswith("_files")
-            or "path" in key
-        )
-
-    def _get_file_parameter_candidates(self, base_alias: str, params: Dict[str, Any]) -> Set[str]:
-        """Collect parameter names that may contain file paths for packaging."""
-        candidates: Set[str] = set(self._get_path_parameters(base_alias))
-        for key in params.keys():
-            if self._looks_like_file_parameter(key):
-                candidates.add(key)
-        return candidates
-
-    def _package_model_param_paths(
-        self,
-        value: Any,
-        files_to_copy: List[Path],
-        packaged_source_metadata: Dict[str, Dict[str, Any]]
-    ) -> Any:
-        """Convert filesystem paths in parameter values to tempfiles references and collect files."""
-        if isinstance(value, list):
-            return [
-                self._package_model_param_paths(item, files_to_copy, packaged_source_metadata)
-                for item in value
-            ]
-
-        if isinstance(value, str) and value:
-            src_file = Path(value)
-            if src_file.exists() and src_file.is_file():
-                files_to_copy.append(src_file)
-                temp_ref = f"tempfiles/{src_file.name}"
-                packaged_source_metadata[temp_ref] = self._extract_source_file_metadata(src_file)
-                return temp_ref
-
-        return value
     
     def _save_model_with_data(self, dialog):
         """Save model with calibration data to .mdcd file."""
@@ -12958,24 +13091,59 @@ Count:
                     base_alias = func_entry.get('base_alias', '')
                     params = func_entry.get('parameters', {})
                     
-                    # Get file-like parameters for this function
-                    file_params = self._get_file_parameter_candidates(base_alias, params)
+                    # Get path parameters for this function using ispath flag
+                    path_params = self._get_path_parameters(base_alias)
                     
                     # For validation_data functions, remove all file paths
                     if 'validation_data' in base_alias:
-                        for param_name in list(file_params):
+                        for param_name in path_params:
                             if param_name in params:
                                 del params[param_name]
                         continue
                     
                     # Replace paths with tempfiles references
-                    for param_name in file_params:
+                    for param_name in path_params:
                         if param_name in params:
-                            params[param_name] = self._package_model_param_paths(
-                                params[param_name],
-                                files_to_copy,
-                                packaged_source_metadata
-                            )
+                            param_value = params[param_name]
+                            # Handle nested lists, simple lists, and string values
+                            if isinstance(param_value, list):
+                                new_paths = []
+                                for item in param_value:
+                                    if isinstance(item, list):
+                                        # Nested list (e.g., sample_paths: list of lists)
+                                        nested_paths = []
+                                        for file_path in item:
+                                            if isinstance(file_path, str) and file_path:
+                                                src_file = Path(file_path)
+                                                if src_file.exists():
+                                                    files_to_copy.append(src_file)
+                                                    temp_ref = f"tempfiles/{src_file.name}"
+                                                    nested_paths.append(temp_ref)
+                                                    packaged_source_metadata[temp_ref] = self._extract_source_file_metadata(src_file)
+                                                else:
+                                                    nested_paths.append(file_path)
+                                            else:
+                                                nested_paths.append(file_path)
+                                        new_paths.append(nested_paths)
+                                    elif isinstance(item, str) and item:
+                                        src_file = Path(item)
+                                        if src_file.exists():
+                                            files_to_copy.append(src_file)
+                                            temp_ref = f"tempfiles/{src_file.name}"
+                                            new_paths.append(temp_ref)
+                                            packaged_source_metadata[temp_ref] = self._extract_source_file_metadata(src_file)
+                                        else:
+                                            new_paths.append(item)
+                                    else:
+                                        new_paths.append(item)
+                                params[param_name] = new_paths
+                            elif isinstance(param_value, str) and param_value:
+                                src_file = Path(param_value)
+                                if src_file.exists():
+                                    files_to_copy.append(src_file)
+                                    temp_ref = f"tempfiles/{src_file.name}"
+                                    params[param_name] = temp_ref
+                                    packaged_source_metadata[temp_ref] = self._extract_source_file_metadata(src_file)
 
                 if packaged_source_metadata:
                     model_data["packaged_source_metadata"] = packaged_source_metadata
@@ -13048,7 +13216,7 @@ Count:
                     params = func_entry.get('parameters', {})
                     
                     # Get path parameters for this function using ispath flag
-                    path_params = self._get_file_parameter_candidates(base_alias, params)
+                    path_params = self._get_path_parameters(base_alias)
                     
                     # Remove only file paths marked with ispath:true
                     for param_name in path_params:
@@ -13118,17 +13286,52 @@ Count:
                     base_alias = func_entry.get('base_alias', '')
                     params = func_entry.get('parameters', {})
                     
-                    # Get file-like parameters for this function
-                    path_params = self._get_file_parameter_candidates(base_alias, params)
+                    # Get path parameters for this function using ispath flag
+                    path_params = self._get_path_parameters(base_alias)
                     
                     # Process each path parameter (copy files, rename paths to tempfiles/)
                     for param_name in path_params:
                         if param_name in params:
-                            params[param_name] = self._package_model_param_paths(
-                                params[param_name],
-                                files_to_copy,
-                                packaged_source_metadata
-                            )
+                            param_value = params[param_name]
+                            # Handle nested lists, simple lists, and string values
+                            if isinstance(param_value, list):
+                                new_paths = []
+                                for item in param_value:
+                                    if isinstance(item, list):
+                                        # Nested list (e.g., sample_paths: list of lists)
+                                        nested_paths = []
+                                        for file_path in item:
+                                            if isinstance(file_path, str) and file_path:
+                                                src_file = Path(file_path)
+                                                if src_file.exists():
+                                                    files_to_copy.append(src_file)
+                                                    temp_ref = f"tempfiles/{src_file.name}"
+                                                    nested_paths.append(temp_ref)
+                                                    packaged_source_metadata[temp_ref] = self._extract_source_file_metadata(src_file)
+                                                else:
+                                                    nested_paths.append(file_path)
+                                            else:
+                                                nested_paths.append(file_path)
+                                        new_paths.append(nested_paths)
+                                    elif isinstance(item, str) and item:
+                                        src_file = Path(item)
+                                        if src_file.exists():
+                                            files_to_copy.append(src_file)
+                                            temp_ref = f"tempfiles/{src_file.name}"
+                                            new_paths.append(temp_ref)
+                                            packaged_source_metadata[temp_ref] = self._extract_source_file_metadata(src_file)
+                                        else:
+                                            new_paths.append(item)
+                                    else:
+                                        new_paths.append(item)
+                                params[param_name] = new_paths
+                            elif isinstance(param_value, str) and param_value:
+                                src_file = Path(param_value)
+                                if src_file.exists():
+                                    files_to_copy.append(src_file)
+                                    temp_ref = f"tempfiles/{src_file.name}"
+                                    params[param_name] = temp_ref
+                                    packaged_source_metadata[temp_ref] = self._extract_source_file_metadata(src_file)
 
                 if packaged_source_metadata:
                     model_data["packaged_source_metadata"] = packaged_source_metadata
@@ -13262,23 +13465,6 @@ Count:
         # Load functions
         packaged_source_metadata = model_data.get('packaged_source_metadata', {})
 
-        # Build fallback mapping from original source paths -> extracted tempfiles paths.
-        # This keeps compatibility with packaged models that still persist original paths
-        # in parameters while carrying packaged_source_metadata + files payload.
-        original_to_temp_abs: Dict[str, str] = {}
-        for temp_ref, source_meta in packaged_source_metadata.items() if isinstance(packaged_source_metadata, dict) else []:
-            if not isinstance(temp_ref, str):
-                continue
-            normalized_ref = temp_ref.replace('\\', '/')
-            if not normalized_ref.startswith('tempfiles/'):
-                continue
-            temp_abs = str(self.tempfiles_dir / normalized_ref.replace('tempfiles/', ''))
-            if not isinstance(source_meta, dict):
-                continue
-            original_path = source_meta.get('file_path')
-            if isinstance(original_path, str) and original_path:
-                original_to_temp_abs[str(Path(original_path))] = temp_abs
-
         for func_entry in model_data.get('functions', []):
             instance_alias = func_entry.get('instance_alias', '')
             base_alias = func_entry.get('base_alias', '')
@@ -13290,27 +13476,13 @@ Count:
             
             # Convert tempfiles references to absolute paths and collect source metadata overrides
             def _convert_tempfile_paths(value: Any) -> Any:
-                if isinstance(value, str):
-                    normalized_value = value.replace('\\', '/')
-
-                    if normalized_value.startswith('tempfiles/'):
-                        temp_ref = normalized_value
-                        abs_path = str(self.tempfiles_dir / temp_ref.replace('tempfiles/', ''))
-                        source_meta = packaged_source_metadata.get(temp_ref)
-                        if isinstance(source_meta, dict):
-                            source_metadata_overrides[abs_path] = copy.deepcopy(source_meta)
-                        return abs_path
-
-                    fallback_abs_path = original_to_temp_abs.get(str(Path(value)))
-                    if fallback_abs_path:
-                        for _temp_ref, source_meta in packaged_source_metadata.items() if isinstance(packaged_source_metadata, dict) else []:
-                            if not isinstance(source_meta, dict):
-                                continue
-                            if str(source_meta.get('file_path', '')) == str(Path(value)):
-                                source_metadata_overrides[fallback_abs_path] = copy.deepcopy(source_meta)
-                                break
-                        return fallback_abs_path
-
+                if isinstance(value, str) and value.startswith('tempfiles/'):
+                    temp_ref = value.replace('\\', '/')
+                    abs_path = str(self.tempfiles_dir / temp_ref.replace('tempfiles/', ''))
+                    source_meta = packaged_source_metadata.get(temp_ref)
+                    if isinstance(source_meta, dict):
+                        source_metadata_overrides[abs_path] = copy.deepcopy(source_meta)
+                    return abs_path
                 if isinstance(value, list):
                     return [_convert_tempfile_paths(item) for item in value]
                 return value
