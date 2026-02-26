@@ -5,6 +5,7 @@ import os
 import csv
 import pandas as pd
 from datetime import datetime
+import re
 
 
 def _load_file(path: str, separator: Optional[str], num_headlines: int) -> np.ndarray:
@@ -46,23 +47,207 @@ def _load_file(path: str, separator: Optional[str], num_headlines: int) -> np.nd
             return np.loadtxt(path, delimiter=separator, skiprows=num_headlines)
 
 
-def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str, d_specs_dimensions: Optional[List[str]] = None,
+def _is_auto_detect_value(value: Any) -> bool:
+    """Return True when a user value indicates automatic detection."""
+    if value is None:
+        return True
+    text = str(value).strip().lower()
+    return text in {
+        "",
+        "auto detect",
+        "autodetect",
+        "auto",
+        "detecção automática",
+        "detecao automatica",
+        "automático",
+        "automatico"
+    }
+
+
+def _normalize_separator_choice(choice: Any) -> str:
+    """Normalize UI separator labels to internal tokens."""
+    normalized = str(choice).strip().lower()
+    mapping = {
+        "comma": "comma",
+        "vírgula": "comma",
+        "virgula": "comma",
+        "tabs": "tabs",
+        "tabulações": "tabs",
+        "tabulacoes": "tabs",
+        "spaces": "spaces",
+        "espaços": "spaces",
+        "espacos": "spaces",
+        "auto detect": "auto detect",
+        "autodetect": "auto detect",
+        "detecção automática": "auto detect",
+        "detecao automatica": "auto detect"
+    }
+    return mapping.get(normalized, normalized)
+
+
+def _detect_separator(data_paths: List[str]) -> str:
+    """Detect file separator among comma, tabs, or spaces using first available file."""
+    if not data_paths:
+        return "comma"
+
+    first_path = data_paths[0]
+    if str(first_path).lower().endswith((".xlsx", ".xls")):
+        return "comma"
+
+    try:
+        with open(first_path, 'r', encoding='utf-8', errors='ignore') as f:
+            for line in f:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                if '\t' in stripped:
+                    return "tabs"
+                if ',' in stripped:
+                    return "comma"
+                return "spaces"
+    except Exception:
+        return "comma"
+
+    return "comma"
+
+
+def _is_numeric_token(token: Any) -> bool:
+    """Check whether token can be interpreted as numeric."""
+    if token is None:
+        return False
+    text = str(token).strip()
+    if text == "":
+        return False
+    try:
+        float(text)
+        return True
+    except Exception:
+        return False
+
+
+def _detect_header_rows(path: str, separator: Optional[str]) -> int:
+    """Detect number of non-data header rows before first numeric row."""
+    if path.lower().endswith((".xlsx", ".xls")):
+        try:
+            df = pd.read_excel(path, header=None, nrows=60)
+        except Exception:
+            return 0
+
+        for idx, row in df.iterrows():
+            values = [v for v in row.tolist() if str(v).strip() != "" and str(v).strip().lower() != "nan"]
+            if not values:
+                continue
+            numeric_count = sum(1 for v in values if _is_numeric_token(v))
+            if numeric_count / max(len(values), 1) >= 0.6:
+                return int(idx)
+        return 0
+
+    split_pattern = None
+    if separator is None:
+        split_pattern = r'\s+'
+
+    try:
+        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+            for idx, line in enumerate(f):
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                if split_pattern is not None:
+                    tokens = [tok for tok in re.split(split_pattern, stripped) if tok]
+                elif separator == '\t':
+                    tokens = [tok.strip() for tok in stripped.split('\t') if tok.strip()]
+                elif separator == ',':
+                    tokens = [tok.strip() for tok in stripped.split(',') if tok.strip()]
+                else:
+                    tokens = [tok.strip() for tok in stripped.split() if tok.strip()]
+
+                if not tokens:
+                    continue
+                numeric_count = sum(1 for tok in tokens if _is_numeric_token(tok))
+                if numeric_count / max(len(tokens), 1) >= 0.6:
+                    return idx
+    except Exception:
+        return 0
+
+    return 0
+
+
+def _is_monotonic_numeric_column(values: np.ndarray) -> bool:
+    """Return True when numeric column is monotonic increasing/decreasing."""
+    if values is None:
+        return False
+    try:
+        arr = np.asarray(values, dtype=float)
+    except Exception:
+        return False
+    arr = arr[np.isfinite(arr)]
+    if arr.size < 3:
+        return False
+    diffs = np.diff(arr)
+    return bool(np.all(diffs >= 0) or np.all(diffs <= 0))
+
+
+def _infer_data_type(data_paths: List[str], separator: Optional[str], num_headlines: int, nway_flag: int) -> str:
+    """Infer a suitable data type based on first data file shape/content."""
+    if not data_paths:
+        return "x_matrix"
+
+    try:
+        data = _load_file(data_paths[0], separator, num_headlines)
+    except Exception:
+        return "x_matrix"
+
+    if data is None:
+        return "x_matrix"
+
+    arr = np.asarray(data)
+    if arr.ndim == 0:
+        return "x_vector"
+    if arr.ndim == 1:
+        return "x_vector"
+
+    rows, cols = arr.shape[0], arr.shape[1] if arr.shape[1:] else 1
+    if rows <= 1:
+        if cols <= 1:
+            return "x_vector"
+        if cols == 2:
+            return "xy_vector"
+        if cols == 3:
+            return "xyz_vector"
+        return "x_vector"
+
+    if cols <= 1:
+        return "x_vector"
+
+    first_col_monotonic = _is_monotonic_numeric_column(arr[:, 0])
+    if cols == 2 and first_col_monotonic:
+        return "xy_vector"
+    if nway_flag > 1 and cols == 3 and first_col_monotonic and _is_monotonic_numeric_column(arr[:, 1]):
+        return "xyz_vector"
+
+    if nway_flag == 2 and cols >= 4 and cols % 2 == 0 and first_col_monotonic:
+        return "xy_matrix"
+
+    return "x_matrix"
+
+
+def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "", d_specs_type: str = "Auto detect", d_specs_dimensions: Optional[List[str]] = None,
               data_path: Optional[List[str]] = None, nway_flag: int = 1, y_path: Optional[str] = None,
               var_path: Optional[List[str]] = None, smp_path: Optional[str] = None,
               transpose: bool = False, axis_info: Optional[List[str]] = None, reshape_order: str = 'F',
               dim_labels: Optional[List[str]] = None, scale_type: Optional[List[str]] = None,
               multi_file_per_sample: bool = False, num_samples: Optional[int] = None,
               cdata_path: Optional[str] = None,
-              source_metadata_overrides: Optional[Dict[str, Dict[str, Any]]] = None) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[List[List[str]]], List[str], Optional[List[np.ndarray]], List[str], Optional[List[str]], Dict[str, Dict[str, Any]]]:
+              source_metadata_overrides: Optional[Dict[str, Dict[str, Any]]] = None) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[List[List[str]]], List[str], Optional[List[np.ndarray]], List[str], Optional[List[Any]], Dict[str, Dict[str, Any]]]:
     """
     Load and organize chemometrics data.
 
     Supports text files (CSV, TSV, space-separated) and Excel files (.xlsx, .xls).
 
     Args:
-        d_specs_separator: Separator type ('comma', 'tabs', 'spaces')
-        d_specs_headlines: Number of header rows to skip
-        d_specs_type: Data type ('x_vector', 'xy_vector', 'x_matrix', etc.)
+        d_specs_separator: Separator type ('comma', 'tabs', 'spaces') or auto-detect token
+        d_specs_headlines: Number of header rows to skip, or empty/auto-detect token
+        d_specs_type: Data type ('x_vector', 'xy_vector', 'x_matrix', etc.) or auto-detect token
         d_specs_dimensions: List of dimensions for reshaping (or comma-separated string)
         data_path: List of paths to X data files (text or Excel, defaults to None)
         nway_flag: Number of ways (1 for 1D/2D, 2+ for multi-way, defaults to 1)
@@ -76,7 +261,7 @@ def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str,
         scale_type: Optional list of scale types for axis generation ('Linear', 'Log10', 'Log2', 'Ln')
         multi_file_per_sample: If True, each sample consists of multiple files (only for nway_flag >= 3)
         num_samples: Number of samples when using multi_file_per_sample mode (files divided equally)
-        cdata_path: Optional path to classification data file (one class label per line)
+        cdata_path: Optional path to classification data file (one row per sample; supports multi-column labels)
         source_metadata_overrides: Optional mapping of absolute file paths to pre-recorded metadata
 
     Returns:
@@ -86,14 +271,28 @@ def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str,
         smp_cal: Sample labels
         axis_n_info: List of axis vectors matching data dimensions or None
         dim_labels: List of dimension labels
-        class_data_cal: List of class labels or None
+        class_data_cal: List of class labels (or list of class-label rows for multi-layer files) or None
         cal_metadata: Dict with per-sample metadata extracted from source files
     """
-    # Parse d_specs parameters
+    normalized_data_paths = _normalize_data_path(data_path)
+
+    # Parse d_specs parameters (with optional auto-detect)
+    separator_choice = _normalize_separator_choice(d_specs_separator)
+    if _is_auto_detect_value(separator_choice):
+        separator_choice = _detect_separator(normalized_data_paths)
+
     separator_map = {"comma": ",", "spaces": None, "tabs": "\t"}
-    separator = separator_map.get(d_specs_separator, ",")
-    num_headlines = int(d_specs_headlines)
-    data_type = d_specs_type
+    separator = separator_map.get(separator_choice, ",")
+
+    if _is_auto_detect_value(d_specs_headlines):
+        num_headlines = _detect_header_rows(normalized_data_paths[0], separator) if normalized_data_paths else 0
+    else:
+        num_headlines = int(d_specs_headlines)
+
+    if _is_auto_detect_value(d_specs_type):
+        data_type = _infer_data_type(normalized_data_paths, separator, num_headlines, nway_flag)
+    else:
+        data_type = d_specs_type
     
     # Normalize d_specs_dimensions to string (handle both string and list inputs)
     dimensions = None
@@ -132,7 +331,6 @@ def load_data(d_specs_separator: str, d_specs_headlines: str, d_specs_type: str,
         elif isinstance(axis_info, list):
             axis_info_list = [a.strip() if isinstance(a, str) else a for a in axis_info if a]
 
-    normalized_data_paths = _normalize_data_path(data_path)
     sample_paths = None
 
     # Load X data - check if multi_file_per_sample mode is enabled
@@ -226,6 +424,9 @@ def _load_x_1way(data_path: List[str], separator: Optional[str], num_headlines: 
         elif data_type == "xy_vector":
             # Second column
             sample = data[:, 1] if data.ndim > 1 else data
+        elif data_type == "xyz_vector":
+            # Third column
+            sample = data[:, 2] if data.ndim > 1 else data
         elif data_type == "x_matrix":
             # 2D matrix
             sample = data
@@ -469,11 +670,40 @@ def _load_y_data(y_path: str, separator: Optional[str] = None, num_headlines: in
     return data
 
 
-def _load_class_data(cdata_path: str) -> List[str]:
-    """Load classification data as list of strings, one per line."""
-    with open(cdata_path, 'r') as f:
-        class_data = [line.strip() for line in f if line.strip()]
-    return class_data
+def _load_class_data(cdata_path: str) -> List[Any]:
+    """Load classification data, supporting single or multi-layer labels per sample row."""
+    rows: List[List[str]] = []
+    max_cols = 1
+
+    with open(cdata_path, 'r', encoding='utf-8', errors='ignore') as f:
+        for line in f:
+            stripped = line.strip()
+            if not stripped:
+                continue
+
+            if ',' in stripped:
+                values = [token.strip() for token in stripped.split(',') if token.strip()]
+            elif '\t' in stripped:
+                values = [token.strip() for token in stripped.split('\t') if token.strip()]
+            else:
+                values = [token.strip() for token in re.split(r'\s+', stripped) if token.strip()]
+
+            if not values:
+                continue
+
+            rows.append(values)
+            max_cols = max(max_cols, len(values))
+
+    if max_cols <= 1:
+        return [row[0] for row in rows]
+
+    normalized_rows: List[List[str]] = []
+    for row in rows:
+        if len(row) < max_cols:
+            normalized_rows.append(row + ["" for _ in range(max_cols - len(row))])
+        else:
+            normalized_rows.append(row)
+    return normalized_rows
 
 
 def _load_labels(label_path: str) -> List[str]:

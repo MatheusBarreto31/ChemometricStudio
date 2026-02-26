@@ -67,7 +67,7 @@
     ]
   },
   "short_description": "Loads spectroscopic and response data from files",
-  "long_description": "This step loads your calibration dataset including spectroscopic data (X), response variables (Y), and optional metadata.\n\nInput Data Components:\n- X Data (Spectra): Main spectroscopic measurements (required)\n- Y Data (Responses): Target/dependent variables (optional)\n- Variable Labels: Wavelengths, frequencies, or variable names (optional)\n- Sample Labels: Sample IDs or identifiers (optional)\n\nData Formats:\n- CSV files with configurable delimiters (comma, tabs, spaces)\n- Matrix format: samples (rows) x variables (columns)\n- Vector formats for specialized data types\n- Support for multiple files via file selection\n\nConfiguration:\n- Specify delimiter type for your files\n- Set number of header rows to skip\n- Choose appropriate data type structure\n- Transpose if needed (samples in columns instead of rows)\n\nThe loaded data becomes input for preprocessing and validation steps.",
+  "long_description": "This step loads your calibration dataset including spectroscopic data (X), response variables (Y), and optional metadata.\n\nInput Data Components:\n- X Data (Spectra): Main spectroscopic measurements (required)\n- Y Data (Responses): Target/dependent variables (optional)\n- Variable Labels: Wavelengths, frequencies, or variable names (optional)\n- Sample Labels: Sample IDs or identifiers (optional)\n\nData Formats:\n- CSV files with configurable delimiters (comma, tabs, spaces)\n- Matrix format: samples (rows) x variables (columns)\n- Vector formats for specialized data types\n- Support for multiple files via file selection\n\nConfiguration:\n- Use Auto detect for separator and data type when possible\n- Leave Header Rows empty to auto-detect how many non-data lines to skip\n- Choose explicit values only when auto-detection is not appropriate\n- Transpose if needed (samples in columns instead of rows)\n\nThe loaded data becomes input for preprocessing and validation steps.",
   "setup": {
     "categories": [
       "Data Dimensionality",
@@ -83,30 +83,32 @@
         "category": "File Format",
         "widget": "combobox",
         "values": [
+          "Auto detect",
           "comma",
           "tabs",
           "spaces"
         ],
         "value_aliases": [
+          "Auto detect",
           "Comma-separated",
           "Tab-separated",
           "Space-separated"
         ],
-        "default": "comma",
+        "default": "Auto detect",
         "required": true,
         "input_type": "user",
-        "tooltip": "Delimiter used in data files"
+        "tooltip": "Default: Auto detect. Tries comma/tab/space separators from file content."
       },
       {
         "name": "d_specs_headlines",
         "label": "Number of Header Rows",
         "category": "File Format",
         "widget": "entry",
-        "type": "int",
-        "default": "0",
+        "type": "str",
+        "default": "",
         "required": true,
         "input_type": "user",
-        "tooltip": "Number of rows to skip at the beginning of each file"
+        "tooltip": "Leave empty to auto-detect header rows. Enter a number only to force a fixed skip count."
       },
       {
         "name": "d_specs_type",
@@ -114,6 +116,7 @@
         "category": "File Format",
         "widget": "combobox",
         "values": [
+          "Auto detect",
           "x_vector",
           "xy_vector",
           "xyz_vector",
@@ -121,16 +124,17 @@
           "xy_matrix"
         ],
         "value_aliases": [
+          "Auto detect",
           "X Vector",
           "X-Y Vector",
           "X-Y-Z Vector",
           "X Matrix",
           "X-Y Matrix"
         ],
-        "default": "x_matrix",
+        "default": "Auto detect",
         "required": true,
         "input_type": "user",
-        "tooltip": "Structure of data: matrix (samples × variables) or vector formats"
+        "tooltip": "Default: Auto detect. Infers the most likely structure from loaded data."
       },
       {
         "name": "d_specs_dimensions",
@@ -214,7 +218,7 @@
         "multiple": false,
         "required": false,
         "input_type": "user",
-        "tooltip": "Classification data file (one class label per line)",
+        "tooltip": "Classification file: one sample per row. Supports single label or multi-layer labels (comma/tab/space separated columns).",
         "ispath": true
       },
       {

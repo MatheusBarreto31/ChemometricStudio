@@ -63,7 +63,7 @@
     ]
   },
   "short_description": "Carrega dados espectroscópicos e de resposta de arquivos",
-  "long_description": "Esta etapa carrega seu conjunto de dados de calibração, incluindo dados espectroscópicos (X), variáveis de resposta (Y) e metadados opcionais.\n\nComponentes de Dados de Entrada:\n- Dados X (Espectros): Principais medições espectroscópicas (obrigatório)\n- Dados Y (Respostas): Variáveis alvo/dependentes (opcional)\n- Rótulos de Variáveis: Comprimentos de onda, frequências ou nomes de variáveis (opcional)\n- Rótulos de Amostras: IDs de amostra ou identificadores (opcional)\n\nFormatos de Dados:\n- Arquivos CSV com delimitadores configuráveis (vírgula, tabulações, espaços)\n- Formato de matriz: amostras (linhas) x variáveis (colunas)\n- Formatos de vetor para tipos de dados especializados\n- Suporte para múltiplos arquivos via seleção de arquivo\n\nConfiguração:\n- Especifique o tipo de delimitador para seus arquivos\n- Defina o número de linhas de cabeçalho para pular\n- Escolha a estrutura de tipo de dados apropriada\n- Transponha se necessário (amostras em colunas em vez de linhas)\n\nOs dados carregados se tornam entrada para etapas de pré-processamento e validação.",
+  "long_description": "Esta etapa carrega seu conjunto de dados de calibração, incluindo dados espectroscópicos (X), variáveis de resposta (Y) e metadados opcionais.\n\nComponentes de Dados de Entrada:\n- Dados X (Espectros): Principais medições espectroscópicas (obrigatório)\n- Dados Y (Respostas): Variáveis alvo/dependentes (opcional)\n- Rótulos de Variáveis: Comprimentos de onda, frequências ou nomes de variáveis (opcional)\n- Rótulos de Amostras: IDs de amostra ou identificadores (opcional)\n\nFormatos de Dados:\n- Arquivos CSV com delimitadores configuráveis (vírgula, tabulações, espaços)\n- Formato de matriz: amostras (linhas) x variáveis (colunas)\n- Formatos de vetor para tipos de dados especializados\n- Suporte para múltiplos arquivos via seleção de arquivo\n\nConfiguração:\n- Use Auto detect para separador e tipo de dados sempre que possível\n- Deixe Linhas de Cabeçalho vazio para detectar automaticamente quantas linhas não numéricas ignorar\n- Informe valores fixos apenas quando necessário\n- Transponha se necessário (amostras em colunas em vez de linhas)\n\nOs dados carregados se tornam entrada para etapas de pré-processamento e validação.",
   "setup": {
     "layout": [
       {
@@ -71,35 +71,38 @@
         "label": "Separador de Dados",
         "widget": "combobox",
         "values": [
+          "Auto detect",
           "vírgula",
           "tabulações",
           "espaços"
         ],
         "value_aliases": [
+          "Detectar automaticamente",
           "Separado por Vírgula",
           "Separado por Tabulação",
           "Separado por Espaço"
         ],
-        "default": "tabulações",
+        "default": "Auto detect",
         "required": true,
         "input_type": "user",
-        "tooltip": "Delimitador usado nos arquivos de dados"
+        "tooltip": "Padrão: Auto detect. Tenta identificar vírgula, tabulação ou espaço no arquivo."
       },
       {
         "name": "d_specs_headlines",
         "label": "Número de Linhas de Cabeçalho",
         "widget": "entry",
-        "type": "int",
-        "default": "0",
+        "type": "str",
+        "default": "",
         "required": true,
         "input_type": "user",
-        "tooltip": "Número de linhas a pular no início de cada arquivo"
+        "tooltip": "Deixe vazio para detectar automaticamente as linhas de cabeçalho. Informe número apenas para forçar valor fixo."
       },
       {
         "name": "d_specs_type",
         "label": "Tipo de Dados",
         "widget": "combobox",
         "values": [
+          "Auto detect",
           "x_vector",
           "xy_vector",
           "xyz_vector",
@@ -107,16 +110,17 @@
           "xy_matrix"
         ],
         "value_aliases": [
+          "Detectar automaticamente",
           "Vetor X",
           "Vetor X-Y",
           "Vetor X-Y-Z",
           "Matriz X",
           "Matriz X-Y"
         ],
-        "default": "x_matrix",
+        "default": "Auto detect",
         "required": true,
         "input_type": "user",
-        "tooltip": "Estrutura dos dados: matriz (amostras × variáveis) ou formatos vetoriais"
+        "tooltip": "Padrão: Auto detect. Infere automaticamente a estrutura mais provável dos dados."
       },
       {
         "name": "d_specs_dimensions",
@@ -193,7 +197,7 @@
         "multiple": false,
         "required": false,
         "input_type": "user",
-        "tooltip": "Arquivo de dados de classificação (um rótulo de classe por linha)",
+        "tooltip": "Arquivo de classificação: uma amostra por linha. Aceita rótulo único ou múltiplas camadas (colunas separadas por vírgula, tabulação ou espaço).",
         "ispath": true
       },
       {

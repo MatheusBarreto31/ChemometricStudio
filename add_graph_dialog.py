@@ -1327,12 +1327,14 @@ class AddGraphDialog:
                     
                     # Extract class data if specified
                     ds_class_data = None
+                    ds_class_layers = None
                     if ds_cfg.get('class_labels'):
                         class_source = ds_cfg['class_labels']
                         if class_source in self.outputs:
                             class_val = self.outputs[class_source]
                             if isinstance(class_val, (list, np.ndarray)):
-                                ds_class_data = np.array(class_val)
+                                ds_class_layers = self.main_gui._normalize_class_data_matrix(class_val)
+                                ds_class_data = self.main_gui._normalize_class_labels_for_plot(class_val)
                     
                     dataset_entry = {
                         'x_data': ds_x,
@@ -1342,6 +1344,8 @@ class AddGraphDialog:
                         'marker': ds_cfg.get('marker', 'o'),
                         'class_data': ds_class_data
                     }
+                    if ds_class_layers is not None:
+                        dataset_entry['class_layers'] = ds_class_layers
                     
                     if ds_cfg.get('color'):
                         dataset_entry['color'] = ds_cfg['color']

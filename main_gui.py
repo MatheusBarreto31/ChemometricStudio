@@ -11,7 +11,7 @@ import os
 import copy
 import re
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional, Any, Callable
+from typing import Dict, List, Tuple, Optional, Any, Callable, Set
 from functools import lru_cache
 import subprocess
 import sys
@@ -513,6 +513,362 @@ class ChemometricsGUI:
             return str(int(round(parsed)))
         return f"{parsed:.2f}".rstrip('0').rstrip('.')
 
+    def _normalize_class_data_matrix(self, value: Any) -> Optional[np.ndarray]:
+        """Normalize class labels into a 2D object array: rows=samples, cols=class layers."""
+        if value is None:
+            return None
+        try:
+            arr = np.asarray(value, dtype=object)
+            if arr.ndim == 0:
+                return np.asarray([[arr.item()]], dtype=object)
+            if arr.ndim == 1:
+                return arr.reshape(-1, 1)
+            return arr.reshape(arr.shape[0], -1)
+        except Exception:
+            return None
+
+    def _is_numeric_class_layer_continuous(self, values: np.ndarray) -> Optional[bool]:
+        """Heuristic: returns True for continuous numeric class-like values, False for discrete, None if non-numeric."""
+        if values is None:
+            return None
+
+        cleaned: List[str] = []
+        has_decimal = False
+        for raw in np.asarray(values, dtype=object).tolist():
+            text = str(raw).strip()
+            if text == "" or text.lower() in {"nan", "none"}:
+                continue
+            cleaned.append(text)
+            if any(ch in text for ch in ('.', 'e', 'E')):
+                has_decimal = True
+
+        if not cleaned:
+            return None
+
+        numeric_values: List[float] = []
+        for text in cleaned:
+            try:
+                numeric_values.append(float(text))
+            except Exception:
+                return None
+
+        if has_decimal:
+            return True
+
+        unique_vals = np.unique(np.asarray(numeric_values, dtype=float))
+        if unique_vals.size <= 1:
+            return False
+
+        span = float(unique_vals.max() - unique_vals.min())
+        diffs = np.diff(np.sort(unique_vals))
+        median_diff = float(np.median(diffs)) if diffs.size > 0 else 0.0
+
+        if span <= max(3.0, float(unique_vals.size) * 3.0) and median_diff <= 2.0:
+            return False
+        return True
+
+    def _compute_scatter_class_layer_state(
+        self,
+        config: dict,
+        datasets_config: Optional[List[dict]],
+        outputs: Dict[str, Any],
+        execution_inputs: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Build effective class-layer configuration (available layers, natures, order, mapping)."""
+        source_values: List[np.ndarray] = []
+
+        def _dataset_axes_resolvable(ds_cfg: dict) -> bool:
+            if not isinstance(ds_cfg, dict):
+                return False
+            x_axis_cfg = ds_cfg.get('x_axis', {}) if isinstance(ds_cfg.get('x_axis', {}), dict) else {}
+            y_axis_cfg = ds_cfg.get('y_axis', {}) if isinstance(ds_cfg.get('y_axis', {}), dict) else {}
+            x_source = x_axis_cfg.get('data_source')
+            y_source = y_axis_cfg.get('data_source')
+            if not isinstance(x_source, str) or not x_source.strip():
+                return False
+            if not isinstance(y_source, str) or not y_source.strip():
+                return False
+
+            x_nested = x_axis_cfg.get('nested_key') if isinstance(x_axis_cfg.get('nested_key'), str) else None
+            y_nested = y_axis_cfg.get('nested_key') if isinstance(y_axis_cfg.get('nested_key'), str) else None
+            x_val = self._get_data_from_source(outputs, x_source, x_nested)
+            y_val = self._get_data_from_source(outputs, y_source, y_nested)
+            return x_val is not None and y_val is not None
+
+        top_source = config.get('class_labels')
+        if isinstance(top_source, str) and top_source:
+            top_val = self._get_data_from_source(outputs, top_source)
+            top_matrix = self._normalize_class_data_matrix(top_val)
+            if top_matrix is not None and top_matrix.size > 0:
+                source_values.append(top_matrix)
+
+        if isinstance(datasets_config, list):
+            exec_inputs = execution_inputs if isinstance(execution_inputs, dict) else {}
+            for ds_cfg in datasets_config:
+                if not isinstance(ds_cfg, dict):
+                    continue
+                include_dataset = True
+                condition = ds_cfg.get('condition')
+                if isinstance(condition, dict):
+                    param_name = condition.get('parameter')
+                    operator = condition.get('operator', '==')
+                    expected_value = condition.get('value')
+                    if param_name and param_name in exec_inputs:
+                        actual_value = exec_inputs[param_name]
+                        include_dataset = _condition_matches(actual_value, operator, expected_value)
+                if not include_dataset or not _dataset_axes_resolvable(ds_cfg):
+                    continue
+
+                class_source = ds_cfg.get('class_labels')
+                if not isinstance(class_source, str) or not class_source:
+                    continue
+                class_val = self._get_data_from_source(outputs, class_source)
+                class_matrix = self._normalize_class_data_matrix(class_val)
+                if class_matrix is not None and class_matrix.size > 0:
+                    source_values.append(class_matrix)
+
+        layer_count = 0
+        for matrix in source_values:
+            if matrix.ndim >= 2:
+                layer_count = max(layer_count, int(matrix.shape[1]))
+
+        def _condition_matches(actual_value: Any, operator: str, expected_value: Any) -> bool:
+            op = str(operator or '==').strip()
+            lhs = actual_value
+            rhs = expected_value
+
+            try:
+                if op in ['>', '<', '>=', '<=']:
+                    try:
+                        lhs = int(lhs) if isinstance(lhs, str) else lhs
+                        rhs = int(rhs) if isinstance(rhs, str) else rhs
+                    except Exception:
+                        lhs = str(lhs)
+                        rhs = str(rhs)
+                else:
+                    lhs = str(lhs)
+                    rhs = str(rhs)
+            except Exception:
+                pass
+
+            try:
+                if op == '==':
+                    return lhs == rhs
+                if op == '!=':
+                    return lhs != rhs
+                if op == '>':
+                    return lhs > rhs
+                if op == '<':
+                    return lhs < rhs
+                if op == '>=':
+                    return lhs >= rhs
+                if op == '<=':
+                    return lhs <= rhs
+                if op == 'in':
+                    return lhs in rhs
+                if op == 'contains':
+                    return rhs in lhs
+                return True
+            except Exception:
+                return False
+
+        dataset_count = len(datasets_config) if isinstance(datasets_config, list) else 0
+        active_dataset_count = dataset_count
+        if isinstance(datasets_config, list):
+            active_dataset_count = 0
+            exec_inputs = execution_inputs if isinstance(execution_inputs, dict) else {}
+            for ds_cfg in datasets_config:
+                if not isinstance(ds_cfg, dict):
+                    continue
+                include_dataset = True
+                condition = ds_cfg.get('condition')
+                if isinstance(condition, dict):
+                    param_name = condition.get('parameter')
+                    operator = condition.get('operator', '==')
+                    expected_value = condition.get('value')
+                    if param_name and param_name in exec_inputs:
+                        actual_value = exec_inputs[param_name]
+                        include_dataset = _condition_matches(actual_value, operator, expected_value)
+                if include_dataset and _dataset_axes_resolvable(ds_cfg):
+                    active_dataset_count += 1
+
+        is_multi_dataset = active_dataset_count > 1
+
+        all_aspects = ['color', 'marker', 'fill', 'edge']
+        available_aspects = ['color', 'marker', 'edge'] if is_multi_dataset else all_aspects
+        max_active = min(len(available_aspects), max(0, layer_count))
+
+        has_user_flag = bool(config.get('class_layer_user_defined', False))
+
+        raw_order = config.get('class_layer_order', [])
+        configured_order: List[str] = []
+        if isinstance(raw_order, str):
+            chunks = [tok.strip().lower() for tok in re.split(r'[;,\s]+', raw_order) if tok and tok.strip()]
+            configured_order = [tok for tok in chunks if tok in available_aspects]
+        elif isinstance(raw_order, (list, tuple)):
+            configured_order = [str(a).strip().lower() for a in raw_order if str(a).strip().lower() in available_aspects]
+
+        raw_map = config.get('class_layer_map', {})
+        configured_map: Dict[str, int] = {}
+        if isinstance(raw_map, dict):
+            for k, v in raw_map.items():
+                try:
+                    norm_k = str(k).strip().lower()
+                    if norm_k in available_aspects:
+                        configured_map[norm_k] = int(v)
+                except Exception:
+                    continue
+        elif isinstance(raw_map, str):
+            parsed_order, parsed_map = self._parse_class_layer_mapping_description(raw_map)
+            for key in parsed_order:
+                if key in available_aspects and key in parsed_map:
+                    try:
+                        configured_map[key] = int(parsed_map[key])
+                    except Exception:
+                        continue
+
+        has_nonempty_order = bool(configured_order)
+        has_nonempty_map = bool(configured_map)
+        user_defined_mapping = has_user_flag or has_nonempty_order or has_nonempty_map
+
+        effective_order: List[str] = []
+        for aspect in configured_order:
+            if aspect not in effective_order:
+                effective_order.append(aspect)
+            if len(effective_order) >= max_active:
+                break
+
+        if not effective_order and max_active > 0 and not user_defined_mapping:
+            effective_order = available_aspects[:max_active]
+
+        effective_map: Dict[str, int] = {}
+        filtered_order: List[str] = []
+        for idx, aspect in enumerate(effective_order):
+            raw_layer = configured_map.get(aspect, idx + 1)
+            try:
+                layer_idx = int(raw_layer)
+            except Exception:
+                layer_idx = idx + 1
+
+            if layer_idx <= 0:
+                continue
+
+            if layer_count > 0:
+                layer_idx = max(1, min(layer_idx, layer_count))
+            else:
+                layer_idx = 1
+            filtered_order.append(aspect)
+            effective_map[aspect] = layer_idx
+
+        effective_order = filtered_order
+
+        layer_nature: Dict[int, str] = {}
+        numeric_layers: List[int] = []
+        for layer_idx in range(1, layer_count + 1):
+            continuous_votes = 0
+            discrete_votes = 0
+            numeric_seen = False
+            for matrix in source_values:
+                if matrix.ndim < 2 or matrix.shape[1] < layer_idx:
+                    continue
+                state = self._is_numeric_class_layer_continuous(matrix[:, layer_idx - 1])
+                if state is None:
+                    continue
+                numeric_seen = True
+                if state:
+                    continuous_votes += 1
+                else:
+                    discrete_votes += 1
+
+            if numeric_seen:
+                numeric_layers.append(layer_idx)
+                layer_nature[layer_idx] = 'continuous' if continuous_votes >= discrete_votes else 'discrete'
+            else:
+                layer_nature[layer_idx] = 'discrete'
+
+        overrides = config.get('class_layer_nature', {})
+        if isinstance(overrides, dict):
+            for key, value in overrides.items():
+                try:
+                    key_idx = int(key)
+                except Exception:
+                    continue
+                norm = str(value).strip().lower()
+                if key_idx >= 1 and key_idx <= layer_count and norm in {'continuous', 'discrete'}:
+                    layer_nature[key_idx] = norm
+
+        return {
+            'layer_count': layer_count,
+            'dataset_count': dataset_count,
+            'active_dataset_count': active_dataset_count,
+            'is_multi_dataset': is_multi_dataset,
+            'available_aspects': available_aspects,
+            'max_active': max_active,
+            'effective_order': effective_order,
+            'effective_map': effective_map,
+            'layer_nature': layer_nature,
+            'numeric_layers': numeric_layers,
+            'user_defined_mapping': user_defined_mapping,
+        }
+
+    def _parse_class_layer_mapping_description(self, text: str) -> Tuple[List[str], Dict[str, int]]:
+        """Parse free-text class-layer mapping like 'marker:1, color:2, fill:3, edge:4'."""
+        parsed_order: List[str] = []
+        parsed_map: Dict[str, int] = {}
+        if not text:
+            return parsed_order, parsed_map
+
+        alias_map = {
+            'marker': 'marker',
+            'colour': 'color',
+            'color': 'color',
+            'fill': 'fill',
+            'filltype': 'fill',
+            'fill_type': 'fill',
+            'edge': 'edge',
+            'edgecolour': 'edge',
+            'edgecolor': 'edge',
+            'edge_color': 'edge',
+        }
+
+        for chunk in str(text).split(','):
+            if ':' not in chunk:
+                continue
+            left, right = chunk.split(':', 1)
+            key = re.sub(r'[^A-Za-z_]', '', left).strip().lower()
+            key = alias_map.get(key)
+            if key is None:
+                continue
+            try:
+                layer_idx = int(str(right).strip())
+            except Exception:
+                continue
+            if layer_idx < 1:
+                continue
+            if key not in parsed_order:
+                parsed_order.append(key)
+            parsed_map[key] = layer_idx
+
+        return parsed_order, parsed_map
+
+    def _show_graph_warning_once(self, instance_alias: str, section_id: Tuple[int, int], warning_code: str, message: str) -> None:
+        """Show a warning message once per graph section and warning code."""
+        try:
+            analysis_info = self.analysis_data.setdefault(instance_alias, {})
+            warning_state = analysis_info.setdefault('graph_warning_state', {})
+            if not isinstance(warning_state, dict):
+                return
+            section_state = warning_state.setdefault(section_id, set())
+            if not isinstance(section_state, set):
+                section_state = set(section_state) if isinstance(section_state, (list, tuple)) else set()
+                warning_state[section_id] = section_state
+            if warning_code in section_state:
+                return
+            section_state.add(warning_code)
+            self._show_fading_warning(message)
+        except Exception:
+            pass
+
     def _update_graph_section_config_option(self, instance_alias: str, section_id: Tuple[int, int],
                                             option_key: str, option_value: Any,
                                             popup_refresh_callback: Optional[Callable[[], None]] = None,
@@ -744,6 +1100,323 @@ class ChemometricsGUI:
                 )
                 item_count += 1
 
+        if str(graph_type).strip().lower() == 'scatter':
+            execution_results = self.analysis_data.get(instance_alias, {}).get('execution_results', {})
+            outputs = self._get_execution_data_sources(execution_results, instance_alias) if isinstance(execution_results, dict) else {}
+            datasets_cfg = config.get('datasets') if isinstance(config.get('datasets'), list) else None
+            scatter_state = self._compute_scatter_class_layer_state(
+                config,
+                datasets_cfg,
+                outputs,
+                execution_results.get('inputs', {}) if isinstance(execution_results, dict) else {},
+            )
+            layer_count = int(scatter_state.get('layer_count', 0))
+
+            if layer_count > 0:
+                aspects_display = {
+                    'marker': self.language_manager.translate('menu.graph_context.class_marker', 'Marker'),
+                    'color': self.language_manager.translate('menu.graph_context.class_color', 'Color'),
+                    'fill': self.language_manager.translate('menu.graph_context.class_fill', 'Fill Type'),
+                    'edge': self.language_manager.translate('menu.graph_context.class_edge', 'Edge Color')
+                }
+
+                available_aspects = list(scatter_state.get('available_aspects', []))
+                max_active = int(scatter_state.get('max_active', len(available_aspects)))
+                effective_order = list(scatter_state.get('effective_order', []))
+                effective_map = dict(scatter_state.get('effective_map', {}))
+
+                class_layers_menu = tk.Menu(menu, tearoff=0)
+
+                def _persist_layer_settings(new_order: List[str], new_map: Dict[str, int]) -> None:
+                    self._update_graph_section_config_option(
+                        instance_alias,
+                        section_id,
+                        'class_layer_user_defined',
+                        True,
+                        popup_refresh_callback=popup_refresh_callback,
+                        refresh_analysis=False
+                    )
+                    self._update_graph_section_config_option(
+                        instance_alias,
+                        section_id,
+                        'class_layer_order',
+                        list(new_order),
+                        popup_refresh_callback=popup_refresh_callback,
+                        refresh_analysis=False
+                    )
+                    self._update_graph_section_config_option(
+                        instance_alias,
+                        section_id,
+                        'class_layer_map',
+                        dict(new_map),
+                        popup_refresh_callback=popup_refresh_callback,
+                        refresh_analysis=True
+                    )
+
+                for aspect in available_aspects:
+                    aspect_layer_menu = tk.Menu(class_layers_menu, tearoff=0)
+                    current_layer = int(effective_map.get(aspect, 0) if aspect in effective_order else 0)
+                    layer_var = tk.IntVar(value=current_layer)
+                    _keep_var_ref(layer_var)
+
+                    def _set_aspect_layer(aspect_name: str, selected_layer: int) -> None:
+                        current_order = [str(a).strip().lower() for a in effective_order if str(a).strip().lower() in available_aspects]
+                        normalized_map: Dict[str, int] = {}
+                        for key, value in effective_map.items():
+                            try:
+                                norm_key = str(key).strip().lower()
+                                if norm_key in available_aspects:
+                                    normalized_map[norm_key] = int(value)
+                            except Exception:
+                                continue
+
+                        if not current_order:
+                            raw_order_cfg = config.get('class_layer_order', [])
+                            if isinstance(raw_order_cfg, str):
+                                tokens = [tok.strip().lower() for tok in re.split(r'[;,\s]+', raw_order_cfg) if tok and tok.strip()]
+                                current_order = [tok for tok in tokens if tok in available_aspects]
+                            elif isinstance(raw_order_cfg, list):
+                                current_order = [str(a).strip().lower() for a in raw_order_cfg if str(a).strip().lower() in available_aspects]
+
+                            raw_map_cfg = config.get('class_layer_map', {})
+                            if isinstance(raw_map_cfg, dict):
+                                for k, v in raw_map_cfg.items():
+                                    try:
+                                        norm_k = str(k).strip().lower()
+                                        if norm_k in available_aspects:
+                                            normalized_map[norm_k] = int(v)
+                                    except Exception:
+                                        continue
+                            elif isinstance(raw_map_cfg, str):
+                                parsed_order, parsed_map = self._parse_class_layer_mapping_description(raw_map_cfg)
+                                for key in parsed_order:
+                                    if key in available_aspects and key in parsed_map:
+                                        try:
+                                            normalized_map[key] = int(parsed_map[key])
+                                        except Exception:
+                                            continue
+
+                        if int(selected_layer) <= 0:
+                            current_order = [a for a in current_order if a != aspect_name]
+                            normalized_map.pop(aspect_name, None)
+                            _persist_layer_settings(current_order, normalized_map)
+                            return
+
+                        if aspect_name not in current_order:
+                            if len(current_order) >= max_active:
+                                return
+                            current_order.append(aspect_name)
+                        normalized_map[aspect_name] = max(1, min(int(selected_layer), layer_count))
+                        _persist_layer_settings(current_order, normalized_map)
+
+                    aspect_layer_menu.add_radiobutton(
+                        label=self.language_manager.translate('menu.graph_context.none', 'None'),
+                        variable=layer_var,
+                        value=0,
+                        command=lambda a=aspect: _set_aspect_layer(a, 0)
+                    )
+
+                    aspect_layer_menu.add_separator()
+
+                    for layer_idx in range(1, layer_count + 1):
+                        aspect_layer_menu.add_radiobutton(
+                            label=f"Layer {layer_idx}",
+                            variable=layer_var,
+                            value=layer_idx,
+                            command=lambda a=aspect, l=layer_idx: _set_aspect_layer(a, l)
+                        )
+
+                    class_layers_menu.add_cascade(
+                        label=f"{aspects_display.get(aspect, aspect.title())} Layer",
+                        menu=aspect_layer_menu
+                    )
+
+                class_layers_menu.add_separator()
+
+                def _edit_mapping_text() -> None:
+                    current_desc = ", ".join(f"{k}:{effective_map.get(k, i+1)}" for i, k in enumerate(effective_order))
+                    user_text = simpledialog.askstring(
+                        title=self.language_manager.translate('menu.graph_context.class_layer_mapping', 'Class Layer Mapping'),
+                        prompt=self.language_manager.translate(
+                            'menu.graph_context.class_layer_mapping_prompt',
+                            "Describe mapping as 'marker:1, color:2, fill:3, edge:4'"
+                        ),
+                        initialvalue=current_desc,
+                        parent=self.root
+                    )
+                    if user_text is None:
+                        return
+                    parsed_order, parsed_map = self._parse_class_layer_mapping_description(user_text)
+                    parsed_order = [a for a in parsed_order if a in available_aspects]
+                    parsed_order = parsed_order[:max_active]
+                    if not parsed_order and available_aspects:
+                        parsed_order = [available_aspects[0]]
+                    bounded_map = {a: max(1, min(int(parsed_map.get(a, 1)), layer_count)) for a in parsed_order}
+                    _persist_layer_settings(parsed_order, bounded_map)
+
+                class_layers_menu.add_command(
+                    label=self.language_manager.translate('menu.graph_context.class_layer_mapping_entry', 'Layer Mapping Description...'),
+                    command=_edit_mapping_text
+                )
+
+                menu.add_cascade(
+                    label=self.language_manager.translate('menu.graph_context.class_layers', 'Class Layers'),
+                    menu=class_layers_menu
+                )
+                item_count += 1
+
+                numeric_layers = list(scatter_state.get('numeric_layers', []))
+                if numeric_layers:
+                    class_nature_menu = tk.Menu(menu, tearoff=0)
+                    current_nature = scatter_state.get('layer_nature', {})
+
+                    for layer_idx in numeric_layers:
+                        layer_menu = tk.Menu(class_nature_menu, tearoff=0)
+                        nature_var = tk.StringVar(value=str(current_nature.get(layer_idx, 'discrete')))
+                        _keep_var_ref(nature_var)
+
+                        def _set_nature(idx: int, value: str) -> None:
+                            overrides = config.get('class_layer_nature', {}) if isinstance(config.get('class_layer_nature', {}), dict) else {}
+                            updated = dict(overrides)
+                            updated[str(idx)] = value
+                            self._update_graph_section_config_option(
+                                instance_alias,
+                                section_id,
+                                'class_layer_nature',
+                                updated,
+                                popup_refresh_callback=popup_refresh_callback,
+                                refresh_analysis=True
+                            )
+
+                        layer_menu.add_radiobutton(
+                            label=self.language_manager.translate('menu.graph_context.class_discrete', 'Discrete'),
+                            variable=nature_var,
+                            value='discrete',
+                            command=lambda i=layer_idx: _set_nature(i, 'discrete')
+                        )
+                        layer_menu.add_radiobutton(
+                            label=self.language_manager.translate('menu.graph_context.class_continuous', 'Continuous'),
+                            variable=nature_var,
+                            value='continuous',
+                            command=lambda i=layer_idx: _set_nature(i, 'continuous')
+                        )
+
+                        class_nature_menu.add_cascade(label=f"Layer {layer_idx}", menu=layer_menu)
+
+                    menu.add_cascade(
+                        label=self.language_manager.translate('menu.graph_context.class_nature', 'Class Nature'),
+                        menu=class_nature_menu
+                    )
+                    item_count += 1
+
+                colormaps_data = self._load_colormaps_catalog()
+                continuous_data = colormaps_data.get("continuous", {})
+                qualitative_data = colormaps_data.get("qualitative", [])
+
+                def _build_aspect_colormap_menu(aspect: str, cont_key: str, qual_key: str) -> tk.Menu:
+                    aspect_menu = tk.Menu(menu, tearoff=0)
+                    mapped_layer = effective_map.get(aspect) if aspect in effective_order else None
+                    if mapped_layer is None:
+                        aspect_menu.add_command(
+                            label=self.language_manager.translate(
+                                'menu.graph_context.assign_layer_first',
+                                'Assign a class layer first'
+                            ),
+                            state=tk.DISABLED
+                        )
+                        return aspect_menu
+
+                    layer_nature = str(scatter_state.get('layer_nature', {}).get(int(mapped_layer), 'discrete')).strip().lower()
+                    is_continuous = layer_nature == 'continuous'
+                    target_key = cont_key if is_continuous else qual_key
+                    current_value = str(config.get(
+                        target_key,
+                        self.settings_manager.get('colormap', 'viridis') if is_continuous else self.settings_manager.get('qualitative_colormap', 'tab10')
+                    ))
+                    cmap_var = tk.StringVar(value=current_value)
+                    _keep_var_ref(cmap_var)
+
+                    has_any_maps = False
+                    if is_continuous:
+                        if isinstance(continuous_data, dict):
+                            for category, cmaps in continuous_data.items():
+                                if not isinstance(cmaps, list) or not cmaps:
+                                    continue
+                                category_menu = tk.Menu(aspect_menu, tearoff=0)
+                                for cmap_name in cmaps:
+                                    cmap_name = str(cmap_name)
+                                    category_menu.add_radiobutton(
+                                        label=cmap_name,
+                                        variable=cmap_var,
+                                        value=cmap_name,
+                                        command=lambda v=cmap_name, k=target_key: self._update_graph_section_config_option(
+                                            instance_alias,
+                                            section_id,
+                                            k,
+                                            v,
+                                            popup_refresh_callback=popup_refresh_callback,
+                                            refresh_analysis=True
+                                        )
+                                    )
+                                aspect_menu.add_cascade(label=str(category), menu=category_menu)
+                                has_any_maps = True
+                        elif isinstance(continuous_data, list):
+                            for cmap_name in continuous_data:
+                                cmap_name = str(cmap_name)
+                                aspect_menu.add_radiobutton(
+                                    label=cmap_name,
+                                    variable=cmap_var,
+                                    value=cmap_name,
+                                    command=lambda v=cmap_name, k=target_key: self._update_graph_section_config_option(
+                                        instance_alias,
+                                        section_id,
+                                        k,
+                                        v,
+                                        popup_refresh_callback=popup_refresh_callback,
+                                        refresh_analysis=True
+                                    )
+                                )
+                                has_any_maps = True
+                    else:
+                        if isinstance(qualitative_data, list):
+                            for cmap_name in qualitative_data:
+                                cmap_name = str(cmap_name)
+                                aspect_menu.add_radiobutton(
+                                    label=cmap_name,
+                                    variable=cmap_var,
+                                    value=cmap_name,
+                                    command=lambda v=cmap_name, k=target_key: self._update_graph_section_config_option(
+                                        instance_alias,
+                                        section_id,
+                                        k,
+                                        v,
+                                        popup_refresh_callback=popup_refresh_callback,
+                                        refresh_analysis=True
+                                    )
+                                )
+                                has_any_maps = True
+
+                    if not has_any_maps:
+                        aspect_menu.add_command(label='-', state=tk.DISABLED)
+
+                    return aspect_menu
+
+                class_colormaps_menu = tk.Menu(menu, tearoff=0)
+                class_colormaps_menu.add_cascade(
+                    label=aspects_display.get('color', 'Color'),
+                    menu=_build_aspect_colormap_menu('color', 'class_color_cmap_continuous', 'class_color_cmap_qualitative')
+                )
+                class_colormaps_menu.add_cascade(
+                    label=aspects_display.get('edge', 'Edge Color'),
+                    menu=_build_aspect_colormap_menu('edge', 'class_edge_cmap_continuous', 'class_edge_cmap_qualitative')
+                )
+
+                menu.add_cascade(
+                    label=self.language_manager.translate('menu.graph_context.class_colormaps', 'Class Colormaps'),
+                    menu=class_colormaps_menu
+                )
+                item_count += 1
+
         axis_type_values = ('linear', 'log10', 'log2', 'ln')
         axis_scale_label = self.language_manager.translate('menu.graph_context.axis_scale', 'Axis Scale')
         axis_scale_labels = {
@@ -841,12 +1514,6 @@ class ChemometricsGUI:
                                    instance_alias: str, section_id: Tuple[int, int],
                                    popup_refresh_callback: Optional[Callable[[], None]] = None) -> None:
         """Attach right-click graph context menu when graph type has supported options."""
-        if not any(
-            self._is_graph_option_supported(graph_type, key, config)
-            for key in ('show_grid', 'show_origin', 'show_labels', 'confidence_ellipses', 'confidence_level', 'cmap')
-        ):
-            return
-
         try:
             widget = canvas.get_tk_widget()
         except Exception:
@@ -2585,33 +3252,24 @@ class ChemometricsGUI:
         """Remove selected item from methodology."""
         idx = self._get_active_methodology_index()
         if idx is not None:
+            item_count = len(self.methodology_list)
+            if idx < 0 or idx >= item_count:
+                return
+
             instance_alias = self.methodology_list.pop(idx)
             self.function_base_aliases.pop(idx)
             
             # Remove config for this instance
             if instance_alias in self.function_configs:
                 del self.function_configs[instance_alias]
-            
-            # Remove routing lines involving this index
-            keys_to_remove = [key for key in self.routing_lines.keys() 
-                            if isinstance(key, tuple) and (key[0] == idx or key[2] == idx)]
-            for key in keys_to_remove:
-                del self.routing_lines[key]
-            
-            # Update indices in remaining routing lines
-            for key in list(self.routing_lines.keys()):
-                if isinstance(key, tuple):
-                    src_idx, src_param, dst_idx, dst_param = key
-                    # Decrement indices that are > removed idx
-                    new_src_idx = src_idx - 1 if src_idx > idx else src_idx
-                    new_dst_idx = dst_idx - 1 if dst_idx > idx else dst_idx
-                    if new_src_idx != src_idx or new_dst_idx != dst_idx:
-                        old_key = key
-                        new_key = (new_src_idx, src_param, new_dst_idx, dst_param)
-                        self.routing_lines[new_key] = self.routing_lines.pop(old_key)
-                        # Update internal indices in the routing info
-                        self.routing_lines[new_key]["src_idx"] = new_src_idx
-                        self.routing_lines[new_key]["dst_idx"] = new_dst_idx
+
+            old_to_new_idx = {
+                old_idx: (old_idx - 1 if old_idx > idx else old_idx)
+                for old_idx in range(item_count)
+                if old_idx != idx
+            }
+            self._remap_routing_indices(old_to_new_idx)
+            self._recalculate_auto_routing()
             
             self.selected_function_idx = None
             self._refresh_methodology_listbox()
@@ -6809,12 +7467,14 @@ class ChemometricsGUI:
                     
                     # Extract class labels if specified
                     ds_class_data = None
+                    ds_class_layers = None
                     if 'class_labels' in dataset_cfg:
                         class_source = dataset_cfg['class_labels']
                         class_val = self._get_data_from_source(outputs, class_source)
                         if class_val is not None:
                             if isinstance(class_val, (list, np.ndarray)):
-                                ds_class_data = np.array(class_val)
+                                ds_class_layers = self._normalize_class_data_matrix(class_val)
+                                ds_class_data = self._normalize_class_labels_for_plot(class_val)
                     
                     # Dataset is valid and will be rendered
                     dataset_entry = {
@@ -6829,6 +7489,8 @@ class ChemometricsGUI:
                         dataset_entry['z_data'] = ds_z_data
                     if ds_class_data is not None:
                         dataset_entry['class_data'] = ds_class_data
+                    if ds_class_layers is not None:
+                        dataset_entry['class_layers'] = ds_class_layers
                     # Include color if specified (used as fallback when no class_data)
                     if 'color' in dataset_cfg:
                         dataset_entry['color'] = dataset_cfg['color']
@@ -6844,7 +7506,8 @@ class ChemometricsGUI:
                 class_val = self._get_data_from_source(outputs, class_source)
                 if class_val is not None:
                     if isinstance(class_val, (list, np.ndarray)):
-                        main_class_data = np.array(class_val)
+                        main_class_layers = self._normalize_class_data_matrix(class_val)
+                        main_class_data = self._normalize_class_labels_for_plot(class_val)
                         
                         # Create extracted_datasets if it doesn't exist
                         if extracted_datasets is None:
@@ -6858,6 +7521,8 @@ class ChemometricsGUI:
                             'marker': 'o',
                             'class_data': main_class_data
                         }
+                        if main_class_layers is not None:
+                            main_dataset['class_layers'] = main_class_layers
                         if z_data is not None:
                             main_dataset['z_data'] = z_data
                         # Include point_labels_source if specified at config level
@@ -6905,6 +7570,40 @@ class ChemometricsGUI:
                         if isinstance(labels_data, (list, np.ndarray)):
                             sample_labels = [str(lbl) for lbl in labels_data]
                             break
+
+            if str(graph_type).strip().lower() == 'scatter':
+                scatter_state = self._compute_scatter_class_layer_state(
+                    config,
+                    datasets_config,
+                    outputs,
+                    execution_results.get('inputs', {}) if isinstance(execution_results, dict) else {},
+                )
+                effective_order = list(scatter_state.get('effective_order', []))
+                effective_map = dict(scatter_state.get('effective_map', {}))
+                layer_nature = dict(scatter_state.get('layer_nature', {}))
+
+                configured_order_raw = config.get('class_layer_order', [])
+                if scatter_state.get('is_multi_dataset') and isinstance(configured_order_raw, list) and 'marker' in [str(v).strip().lower() for v in configured_order_raw]:
+                    self._show_graph_warning_once(
+                        instance_alias,
+                        section_id,
+                        'scatter_marker_reserved',
+                        self.language_manager.translate(
+                            'ui.messages.scatter_marker_reserved_multi_dataset',
+                            'Scatter class-layer marker mapping is disabled for multiple datasets; marker is reserved for dataset identity.'
+                        )
+                    )
+
+                render_config['class_layer_order_effective'] = effective_order
+                render_config['class_layer_map_effective'] = effective_map
+                render_config['class_layer_nature_effective'] = {str(k): str(v) for k, v in layer_nature.items()}
+                render_config['class_layer_count'] = int(scatter_state.get('layer_count', 0))
+                render_config['class_color_palette_mode'] = str(config.get('class_color_palette_mode', 'auto'))
+                render_config['class_edge_palette_mode'] = str(config.get('class_edge_palette_mode', 'auto'))
+                render_config['class_color_cmap_continuous'] = str(config.get('class_color_cmap_continuous', self.settings_manager.get('colormap', 'viridis')))
+                render_config['class_edge_cmap_continuous'] = str(config.get('class_edge_cmap_continuous', self.settings_manager.get('colormap', 'viridis')))
+                render_config['class_color_cmap_qualitative'] = str(config.get('class_color_cmap_qualitative', self.settings_manager.get('qualitative_colormap', 'tab10')))
+                render_config['class_edge_cmap_qualitative'] = str(config.get('class_edge_cmap_qualitative', self.settings_manager.get('qualitative_colormap', 'tab10')))
             
             # Render graph using graph_renderer module
             graph_renderer = self._get_graph_renderer()
@@ -8682,7 +9381,9 @@ Count:
                         z_label_ds = 'Z'
                         data_dict[z_label_ds] = ds_z_data.flatten() if isinstance(ds_z_data, np.ndarray) else ds_z_data
                     if ds_class_data is not None:
-                        data_dict['Class'] = ds_class_data.flatten() if isinstance(ds_class_data, np.ndarray) else ds_class_data
+                        normalized_class_data = self._normalize_class_labels_for_plot(ds_class_data)
+                        if normalized_class_data is not None:
+                            data_dict['Class'] = normalized_class_data
                     
                     if data_dict:
                         df = pd.DataFrame(data_dict)
@@ -8710,20 +9411,18 @@ Count:
                 class_val = self._get_data_from_source(outputs, class_labels_source) if class_labels_source else None
                 if class_val is not None:
                     if isinstance(class_val, (list, np.ndarray)):
-                        class_data = np.array(class_val)
-                        if class_data.ndim > 1:
-                            class_data = class_data.flatten()
-                        data_dict['Class'] = class_data
+                        class_data = self._normalize_class_labels_for_plot(class_val)
+                        if class_data is not None:
+                            data_dict['Class'] = class_data
                 else:
                     # Try common class label sources
                     for class_source in ['class_data_cal', 'class_data_val', 'class_labels', 'class_data']:
                         class_val = self._get_data_from_source(outputs, class_source)
                         if class_val is not None:
                             if isinstance(class_val, (list, np.ndarray)):
-                                class_data = np.array(class_val)
-                                if class_data.ndim > 1:
-                                    class_data = class_data.flatten()
-                                data_dict['Class'] = class_data
+                                class_data = self._normalize_class_labels_for_plot(class_val)
+                                if class_data is not None:
+                                    data_dict['Class'] = class_data
                                 break
                 
                 if data_dict:
@@ -9823,12 +10522,14 @@ Count:
                     
                     # Extract class labels if specified
                     ds_class_data = None
+                    ds_class_layers = None
                     if 'class_labels' in dataset_cfg:
                         class_source = dataset_cfg['class_labels']
                         class_val = self._get_data_from_source(outputs, class_source)
                         if class_val is not None:
                             if isinstance(class_val, (list, np.ndarray)):
-                                ds_class_data = np.array(class_val)
+                                ds_class_layers = self._normalize_class_data_matrix(class_val)
+                                ds_class_data = self._normalize_class_labels_for_plot(class_val)
                     
                     # Dataset is valid and will be rendered
                     dataset_entry = {
@@ -9843,6 +10544,8 @@ Count:
                         dataset_entry['z_data'] = ds_z_data
                     if ds_class_data is not None:
                         dataset_entry['class_data'] = ds_class_data
+                    if ds_class_layers is not None:
+                        dataset_entry['class_layers'] = ds_class_layers
                     # Include color if specified (used as fallback when no class_data)
                     if 'color' in dataset_cfg:
                         dataset_entry['color'] = dataset_cfg['color']
@@ -9858,7 +10561,8 @@ Count:
                 class_val = self._get_data_from_source(outputs, class_source)
                 if class_val is not None:
                     if isinstance(class_val, (list, np.ndarray)):
-                        main_class_data = np.array(class_val)
+                        main_class_layers = self._normalize_class_data_matrix(class_val)
+                        main_class_data = self._normalize_class_labels_for_plot(class_val)
                         
                         # Create extracted_datasets if it doesn't exist
                         if extracted_datasets is None:
@@ -9872,6 +10576,8 @@ Count:
                             'marker': 'o',
                             'class_data': main_class_data
                         }
+                        if main_class_layers is not None:
+                            main_dataset['class_layers'] = main_class_layers
                         if z_data is not None:
                             main_dataset['z_data'] = z_data
                         # Include point_labels_source if specified at config level
@@ -9919,6 +10625,40 @@ Count:
                         if isinstance(labels_data, (list, np.ndarray)):
                             sample_labels = [str(lbl) for lbl in labels_data]
                             break
+
+            if str(graph_type).strip().lower() == 'scatter':
+                scatter_state = self._compute_scatter_class_layer_state(
+                    config,
+                    datasets_config,
+                    outputs,
+                    execution_results.get('inputs', {}) if isinstance(execution_results, dict) else {},
+                )
+                effective_order = list(scatter_state.get('effective_order', []))
+                effective_map = dict(scatter_state.get('effective_map', {}))
+                layer_nature = dict(scatter_state.get('layer_nature', {}))
+
+                configured_order_raw = config.get('class_layer_order', [])
+                if scatter_state.get('is_multi_dataset') and isinstance(configured_order_raw, list) and 'marker' in [str(v).strip().lower() for v in configured_order_raw]:
+                    self._show_graph_warning_once(
+                        instance_alias,
+                        section_id,
+                        'scatter_marker_reserved',
+                        self.language_manager.translate(
+                            'ui.messages.scatter_marker_reserved_multi_dataset',
+                            'Scatter class-layer marker mapping is disabled for multiple datasets; marker is reserved for dataset identity.'
+                        )
+                    )
+
+                render_config['class_layer_order_effective'] = effective_order
+                render_config['class_layer_map_effective'] = effective_map
+                render_config['class_layer_nature_effective'] = {str(k): str(v) for k, v in layer_nature.items()}
+                render_config['class_layer_count'] = int(scatter_state.get('layer_count', 0))
+                render_config['class_color_palette_mode'] = str(config.get('class_color_palette_mode', 'auto'))
+                render_config['class_edge_palette_mode'] = str(config.get('class_edge_palette_mode', 'auto'))
+                render_config['class_color_cmap_continuous'] = str(config.get('class_color_cmap_continuous', self.settings_manager.get('colormap', 'viridis')))
+                render_config['class_edge_cmap_continuous'] = str(config.get('class_edge_cmap_continuous', self.settings_manager.get('colormap', 'viridis')))
+                render_config['class_color_cmap_qualitative'] = str(config.get('class_color_cmap_qualitative', self.settings_manager.get('qualitative_colormap', 'tab10')))
+                render_config['class_edge_cmap_qualitative'] = str(config.get('class_edge_cmap_qualitative', self.settings_manager.get('qualitative_colormap', 'tab10')))
             
             # Render graph using graph_renderer module
             graph_renderer = self._get_graph_renderer()
@@ -10713,6 +11453,22 @@ Count:
             return [", ".join(str(v) for v in row) for row in reshaped.tolist()]
         except Exception:
             return []
+
+    def _normalize_class_labels_for_plot(self, value: Any) -> Optional[np.ndarray]:
+        """Normalize class labels to one value per sample (uses first column for multi-layer inputs)."""
+        if value is None:
+            return None
+        try:
+            arr = np.asarray(value, dtype=object)
+            if arr.ndim == 0:
+                return np.array([str(arr.item())], dtype=object)
+            if arr.ndim == 1:
+                return arr
+
+            reshaped = arr.reshape(arr.shape[0], -1)
+            return reshaped[:, 0]
+        except Exception:
+            return None
 
     def _latest_report_outputs_map(self) -> Dict[str, Any]:
         """Collect latest available output/input values in methodology order."""
@@ -11837,7 +12593,18 @@ Count:
                         continue
                     
                     # Special handling for file paths
-                    if key in ("data_path", "var_path", "smp_path", "y_path", "y_val_path", "X_val_path", "Y_val_path"):
+                    if key in (
+                        "data_path",
+                        "var_path",
+                        "smp_path",
+                        "y_path",
+                        "y_val_path",
+                        "X_val_path",
+                        "Y_val_path",
+                        "val_labels_path",
+                        "selection_file",
+                        "cdata_path",
+                    ):
                         # Check if value is already a list
                         if isinstance(value, list):
                             # Already a list - normalize the paths inside
@@ -12106,6 +12873,53 @@ Count:
             metadata["modified_time"] = None
 
         return metadata
+
+    def _looks_like_file_parameter(self, param_name: str) -> bool:
+        """Heuristically determine whether a parameter likely represents file path input."""
+        key = str(param_name or "").strip().lower()
+        if not key:
+            return False
+        if key in {"source_metadata_overrides", "file_size_bytes", "created_time", "modified_time"}:
+            return False
+        return (
+            key == "path"
+            or key.endswith("_path")
+            or key.endswith("_paths")
+            or key.endswith("_file")
+            or key.endswith("_files")
+            or "path" in key
+        )
+
+    def _get_file_parameter_candidates(self, base_alias: str, params: Dict[str, Any]) -> Set[str]:
+        """Collect parameter names that may contain file paths for packaging."""
+        candidates: Set[str] = set(self._get_path_parameters(base_alias))
+        for key in params.keys():
+            if self._looks_like_file_parameter(key):
+                candidates.add(key)
+        return candidates
+
+    def _package_model_param_paths(
+        self,
+        value: Any,
+        files_to_copy: List[Path],
+        packaged_source_metadata: Dict[str, Dict[str, Any]]
+    ) -> Any:
+        """Convert filesystem paths in parameter values to tempfiles references and collect files."""
+        if isinstance(value, list):
+            return [
+                self._package_model_param_paths(item, files_to_copy, packaged_source_metadata)
+                for item in value
+            ]
+
+        if isinstance(value, str) and value:
+            src_file = Path(value)
+            if src_file.exists() and src_file.is_file():
+                files_to_copy.append(src_file)
+                temp_ref = f"tempfiles/{src_file.name}"
+                packaged_source_metadata[temp_ref] = self._extract_source_file_metadata(src_file)
+                return temp_ref
+
+        return value
     
     def _save_model_with_data(self, dialog):
         """Save model with calibration data to .mdcd file."""
@@ -12144,59 +12958,24 @@ Count:
                     base_alias = func_entry.get('base_alias', '')
                     params = func_entry.get('parameters', {})
                     
-                    # Get path parameters for this function using ispath flag
-                    path_params = self._get_path_parameters(base_alias)
+                    # Get file-like parameters for this function
+                    file_params = self._get_file_parameter_candidates(base_alias, params)
                     
                     # For validation_data functions, remove all file paths
                     if 'validation_data' in base_alias:
-                        for param_name in path_params:
+                        for param_name in list(file_params):
                             if param_name in params:
                                 del params[param_name]
                         continue
                     
                     # Replace paths with tempfiles references
-                    for param_name in path_params:
+                    for param_name in file_params:
                         if param_name in params:
-                            param_value = params[param_name]
-                            # Handle nested lists, simple lists, and string values
-                            if isinstance(param_value, list):
-                                new_paths = []
-                                for item in param_value:
-                                    if isinstance(item, list):
-                                        # Nested list (e.g., sample_paths: list of lists)
-                                        nested_paths = []
-                                        for file_path in item:
-                                            if isinstance(file_path, str) and file_path:
-                                                src_file = Path(file_path)
-                                                if src_file.exists():
-                                                    files_to_copy.append(src_file)
-                                                    temp_ref = f"tempfiles/{src_file.name}"
-                                                    nested_paths.append(temp_ref)
-                                                    packaged_source_metadata[temp_ref] = self._extract_source_file_metadata(src_file)
-                                                else:
-                                                    nested_paths.append(file_path)
-                                            else:
-                                                nested_paths.append(file_path)
-                                        new_paths.append(nested_paths)
-                                    elif isinstance(item, str) and item:
-                                        src_file = Path(item)
-                                        if src_file.exists():
-                                            files_to_copy.append(src_file)
-                                            temp_ref = f"tempfiles/{src_file.name}"
-                                            new_paths.append(temp_ref)
-                                            packaged_source_metadata[temp_ref] = self._extract_source_file_metadata(src_file)
-                                        else:
-                                            new_paths.append(item)
-                                    else:
-                                        new_paths.append(item)
-                                params[param_name] = new_paths
-                            elif isinstance(param_value, str) and param_value:
-                                src_file = Path(param_value)
-                                if src_file.exists():
-                                    files_to_copy.append(src_file)
-                                    temp_ref = f"tempfiles/{src_file.name}"
-                                    params[param_name] = temp_ref
-                                    packaged_source_metadata[temp_ref] = self._extract_source_file_metadata(src_file)
+                            params[param_name] = self._package_model_param_paths(
+                                params[param_name],
+                                files_to_copy,
+                                packaged_source_metadata
+                            )
 
                 if packaged_source_metadata:
                     model_data["packaged_source_metadata"] = packaged_source_metadata
@@ -12269,7 +13048,7 @@ Count:
                     params = func_entry.get('parameters', {})
                     
                     # Get path parameters for this function using ispath flag
-                    path_params = self._get_path_parameters(base_alias)
+                    path_params = self._get_file_parameter_candidates(base_alias, params)
                     
                     # Remove only file paths marked with ispath:true
                     for param_name in path_params:
@@ -12339,52 +13118,17 @@ Count:
                     base_alias = func_entry.get('base_alias', '')
                     params = func_entry.get('parameters', {})
                     
-                    # Get path parameters for this function using ispath flag
-                    path_params = self._get_path_parameters(base_alias)
+                    # Get file-like parameters for this function
+                    path_params = self._get_file_parameter_candidates(base_alias, params)
                     
                     # Process each path parameter (copy files, rename paths to tempfiles/)
                     for param_name in path_params:
                         if param_name in params:
-                            param_value = params[param_name]
-                            # Handle nested lists, simple lists, and string values
-                            if isinstance(param_value, list):
-                                new_paths = []
-                                for item in param_value:
-                                    if isinstance(item, list):
-                                        # Nested list (e.g., sample_paths: list of lists)
-                                        nested_paths = []
-                                        for file_path in item:
-                                            if isinstance(file_path, str) and file_path:
-                                                src_file = Path(file_path)
-                                                if src_file.exists():
-                                                    files_to_copy.append(src_file)
-                                                    temp_ref = f"tempfiles/{src_file.name}"
-                                                    nested_paths.append(temp_ref)
-                                                    packaged_source_metadata[temp_ref] = self._extract_source_file_metadata(src_file)
-                                                else:
-                                                    nested_paths.append(file_path)
-                                            else:
-                                                nested_paths.append(file_path)
-                                        new_paths.append(nested_paths)
-                                    elif isinstance(item, str) and item:
-                                        src_file = Path(item)
-                                        if src_file.exists():
-                                            files_to_copy.append(src_file)
-                                            temp_ref = f"tempfiles/{src_file.name}"
-                                            new_paths.append(temp_ref)
-                                            packaged_source_metadata[temp_ref] = self._extract_source_file_metadata(src_file)
-                                        else:
-                                            new_paths.append(item)
-                                    else:
-                                        new_paths.append(item)
-                                params[param_name] = new_paths
-                            elif isinstance(param_value, str) and param_value:
-                                src_file = Path(param_value)
-                                if src_file.exists():
-                                    files_to_copy.append(src_file)
-                                    temp_ref = f"tempfiles/{src_file.name}"
-                                    params[param_name] = temp_ref
-                                    packaged_source_metadata[temp_ref] = self._extract_source_file_metadata(src_file)
+                            params[param_name] = self._package_model_param_paths(
+                                params[param_name],
+                                files_to_copy,
+                                packaged_source_metadata
+                            )
 
                 if packaged_source_metadata:
                     model_data["packaged_source_metadata"] = packaged_source_metadata
@@ -12518,6 +13262,23 @@ Count:
         # Load functions
         packaged_source_metadata = model_data.get('packaged_source_metadata', {})
 
+        # Build fallback mapping from original source paths -> extracted tempfiles paths.
+        # This keeps compatibility with packaged models that still persist original paths
+        # in parameters while carrying packaged_source_metadata + files payload.
+        original_to_temp_abs: Dict[str, str] = {}
+        for temp_ref, source_meta in packaged_source_metadata.items() if isinstance(packaged_source_metadata, dict) else []:
+            if not isinstance(temp_ref, str):
+                continue
+            normalized_ref = temp_ref.replace('\\', '/')
+            if not normalized_ref.startswith('tempfiles/'):
+                continue
+            temp_abs = str(self.tempfiles_dir / normalized_ref.replace('tempfiles/', ''))
+            if not isinstance(source_meta, dict):
+                continue
+            original_path = source_meta.get('file_path')
+            if isinstance(original_path, str) and original_path:
+                original_to_temp_abs[str(Path(original_path))] = temp_abs
+
         for func_entry in model_data.get('functions', []):
             instance_alias = func_entry.get('instance_alias', '')
             base_alias = func_entry.get('base_alias', '')
@@ -12529,13 +13290,27 @@ Count:
             
             # Convert tempfiles references to absolute paths and collect source metadata overrides
             def _convert_tempfile_paths(value: Any) -> Any:
-                if isinstance(value, str) and value.startswith('tempfiles/'):
-                    temp_ref = value.replace('\\', '/')
-                    abs_path = str(self.tempfiles_dir / temp_ref.replace('tempfiles/', ''))
-                    source_meta = packaged_source_metadata.get(temp_ref)
-                    if isinstance(source_meta, dict):
-                        source_metadata_overrides[abs_path] = copy.deepcopy(source_meta)
-                    return abs_path
+                if isinstance(value, str):
+                    normalized_value = value.replace('\\', '/')
+
+                    if normalized_value.startswith('tempfiles/'):
+                        temp_ref = normalized_value
+                        abs_path = str(self.tempfiles_dir / temp_ref.replace('tempfiles/', ''))
+                        source_meta = packaged_source_metadata.get(temp_ref)
+                        if isinstance(source_meta, dict):
+                            source_metadata_overrides[abs_path] = copy.deepcopy(source_meta)
+                        return abs_path
+
+                    fallback_abs_path = original_to_temp_abs.get(str(Path(value)))
+                    if fallback_abs_path:
+                        for _temp_ref, source_meta in packaged_source_metadata.items() if isinstance(packaged_source_metadata, dict) else []:
+                            if not isinstance(source_meta, dict):
+                                continue
+                            if str(source_meta.get('file_path', '')) == str(Path(value)):
+                                source_metadata_overrides[fallback_abs_path] = copy.deepcopy(source_meta)
+                                break
+                        return fallback_abs_path
+
                 if isinstance(value, list):
                     return [_convert_tempfile_paths(item) for item in value]
                 return value

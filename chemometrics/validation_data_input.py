@@ -1,11 +1,11 @@
 from chemometrics.data_input import load_data
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Any
 import numpy as np
 import os
 
 
 def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal: List[str],
-                          class_data_cal: Optional[List[str]] = None,
+                          class_data_cal: Optional[List[Any]] = None,
                           cal_metadata: Optional[dict] = None,
                           validation_mode: Optional[str] = None, createVal: Optional[bool] = None,
                           creationMethod: Optional[str] = None,
@@ -20,7 +20,7 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
                           X_val_path: Optional[str] = None, Y_val_path: Optional[str] = None,
                           val_labels_path: Optional[str] = None,
                           cdata_path: Optional[str] = None,
-                          source_metadata_overrides: Optional[dict] = None) -> Tuple[np.ndarray, Optional[np.ndarray], np.ndarray, Optional[np.ndarray], List[str], List[str], Optional[List[str]], Optional[List[str]], Optional[dict], Optional[dict]]:
+                          source_metadata_overrides: Optional[dict] = None) -> Tuple[np.ndarray, Optional[np.ndarray], np.ndarray, Optional[np.ndarray], List[str], List[str], Optional[List[Any]], Optional[List[Any]], Optional[dict], Optional[dict]]:
     """
     Split data into calibration and validation sets.
 
@@ -60,9 +60,9 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
         if X_val_path or Y_val_path:
             # Load from external file paths
             X_val, Y_val, _, smp_val, _, _, class_data_val, val_metadata = load_data(
-                d_specs_separator=d_specs_separator or "tabs",
-                d_specs_headlines=d_specs_headlines or "0",
-                d_specs_type=d_specs_type or "x_matrix",
+                d_specs_separator=d_specs_separator or "Auto detect",
+                d_specs_headlines=d_specs_headlines if d_specs_headlines is not None else "",
+                d_specs_type=d_specs_type or "Auto detect",
                 d_specs_dimensions=d_specs_dimensions or "",
                 data_path=[X_val_path] if X_val_path else [],
                 nway_flag=nway_flag or 1,
@@ -79,9 +79,9 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
             if data_path is None or nway_flag is None:
                 raise ValueError("Either X_val_path/Y_val_path or data_path/nway_flag required when loading external validation")
             X_val, Y_val, _, smp_val, _, _, class_data_val, val_metadata = load_data(
-                d_specs_separator=d_specs_separator or "tabs",
-                d_specs_headlines=d_specs_headlines or "0",
-                d_specs_type=d_specs_type or "x_matrix",
+                d_specs_separator=d_specs_separator or "Auto detect",
+                d_specs_headlines=d_specs_headlines if d_specs_headlines is not None else "",
+                d_specs_type=d_specs_type or "Auto detect",
                 d_specs_dimensions=d_specs_dimensions or "",
                 data_path=data_path,
                 nway_flag=nway_flag,

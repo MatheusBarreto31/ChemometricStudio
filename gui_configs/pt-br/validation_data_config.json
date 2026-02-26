@@ -142,7 +142,7 @@
         "multiple": false,
         "required": false,
         "input_type": "user",
-        "tooltip": "Arquivo de dados de classificação para validação externa (um rótulo de classe por linha)",
+        "tooltip": "Arquivo de classificação para validação externa: uma amostra por linha, com rótulo único ou múltiplas camadas (colunas separadas por vírgula, tabulação ou espaço).",
         "visible_if": {"validation_mode": "Load"},
         "ispath": true
       },
@@ -195,34 +195,34 @@
         "name": "d_specs_separator",
         "label": "Separador de Dados (herdado de Carregar Dados)",
         "widget": "combobox",
-        "values": ["vírgula", "tabulações", "espaços"],
-        "default": "tabulações",
+        "values": ["Auto detect", "vírgula", "tabulações", "espaços"],
+        "default": "Auto detect",
         "required": true,
         "input_type": "inherited",
         "visible_if": {"input_type": "user"},
-        "tooltip": "Herdado automaticamente da função Carregar Dados"
+        "tooltip": "Herdado automaticamente da função Carregar Dados. Padrão: Auto detect."
       },
       {
         "name": "d_specs_headlines",
         "label": "Número de Linhas de Cabeçalho (herdado de Carregar Dados)",
         "widget": "entry",
-        "type": "int",
-        "default": "0",
+        "type": "str",
+        "default": "",
         "required": true,
         "input_type": "inherited",
         "visible_if": {"input_type": "user"},
-        "tooltip": "Herdado automaticamente da função Carregar Dados"
+        "tooltip": "Herdado automaticamente da função Carregar Dados. Deixe vazio para detectar automaticamente."
       },
       {
         "name": "d_specs_type",
         "label": "Tipo de Dados (herdado de Carregar Dados)",
         "widget": "combobox",
-        "values": ["x_vector", "xy_vector", "xyz_vector", "x_matrix", "xy_matrix"],
-        "default": "x_matrix",
+        "values": ["Auto detect", "x_vector", "xy_vector", "xyz_vector", "x_matrix", "xy_matrix"],
+        "default": "Auto detect",
         "required": true,
         "input_type": "inherited",
         "visible_if": {"input_type": "user"},
-        "tooltip": "Herdado automaticamente da função Carregar Dados"
+        "tooltip": "Herdado automaticamente da função Carregar Dados. Padrão: Auto detect."
       },
       {
         "name": "d_specs_dimensions",

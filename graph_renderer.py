@@ -11,6 +11,8 @@ import numpy as np
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib import cm
+from matplotlib import colors as mcolors
+from matplotlib.markers import MarkerStyle
 from matplotlib.patches import Ellipse
 from matplotlib.ticker import MaxNLocator, FuncFormatter
 import tkinter as tk
@@ -424,88 +426,154 @@ def _render_point_labels(ax, x_data, y_data, labels, use_3d: bool = False, z_dat
 def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: dict, 
                                  use_3d: bool, qualitative_cmap: str,
                                  sample_labels_by_dataset: Optional[Dict[str, List[str]]] = None) -> None:
-    """Render multiple datasets on the same scatter plot with class-based coloring.
-    
-    Each dataset uses a unique marker. Classes within datasets use colors from the qualitative colormap.
-    Dataset color (if provided) is used as fallback when no class_data is available.
-    Sample labels enable tooltip display on hover.
-    
-    Legend shows two separate groups:
-    - Datasets: Each dataset as a separate entry with its marker and a muted color
-    - Classes: Each class as a separate entry with a standard marker and class color
-    
-    Args:
-        ax: Matplotlib axes
-        datasets: List of dataset dicts, each containing:
-            - 'x_data': numpy array
-            - 'y_data': numpy array
-            - 'z_data': numpy array (optional, for 3D)
-            - 'label': str (dataset name)
-            - 'marker': str (marker type, e.g., 'o', 's', '^')
-            - 'class_data': numpy array of class labels (optional)
-            - 'color': str (fallback color if no class_data, e.g., '#808080')
-        config: Graph configuration
-        use_3d: Whether to render as 3D scatter
-        qualitative_cmap: Name of qualitative colormap
-        sample_labels_by_dataset: Optional dict mapping dataset labels to their sample labels
-    """
+    """Render scatter with class-layer styling (marker, color, fill, edge-color)."""
     from matplotlib.lines import Line2D
-    
-    # Get colormap
-    try:
-        cmap = cm.get_cmap(qualitative_cmap)
-    except ValueError:
-        cmap = cm.get_cmap('tab10')  # Fallback to tab10
-    
-    # Extract discrete color list from qualitative colormap
-    # Qualitative colormaps have a fixed set of colors (e.g., tab10 has 10)
-    if hasattr(cmap, 'colors'):
-        cmap_colors = list(cmap.colors)
-    else:
-        # Fallback: sample N colors evenly from the colormap
-        n_sample = getattr(cmap, 'N', 10)
-        cmap_colors = [cmap(i / n_sample) for i in range(n_sample)]
-    
-    # Collect all unique classes across all datasets to ensure consistent coloring
-    all_classes = set()
-    for dataset in datasets:
-        if 'class_data' in dataset and dataset['class_data'] is not None:
-            unique_classes = np.unique(dataset['class_data'])
-            all_classes.update(unique_classes)
-    
-    # Sort classes for consistent color assignment
-    all_classes = sorted(list(all_classes))
-    
-    # Create class-to-color mapping using discrete colormap colors
-    class_to_color = {}
-    if all_classes:
-        for idx, cls in enumerate(all_classes):
-            class_to_color[cls] = cmap_colors[idx % len(cmap_colors)]
-    
-    # Check if we have only one dataset (for cleaner legend)
-    is_single_dataset = len(datasets) == 1
-    
-    # Track legend items for later construction
-    dataset_legend_items = []  # List of (label, marker, muted_color) for datasets
-    
-    # Plot each dataset
+
+    def _safe_cmap(name: str, fallback: str = 'viridis'):
+        try:
+            return cm.get_cmap(str(name))
+        except Exception:
+            return cm.get_cmap(fallback)
+
+    def _flatten_axis(values: Any) -> np.ndarray:
+        arr = np.asarray(values)
+        if arr.ndim <= 1:
+            return arr.reshape(-1)
+        return arr.reshape(arr.shape[0], -1)[:, 0]
+
+    def _normalize_class_layers(dataset: Dict[str, Any], n_points: int) -> Optional[np.ndarray]:
+        layers = dataset.get('class_layers')
+        if layers is None and dataset.get('class_data') is not None:
+            layers = dataset.get('class_data')
+        if layers is None:
+            return None
+        arr = np.asarray(layers, dtype=object)
+        if arr.ndim == 0:
+            arr = np.asarray([[arr.item()]], dtype=object)
+        elif arr.ndim == 1:
+            arr = arr.reshape(-1, 1)
+        else:
+            arr = arr.reshape(arr.shape[0], -1)
+        if arr.shape[0] > n_points:
+            arr = arr[:n_points, :]
+        return arr
+
+    def _layer_is_continuous(values: np.ndarray) -> Optional[bool]:
+        cleaned = []
+        has_decimal = False
+        for raw in np.asarray(values, dtype=object).tolist():
+            text = str(raw).strip()
+            if text == '' or text.lower() in {'nan', 'none'}:
+                continue
+            cleaned.append(text)
+            if any(ch in text for ch in ('.', 'e', 'E')):
+                has_decimal = True
+        if not cleaned:
+            return None
+        numeric = []
+        for text in cleaned:
+            try:
+                numeric.append(float(text))
+            except Exception:
+                return None
+        if has_decimal:
+            return True
+        unique = np.unique(np.asarray(numeric, dtype=float))
+        if unique.size <= 1:
+            return False
+        span = float(unique.max() - unique.min())
+        diffs = np.diff(np.sort(unique))
+        median_diff = float(np.median(diffs)) if diffs.size > 0 else 0.0
+        if span <= max(3.0, float(unique.size) * 3.0) and median_diff <= 2.0:
+            return False
+        return True
+
+    def _as_float(values: np.ndarray) -> Optional[np.ndarray]:
+        out = []
+        for raw in np.asarray(values, dtype=object).tolist():
+            try:
+                out.append(float(str(raw).strip()))
+            except Exception:
+                return None
+        return np.asarray(out, dtype=float)
+
+    def _discrete_color_map(values: np.ndarray, cmap_name: str) -> Tuple[np.ndarray, Dict[str, Any]]:
+        cmap_obj = _safe_cmap(cmap_name, 'tab10')
+        values_arr = np.asarray(values, dtype=object)
+        unique_vals = [v for v in np.unique(values_arr)]
+        if hasattr(cmap_obj, 'colors'):
+            palette = list(cmap_obj.colors)
+        else:
+            n_sample = max(10, int(getattr(cmap_obj, 'N', 10) or 10))
+            palette = [cmap_obj(i / max(1, n_sample - 1)) for i in range(n_sample)]
+        mapping = {str(v): mcolors.to_rgba(palette[i % len(palette)]) for i, v in enumerate(unique_vals)}
+        colors = np.array([mapping[str(v)] for v in values_arr], dtype=float)
+        return colors, mapping
+
+    def _continuous_color_map(values: np.ndarray, cmap_name: str) -> np.ndarray:
+        numeric = _as_float(values)
+        if numeric is None or numeric.size == 0:
+            return np.tile(np.array([[0.4, 0.4, 0.4, 1.0]]), (len(values), 1))
+        cmap_obj = _safe_cmap(cmap_name, 'viridis')
+        vmin = float(np.nanmin(numeric))
+        vmax = float(np.nanmax(numeric))
+        if np.isclose(vmin, vmax):
+            normed = np.zeros_like(numeric)
+        else:
+            normed = (numeric - vmin) / (vmax - vmin)
+        return cmap_obj(normed)
+
+    is_multi_dataset = len(datasets) > 1
+    all_aspects = ['color', 'marker', 'fill', 'edge']
+    available_aspects = ['color', 'marker', 'edge'] if is_multi_dataset else all_aspects
+
+    configured_order = config.get('class_layer_order_effective', config.get('class_layer_order', []))
+    if not isinstance(configured_order, list):
+        configured_order = []
+    configured_order = [str(a).strip().lower() for a in configured_order if str(a).strip().lower() in available_aspects]
+
+    configured_map = config.get('class_layer_map_effective', config.get('class_layer_map', {}))
+    if not isinstance(configured_map, dict):
+        configured_map = {}
+
+    nature_cfg = config.get('class_layer_nature_effective', config.get('class_layer_nature', {}))
+    if not isinstance(nature_cfg, dict):
+        nature_cfg = {}
+
+    marker_cycle = ['o', 's', '^', 'D', 'v', 'P', 'X', '*', '<', '>']
+    fill_style_cycle = ['full', 'none', 'left', 'right', 'bottom', 'top']
+    dataset_legend_items = []
+    class_legend_mapping: Dict[str, Any] = {}
+
+    color_cmap_cont = str(config.get('class_color_cmap_continuous', config.get('cmap', 'viridis')))
+    edge_cmap_cont = str(config.get('class_edge_cmap_continuous', config.get('cmap', 'viridis')))
+    color_cmap_qual = str(config.get('class_color_cmap_qualitative', qualitative_cmap))
+    edge_cmap_qual = str(config.get('class_edge_cmap_qualitative', qualitative_cmap))
+
     show_labels = config.get('show_labels', False)
-    for dataset in datasets:
-        x_data = dataset.get('x_data')
-        y_data = dataset.get('y_data')
+    for dataset_idx, dataset in enumerate(datasets):
+        x_data = _flatten_axis(dataset.get('x_data'))
+        y_data = _flatten_axis(dataset.get('y_data'))
         z_data = dataset.get('z_data')
         dataset_label = dataset.get('label', 'Dataset')
         marker = dataset.get('marker', 'o')
-        class_data = dataset.get('class_data')
+        dataset_fillstyle = fill_style_cycle[dataset_idx % len(fill_style_cycle)]
         fallback_color = dataset.get('color')  # Optional explicit color for non-class mode
-        
-        if x_data is None or y_data is None:
+
+        if x_data is None or y_data is None or len(x_data) == 0 or len(y_data) == 0:
             continue
-        
-        # If no class data, plot all points with same color (explicit or default)
-        if class_data is None:
+
+        n_points = min(len(x_data), len(y_data))
+        x_data = np.asarray(x_data[:n_points])
+        y_data = np.asarray(y_data[:n_points])
+        z_data = np.asarray(z_data[:n_points]) if (use_3d and z_data is not None) else None
+
+        class_layers = _normalize_class_layers(dataset, n_points)
+        if class_layers is None or class_layers.size == 0:
+            base_marker = 'o' if is_multi_dataset else marker
+            marker_obj = MarkerStyle(base_marker, fillstyle=dataset_fillstyle if is_multi_dataset else 'full')
             scatter_kwargs = {
-                'marker': marker,
+                'marker': marker_obj,
                 'alpha': 0.6,
                 's': 30,
                 'picker': 5  # Enable picking for tooltips
@@ -535,37 +603,262 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
                     )
             
             # Track for legend
-            dataset_legend_items.append((dataset_label, marker, fallback_color or 'gray'))
+            dataset_legend_items.append((dataset_label, base_marker, fallback_color or 'gray', dataset_fillstyle))
         else:
-            # Plot by class with different colors (class coloring takes precedence over fallback_color)
-            unique_classes = np.unique(class_data)
-            for cls in unique_classes:
-                mask = class_data == cls
-                x_subset = x_data[mask]
-                y_subset = y_data[mask]
-                
-                # Get color for this class
-                color = class_to_color.get(cls, 'C0')
-                
-                # Plot without label - we'll use custom legend entries instead
-                if use_3d and z_data is not None:
-                    z_subset = z_data[mask]
-                    scatter = ax.scatter(x_subset, y_subset, z_subset, marker=marker, 
-                             color=color, alpha=0.6, s=30, picker=5)
+            n_layers = class_layers.shape[1]
+            active_order = [a for a in configured_order if a in available_aspects]
+            if not active_order:
+                auto_count = min(len(available_aspects), n_layers)
+                active_order = available_aspects[:auto_count]
+
+            aspect_layer_values: Dict[str, np.ndarray] = {}
+            aspect_nature: Dict[str, str] = {}
+            for idx, aspect in enumerate(active_order):
+                raw_layer_idx = configured_map.get(aspect, idx + 1)
+                try:
+                    layer_idx = int(raw_layer_idx)
+                except Exception:
+                    layer_idx = idx + 1
+
+                if layer_idx <= 0:
+                    continue
+
+                layer_idx = max(1, min(layer_idx, n_layers))
+                if layer_idx < 1 or layer_idx > n_layers:
+                    continue
+
+                values = class_layers[:, layer_idx - 1]
+                aspect_layer_values[aspect] = values
+
+                nature_raw = str(nature_cfg.get(str(layer_idx), nature_cfg.get(layer_idx, ''))).strip().lower()
+                if nature_raw in {'discrete', 'continuous'}:
+                    aspect_nature[aspect] = nature_raw
                 else:
-                    scatter = ax.scatter(x_subset, y_subset, marker=marker, 
-                             color=color, alpha=0.6, s=30, picker=5)
-                
-                # Store sample labels on scatter object if provided
-                # For class-colored datasets, subset the labels to match the masked data
-                if sample_labels_by_dataset and dataset_label in sample_labels_by_dataset:
-                    all_labels = sample_labels_by_dataset[dataset_label]
-                    # Apply same mask to subset the labels
-                    if mask is not None and len(all_labels) == len(mask):
-                        labels_subset = [all_labels[i] for i in range(len(all_labels)) if mask[i]]
-                        scatter.sample_labels = labels_subset
-                        scatter.x_data = x_subset
-                        scatter.y_data = y_subset
+                    detected = _layer_is_continuous(values)
+                    aspect_nature[aspect] = 'continuous' if detected is True else 'discrete'
+
+            marker_values = np.asarray(aspect_layer_values['marker'], dtype=object) if 'marker' in aspect_layer_values else None
+            base_marker = 'o' if is_multi_dataset else marker
+            marker_vector = np.asarray([base_marker] * n_points, dtype=object)
+            if marker_values is not None:
+                unique_markers = np.unique(marker_values)
+                marker_map = {str(v): marker_cycle[i % len(marker_cycle)] for i, v in enumerate(unique_markers)}
+                marker_vector = np.asarray([marker_map[str(v)] for v in marker_values], dtype=object)
+
+            fillstyle_vector = np.asarray([
+                dataset_fillstyle if is_multi_dataset else 'full'
+            ] * n_points, dtype=object)
+            if (not is_multi_dataset) and 'fill' in aspect_layer_values:
+                fill_values = np.asarray(aspect_layer_values['fill'], dtype=object)
+                if aspect_nature.get('fill') == 'continuous':
+                    numeric_fill = _as_float(fill_values)
+                    if numeric_fill is not None and numeric_fill.size > 0:
+                        vmin = float(np.nanmin(numeric_fill))
+                        vmax = float(np.nanmax(numeric_fill))
+                        if np.isclose(vmin, vmax):
+                            fillstyle_vector = np.asarray(['full'] * n_points, dtype=object)
+                        else:
+                            normalized = (numeric_fill - vmin) / (vmax - vmin)
+                            indices = np.clip(np.round(normalized * (len(fill_style_cycle) - 1)).astype(int), 0, len(fill_style_cycle) - 1)
+                            fillstyle_vector = np.asarray([fill_style_cycle[idx] for idx in indices], dtype=object)
+                else:
+                    unique_fill = np.unique(fill_values)
+                    fill_map = {str(v): fill_style_cycle[i % len(fill_style_cycle)] for i, v in enumerate(unique_fill)}
+                    fillstyle_vector = np.asarray([fill_map[str(v)] for v in fill_values], dtype=object)
+
+            if 'color' in aspect_layer_values:
+                color_values = np.asarray(aspect_layer_values['color'], dtype=object)
+                use_cont = aspect_nature.get('color') == 'continuous'
+                if use_cont:
+                    face_rgba = _continuous_color_map(color_values, color_cmap_cont)
+                else:
+                    face_rgba, discrete_map = _discrete_color_map(color_values, color_cmap_qual)
+                    for key, rgba in discrete_map.items():
+                        class_legend_mapping[key] = rgba
+            else:
+                if fallback_color:
+                    fallback_rgba = np.asarray(mcolors.to_rgba(fallback_color), dtype=float)
+                else:
+                    fallback_rgba = np.asarray(mcolors.to_rgba('C0'), dtype=float)
+                face_rgba = np.tile(fallback_rgba, (n_points, 1))
+
+            if 'edge' in aspect_layer_values:
+                edge_values = np.asarray(aspect_layer_values['edge'], dtype=object)
+                use_cont_edge = aspect_nature.get('edge') == 'continuous'
+                if use_cont_edge:
+                    edge_rgba = _continuous_color_map(edge_values, edge_cmap_cont)
+                else:
+                    edge_rgba, _ = _discrete_color_map(edge_values, edge_cmap_qual)
+            else:
+                edge_rgba = np.copy(face_rgba)
+                edge_rgba[:, 3] = np.maximum(edge_rgba[:, 3], 0.85)
+
+            unique_markers = [m for m in np.unique(marker_vector)]
+            for marker_symbol in unique_markers:
+                marker_mask = marker_vector == marker_symbol
+                if not np.any(marker_mask):
+                    continue
+                marker_fillstyles = np.unique(fillstyle_vector[marker_mask])
+                for fillstyle_name in marker_fillstyles:
+                    point_mask = marker_mask & (fillstyle_vector == fillstyle_name)
+                    if not np.any(point_mask):
+                        continue
+
+                    x_subset = x_data[point_mask]
+                    y_subset = y_data[point_mask]
+                    z_subset = z_data[point_mask] if (use_3d and z_data is not None) else None
+                    face_subset = np.copy(face_rgba[point_mask])
+                    edge_subset = np.copy(edge_rgba[point_mask])
+                    if face_subset.ndim == 1:
+                        face_subset = face_subset.reshape(1, -1)
+                    if edge_subset.ndim == 1:
+                        edge_subset = edge_subset.reshape(1, -1)
+
+                    fillstyle_str = str(fillstyle_name)
+                    marker_base = MarkerStyle(str(marker_symbol))
+                    marker_is_filled = bool(marker_base.is_filled())
+                    linewidths_subset = np.full(face_subset.shape[0], 1.8 if fillstyle_str == 'none' else 1.0, dtype=float)
+
+                    scatter = None
+                    if not marker_is_filled:
+                        point_color = edge_subset if edge_subset is not None else face_subset
+                        if use_3d and z_subset is not None:
+                            scatter = ax.scatter(
+                                x_subset,
+                                y_subset,
+                                z_subset,
+                                marker=str(marker_symbol),
+                                c=point_color,
+                                alpha=0.7,
+                                s=30,
+                                linewidths=linewidths_subset,
+                                picker=5
+                            )
+                        else:
+                            scatter = ax.scatter(
+                                x_subset,
+                                y_subset,
+                                marker=str(marker_symbol),
+                                c=point_color,
+                                alpha=0.7,
+                                s=30,
+                                linewidths=linewidths_subset,
+                                picker=5
+                            )
+                    elif fillstyle_str in {'left', 'right', 'bottom', 'top'}:
+                        outline_marker = MarkerStyle(str(marker_symbol), fillstyle='full')
+                        fill_marker = MarkerStyle(str(marker_symbol), fillstyle=fillstyle_str)
+
+                        if use_3d and z_subset is not None:
+                            ax.scatter(
+                                x_subset,
+                                y_subset,
+                                z_subset,
+                                marker=outline_marker,
+                                facecolors='none',
+                                edgecolors=edge_subset,
+                                alpha=0.7,
+                                s=30,
+                                linewidths=np.full(face_subset.shape[0], 1.2, dtype=float),
+                                picker=0
+                            )
+                            scatter = ax.scatter(
+                                x_subset,
+                                y_subset,
+                                z_subset,
+                                marker=fill_marker,
+                                c=face_subset,
+                                edgecolors='none',
+                                alpha=0.7,
+                                s=30,
+                                linewidths=0.0,
+                                picker=5
+                            )
+                        else:
+                            ax.scatter(
+                                x_subset,
+                                y_subset,
+                                marker=outline_marker,
+                                facecolors='none',
+                                edgecolors=edge_subset,
+                                alpha=0.7,
+                                s=30,
+                                linewidths=np.full(face_subset.shape[0], 1.2, dtype=float),
+                                picker=0
+                            )
+                            scatter = ax.scatter(
+                                x_subset,
+                                y_subset,
+                                marker=fill_marker,
+                                c=face_subset,
+                                edgecolors='none',
+                                alpha=0.7,
+                                s=30,
+                                linewidths=0.0,
+                                picker=5
+                            )
+                    elif fillstyle_str == 'none':
+                        outline_marker = MarkerStyle(str(marker_symbol), fillstyle='full')
+                        if use_3d and z_subset is not None:
+                            scatter = ax.scatter(
+                                x_subset,
+                                y_subset,
+                                z_subset,
+                                marker=outline_marker,
+                                facecolors='none',
+                                edgecolors=edge_subset,
+                                alpha=0.7,
+                                s=30,
+                                linewidths=np.full(face_subset.shape[0], 1.8, dtype=float),
+                                picker=5
+                            )
+                        else:
+                            scatter = ax.scatter(
+                                x_subset,
+                                y_subset,
+                                marker=outline_marker,
+                                facecolors='none',
+                                edgecolors=edge_subset,
+                                alpha=0.7,
+                                s=30,
+                                linewidths=np.full(face_subset.shape[0], 1.8, dtype=float),
+                                picker=5
+                            )
+                    else:
+                        marker_obj = MarkerStyle(str(marker_symbol), fillstyle=fillstyle_str)
+                        if use_3d and z_subset is not None:
+                            scatter = ax.scatter(
+                                x_subset,
+                                y_subset,
+                                z_subset,
+                                marker=marker_obj,
+                                c=face_subset,
+                                edgecolors=edge_subset,
+                                alpha=0.7,
+                                s=30,
+                                linewidths=linewidths_subset,
+                                picker=5
+                            )
+                        else:
+                            scatter = ax.scatter(
+                                x_subset,
+                                y_subset,
+                                marker=marker_obj,
+                                c=face_subset,
+                                edgecolors=edge_subset,
+                                alpha=0.7,
+                                s=30,
+                                linewidths=linewidths_subset,
+                                picker=5
+                            )
+
+                    if sample_labels_by_dataset and dataset_label in sample_labels_by_dataset:
+                        all_labels = sample_labels_by_dataset[dataset_label]
+                        if len(all_labels) >= n_points:
+                            labels_subset = [all_labels[i] for i in range(n_points) if point_mask[i]]
+                            scatter.sample_labels = labels_subset
+                            scatter.x_data = x_subset
+                            scatter.y_data = y_subset
 
             if show_labels and sample_labels_by_dataset and dataset_label in sample_labels_by_dataset:
                 _render_point_labels(
@@ -576,9 +869,8 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
                     use_3d=use_3d,
                     z_data=z_data
                 )
-            
-            # Track dataset for legend
-            dataset_legend_items.append((dataset_label, marker, 'gray'))  # muted/gray color for dataset marker
+
+            dataset_legend_items.append((dataset_label, base_marker, 'gray', dataset_fillstyle))
     
     # Set axis labels
     ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
@@ -593,26 +885,25 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
     # Add dataset entries only if multiple datasets (single dataset is implicit)
     if len(dataset_legend_items) > 1:
         # Add section header or separator (using an invisible entry)
-        if all_classes:  # Only add if we also have classes
+        if class_legend_mapping:  # Only add if we also have classes
             legend_handles.append(Line2D([0], [0], marker='', color='none', linewidth=0))
             legend_labels.append('Datasets:')
         
-        for dataset_label, marker, color in dataset_legend_items:
+        for dataset_label, marker, color, fillstyle in dataset_legend_items:
             handle = Line2D([0], [0], marker=marker, color='none', markerfacecolor=color, 
-                           markeredgecolor='gray', markersize=6, alpha=0.6, linewidth=0)
+                           markeredgecolor='gray', markersize=6, alpha=0.6, linewidth=0,
+                           fillstyle=fillstyle)
             legend_handles.append(handle)
             legend_labels.append(dataset_label)
     
     # Add class entries (only if we have classes)
-    if all_classes:
+    if class_legend_mapping:
         # Add section header
         if dataset_legend_items:  # Only add if we also have datasets
             legend_handles.append(Line2D([0], [0], marker='', color='none', linewidth=0))
             legend_labels.append('Classes:')
-        
-        # Add one entry per class with standard marker (circle) and class color
-        for cls in all_classes:
-            color = class_to_color.get(cls, 'C0')
+
+        for cls, color in class_legend_mapping.items():
             handle = Line2D([0], [0], marker='o', color='none', markerfacecolor=color, 
                            markeredgecolor='darkgray', markersize=6, alpha=0.6, linewidth=0)
             legend_handles.append(handle)
@@ -625,12 +916,12 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
     if not use_3d and _is_confidence_ellipses_enabled(config) and len(datasets) > 0:
         confidence = _parse_confidence_level(config)
         first_dataset = datasets[0]
-        first_x = first_dataset.get('x_data')
-        first_y = first_dataset.get('y_data')
+        first_x = _flatten_axis(first_dataset.get('x_data'))
+        first_y = _flatten_axis(first_dataset.get('y_data'))
         first_class_data = first_dataset.get('class_data')
         first_color = first_dataset.get('color', 'C0')
 
-        if first_x is not None and first_y is not None:
+        if first_x is not None and first_y is not None and len(first_x) > 0 and len(first_y) > 0:
             if first_class_data is not None:
                 first_class_data = np.asarray(first_class_data)
                 classes = np.unique(first_class_data)
@@ -638,7 +929,7 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
                     class_mask = first_class_data == cls
                     if not np.any(class_mask):
                         continue
-                    class_color = class_to_color.get(cls, first_color)
+                    class_color = class_legend_mapping.get(str(cls), first_color)
                     _draw_confidence_ellipse(ax, first_x[class_mask], first_y[class_mask], class_color, confidence)
             else:
                 _draw_confidence_ellipse(ax, first_x, first_y, first_color, confidence)

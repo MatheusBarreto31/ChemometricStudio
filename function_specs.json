@@ -140,7 +140,7 @@
     },
     "load_data": {
       "d_specs_separator": "str",
-      "d_specs_headlines": "int",
+      "d_specs_headlines": "str",
       "d_specs_type": "str",
       "d_specs_dimensions": "str",
       "data_path": "list",
@@ -169,7 +169,7 @@
       "Y_val_path": "str",
       "val_labels_path": "str",
       "d_specs_separator": "str",
-      "d_specs_headlines": "int",
+      "d_specs_headlines": "str",
       "d_specs_type": "str",
       "d_specs_dimensions": "str",
       "data_path": "list",
