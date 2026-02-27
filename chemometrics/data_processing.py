@@ -229,16 +229,14 @@ def _savitzky_golay_smooth(X: np.ndarray, nway_flag: int, direction: Optional[in
     return savgol_filter(X, window_size, polyorder, axis=axis)
 
 
-def center_and_normalize(
+def center_and_scale(
     X_cal: np.ndarray,
     X_val: Optional[np.ndarray] = None,
-    center: bool = True,
-    normalize: bool = False,
-    nway_flag: Optional[int] = None,
-    direction: Optional[int] = None
+    scaling_method: str = "center",
+    nway_flag: Optional[int] = None
 ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
-    Center and/or normalize data on the average of calibration samples.
+    Apply center/scaling preprocessing using calibration-derived statistics.
     
     This function handles both first-order (2D) and multiway data.
     When both X_cal and X_val are provided, both are processed using X_cal statistics.
@@ -246,63 +244,66 @@ def center_and_normalize(
     Args:
         X_cal: Calibration data (reference for centering/normalization)
         X_val: Optional validation data
-        center: If True, subtract mean from X_cal
-        normalize: If True, divide by standard deviation of X_cal
+        scaling_method: Preprocessing method. Supported values:
+                   - 'none': no scaling
+                   - 'center': mean centering only
+                   - 'autoscale': mean centering + division by std
+                   - 'frobenius': divide by Frobenius norm of X_cal
+                   - 'range_0_1': min-max scale to [0, 1]
+                   - 'range_-1_1': min-max scale to [-1, 1]
+                   - 'variance': mean centering + division by variance
         nway_flag: Number of ways (if None, auto-determined from X_cal)
-        direction: Direction for multiway data centering:
-                   - None or -1: Apply along last axis (features/wavelengths)
-                   - 0: Apply along first axis (samples)
-                   - Other integers: Apply along specified axis
         
     Returns:
         Centered/normalized X_cal, or (X_cal, X_val) if X_val provided
         
     Examples:
         # 2D data: (samples, wavelengths) - center on wavelengths
-        X_cal_centered = center_and_normalize(X_cal, center=True, normalize=False)
+        X_cal_centered = center_and_scale(X_cal, scaling_method="center")
         
-        # Multiway data with direction
-        X_cal, X_val = center_and_normalize(X_cal, X_val, center=True, normalize=True, 
-                                            nway_flag=3, direction=2)
+        # Multiway data
+        X_cal, X_val = center_and_scale(X_cal, X_val, scaling_method="autoscale",
+                                            nway_flag=3)
     """
-    if isinstance(direction, str):
-        stripped = direction.strip()
-        if stripped == "":
-            direction = None
-        else:
-            direction = int(stripped)
-    elif isinstance(direction, float):
-        direction = int(direction)
 
     if nway_flag is None:
         nway_flag = _determine_dimensionality(X_cal)
+
+
+    method = str(scaling_method).strip().lower()
     
-    # Determine axis for centering
-    # Default: center on samples (axis 0) for features; for multiway, respect direction
-    if direction is None or direction == -1:
-        # Default: center along axis 0 (samples) - compute mean across samples for each feature
-        axis = 0
-    else:
-        axis = direction
+    axis = 0
     
-    # Calculate statistics from X_cal
+    eps = 1e-10
     mean = np.mean(X_cal, axis=axis, keepdims=True)
-    std = np.std(X_cal, axis=axis, keepdims=True) if normalize else None
-    
-    # Process X_cal
-    X_cal = X_cal.copy()
-    if center:
-        X_cal = X_cal - mean
-    if normalize:
-        X_cal = X_cal / (std + 1e-10)
-    
-    # Process X_val using X_cal statistics
+    std = np.std(X_cal, axis=axis, keepdims=True)
+    variance = np.var(X_cal, axis=axis, keepdims=True)
+    min_val = np.min(X_cal, axis=axis, keepdims=True)
+    max_val = np.max(X_cal, axis=axis, keepdims=True)
+    range_val = max_val - min_val
+    fro_norm = float(np.sqrt(np.sum(np.square(X_cal))))
+
+    def _apply(arr: np.ndarray) -> np.ndarray:
+        if method == "none":
+            return arr
+        if method == "center":
+            return arr - mean
+        if method == "autoscale":
+            return (arr - mean) / (std + eps)
+        if method == "frobenius":
+            return arr / (fro_norm + eps)
+        if method == "range_0_1":
+            return (arr - min_val) / (range_val + eps)
+        if method == "range_-1_1":
+            return (2.0 * (arr - min_val) / (range_val + eps)) - 1.0
+        if method == "variance":
+            return (arr - mean) / (variance + eps)
+        raise ValueError(f"Unknown scaling method: {method}")
+
+    X_cal = _apply(X_cal.copy())
+
     if X_val is not None:
-        X_val = X_val.copy()
-        if center:
-            X_val = X_val - mean
-        if normalize:
-            X_val = X_val / (std + 1e-10)
+        X_val = _apply(X_val.copy())
         return X_cal, X_val
     
     return X_cal

@@ -1,14 +1,12 @@
 {
-  "display_name": "Centralizar e Normalizar",
+  "display_name": "Centralizar e Escalonar",
   "category": "2.Pré-Processamento",
   "data_type": "all",
   "input_aliases": {
     "X_cal": "X Calibração",
     "X_val": "X Validação",
-    "center": "Centralizar",
-    "normalize": "Normalizar",
-    "nway_flag": "Dimensionalidade",
-    "direction": "Direção"
+    "scaling_method": "Método de Escalonamento",
+    "nway_flag": "Dimensionalidade"
   },
   "output_aliases": {
     "X_cal": "X Cal (Processado)",
@@ -24,37 +22,20 @@
       "X_validation"
     ]
   },
-  "short_description": "Centraliza e/ou normaliza dados espectroscópicos",
-  "long_description": "Etapa de pré-processamento que centraliza e/ou normaliza dados para melhorar o desempenho do modelo. Preparação essencial para métodos de calibração multivariada.\n\nCentralização:\n- Subtrai as médias das colunas de todas as amostras\n- Remove efeitos de linha de base/deslocamento\n- Centraliza dados em torno de zero\n- Recomendado para a maioria das aplicações\n\nNormalização (Autoscaling):\n- Divide pelos desvios padrão das colunas\n- Dimensiona cada variável para variância unitária\n- Dá peso igual a todas as variáveis\n- Importante quando variáveis têm escalas/unidades diferentes\n- Particularmente útil para dados espectroscópicos\n\nEfeitos de Combinação:\n\nApenas Centralização:\n- Remove diferenças de deslocamento entre amostras\n- Preserva estrutura de variância\n- Bom quando variáveis estão na mesma escala\n\nApenas Normalização (raro):\n- Sem centralização, menos comum\n- Útil para distribuições de dados específicas\n\nTanto Centralização + Normalização (recomendado):\n- Pré-processamento padrão para quimiometria\n- Tratamento igual de todas as variáveis\n- Melhora estabilidade e interpretabilidade do modelo\n- Necessário para a maioria das aplicações PLS e PCR\n\nDados Multidirecionais:\n- Funciona com dados 2D, 3D e de dimensões superiores\n- Parâmetro de direção especifica o eixo\n- Direção padrão (-1) se aplica ao longo do último eixo\n\nNota: Dados de validação serão transformados usando estatísticas de calibração durante a modelagem.",
+  "short_description": "Aplica pré-processamento de centralização/escalonamento em dados espectroscópicos",
+  "long_description": "Etapa de pré-processamento que aplica um único método selecionável de centralização/escalonamento para melhorar o desempenho do modelo. Preparação essencial para métodos de calibração multivariada.\n\nMétodos Disponíveis:\n- Nenhum: sem escalonamento\n- Centralizar: subtrai as médias de calibração\n- Autoscale: centraliza na média e divide pelo desvio padrão de calibração (variância unitária)\n- Normalização de Frobenius: divide pela norma de Frobenius da calibração\n- Escalonamento por Faixa [0,1]: min-max usando mínimo/máximo da calibração\n- Escalonamento por Faixa [-1,1]: min-max mapeado para [-1,1]\n- Escalonamento por Variância: centraliza na média e divide pela variância de calibração\n\nImportante:\n- Autoscale já inclui centralização\n- Dados de validação/teste sempre usam estatísticas da calibração/treino (nunca estatísticas próprias)\n\nDados Multidimensionais:\n- Funciona com dados 2D, 3D e de dimensões superiores\n- Estatísticas dependentes de eixo são calculadas ao longo do eixo de amostras usado por esta função",
   "setup": {
     "layout": [
       {
-        "name": "center",
-        "label": "Centralizar Dados",
-        "widget": "checkbutton",
-        "default": true,
+        "name": "scaling_method",
+        "label": "Método de Escalonamento",
+        "widget": "combobox",
+        "values": ["none", "center", "autoscale", "frobenius", "range_0_1", "range_-1_1", "variance"],
+        "value_aliases": ["Nenhum", "Centralizar", "Autoscale", "Normalização de Frobenius", "Escalonamento por Faixa [0,1]", "Escalonamento por Faixa [-1,1]", "Escalonamento por Variância"],
+        "default": "center",
         "required": true,
         "input_type": "user",
-        "tooltip": "Subtrair médias das colunas (centralização/mean-centering)"
-      },
-      {
-        "name": "normalize",
-        "label": "Normalizar Dados",
-        "widget": "checkbutton",
-        "default": false,
-        "required": true,
-        "input_type": "user",
-        "tooltip": "Dimensionar para variância unitária (autoscaling)"
-      },
-      {
-        "name": "direction",
-        "label": "Direção (para multidirecionais, -1=padrão)",
-        "widget": "entry",
-        "type": "int",
-        "default": "-1",
-        "required": false,
-        "input_type": "user",
-        "tooltip": "Dimensão ao longo da qual centralizar/normalizar (-1 para padrão)"
+        "tooltip": "Autoscale já inclui centralização; as estatísticas vêm sempre dos dados de calibração/treino"
       },
       {
         "name": "X_cal",

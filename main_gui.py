@@ -3461,6 +3461,8 @@ class ChemometricsGUI:
                         # Update internal indices in the routing info
                         self.routing_lines[new_key]["src_idx"] = new_src_idx
                         self.routing_lines[new_key]["dst_idx"] = new_dst_idx
+
+            self._recalculate_auto_routing()
             
             self.selected_function_idx = None
             self._refresh_methodology_listbox()

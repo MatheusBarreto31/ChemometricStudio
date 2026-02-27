@@ -10,7 +10,7 @@
     "validation_data_main": ["X_cal", "Y_cal", "X_val", "Y_val", "smp_cal", "smp_val", "class_data_cal", "class_data_val", "cal_metadata", "val_metadata"],
     "baseline_correction": ["X_cal", "X_val"],
     "smoothing": ["X_cal", "X_val"],
-    "center_and_normalize": ["X_cal", "X_val"],
+    "center_and_scale": ["X_cal", "X_val"],
     "univariate_calibration": ["y_cal_pred", "y_val_pred", "models", "metrics", "cv_results"],
     "pca_analysis": ["model_scores", "model_loadings", "val_scores", "model_scores_cv", "model_loadings_cv", "metrics", "cv_results", "data_shape", "data_shape_val", "axis_n_info", "pc_labels", "class_data_cal", "class_data_val", "smp_cal", "smp_val"]
   },
@@ -50,7 +50,7 @@
       "window_size",
       "polyorder"
     ],
-    "center_and_normalize": ["X_cal", "X_val", "center", "normalize", "nway_flag", "direction"],
+    "center_and_scale": ["X_cal", "X_val", "scaling_method", "nway_flag"],
     "univariate_calibration": ["X_cal", "Y_cal", "X_val", "Y_val", "degree", "intercept", "cv_config"],
     "pca_analysis": ["X_cal", "X_val", "n_components", "cv_config", "axis_n_info", "class_data_cal", "class_data_val", "smp_cal", "smp_val"]
   },
@@ -65,7 +65,7 @@
     "validation_data_main": ["chemometrics.validation_data_input", "validation_data_main"],
     "baseline_correction": ["chemometrics.data_processing", "baseline_correction"],
     "smoothing": ["chemometrics.data_processing", "smoothing"],
-    "center_and_normalize": ["chemometrics.data_processing", "center_and_normalize"],
+    "center_and_scale": ["chemometrics.data_processing", "center_and_scale"],
     "univariate_calibration": ["chemometrics.univ_calibration", "univariate_calibration"],
     "pca_analysis": ["chemometrics.pca_analysis", "pca_analysis"]
   },
@@ -100,7 +100,7 @@
     "smoothing": {
       "config_path": "gui_configs/smoothing_config.json"
     },
-    "center_and_normalize": {
+    "center_and_scale": {
       "config_path": "gui_configs/center_normalize_config.json"
     },
     "univariate_calibration": {
@@ -197,13 +197,11 @@
       "window_size": "int",
       "polyorder": "int"
     },
-    "center_and_normalize": {
+    "center_and_scale": {
       "X_cal": "ndarray",
       "X_val": "ndarray",
-      "center": "bool",
-      "normalize": "bool",
-      "nway_flag": "int",
-      "direction": "int"
+      "scaling_method": "str",
+      "nway_flag": "int"
     },
     "univariate_calibration": {
       "X_cal": "ndarray",

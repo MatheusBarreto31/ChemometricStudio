@@ -1,14 +1,12 @@
 {
-  "display_name": "Center & Normalize",
+  "display_name": "Center & Scale",
   "category": "2.Preprocessing",
   "data_type": "all",
   "input_aliases": {
     "X_cal": "X Calibration",
     "X_val": "X Validation",
-    "center": "Center",
-    "normalize": "Normalize",
-    "nway_flag": "Dimensionality",
-    "direction": "Direction"
+    "scaling_method": "Scaling Method",
+    "nway_flag": "Dimensionality"
   },
   "output_aliases": {
     "X_cal": "X Cal (Processed)",
@@ -18,41 +16,22 @@
     "X_cal": ["X", "X_train"],
     "X_val": ["X_test", "X_validation"]
   },
-  "short_description": "Centers and/or normalizes spectroscopic data",
-  "long_description": "Preprocessing step that centers and/or normalizes data to improve model performance. Essential preparation for multivariate calibration methods.\n\nCentering:\n- Subtracts column means from all samples\n- Removes baseline/offset effects\n- Centers data around zero\n- Recommended for most applications\n\nNormalization (Autoscaling):\n- Divides by column standard deviations\n- Scales each variable to unit variance\n- Gives equal weight to all variables\n- Important when variables have different scales/units\n- Particularly useful for spectroscopic data\n\nCombination Effects:\n\nCentering Only:\n- Removes offset differences between samples\n- Preserves variance structure\n- Good when variables are on same scale\n\nNormalization Only (rare):\n- Without centering, less common\n- Useful for specific data distributions\n\nBoth Centering + Normalization (recommended):\n- Standard preprocessing for chemometrics\n- Equal treatment of all variables\n- Improves model stability and interpretability\n- Required for most PLS and PCR applications\n\nMultiway Data:\n- Works with 2D, 3D, and higher dimensional data\n- Direction parameter specifies axis\n- Default direction (-1) applies along last axis\n\nNote: Validation data will be transformed using calibration statistics during modeling.",
+  "short_description": "Applies center/scaling preprocessing to spectroscopic data",
+  "long_description": "Preprocessing step that applies one selectable centering/scaling method to improve model performance. Essential preparation for multivariate calibration methods.\n\nAvailable Methods:\n- None: pass-through (no scaling)\n- Center: subtracts calibration means\n- Autoscale: mean-centers and divides by calibration standard deviation (unit variance)\n- Frobenius Normalization: divides by calibration Frobenius norm\n- Range Scaling [0,1]: min-max scaling using calibration min/max\n- Range Scaling [-1,1]: min-max scaling mapped to [-1,1]\n- Variance Scaling: mean-centers and divides by calibration variance\n\nImportant:\n- Autoscale already includes centering\n- Validation/test data are always transformed using calibration/training statistics (never its own statistics)\n\nMultiway Data:\n- Works with 2D, 3D, and higher dimensional data\n- Axis-based statistics are computed along the sample axis used by this function",
   "setup": {
-    "categories": ["Processing Options", "Data Inputs", "Multiway Configuration"],
+    "categories": ["Scaling Options", "Data Inputs", "Multiway Configuration"],
     "layout": [
       {
-        "name": "center",
-        "label": "Center Data",
-        "category": "Processing Options",
-        "widget": "checkbutton",
-        "default": true,
+        "name": "scaling_method",
+        "label": "Scaling Method",
+        "category": "Scaling Options",
+        "widget": "combobox",
+        "values": ["none", "center", "autoscale", "frobenius", "range_0_1", "range_-1_1", "variance"],
+        "value_aliases": ["None", "Center", "Autoscale", "Frobenius Normalization", "Range Scaling [0,1]", "Range Scaling [-1,1]", "Variance Scaling"],
+        "default": "center",
         "required": true,
         "input_type": "user",
-        "tooltip": "Subtract column means (centering/mean-centering)"
-      },
-      {
-        "name": "normalize",
-        "label": "Normalize Data",
-        "category": "Processing Options",
-        "widget": "checkbutton",
-        "default": false,
-        "required": true,
-        "input_type": "user",
-        "tooltip": "Scale to unit variance (autoscaling)"
-      },
-      {
-        "name": "direction",
-        "label": "Direction (for multiway, -1=default)",
-        "category": "Multiway Configuration",
-        "widget": "entry",
-        "type": "int",
-        "default": "-1",
-        "required": false,
-        "input_type": "user",
-        "tooltip": "Dimension along which to center/normalize (-1 for default)"
+        "tooltip": "Autoscale includes centering; all scaling statistics come from calibration/training data"
       },
       {
         "name": "X_cal",
