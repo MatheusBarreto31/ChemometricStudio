@@ -4587,11 +4587,13 @@ class ChemometricsGUI:
 
                 type_name = str(body_param_types.get(field_name, field.get("type", "str"))).lower()
                 is_numeric = type_name in ("int", "float") or field.get("type") in ("int", "float")
+                is_boolean = type_name == "bool" or str(field.get("type", "")).lower() == "bool" or field_widget == "checkbutton"
                 is_choice = field_widget == "combobox"
+                is_sweep_choice = is_choice or is_boolean
 
                 if current_mode == "sweep_numeric" and not is_numeric:
                     continue
-                if current_mode == "sweep_choice" and not is_choice:
+                if current_mode == "sweep_choice" and not is_sweep_choice:
                     continue
                 if current_mode not in ("sweep_numeric", "sweep_choice"):
                     continue
@@ -4603,10 +4605,18 @@ class ChemometricsGUI:
                 sweep_targets_actual.append(target_value)
                 sweep_targets_display.append(target_alias)
 
-                choice_values = field.get("values", []) if is_choice else []
-                choice_aliases = field.get("value_aliases", choice_values) if is_choice else []
+                if is_choice:
+                    choice_values = field.get("values", [])
+                    choice_aliases = field.get("value_aliases", choice_values)
+                elif is_boolean:
+                    choice_values = ["false", "true"]
+                    choice_aliases = ["Off", "On"]
+                else:
+                    choice_values = []
+                    choice_aliases = []
                 target_meta[target_value] = {
-                    "is_choice": is_choice,
+                    "is_choice": is_sweep_choice,
+                    "is_boolean": is_boolean,
                     "choice_values": [str(v) for v in choice_values],
                     "choice_aliases": [str(v) for v in choice_aliases],
                     "is_numeric": is_numeric
@@ -4727,6 +4737,13 @@ class ChemometricsGUI:
                 selected_choice_values = [str(v) for v in current_sweep_raw]
             else:
                 selected_choice_values = []
+
+            if target_info.get("is_boolean"):
+                valid_values = {str(v) for v in choice_values}
+                selected_normalized = [str(v).strip().lower() for v in selected_choice_values if str(v).strip()]
+                has_valid_selection = any(v in valid_values for v in selected_normalized)
+                if not has_valid_selection:
+                    selected_choice_values = ["false", "true"]
 
             self._set_setup_checklist_options(
                 sweep_choice_data,

@@ -82,7 +82,7 @@
         "required": false,
         "input_type": "user",
         "visible_if": {"mode": ["sweep_choice"]},
-        "tooltip": "Selecione um ou mais valores de escolha para incluir no sweep."
+        "tooltip": "Selecione um ou mais valores de escolha para incluir no sweep. Para alvos booleanos, o padrão é Desligado e depois Ligado."
       },
       {
         "name": "benchmark_source",

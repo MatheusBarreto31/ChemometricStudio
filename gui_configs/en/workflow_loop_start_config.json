@@ -82,7 +82,7 @@
         "required": false,
         "input_type": "user",
         "visible_if": {"mode": ["sweep_choice"]},
-        "tooltip": "Select one or more choice values to include in sweep."
+        "tooltip": "Select one or more choice values to include in sweep. For boolean targets, defaults to Off then On."
       },
       {
         "name": "benchmark_source",
