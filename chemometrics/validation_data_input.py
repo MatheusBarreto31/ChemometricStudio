@@ -59,7 +59,7 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
         # Check if using new parameters (X_val_path, Y_val_path)
         if X_val_path or Y_val_path:
             # Load from external file paths
-            X_val, Y_val, _, smp_val, _, _, class_data_val, val_metadata = load_data(
+            X_val, Y_val, _, smp_val, _, _, _, class_data_val, val_metadata = load_data(
                 d_specs_separator=d_specs_separator or "Auto detect",
                 d_specs_headlines=d_specs_headlines if d_specs_headlines is not None else "",
                 d_specs_type=d_specs_type or "Auto detect",
@@ -78,7 +78,7 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
             # Use data_path parameters for loading external validation
             if data_path is None or nway_flag is None:
                 raise ValueError("Either X_val_path/Y_val_path or data_path/nway_flag required when loading external validation")
-            X_val, Y_val, _, smp_val, _, _, class_data_val, val_metadata = load_data(
+            X_val, Y_val, _, smp_val, _, _, _, class_data_val, val_metadata = load_data(
                 d_specs_separator=d_specs_separator or "Auto detect",
                 d_specs_headlines=d_specs_headlines if d_specs_headlines is not None else "",
                 d_specs_type=d_specs_type or "Auto detect",

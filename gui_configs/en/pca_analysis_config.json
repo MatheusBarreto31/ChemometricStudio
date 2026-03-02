@@ -8,6 +8,7 @@
     "n_components": "Number of Components",
     "cv_config": "CV Configuration",
     "axis_n_info": "Variable Labels",
+    "axis_nature": "Axis Nature",
     "class_data_cal": "Calibration Classes",
     "class_data_val": "Validation Classes",
     "smp_cal": "Cal Sample Labels",
@@ -34,7 +35,9 @@
     "messages": {
       "upca_used": "Higher-order input data was unfolded and processed with U-PCA."
     },
-    "warnings": {},
+    "warnings": {
+      "discrete_axis_recommend_autoscale": "Discrete axis nature was detected. For PCA, autoscaling is usually recommended so discrete-coded variables do not dominate component variance by scale alone. Consider applying Center and Scale with method 'autoscale' before PCA."
+    },
     "errors": {}
   },
   "setup": {
@@ -102,6 +105,18 @@
           "input_type": "user"
         },
         "tooltip": "Routed from load_data output for loadings plot labels"
+      },
+      {
+        "name": "axis_nature",
+        "label": "Axis Nature",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        },
+        "tooltip": "Routed from load_data output to identify discrete axes and suggest autoscaling before PCA"
       },
       {
         "name": "class_data_cal",

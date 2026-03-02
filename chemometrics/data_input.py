@@ -235,12 +235,12 @@ def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "
               data_path: Optional[List[str]] = None, nway_flag: int = 1, y_path: Optional[str] = None,
               var_path: Optional[List[str]] = None, smp_path: Optional[str] = None,
               transpose: bool = False, axis_info: Optional[List[str]] = None, reshape_order: str = 'F',
-              dim_labels: Optional[List[str]] = None, scale_type: Optional[List[str]] = None,
+              dim_labels: Optional[List[str]] = None, axis_nature: Optional[List[str]] = None, scale_type: Optional[List[str]] = None,
               multi_file_per_sample: bool = False, num_samples: Optional[int] = None,
               y_from_x: bool = False, class_from_x: bool = False, smp_from_x: bool = False,
               y_columns: str = "", class_columns: str = "", smp_column: str = "",
               cdata_path: Optional[str] = None,
-              source_metadata_overrides: Optional[Dict[str, Dict[str, Any]]] = None) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[List[List[str]]], List[str], Optional[List[np.ndarray]], List[str], Optional[List[Any]], Dict[str, Dict[str, Any]]]:
+              source_metadata_overrides: Optional[Dict[str, Dict[str, Any]]] = None) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[List[List[str]]], List[str], Optional[List[np.ndarray]], List[str], List[str], Optional[List[Any]], Dict[str, Dict[str, Any]]]:
     """
     Load and organize chemometrics data.
 
@@ -260,6 +260,7 @@ def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "
         axis_info: Optional list of axis ranges (e.g., ["100 200", "1 10"]) or semicolon-separated string
         reshape_order: Reshape order for multiway data - 'F' (Fortran/MATLAB column-major, default) or 'C' (C row-major)
         dim_labels: Optional list of dimension names or comma-separated string
+        axis_nature: Optional list describing axis nature for each dimension ('Continuous' or 'Discrete')
         scale_type: Optional list of scale types for axis generation ('Linear', 'Log10', 'Log2', 'Ln')
         multi_file_per_sample: If True, each sample consists of multiple files (only for nway_flag >= 3)
         num_samples: Number of samples when using multi_file_per_sample mode (files divided equally)
@@ -278,6 +279,7 @@ def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "
         axis_t_info: List of string lists containing axis text labels for each dimension
         smp_cal: Sample labels
         axis_n_info: List of axis vectors matching data dimensions or None
+        axis_nature: List describing axis nature for each dimension
         dim_labels: List of dimension labels
         class_data_cal: List of class labels (or list of class-label rows for multi-layer files) or None
         cal_metadata: Dict with per-sample metadata extracted from source files
@@ -329,6 +331,8 @@ def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "
             scale_type_list = [s.strip() for s in scale_type.split(',') if s.strip()]
         elif isinstance(scale_type, list):
             scale_type_list = [s.strip() if isinstance(s, str) else s for s in scale_type]
+
+    axis_nature_list = _normalize_axis_nature(axis_nature, nway_flag)
 
     # Normalize axis_info to list (handle both string and list inputs)
     axis_info_list = None
@@ -453,7 +457,35 @@ def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "
         source_metadata_overrides=source_metadata_overrides
     )
 
-    return X, Y, axis_t_info, smp_labels, axis_n_info, processed_dim_labels, class_data, cal_metadata
+    return X, Y, axis_t_info, smp_labels, axis_n_info, axis_nature_list, processed_dim_labels, class_data, cal_metadata
+
+
+def _normalize_axis_nature(axis_nature: Optional[List[str]], nway_flag: int) -> List[str]:
+    """Normalize axis_nature input to one value per data dimension (default: Continuous)."""
+    axis_count = max(int(nway_flag), 0)
+    default_values = ["Continuous"] * axis_count
+
+    if not axis_nature:
+        return default_values
+
+    if isinstance(axis_nature, str):
+        raw_values = [value.strip() for value in axis_nature.split(',') if value.strip()]
+    elif isinstance(axis_nature, list):
+        raw_values = [str(value).strip() for value in axis_nature if str(value).strip()]
+    else:
+        return default_values
+
+    normalized_values: List[str] = []
+    for value in raw_values[:axis_count]:
+        if value.lower() == "discrete":
+            normalized_values.append("Discrete")
+        else:
+            normalized_values.append("Continuous")
+
+    if len(normalized_values) < axis_count:
+        normalized_values.extend(["Continuous"] * (axis_count - len(normalized_values)))
+
+    return normalized_values
 
 
 def _load_x_data(data_path: List[str], separator: Optional[str], num_headlines: int,

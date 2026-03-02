@@ -14,6 +14,7 @@
     "smp_path": "Rótulos de Amostras",
     "transpose": "Transpor",
     "dim_labels": "Nomes das Dimensões",
+    "axis_nature": "Natureza do Eixo",
     "scale_type": "Tipo de Escala",
     "cdata_path": "Arquivo de Dados de Classificação"
   },
@@ -23,6 +24,7 @@
     "axis_t_info": "Rótulos de Texto dos Eixos",
     "smp_cal": "Rótulos de Amostras",
     "axis_n_info": "Vetores de Eixo",
+    "axis_nature": "Natureza do Eixo",
     "dim_labels": "Rótulos de Dimensões",
     "class_data_cal": "Dados de Classificação",
     "cal_metadata": "Metadados de Amostras"
@@ -48,6 +50,10 @@
       "axis_info",
       "axis_vectors",
       "variables"
+    ],
+    "axis_nature": [
+      "axis_type",
+      "axis_types"
     ],
     "dim_labels": [
       "dimension_labels"
@@ -229,6 +235,20 @@
         "required": false,
         "input_type": "user",
         "tooltip": "Nome para cada dimensão. Valores vazios usarão o índice da posição."
+      },
+      {
+        "name": "axis_nature",
+        "label": "Natureza do Eixo",
+        "widget": "combobox_list",
+        "count_source": "nway_flag",
+        "values": [
+          "Continuous",
+          "Discrete"
+        ],
+        "default": "Continuous",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Natureza para cada eixo (uma por dimensão). Use Continuous para escalas numéricas e Discrete para eixos categóricos/indexados."
       },
       {
         "name": "scale_type",

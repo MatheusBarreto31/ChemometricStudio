@@ -4,9 +4,12 @@ import numpy as np
 from sklearn.decomposition import PCA
 
 try:
-    from execution_reporting import emit_execution_message
+    from execution_reporting import emit_execution_message, emit_execution_warning
 except ImportError:
     def emit_execution_message(code: Optional[str] = None, text: str = "", details: Optional[Dict[str, Any]] = None) -> None:
+        return
+
+    def emit_execution_warning(code: Optional[str] = None, text: str = "", details: Optional[Dict[str, Any]] = None) -> None:
         return
 
 # Import CV pipeline
@@ -58,6 +61,53 @@ def _is_cv_fold_call() -> bool:
         if 'CVPipeline' in str(frame_info.filename) or 'cv_pipeline' in str(frame_info.filename):
             return True
     return False
+
+
+def _normalize_axis_nature(axis_nature: Optional[Any], expected_axes: int) -> List[str]:
+    """Normalize axis nature list to expected variable-axis count."""
+    default_values = ["Continuous"] * max(int(expected_axes), 0)
+
+    if axis_nature is None:
+        return default_values
+
+    if isinstance(axis_nature, str):
+        raw_values = [v.strip() for v in axis_nature.split(',') if v.strip()]
+    elif isinstance(axis_nature, list):
+        raw_values = [str(v).strip() for v in axis_nature if str(v).strip()]
+    else:
+        return default_values
+
+    normalized: List[str] = []
+    for value in raw_values[:expected_axes]:
+        normalized.append("Discrete" if value.lower() == "discrete" else "Continuous")
+
+    if len(normalized) < expected_axes:
+        normalized.extend(["Continuous"] * (expected_axes - len(normalized)))
+
+    return normalized
+
+
+def _looks_autoscaled(X_2d: np.ndarray) -> bool:
+    """Heuristic check for autoscaled matrix (column mean≈0 and std≈1)."""
+    if X_2d is None:
+        return False
+
+    X_2d = np.asarray(X_2d, dtype=float)
+    if X_2d.ndim != 2 or X_2d.size == 0:
+        return False
+
+    col_means = np.mean(X_2d, axis=0)
+    col_stds = np.std(X_2d, axis=0)
+    varying_mask = np.isfinite(col_stds) & (col_stds > 1e-8)
+    if not np.any(varying_mask):
+        return False
+
+    valid_means = np.abs(col_means[varying_mask])
+    valid_std_delta = np.abs(col_stds[varying_mask] - 1.0)
+
+    mean_ok = float(np.nanpercentile(valid_means, 95)) <= 0.15
+    std_ok = float(np.nanpercentile(valid_std_delta, 95)) <= 0.20
+    return bool(mean_ok and std_ok)
 
 
 def _compute_reconstruction_rmse_vector(
@@ -154,6 +204,7 @@ def pca_analysis(
     cv_config: Optional[Any] = None,
     fold: int = 0,
     axis_n_info: Optional[List[str]] = None,
+    axis_nature: Optional[List[str]] = None,
     class_data_cal: Optional[List[str]] = None,
     class_data_val: Optional[List[str]] = None,
     smp_cal: Optional[List[str]] = None,
@@ -176,6 +227,7 @@ def pca_analysis(
                    Otherwise runs single fit.
         fold: fold index (passed by CVPipeline, not user-set)
         axis_n_info: optional axis information for variable labels
+        axis_nature: optional list describing each variable axis as Continuous or Discrete
         class_data_cal: optional list of class labels for calibration samples
         class_data_val: optional list of class labels for validation samples
         smp_cal: optional list of sample labels for calibration samples
@@ -235,6 +287,28 @@ def pca_analysis(
             code="upca_used",
             text="Higher-order input data was unfolded and processed with U-PCA.",
         )
+
+    # Warning for discrete-axis PCA without autoscaling.
+    # Execute once per top-level call to avoid duplicate fold-level warnings.
+    expected_axes = max(int(x_cal_ndim) - 1, 0)
+    axis_nature_list = _normalize_axis_nature(axis_nature, expected_axes)
+    has_discrete_axis = any(value == "Discrete" for value in axis_nature_list)
+    if has_discrete_axis and fold == 0 and not _is_cv_fold_call():
+        try:
+            X_cal_2d, _ = _ensure_2d_matrix(X_cal)
+            autoscaled_detected = _looks_autoscaled(X_cal_2d)
+        except Exception:
+            autoscaled_detected = False
+
+        if not autoscaled_detected:
+            emit_execution_warning(
+                code="discrete_axis_recommend_autoscale",
+                text=(
+                    "Discrete axis nature was detected. For PCA, autoscaling is usually recommended so "
+                    "discrete-coded variables do not dominate component variance by scale alone. "
+                    "Consider applying Center and Scale with method 'autoscale' before PCA."
+                ),
+            )
     
     # Handle CV routing
     if cv_config is not None and HAS_CV and cv_config.is_enabled():

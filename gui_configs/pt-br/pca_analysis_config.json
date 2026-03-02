@@ -8,6 +8,7 @@
     "n_components": "Número de Componentes",
     "cv_config": "Configuração CV",
     "axis_n_info": "Rótulos de Variáveis",
+    "axis_nature": "Natureza do Eixo",
     "class_data_cal": "Classes de Calibração",
     "class_data_val": "Classes de Validação",
     "smp_cal": "Rótulos de Amostras de Calibração",
@@ -34,7 +35,9 @@
     "messages": {
       "upca_used": "Os dados de ordem superior foram desdobrados e processados com U-PCA."
     },
-    "warnings": {},
+    "warnings": {
+      "discrete_axis_recommend_autoscale": "Foi detectada natureza de eixo discreta. Para PCA, geralmente é recomendado aplicar autoscale para que variáveis codificadas como discretas não dominem a variância dos componentes apenas pela escala. Considere aplicar Centralizar e Escalar com método 'autoscale' antes do PCA."
+    },
     "errors": {}
   },
   "setup": {
@@ -102,6 +105,18 @@
           "input_type": "user"
         },
         "tooltip": "Roteado da saída load_data para rótulos do gráfico de loadings"
+      },
+      {
+        "name": "axis_nature",
+        "label": "Natureza do Eixo",
+        "category": "Entradas de Dados",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        },
+        "tooltip": "Roteado da saída load_data para identificar eixos discretos e sugerir autoscale antes do PCA"
       },
       {
         "name": "smp_cal",

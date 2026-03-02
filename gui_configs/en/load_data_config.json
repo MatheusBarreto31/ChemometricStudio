@@ -15,6 +15,7 @@
     "var_path": "Axis Labels Files",
     "smp_path": "Sample Labels",
     "dim_labels": "Dimension Names",
+    "axis_nature": "Axis Nature",
     "scale_type": "Scale Type",
     "transpose": "Transpose",
     "reshape_order": "Reshape Order",
@@ -33,6 +34,7 @@
     "axis_t_info": "Axis Text Labels",
     "smp_cal": "Sample Labels",
     "axis_n_info": "Axis Vectors",
+    "axis_nature": "Axis Nature",
     "dim_labels": "Axis Titles",
     "class_data_cal": "Classification Data",
     "cal_metadata": "Sample Metadata"
@@ -58,6 +60,10 @@
       "axis_info",
       "axis_vectors",
       "variables"
+    ],
+    "axis_nature": [
+      "axis_type",
+      "axis_types"
     ],
     "dim_labels": [
       "dimension_labels"
@@ -349,6 +355,21 @@
         "required": false,
         "input_type": "user",
         "tooltip": "Name for each dimension. Empty values will use position index."
+      },
+      {
+        "name": "axis_nature",
+        "label": "Axis Nature",
+        "category": "Axis Configuration",
+        "widget": "combobox_list",
+        "count_source": "nway_flag",
+        "values": [
+          "Continuous",
+          "Discrete"
+        ],
+        "default": "Continuous",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Nature for each axis (one per dimension). Use Continuous for numerical scales and Discrete for categorical/indexed axes."
       },
       {
         "name": "scale_type",
