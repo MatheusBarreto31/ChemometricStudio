@@ -107,7 +107,7 @@ def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarr
     
     # Set default colormap in config if not already set (allows JSON configs to override)
     if 'cmap' not in config:
-        config['cmap'] = default_cmap
+        config['cmap'] = qualitative_cmap if str(graph_type).strip().lower() in {'line', 'scatter'} else default_cmap
     
     # Check if z_axis is defined for 3D scatter or 3d_surf
     z_axis_config = config.get('z_axis', {})
@@ -124,7 +124,7 @@ def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarr
         _render_scatter(ax, x_data, y_data, z_data, config, use_3d, datasets, qualitative_cmap, 
                        sample_labels, sample_labels_by_dataset)
     elif graph_type == 'line':
-        _render_line(ax, x_data, y_data, config, datasets)
+        _render_line(ax, x_data, y_data, config, datasets, qualitative_cmap)
     elif graph_type == 'bar':
         _render_bar(ax, x_data, y_data, config)
     elif graph_type == 'histogram':
@@ -366,15 +366,21 @@ def _render_scatter(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarra
                                      sample_labels_by_dataset)
     # Otherwise use traditional single dataset rendering
     elif x_data is not None and y_data is not None:
+        cmap_name = str(config.get('cmap', qualitative_cmap))
+        try:
+            cmap_obj = cm.get_cmap(cmap_name)
+        except Exception:
+            cmap_obj = cm.get_cmap(qualitative_cmap)
+        base_color = cmap_obj(0.0)
         if use_3d:
             # 3D scatter
-            scatter = ax.scatter(x_data, y_data, z_data, alpha=0.6, picker=5)
+            scatter = ax.scatter(x_data, y_data, z_data, color=base_color, alpha=0.6, picker=5)
             ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
             ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
             ax.set_zlabel(config.get('z_axis', {}).get('label', 'Z'))
         else:
             # 2D scatter with picker enabled for tooltips
-            scatter = ax.scatter(x_data, y_data, alpha=0.6, picker=5)
+            scatter = ax.scatter(x_data, y_data, color=base_color, alpha=0.6, picker=5)
             ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
             ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
         
@@ -622,6 +628,12 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
     edge_cmap_cont = str(config.get('class_edge_cmap_continuous', config.get('cmap', 'viridis')))
     color_cmap_qual = str(config.get('class_color_cmap_qualitative', qualitative_cmap))
     edge_cmap_qual = str(config.get('class_edge_cmap_qualitative', qualitative_cmap))
+    scatter_cmap_name = str(config.get('cmap', qualitative_cmap))
+    try:
+        scatter_cmap_obj = _safe_cmap(scatter_cmap_name, qualitative_cmap)
+        nonclass_base_color = mcolors.to_rgba(scatter_cmap_obj(0.0))
+    except Exception:
+        nonclass_base_color = mcolors.to_rgba('C0')
 
     show_labels = config.get('show_labels', False)
     for dataset_idx, dataset in enumerate(datasets):
@@ -645,14 +657,14 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
         if class_layers is None or class_layers.size == 0:
             base_marker = 'o' if is_multi_dataset else marker
             marker_obj = MarkerStyle(base_marker, fillstyle=dataset_fillstyle if is_multi_dataset else 'full')
+            dataset_color = fallback_color if fallback_color else nonclass_base_color
             scatter_kwargs = {
                 'marker': marker_obj,
                 'alpha': 0.6,
                 's': 30,
-                'picker': 5  # Enable picking for tooltips
+                'picker': 5,  # Enable picking for tooltips
+                'color': dataset_color,
             }
-            if fallback_color:
-                scatter_kwargs['color'] = fallback_color
             
             if use_3d and z_data is not None:
                 scatter = ax.scatter(x_data, y_data, z_data, **scatter_kwargs)
@@ -676,7 +688,7 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
                     )
             
             # Track for legend
-            dataset_legend_items.append((dataset_label, base_marker, fallback_color or 'gray', dataset_fillstyle))
+            dataset_legend_items.append((dataset_label, base_marker, dataset_color, dataset_fillstyle))
         else:
             n_layers = class_layers.shape[1]
             active_order = [a for a in configured_order if a in available_aspects]
@@ -1042,7 +1054,9 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
         first_x = _flatten_axis(first_dataset.get('x_data'))
         first_y = _flatten_axis(first_dataset.get('y_data'))
         first_class_data = first_dataset.get('class_data')
-        first_color = first_dataset.get('color', 'C0')
+        first_color = first_dataset.get('color')
+        if not first_color:
+            first_color = nonclass_base_color
 
         if first_x is not None and first_y is not None and len(first_x) > 0 and len(first_y) > 0:
             if first_class_data is not None:
@@ -1059,30 +1073,61 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
 
 
 def _render_line(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],
-                config: dict, datasets: Optional[List[Dict[str, Any]]] = None) -> None:
-    """Render a line plot, supporting single or multiple datasets."""
-    # If datasets provided, use multi-dataset rendering
+                config: dict, datasets: Optional[List[Dict[str, Any]]] = None,
+                qualitative_cmap: str = 'tab10') -> None:
+    """Render a line plot, supporting single or multiple datasets with class coloring."""
+    # If datasets provided, use multi-dataset rendering with class support
     if datasets and len(datasets) > 0:
-        _render_line_multi_dataset(ax, datasets, config)
+        _render_line_multi_dataset(ax, datasets, config, qualitative_cmap)
     # Otherwise use traditional single dataset rendering
     elif x_data is not None and y_data is not None:
+        cmap_name = config.get('cmap', qualitative_cmap)
         marker = config.get('marker')  # None if absent, defaults to line only
+        color_cfg = config.get('color')
         # Handle 2D arrays (matrices) by plotting each row as a separate line
         if isinstance(y_data, np.ndarray) and y_data.ndim == 2:
+            n_rows = y_data.shape[0]
+            try:
+                cmap_obj = cm.get_cmap(cmap_name)
+            except Exception:
+                cmap_obj = cm.get_cmap('tab10')
             for i, row in enumerate(y_data):
-                ax.plot(row, marker=marker, label=f'Row {i+1}')
+                color = cmap_obj(i / max(1, n_rows - 1))
+                plot_kwargs: Dict[str, Any] = {'color': color, 'label': f'Row {i+1}'}
+                if marker is not None:
+                    plot_kwargs['marker'] = marker
+                ax.plot(row, **plot_kwargs)
             # Show legend if enabled (default: False)
             if config.get('show_legend', False):
                 ax.legend()
         else:
-            ax.plot(x_data, y_data, marker=marker)
+            plot_kwargs = {}
+            if marker is not None:
+                plot_kwargs['marker'] = marker
+            if color_cfg is not None:
+                plot_kwargs['color'] = color_cfg
+            else:
+                try:
+                    cmap_obj = cm.get_cmap(cmap_name)
+                except Exception:
+                    cmap_obj = cm.get_cmap('tab10')
+                plot_kwargs['color'] = cmap_obj(0.0)
+            ax.plot(x_data, y_data, **plot_kwargs)
         ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
         ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
 
 
-def _render_line_multi_dataset(ax, datasets: List[Dict[str, Any]], config: dict) -> None:
-    """Render multiple line datasets on the same plot.
-    
+def _render_line_multi_dataset(ax, datasets: List[Dict[str, Any]], config: dict,
+                               qualitative_cmap: str = 'tab10') -> None:
+    """Render multiple line datasets with optional class-based coloring.
+
+    Class aspects for line plots:
+      - colour : one colour per class value (qualitative or continuous colormap)
+      - linestyle : one linestyle per dataset (when multiple datasets are present)
+
+    When class data is absent the lines are coloured using the configured colormap
+    so that the persistent-settings colormap is always respected.
+
     Args:
         ax: Matplotlib axes
         datasets: List of dataset dicts, each containing:
@@ -1091,48 +1136,442 @@ def _render_line_multi_dataset(ax, datasets: List[Dict[str, Any]], config: dict)
             - 'x_axis': dict with axis config (for label extraction)
             - 'y_axis': dict with axis config (for label extraction)
             - 'label': str (dataset/line name)
-            - 'marker': str (optional marker type, e.g., 'o', 's', '^')
-            - 'color': str (optional, e.g., '#1f77b4')
-        config: Graph configuration
+            - 'marker': str (optional marker, e.g. 'o', 's', '^')
+            - 'color': str (optional fallback colour, e.g. '#1f77b4')
+            - 'class_data': array-like of class labels (optional)
+            - 'class_layers': 2-D array of class layers (optional, first column used)
+        config: Graph configuration dict
+        qualitative_cmap: Qualitative colormap name for discrete class colours
     """
+    from matplotlib.lines import Line2D
+
+    def _safe_cmap_line(name: str, fallback: str = 'tab10'):
+        try:
+            return cm.get_cmap(str(name))
+        except Exception:
+            return cm.get_cmap(fallback)
+
+    def _flatten_1d(values: Any) -> np.ndarray:
+        arr = np.asarray(values, dtype=object)
+        if arr.ndim == 0:
+            return arr.reshape(1)
+        if arr.ndim == 1:
+            return arr
+        return arr.reshape(arr.shape[0], -1)[:, 0]
+
+    def _normalize_class_layers(dataset: Dict[str, Any], n_points: int) -> Optional[np.ndarray]:
+        layers = dataset.get('class_layers')
+        if layers is None and dataset.get('class_data') is not None:
+            layers = dataset.get('class_data')
+        if layers is None:
+            return None
+        arr = np.asarray(layers, dtype=object)
+        if arr.ndim == 0:
+            arr = np.asarray([[arr.item()]], dtype=object)
+        elif arr.ndim == 1:
+            arr = arr.reshape(-1, 1)
+        else:
+            arr = arr.reshape(arr.shape[0], -1)
+        if arr.shape[0] > n_points:
+            arr = arr[:n_points, :]
+        return arr
+
+    def _as_float(values: np.ndarray) -> Optional[np.ndarray]:
+        out: List[float] = []
+        for raw in np.asarray(values, dtype=object).tolist():
+            try:
+                out.append(float(str(raw).strip()))
+            except Exception:
+                return None
+        return np.asarray(out, dtype=float)
+
+    def _layer_is_continuous(values: np.ndarray) -> Optional[bool]:
+        cleaned = []
+        has_decimal = False
+        for raw in np.asarray(values, dtype=object).tolist():
+            text = str(raw).strip()
+            if text == '' or text.lower() in {'nan', 'none'}:
+                continue
+            cleaned.append(text)
+            if any(ch in text for ch in ('.', 'e', 'E')):
+                has_decimal = True
+        if not cleaned:
+            return None
+        numeric = []
+        for text in cleaned:
+            try:
+                numeric.append(float(text))
+            except Exception:
+                return None
+        if has_decimal:
+            return True
+        unique = np.unique(np.asarray(numeric, dtype=float))
+        if unique.size <= 1:
+            return False
+        span = float(unique.max() - unique.min())
+        diffs = np.diff(np.sort(unique))
+        median_diff = float(np.median(diffs)) if diffs.size > 0 else 0.0
+        if span <= max(3.0, float(unique.size) * 3.0) and median_diff <= 2.0:
+            return False
+        return True
+
+    def _discrete_color_map(values: np.ndarray, cmap_name: str) -> Tuple[np.ndarray, Dict[str, Any]]:
+        cmap_obj = _safe_cmap_line(cmap_name, 'tab10')
+        values_arr = np.asarray(values, dtype=object)
+        unique_vals = [v for v in np.unique(values_arr)]
+        if hasattr(cmap_obj, 'colors'):
+            palette = list(cmap_obj.colors)
+        else:
+            n_sample = max(10, int(getattr(cmap_obj, 'N', 10) or 10))
+            palette = [cmap_obj(i / max(1, n_sample - 1)) for i in range(n_sample)]
+        mapping = {str(v): mcolors.to_rgba(palette[i % len(palette)]) for i, v in enumerate(unique_vals)}
+        colors = np.array([mapping[str(v)] for v in values_arr], dtype=float)
+        return colors, mapping
+
+    def _continuous_color_map(values: np.ndarray, cmap_name: str) -> np.ndarray:
+        numeric = _as_float(values)
+        if numeric is None or numeric.size == 0:
+            return np.tile(np.array([[0.4, 0.4, 0.4, 1.0]]), (len(values), 1))
+        cmap_obj = _safe_cmap_line(cmap_name, 'viridis')
+        vmin = float(np.nanmin(numeric))
+        vmax = float(np.nanmax(numeric))
+        if np.isclose(vmin, vmax):
+            normed = np.zeros_like(numeric)
+        else:
+            normed = (numeric - vmin) / (vmax - vmin)
+        return cmap_obj(normed)
+
+    def _discrete_symbol_map(values: np.ndarray, symbols: List[str]) -> Tuple[np.ndarray, Dict[str, str]]:
+        values_arr = np.asarray(values, dtype=object)
+        unique_vals = [v for v in np.unique(values_arr)]
+        mapping = {str(v): symbols[i % len(symbols)] for i, v in enumerate(unique_vals)}
+        mapped = np.asarray([mapping[str(v)] for v in values_arr], dtype=object)
+        return mapped, mapping
+
+    def _prepare_line_rows(x_values: Any, y_values: Any) -> Tuple[List[Optional[np.ndarray]], List[np.ndarray]]:
+        y_arr = np.asarray(y_values)
+        if y_arr.ndim <= 1:
+            y_line = y_arr.reshape(-1)
+            x_line = None
+            if x_values is not None:
+                x_arr = np.asarray(x_values).reshape(-1)
+                if x_arr.shape[0] == y_line.shape[0]:
+                    x_line = x_arr
+            return [x_line], [y_line]
+
+        y_matrix = y_arr.reshape(y_arr.shape[0], -1)
+        # Keep legacy matrix-line behavior compatible with previous no-class rendering:
+        # plot each row directly as a line (index on x-axis) instead of forcing x_values.
+        x_rows = [None] * y_matrix.shape[0]
+        y_rows = [y_matrix[i, :] for i in range(y_matrix.shape[0])]
+        return x_rows, y_rows
+
+    def _continuous_symbol_map(values: np.ndarray, symbols: List[str]) -> Tuple[np.ndarray, Dict[str, str]]:
+        numeric = _as_float(values)
+        if numeric is None or numeric.size == 0:
+            mapped = np.asarray([symbols[0]] * len(values), dtype=object)
+            return mapped, {'bin 1': symbols[0]}
+        vmin = float(np.nanmin(numeric))
+        vmax = float(np.nanmax(numeric))
+        if np.isclose(vmin, vmax):
+            mapped = np.asarray([symbols[0]] * len(numeric), dtype=object)
+            return mapped, {'bin 1': symbols[0]}
+        normed = (numeric - vmin) / (vmax - vmin)
+        idxs = np.clip((normed * len(symbols)).astype(int), 0, len(symbols) - 1)
+        mapped = np.asarray([symbols[i] for i in idxs], dtype=object)
+        legend_map: Dict[str, str] = {}
+        for i, symbol in enumerate(symbols):
+            legend_map[f'bin {i + 1}'] = symbol
+        return mapped, legend_map
+
+    cmap_name = config.get('cmap', qualitative_cmap)
+    dataset_linestyle_cycle = ['-', '--', '-.', ':']
+    class_linestyle_cycle = ['-', '--', '-.', ':']
+    marker_cycle = ['o', 's', '^', 'D', 'v', 'P', 'X', '*', '<', '>']
+    is_multi_dataset = len(datasets) > 1
+    line_marker_reserved = bool(config.get('line_marker_reserved', False))
+
+    configured_order = config.get('class_layer_order_effective', config.get('class_layer_order', []))
+    if not isinstance(configured_order, list):
+        configured_order = []
+    configured_order = [str(a).strip().lower() for a in configured_order]
+
+    configured_map = config.get('class_layer_map_effective', config.get('class_layer_map', {}))
+    if not isinstance(configured_map, dict):
+        configured_map = {}
+
+    nature_cfg = config.get('class_layer_nature_effective', config.get('class_layer_nature', {}))
+    if not isinstance(nature_cfg, dict):
+        nature_cfg = {}
+
+    available_aspects = ['color']
+    if not is_multi_dataset:
+        available_aspects.append('linestyle')
+    if not line_marker_reserved:
+        available_aspects.append('marker')
+
+    has_class = any(
+        d.get('class_data') is not None or d.get('class_layers') is not None
+        for d in datasets
+    )
+
     x_axis_label = None
     y_axis_label = None
-    
-    # Plot each dataset
-    for dataset in datasets:
-        x_data = dataset.get('x_data')
-        y_data = dataset.get('y_data')
-        label = dataset.get('label', 'Dataset')
-        marker = dataset.get('marker')
-        color = dataset.get('color')
-        
-        # Extract axis labels from the first dataset
-        if x_axis_label is None and 'x_axis' in dataset:
-            x_axis_label = dataset['x_axis'].get('label')
-        if y_axis_label is None and 'y_axis' in dataset:
-            y_axis_label = dataset['y_axis'].get('label')
-        
-        if x_data is None or y_data is None:
-            continue
-        
-        # Plot the line with optional marker and color
-        plot_kwargs = {'label': label}
-        if marker is not None:
-            plot_kwargs['marker'] = marker
-        if color is not None:
-            plot_kwargs['color'] = color
-        
-        ax.plot(x_data, y_data, **plot_kwargs)
-    
-    # Set axis labels if found
+
+    if has_class:
+        color_cmap_cont = str(config.get('class_color_cmap_continuous', config.get('cmap', 'viridis')))
+        color_cmap_qual = str(config.get('class_color_cmap_qualitative', qualitative_cmap))
+
+        dataset_legend_items: List[Tuple[str, str]] = []
+        color_legend_mapping: Dict[str, Any] = {}
+        linestyle_legend_mapping: Dict[str, str] = {}
+        marker_legend_mapping: Dict[str, str] = {}
+
+        for dataset_idx, dataset in enumerate(datasets):
+            x_data_d = dataset.get('x_data')
+            y_data_d = dataset.get('y_data')
+            dataset_label = dataset.get('label', f'Dataset {dataset_idx + 1}')
+            dataset_marker = dataset.get('marker')
+
+            if x_axis_label is None and 'x_axis' in dataset:
+                x_axis_label = dataset['x_axis'].get('label')
+            if y_axis_label is None and 'y_axis' in dataset:
+                y_axis_label = dataset['y_axis'].get('label')
+
+            if x_data_d is None or y_data_d is None:
+                continue
+
+            x_rows, y_rows = _prepare_line_rows(x_data_d, y_data_d)
+            n_lines = len(y_rows)
+            if n_lines <= 0:
+                continue
+            dataset_linestyle = dataset_linestyle_cycle[dataset_idx % len(dataset_linestyle_cycle)] if is_multi_dataset else '-'
+
+            class_layers = _normalize_class_layers(dataset, n_lines)
+            if class_layers is None or class_layers.size == 0:
+                for line_idx, y_line in enumerate(y_rows):
+                    plot_kwargs: Dict[str, Any] = {
+                        'linestyle': dataset_linestyle,
+                        'color': dataset.get('color', 'gray'),
+                    }
+                    if line_marker_reserved and dataset_marker is not None:
+                        marker_text = str(dataset_marker).strip().lower()
+                        if marker_text not in {'', 'none'}:
+                            plot_kwargs['marker'] = dataset_marker
+
+                    x_line = x_rows[line_idx]
+                    if x_line is not None and len(x_line) == len(y_line):
+                        ax.plot(x_line, y_line, **plot_kwargs)
+                    else:
+                        ax.plot(y_line, **plot_kwargs)
+                if is_multi_dataset:
+                    dataset_legend_items.append((str(dataset_label), dataset_linestyle))
+                continue
+
+            n_layers = class_layers.shape[1]
+            active_order = [a for a in configured_order if a in available_aspects]
+            if not active_order:
+                auto_count = min(len(available_aspects), n_layers)
+                active_order = available_aspects[:auto_count]
+
+            aspect_layer_values: Dict[str, np.ndarray] = {}
+            aspect_nature: Dict[str, str] = {}
+            for idx, aspect in enumerate(active_order):
+                raw_layer_idx = configured_map.get(aspect, idx + 1)
+                try:
+                    layer_idx = int(raw_layer_idx)
+                except Exception:
+                    layer_idx = idx + 1
+                if layer_idx <= 0:
+                    continue
+                layer_idx = max(1, min(layer_idx, n_layers))
+
+                values = class_layers[:, layer_idx - 1]
+                aspect_layer_values[aspect] = values
+
+                nature_raw = str(nature_cfg.get(str(layer_idx), nature_cfg.get(layer_idx, ''))).strip().lower()
+                if nature_raw in {'discrete', 'continuous'}:
+                    aspect_nature[aspect] = nature_raw
+                else:
+                    detected = _layer_is_continuous(values)
+                    aspect_nature[aspect] = 'continuous' if detected is True else 'discrete'
+
+            color_vector = np.tile(np.asarray(mcolors.to_rgba(dataset.get('color', 'C0'))), (n_lines, 1))
+            if 'color' in aspect_layer_values:
+                color_values = np.asarray(aspect_layer_values['color'], dtype=object)
+                if aspect_nature.get('color') == 'continuous':
+                    color_vector = _continuous_color_map(color_values, color_cmap_cont)
+                else:
+                    color_vector, discrete_map = _discrete_color_map(color_values, color_cmap_qual)
+                    for key, rgba in discrete_map.items():
+                        color_legend_mapping[key] = rgba
+
+            linestyle_vector = np.asarray([dataset_linestyle] * n_lines, dtype=object)
+            if (not is_multi_dataset) and 'linestyle' in aspect_layer_values:
+                style_values = np.asarray(aspect_layer_values['linestyle'], dtype=object)
+                if aspect_nature.get('linestyle') == 'continuous':
+                    linestyle_vector, style_map = _continuous_symbol_map(style_values, class_linestyle_cycle)
+                else:
+                    linestyle_vector, style_map = _discrete_symbol_map(style_values, class_linestyle_cycle)
+                for key, value in style_map.items():
+                    linestyle_legend_mapping[str(key)] = str(value)
+
+            marker_vector = np.asarray([None] * n_lines, dtype=object)
+            if line_marker_reserved and dataset_marker is not None:
+                marker_text = str(dataset_marker).strip().lower()
+                if marker_text not in {'', 'none'}:
+                    marker_vector = np.asarray([dataset_marker] * n_lines, dtype=object)
+            elif 'marker' in aspect_layer_values:
+                marker_values = np.asarray(aspect_layer_values['marker'], dtype=object)
+                if aspect_nature.get('marker') == 'continuous':
+                    marker_vector, marker_map = _continuous_symbol_map(marker_values, marker_cycle)
+                else:
+                    marker_vector, marker_map = _discrete_symbol_map(marker_values, marker_cycle)
+                for key, value in marker_map.items():
+                    marker_legend_mapping[str(key)] = str(value)
+
+            for line_idx in range(n_lines):
+                plot_kwargs: Dict[str, Any] = {
+                    'color': color_vector[line_idx],
+                    'linestyle': str(linestyle_vector[line_idx]),
+                }
+                marker_value = marker_vector[line_idx]
+                if marker_value is not None and str(marker_value).strip().lower() not in {'', 'none'}:
+                    plot_kwargs['marker'] = marker_value
+
+                x_line = x_rows[line_idx]
+                y_line = y_rows[line_idx]
+                if x_line is not None and len(x_line) == len(y_line):
+                    ax.plot(x_line, y_line, **plot_kwargs)
+                else:
+                    ax.plot(y_line, **plot_kwargs)
+
+            if is_multi_dataset:
+                dataset_legend_items.append((str(dataset_label), dataset_linestyle))
+
+        line_legend_show_mode = _normalize_scatter_legend_show_mode(config)
+        line_legend_elements = {
+            'datasets': True,
+            'color': True,
+            'linestyle': False,
+            'marker': False,
+        }
+        raw_line_legend_elements = config.get('legend_elements', {})
+        if isinstance(raw_line_legend_elements, dict):
+            for key in list(line_legend_elements.keys()):
+                if key in raw_line_legend_elements:
+                    line_legend_elements[key] = bool(raw_line_legend_elements.get(key))
+
+        legend_groups: List[Tuple[str, List[Tuple[Any, str]]]] = []
+        if line_legend_elements.get('datasets', True) and is_multi_dataset and dataset_legend_items:
+            ds_entries = [
+                (Line2D([0], [0], color='gray', linestyle=ls, linewidth=1.6), lbl)
+                for lbl, ls in dataset_legend_items
+            ]
+            legend_groups.append(('Datasets:', ds_entries))
+
+        if line_legend_elements.get('color', True) and color_legend_mapping:
+            color_entries: List[Tuple[Any, str]] = []
+            for cls, rgba in color_legend_mapping.items():
+                handle = Line2D([0], [0], color=rgba, linestyle='-', linewidth=2.0)
+                color_entries.append((handle, str(cls)))
+            legend_groups.append(('Class Color:', color_entries))
+
+        if line_legend_elements.get('linestyle', False) and (not is_multi_dataset) and linestyle_legend_mapping:
+            style_entries: List[Tuple[Any, str]] = []
+            for cls, ls in linestyle_legend_mapping.items():
+                handle = Line2D([0], [0], color='gray', linestyle=str(ls), linewidth=1.8)
+                style_entries.append((handle, str(cls)))
+            legend_groups.append(('Class Line Style:', style_entries))
+
+        if line_legend_elements.get('marker', False) and marker_legend_mapping:
+            marker_entries: List[Tuple[Any, str]] = []
+            for cls, mk in marker_legend_mapping.items():
+                handle = Line2D([0], [0], color='gray', linestyle='-', marker=str(mk), linewidth=1.2)
+                marker_entries.append((handle, str(cls)))
+            legend_groups.append(('Class Marker:', marker_entries))
+
+        if line_legend_show_mode != 'no' and legend_groups:
+            handles: List[Any] = []
+            labels: List[str] = []
+            show_titles = len(legend_groups) > 1
+            for group_title, entries in legend_groups:
+                if show_titles:
+                    handles.append(Line2D([], [], visible=False))
+                    labels.append(group_title)
+                for handle, lbl in entries:
+                    handles.append(handle)
+                    labels.append(str(lbl))
+            legend_placement = _get_scatter_legend_placement(config)
+            ax.legend(handles=handles, labels=labels, fontsize='small', framealpha=0.8, **legend_placement)
+
+    else:
+        n_datasets = len(datasets)
+        cmap_obj = _safe_cmap_line(cmap_name, 'tab10')
+
+        total_lines = 0
+        for dataset in datasets:
+            _x_rows_tmp, _y_rows_tmp = _prepare_line_rows(dataset.get('x_data'), dataset.get('y_data'))
+            total_lines += len(_y_rows_tmp)
+        global_line_idx = 0
+
+        for dataset_idx, dataset in enumerate(datasets):
+            x_data_d = dataset.get('x_data')
+            y_data_d = dataset.get('y_data')
+            label = dataset.get('label', f'Dataset {dataset_idx + 1}')
+            marker = dataset.get('marker')
+            color = dataset.get('color')
+
+            if x_axis_label is None and 'x_axis' in dataset:
+                x_axis_label = dataset['x_axis'].get('label')
+            if y_axis_label is None and 'y_axis' in dataset:
+                y_axis_label = dataset['y_axis'].get('label')
+
+            if x_data_d is None or y_data_d is None:
+                continue
+
+            linestyle = dataset_linestyle_cycle[dataset_idx % len(dataset_linestyle_cycle)] if is_multi_dataset else '-'
+            x_rows, y_rows = _prepare_line_rows(x_data_d, y_data_d)
+            for line_idx, y_line in enumerate(y_rows):
+                plot_kwargs = {'label': label if line_idx == 0 else None, 'linestyle': linestyle}
+                if marker is not None:
+                    marker_text = str(marker).strip().lower()
+                    if marker_text not in {'', 'none'}:
+                        plot_kwargs['marker'] = marker
+                if color is not None:
+                    plot_kwargs['color'] = color
+                else:
+                    plot_kwargs['color'] = cmap_obj(global_line_idx / max(1, total_lines - 1))
+
+                x_line = x_rows[line_idx]
+                if x_line is not None and len(x_line) == len(y_line):
+                    ax.plot(x_line, y_line, **plot_kwargs)
+                else:
+                    ax.plot(y_line, **plot_kwargs)
+                global_line_idx += 1
+
+        line_legend_show_mode = _normalize_scatter_legend_show_mode(config)
+        line_legend_elements = {
+            'datasets': True,
+            'color': True,
+            'linestyle': False,
+            'marker': False,
+        }
+        raw_line_legend_elements = config.get('legend_elements', {})
+        if isinstance(raw_line_legend_elements, dict):
+            for key in list(line_legend_elements.keys()):
+                if key in raw_line_legend_elements:
+                    line_legend_elements[key] = bool(raw_line_legend_elements.get(key))
+
+        if line_legend_show_mode != 'no' and line_legend_elements.get('datasets', True) and n_datasets > 1:
+            legend_placement = _get_scatter_legend_placement(config)
+            ax.legend(fontsize='small', framealpha=0.8, **legend_placement)
+
+    # ---------------------------------------------------------------- axis labels
     if x_axis_label:
         ax.set_xlabel(x_axis_label)
     if y_axis_label:
         ax.set_ylabel(y_axis_label)
-    
-    # Show legend automatically for multi-dataset
-    if len(datasets) > 1:
-        ax.legend()
 
 
 def _render_bar(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],

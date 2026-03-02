@@ -429,7 +429,7 @@ class ChemometricsGUI:
         if option_key == 'confidence_level':
             return normalized_type == 'scatter' and not is_scatter_3d
         if option_key == 'cmap':
-            return normalized_type in {'heatmap', '3d_surf', 'contour'}
+            return normalized_type in {'line', 'scatter', 'heatmap', '3d_surf', 'contour'}
         if option_key == 'use_wireframe':
             return normalized_type == '3d_surf'
         if option_key == 'contour_filled':
@@ -696,7 +696,7 @@ class ChemometricsGUI:
 
         all_aspects = ['color', 'marker', 'fill', 'edge']
         available_aspects = ['color', 'marker', 'edge'] if is_multi_dataset else all_aspects
-        max_active = min(len(available_aspects), max(0, layer_count))
+        max_active = len(available_aspects) if layer_count > 0 else 0
 
         has_user_flag = bool(config.get('class_layer_user_defined', False))
 
@@ -739,7 +739,8 @@ class ChemometricsGUI:
                 break
 
         if not effective_order and max_active > 0 and not user_defined_mapping:
-            effective_order = available_aspects[:max_active]
+            auto_count = min(len(available_aspects), max(0, layer_count))
+            effective_order = available_aspects[:auto_count]
 
         effective_map: Dict[str, int] = {}
         filtered_order: List[str] = []
@@ -811,6 +812,121 @@ class ChemometricsGUI:
             'user_defined_mapping': user_defined_mapping,
         }
 
+    def _compute_line_class_layer_state(
+        self,
+        config: dict,
+        datasets_config: Optional[List[dict]],
+        outputs: Dict[str, Any],
+        execution_inputs: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Build effective class-layer configuration for line plots.
+
+        Line aspects:
+          - color (always available)
+          - linestyle (single-dataset only; reserved for dataset identity on multi-dataset)
+          - marker (disabled when marker is explicitly provided in JSON config)
+        """
+        base_state = self._compute_scatter_class_layer_state(
+            config,
+            datasets_config,
+            outputs,
+            execution_inputs,
+        )
+
+        layer_count = int(base_state.get('layer_count', 0))
+        is_multi_dataset = bool(base_state.get('is_multi_dataset', False))
+
+        marker_explicit = False
+        if 'marker' in config:
+            marker_explicit = True
+        if isinstance(datasets_config, list):
+            for ds_cfg in datasets_config:
+                if isinstance(ds_cfg, dict) and 'marker' in ds_cfg:
+                    marker_explicit = True
+                    break
+
+        available_aspects: List[str] = ['color']
+        if not is_multi_dataset:
+            available_aspects.append('linestyle')
+        if not marker_explicit:
+            available_aspects.append('marker')
+
+        max_active = len(available_aspects) if layer_count > 0 else 0
+
+        has_user_flag = bool(config.get('class_layer_user_defined', False))
+
+        raw_order = config.get('class_layer_order', [])
+        configured_order: List[str] = []
+        if isinstance(raw_order, str):
+            chunks = [tok.strip().lower() for tok in re.split(r'[;,\s]+', raw_order) if tok and tok.strip()]
+            configured_order = [tok for tok in chunks if tok in available_aspects]
+        elif isinstance(raw_order, (list, tuple)):
+            configured_order = [str(a).strip().lower() for a in raw_order if str(a).strip().lower() in available_aspects]
+
+        raw_map = config.get('class_layer_map', {})
+        configured_map: Dict[str, int] = {}
+        if isinstance(raw_map, dict):
+            for k, v in raw_map.items():
+                try:
+                    norm_k = str(k).strip().lower()
+                    if norm_k in available_aspects:
+                        configured_map[norm_k] = int(v)
+                except Exception:
+                    continue
+        elif isinstance(raw_map, str):
+            parsed_order, parsed_map = self._parse_class_layer_mapping_description(raw_map)
+            for key in parsed_order:
+                if key in available_aspects and key in parsed_map:
+                    try:
+                        configured_map[key] = int(parsed_map[key])
+                    except Exception:
+                        continue
+
+        has_nonempty_order = bool(configured_order)
+        has_nonempty_map = bool(configured_map)
+        user_defined_mapping = has_user_flag or has_nonempty_order or has_nonempty_map
+
+        effective_order: List[str] = []
+        for aspect in configured_order:
+            if aspect not in effective_order:
+                effective_order.append(aspect)
+            if len(effective_order) >= max_active:
+                break
+
+        if not effective_order and max_active > 0 and not user_defined_mapping:
+            auto_count = min(len(available_aspects), max(0, layer_count))
+            effective_order = available_aspects[:auto_count]
+
+        effective_map: Dict[str, int] = {}
+        filtered_order: List[str] = []
+        for idx, aspect in enumerate(effective_order):
+            raw_layer = configured_map.get(aspect, idx + 1)
+            try:
+                layer_idx = int(raw_layer)
+            except Exception:
+                layer_idx = idx + 1
+
+            if layer_idx <= 0:
+                continue
+
+            if layer_count > 0:
+                layer_idx = max(1, min(layer_idx, layer_count))
+            else:
+                layer_idx = 1
+            filtered_order.append(aspect)
+            effective_map[aspect] = layer_idx
+
+        result = dict(base_state)
+        result.update({
+            'available_aspects': available_aspects,
+            'max_active': max_active,
+            'effective_order': filtered_order,
+            'effective_map': effective_map,
+            'marker_explicit': marker_explicit,
+            'user_defined_mapping': user_defined_mapping,
+        })
+        return result
+
     def _parse_class_layer_mapping_description(self, text: str) -> Tuple[List[str], Dict[str, int]]:
         """Parse free-text class-layer mapping like 'marker:1, color:2, fill:3, edge:4'."""
         parsed_order: List[str] = []
@@ -820,6 +936,10 @@ class ChemometricsGUI:
 
         alias_map = {
             'marker': 'marker',
+            'linestyle': 'linestyle',
+            'line_style': 'linestyle',
+            'line-type': 'linestyle',
+            'linetype': 'linestyle',
             'colour': 'color',
             'color': 'color',
             'fill': 'fill',
@@ -916,6 +1036,53 @@ class ChemometricsGUI:
                 self.language_manager.translate("ui.messages.generate_model_json_failed", "Failed to generate model.json") + f": {e}"
             )
 
+    def _remove_graph_section_config_option(self, instance_alias: str, section_id: Tuple[int, int],
+                                            option_key: str,
+                                            popup_refresh_callback: Optional[Callable[[], None]] = None,
+                                            refresh_analysis: bool = True) -> None:
+        """Remove a graph option from analysis config and regenerate model.json."""
+        try:
+            analysis_info = self.analysis_data.get(instance_alias)
+            if not isinstance(analysis_info, dict):
+                return
+
+            page_idx, section_idx = section_id
+            pages = analysis_info.get('pages', [])
+            if page_idx < 0 or page_idx >= len(pages):
+                return
+
+            sections = pages[page_idx].get('sections', []) if isinstance(pages[page_idx], dict) else []
+            if section_idx < 0 or section_idx >= len(sections):
+                return
+
+            section = sections[section_idx]
+            config = section.setdefault('config', {}) if isinstance(section, dict) else {}
+            if not isinstance(config, dict):
+                return
+
+            config.pop(option_key, None)
+
+            graph_slices = analysis_info.get('graph_slices', {})
+            if section_id in graph_slices and isinstance(graph_slices[section_id], dict):
+                graph_slices[section_id]['config'] = config
+
+            self._generate_model_json()
+
+            if refresh_analysis:
+                has_slice_state = section_id in analysis_info.get('graph_slices', {})
+                has_canvas = section_id in analysis_info.get('graph_canvases', {})
+                if has_slice_state and has_canvas:
+                    self._update_graph_with_slice(instance_alias, section_id, -1)
+                else:
+                    self._show_analysis_tab()
+
+            if popup_refresh_callback is not None:
+                popup_refresh_callback()
+        except Exception as e:
+            self._show_fading_error(
+                self.language_manager.translate("ui.messages.generate_model_json_failed", "Failed to generate model.json") + f": {e}"
+            )
+
     def _build_graph_context_menu(self, graph_type: str, config: dict, instance_alias: str,
                                   section_id: Tuple[int, int],
                                   popup_refresh_callback: Optional[Callable[[], None]] = None) -> Optional[tk.Menu]:
@@ -923,6 +1090,34 @@ class ChemometricsGUI:
         menu = tk.Menu(self.root, tearoff=0)
         menu._var_refs = []
         item_count = 0
+        normalized_graph_type = str(graph_type).strip().lower()
+        line_state_for_menu: Optional[Dict[str, Any]] = None
+        scatter_state_for_menu: Optional[Dict[str, Any]] = None
+
+        execution_results = self.analysis_data.get(instance_alias, {}).get('execution_results', {})
+        outputs = self._get_execution_data_sources(execution_results, instance_alias) if isinstance(execution_results, dict) else {}
+        datasets_cfg = config.get('datasets') if isinstance(config.get('datasets'), list) else None
+
+        if normalized_graph_type == 'line':
+            try:
+                line_state_for_menu = self._compute_line_class_layer_state(
+                    config,
+                    datasets_cfg,
+                    outputs,
+                    execution_results.get('inputs', {}) if isinstance(execution_results, dict) else {},
+                )
+            except Exception:
+                line_state_for_menu = None
+        elif normalized_graph_type == 'scatter':
+            try:
+                scatter_state_for_menu = self._compute_scatter_class_layer_state(
+                    config,
+                    datasets_cfg,
+                    outputs,
+                    execution_results.get('inputs', {}) if isinstance(execution_results, dict) else {},
+                )
+            except Exception:
+                scatter_state_for_menu = None
 
         def _keep_var_ref(var_obj: Any) -> None:
             try:
@@ -1049,11 +1244,24 @@ class ChemometricsGUI:
             )
             item_count += 1
 
-        if self._is_graph_option_supported(graph_type, 'cmap', config):
+        line_has_active_classes = bool(
+            line_state_for_menu is not None and int(line_state_for_menu.get('layer_count', 0)) > 0
+        )
+        scatter_has_active_classes = bool(
+            scatter_state_for_menu is not None and int(scatter_state_for_menu.get('layer_count', 0)) > 0
+        )
+        if self._is_graph_option_supported(graph_type, 'cmap', config) and not (
+            (normalized_graph_type == 'line' and line_has_active_classes) or
+            (normalized_graph_type == 'scatter' and scatter_has_active_classes)
+        ):
             colormaps_data = self._load_colormaps_catalog()
             continuous_data = colormaps_data.get("continuous", {})
+            qualitative_data = colormaps_data.get("qualitative", [])
             cmap_menu = tk.Menu(menu, tearoff=0)
-            current_cmap = str(config.get('cmap') or self.settings_manager.get('colormap', 'viridis'))
+            normalized_cmap_graph = str(graph_type or '').strip().lower()
+            use_qualitative_cmaps = normalized_cmap_graph in {'line', 'scatter'}
+            default_token = '__default__'
+            current_cmap = str(config.get('cmap', default_token))
             cmap_var = tk.StringVar(value=current_cmap)
             _keep_var_ref(cmap_var)
 
@@ -1067,31 +1275,57 @@ class ChemometricsGUI:
                     refresh_analysis=True
                 )
 
+            cmap_menu.add_radiobutton(
+                label=self.language_manager.translate('menu.graph_context.use_default_colormap', 'Default (settings)'),
+                variable=cmap_var,
+                value=default_token,
+                command=lambda: self._remove_graph_section_config_option(
+                    instance_alias,
+                    section_id,
+                    'cmap',
+                    popup_refresh_callback=popup_refresh_callback,
+                    refresh_analysis=True
+                )
+            )
+            cmap_menu.add_separator()
+
             has_any_cmap = False
 
-            if isinstance(continuous_data, list):
-                for cmap_name in continuous_data:
-                    cmap_menu.add_radiobutton(
-                        label=cmap_name,
-                        variable=cmap_var,
-                        value=cmap_name,
-                        command=lambda v=cmap_name, setter=_set_cmap: setter(v)
-                    )
-                    has_any_cmap = True
-            elif isinstance(continuous_data, dict):
-                for category, cmaps in continuous_data.items():
-                    if not isinstance(cmaps, list) or not cmaps:
-                        continue
-                    category_menu = tk.Menu(cmap_menu, tearoff=0)
-                    for cmap_name in cmaps:
-                        category_menu.add_radiobutton(
+            if use_qualitative_cmaps:
+                if isinstance(qualitative_data, list):
+                    for cmap_name in qualitative_data:
+                        cmap_name = str(cmap_name)
+                        cmap_menu.add_radiobutton(
                             label=cmap_name,
                             variable=cmap_var,
                             value=cmap_name,
                             command=lambda v=cmap_name, setter=_set_cmap: setter(v)
                         )
-                    cmap_menu.add_cascade(label=category, menu=category_menu)
-                    has_any_cmap = True
+                        has_any_cmap = True
+            else:
+                if isinstance(continuous_data, list):
+                    for cmap_name in continuous_data:
+                        cmap_menu.add_radiobutton(
+                            label=cmap_name,
+                            variable=cmap_var,
+                            value=cmap_name,
+                            command=lambda v=cmap_name, setter=_set_cmap: setter(v)
+                        )
+                        has_any_cmap = True
+                elif isinstance(continuous_data, dict):
+                    for category, cmaps in continuous_data.items():
+                        if not isinstance(cmaps, list) or not cmaps:
+                            continue
+                        category_menu = tk.Menu(cmap_menu, tearoff=0)
+                        for cmap_name in cmaps:
+                            category_menu.add_radiobutton(
+                                label=cmap_name,
+                                variable=cmap_var,
+                                value=cmap_name,
+                                command=lambda v=cmap_name, setter=_set_cmap: setter(v)
+                            )
+                        cmap_menu.add_cascade(label=category, menu=category_menu)
+                        has_any_cmap = True
 
             if has_any_cmap:
                 menu.add_cascade(
@@ -1511,12 +1745,33 @@ class ChemometricsGUI:
                     layer_nature = str(scatter_state.get('layer_nature', {}).get(int(mapped_layer), 'discrete')).strip().lower()
                     is_continuous = layer_nature == 'continuous'
                     target_key = cont_key if is_continuous else qual_key
-                    current_value = str(config.get(
-                        target_key,
-                        self.settings_manager.get('colormap', 'viridis') if is_continuous else self.settings_manager.get('qualitative_colormap', 'tab10')
-                    ))
+                    default_token = '__default__'
+                    current_value = str(config.get(target_key, default_token))
                     cmap_var = tk.StringVar(value=current_value)
                     _keep_var_ref(cmap_var)
+
+                    aspect_menu.add_radiobutton(
+                        label=self.language_manager.translate('menu.graph_context.use_default_colormap', 'Default (settings)'),
+                        variable=cmap_var,
+                        value=default_token,
+                        command=lambda ck=cont_key, qk=qual_key: (
+                            self._remove_graph_section_config_option(
+                                instance_alias,
+                                section_id,
+                                ck,
+                                popup_refresh_callback=popup_refresh_callback,
+                                refresh_analysis=False
+                            ),
+                            self._remove_graph_section_config_option(
+                                instance_alias,
+                                section_id,
+                                qk,
+                                popup_refresh_callback=popup_refresh_callback,
+                                refresh_analysis=True
+                            )
+                        )
+                    )
+                    aspect_menu.add_separator()
 
                     has_any_maps = False
                     if is_continuous:
@@ -1591,6 +1846,494 @@ class ChemometricsGUI:
                 class_colormaps_menu.add_cascade(
                     label=aspects_display.get('edge', 'Edge Color'),
                     menu=_build_aspect_colormap_menu('edge', 'class_edge_cmap_continuous', 'class_edge_cmap_qualitative')
+                )
+
+                menu.add_cascade(
+                    label=self.language_manager.translate('menu.graph_context.class_colormaps', 'Class Colormaps'),
+                    menu=class_colormaps_menu
+                )
+                item_count += 1
+
+        if str(graph_type).strip().lower() == 'line':
+            legend_menu = tk.Menu(menu, tearoff=0)
+
+            default_suffix = " " + self.language_manager.translate('menu.default_tag', '(default)')
+
+            raw_show_mode = str(config.get('legend_show_mode', '')).strip().lower()
+            if raw_show_mode not in {'auto', 'yes', 'no'}:
+                legacy_show_legend = config.get('show_legend')
+                if isinstance(legacy_show_legend, bool):
+                    raw_show_mode = 'yes' if legacy_show_legend else 'no'
+                else:
+                    raw_show_mode = 'auto'
+
+            show_mode_var = tk.StringVar(value=raw_show_mode)
+            _keep_var_ref(show_mode_var)
+
+            def _set_line_legend_show_mode(value: str) -> None:
+                self._update_graph_section_config_option(
+                    instance_alias,
+                    section_id,
+                    'legend_show_mode',
+                    str(value),
+                    popup_refresh_callback=popup_refresh_callback,
+                    refresh_analysis=True
+                )
+
+            show_menu = tk.Menu(legend_menu, tearoff=0)
+            show_menu.add_radiobutton(
+                label=self.language_manager.translate('menu.graph_context.legend_show_auto', 'Auto') + default_suffix,
+                variable=show_mode_var,
+                value='auto',
+                command=lambda: _set_line_legend_show_mode('auto')
+            )
+            show_menu.add_radiobutton(
+                label=self.language_manager.translate('menu.graph_context.legend_show_yes', 'Yes'),
+                variable=show_mode_var,
+                value='yes',
+                command=lambda: _set_line_legend_show_mode('yes')
+            )
+            show_menu.add_radiobutton(
+                label=self.language_manager.translate('menu.graph_context.legend_show_no', 'No'),
+                variable=show_mode_var,
+                value='no',
+                command=lambda: _set_line_legend_show_mode('no')
+            )
+            legend_menu.add_cascade(
+                label=self.language_manager.translate('menu.graph_context.legend_show', 'Show Legend'),
+                menu=show_menu
+            )
+
+            legend_elements_cfg = config.get('legend_elements', {}) if isinstance(config.get('legend_elements', {}), dict) else {}
+            legend_elements_state = dict(legend_elements_cfg)
+
+            def _line_legend_element_default(key: str) -> bool:
+                return key in {'datasets', 'color'}
+
+            def _set_line_legend_element(element_key: str, enabled: bool) -> None:
+                legend_elements_state[element_key] = bool(enabled)
+                self._update_graph_section_config_option(
+                    instance_alias,
+                    section_id,
+                    'legend_elements',
+                    dict(legend_elements_state),
+                    popup_refresh_callback=popup_refresh_callback,
+                    refresh_analysis=True
+                )
+
+            legend_elements_menu = tk.Menu(legend_menu, tearoff=0)
+            legend_element_specs = [
+                ('datasets', 'menu.graph_context.legend_element_datasets', 'Datasets'),
+                ('color', 'menu.graph_context.legend_element_color', 'Color'),
+                ('linestyle', 'menu.graph_context.legend_element_line_style', 'Line Style'),
+                ('marker', 'menu.graph_context.legend_element_marker', 'Marker'),
+            ]
+
+            for element_key, label_key, fallback in legend_element_specs:
+                current_enabled = bool(legend_elements_cfg.get(element_key, _line_legend_element_default(element_key)))
+                element_var = tk.BooleanVar(value=current_enabled)
+                _keep_var_ref(element_var)
+                legend_elements_menu.add_checkbutton(
+                    label=self.language_manager.translate(label_key, fallback),
+                    variable=element_var,
+                    onvalue=True,
+                    offvalue=False,
+                    command=lambda k=element_key, v=element_var: _set_line_legend_element(k, bool(v.get()))
+                )
+
+            legend_menu.add_cascade(
+                label=self.language_manager.translate('menu.graph_context.legend_elements', 'Elements'),
+                menu=legend_elements_menu
+            )
+
+            raw_position = str(config.get('legend_position', 'auto')).strip().lower()
+            if raw_position not in {'auto', 'nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'}:
+                raw_position = 'auto'
+
+            raw_location = str(config.get('legend_location', 'inside')).strip().lower()
+            if raw_location not in {'inside', 'outside'}:
+                raw_location = 'inside'
+
+            legend_position_root_menu = tk.Menu(legend_menu, tearoff=0)
+            legend_position_menu = tk.Menu(legend_position_root_menu, tearoff=0)
+            legend_location_menu = tk.Menu(legend_position_root_menu, tearoff=0)
+
+            legend_position_var = tk.StringVar(value=raw_position)
+            legend_location_var = tk.StringVar(value=raw_location)
+            _keep_var_ref(legend_position_var)
+            _keep_var_ref(legend_location_var)
+
+            def _set_line_legend_position(value: str) -> None:
+                self._update_graph_section_config_option(
+                    instance_alias,
+                    section_id,
+                    'legend_position',
+                    str(value),
+                    popup_refresh_callback=popup_refresh_callback,
+                    refresh_analysis=True
+                )
+
+            def _set_line_legend_location(value: str) -> None:
+                self._update_graph_section_config_option(
+                    instance_alias,
+                    section_id,
+                    'legend_location',
+                    str(value),
+                    popup_refresh_callback=popup_refresh_callback,
+                    refresh_analysis=True
+                )
+
+            legend_position_specs = [
+                ('auto', self.language_manager.translate('menu.graph_context.legend_show_auto', 'Auto') + default_suffix),
+                ('nw', 'NW'), ('n', 'N'), ('ne', 'NE'), ('e', 'E'), ('se', 'SE'), ('s', 'S'), ('sw', 'SW'), ('w', 'W'),
+            ]
+
+            for position_value, position_label in legend_position_specs:
+                legend_position_menu.add_radiobutton(
+                    label=position_label,
+                    variable=legend_position_var,
+                    value=position_value,
+                    command=lambda v=position_value: _set_line_legend_position(v)
+                )
+
+            legend_location_menu.add_radiobutton(
+                label=self.language_manager.translate('menu.graph_context.legend_location_inside', 'Inside') + default_suffix,
+                variable=legend_location_var,
+                value='inside',
+                command=lambda: _set_line_legend_location('inside')
+            )
+            legend_location_menu.add_radiobutton(
+                label=self.language_manager.translate('menu.graph_context.legend_location_outside', 'Outside'),
+                variable=legend_location_var,
+                value='outside',
+                command=lambda: _set_line_legend_location('outside')
+            )
+
+            legend_position_root_menu.add_cascade(
+                label=self.language_manager.translate('menu.graph_context.legend_position_value', 'Position'),
+                menu=legend_position_menu
+            )
+            legend_position_root_menu.add_cascade(
+                label=self.language_manager.translate('menu.graph_context.legend_location', 'Location'),
+                menu=legend_location_menu
+            )
+
+            legend_menu.add_cascade(
+                label=self.language_manager.translate('menu.graph_context.legend_position_root', 'Position'),
+                menu=legend_position_root_menu
+            )
+
+            menu.add_cascade(
+                label=self.language_manager.translate('menu.graph_context.legend', 'Legend'),
+                menu=legend_menu
+            )
+            item_count += 1
+
+            execution_results = self.analysis_data.get(instance_alias, {}).get('execution_results', {})
+            outputs = self._get_execution_data_sources(execution_results, instance_alias) if isinstance(execution_results, dict) else {}
+            datasets_cfg = config.get('datasets') if isinstance(config.get('datasets'), list) else None
+            line_state = line_state_for_menu if line_state_for_menu is not None else self._compute_line_class_layer_state(
+                config,
+                datasets_cfg,
+                outputs,
+                execution_results.get('inputs', {}) if isinstance(execution_results, dict) else {},
+            )
+            layer_count = int(line_state.get('layer_count', 0))
+
+            if layer_count > 0:
+                line_aspects_display = {
+                    'marker': self.language_manager.translate('menu.graph_context.class_marker', 'Marker'),
+                    'color': self.language_manager.translate('menu.graph_context.class_color', 'Color'),
+                    'linestyle': self.language_manager.translate('menu.graph_context.class_line_style', 'Line Style')
+                }
+
+                available_aspects = list(line_state.get('available_aspects', []))
+                max_active = int(line_state.get('max_active', len(available_aspects)))
+                effective_order = list(line_state.get('effective_order', []))
+                effective_map = dict(line_state.get('effective_map', {}))
+
+                class_layers_menu = tk.Menu(menu, tearoff=0)
+
+                def _persist_line_layer_settings(new_order: List[str], new_map: Dict[str, int]) -> None:
+                    self._update_graph_section_config_option(
+                        instance_alias,
+                        section_id,
+                        'class_layer_user_defined',
+                        True,
+                        popup_refresh_callback=popup_refresh_callback,
+                        refresh_analysis=False
+                    )
+                    self._update_graph_section_config_option(
+                        instance_alias,
+                        section_id,
+                        'class_layer_order',
+                        list(new_order),
+                        popup_refresh_callback=popup_refresh_callback,
+                        refresh_analysis=False
+                    )
+                    self._update_graph_section_config_option(
+                        instance_alias,
+                        section_id,
+                        'class_layer_map',
+                        dict(new_map),
+                        popup_refresh_callback=popup_refresh_callback,
+                        refresh_analysis=True
+                    )
+
+                for aspect in available_aspects:
+                    aspect_layer_menu = tk.Menu(class_layers_menu, tearoff=0)
+                    current_layer = int(effective_map.get(aspect, 0) if aspect in effective_order else 0)
+                    layer_var = tk.IntVar(value=current_layer)
+                    _keep_var_ref(layer_var)
+
+                    def _set_line_aspect_layer(aspect_name: str, selected_layer: int) -> None:
+                        current_order = [str(a).strip().lower() for a in effective_order if str(a).strip().lower() in available_aspects]
+                        normalized_map: Dict[str, int] = {}
+                        for key, value in effective_map.items():
+                            try:
+                                norm_key = str(key).strip().lower()
+                                if norm_key in available_aspects:
+                                    normalized_map[norm_key] = int(value)
+                            except Exception:
+                                continue
+
+                        if not current_order:
+                            raw_order_cfg = config.get('class_layer_order', [])
+                            if isinstance(raw_order_cfg, str):
+                                tokens = [tok.strip().lower() for tok in re.split(r'[;,\s]+', raw_order_cfg) if tok and tok.strip()]
+                                current_order = [tok for tok in tokens if tok in available_aspects]
+                            elif isinstance(raw_order_cfg, list):
+                                current_order = [str(a).strip().lower() for a in raw_order_cfg if str(a).strip().lower() in available_aspects]
+
+                            raw_map_cfg = config.get('class_layer_map', {})
+                            if isinstance(raw_map_cfg, dict):
+                                for k, v in raw_map_cfg.items():
+                                    try:
+                                        norm_k = str(k).strip().lower()
+                                        if norm_k in available_aspects:
+                                            normalized_map[norm_k] = int(v)
+                                    except Exception:
+                                        continue
+                            elif isinstance(raw_map_cfg, str):
+                                parsed_order, parsed_map = self._parse_class_layer_mapping_description(raw_map_cfg)
+                                for key in parsed_order:
+                                    if key in available_aspects and key in parsed_map:
+                                        try:
+                                            normalized_map[key] = int(parsed_map[key])
+                                        except Exception:
+                                            continue
+
+                        if int(selected_layer) <= 0:
+                            current_order = [a for a in current_order if a != aspect_name]
+                            normalized_map.pop(aspect_name, None)
+                            _persist_line_layer_settings(current_order, normalized_map)
+                            return
+
+                        if aspect_name not in current_order:
+                            if len(current_order) >= max_active:
+                                return
+                            current_order.append(aspect_name)
+                        normalized_map[aspect_name] = max(1, min(int(selected_layer), layer_count))
+                        _persist_line_layer_settings(current_order, normalized_map)
+
+                    aspect_layer_menu.add_radiobutton(
+                        label=self.language_manager.translate('menu.graph_context.none', 'None'),
+                        variable=layer_var,
+                        value=0,
+                        command=lambda a=aspect: _set_line_aspect_layer(a, 0)
+                    )
+                    aspect_layer_menu.add_separator()
+
+                    for layer_idx in range(1, layer_count + 1):
+                        aspect_layer_menu.add_radiobutton(
+                            label=f"Layer {layer_idx}",
+                            variable=layer_var,
+                            value=layer_idx,
+                            command=lambda a=aspect, l=layer_idx: _set_line_aspect_layer(a, l)
+                        )
+
+                    class_layers_menu.add_cascade(
+                        label=f"{line_aspects_display.get(aspect, aspect.title())} Layer",
+                        menu=aspect_layer_menu
+                    )
+
+                class_layers_menu.add_separator()
+
+                def _edit_line_mapping_text() -> None:
+                    current_desc = ", ".join(f"{k}:{effective_map.get(k, i+1)}" for i, k in enumerate(effective_order))
+                    user_text = simpledialog.askstring(
+                        title=self.language_manager.translate('menu.graph_context.class_layer_mapping', 'Class Layer Mapping'),
+                        prompt=self.language_manager.translate(
+                            'menu.graph_context.class_layer_mapping_prompt',
+                            "Describe mapping as 'color:1, linestyle:2, marker:3'"
+                        ),
+                        initialvalue=current_desc,
+                        parent=self.root
+                    )
+                    if user_text is None:
+                        return
+                    parsed_order, parsed_map = self._parse_class_layer_mapping_description(user_text)
+                    parsed_order = [a for a in parsed_order if a in available_aspects]
+                    parsed_order = parsed_order[:max_active]
+                    if not parsed_order and available_aspects:
+                        parsed_order = [available_aspects[0]]
+                    bounded_map = {a: max(1, min(int(parsed_map.get(a, 1)), layer_count)) for a in parsed_order}
+                    _persist_line_layer_settings(parsed_order, bounded_map)
+
+                class_layers_menu.add_command(
+                    label=self.language_manager.translate('menu.graph_context.class_layer_mapping_entry', 'Layer Mapping Description...'),
+                    command=_edit_line_mapping_text
+                )
+
+                menu.add_cascade(
+                    label=self.language_manager.translate('menu.graph_context.class_layers', 'Class Layers'),
+                    menu=class_layers_menu
+                )
+                item_count += 1
+
+                numeric_layers = list(line_state.get('numeric_layers', []))
+                if numeric_layers:
+                    class_nature_menu = tk.Menu(menu, tearoff=0)
+                    current_nature = line_state.get('layer_nature', {})
+
+                    for layer_idx in numeric_layers:
+                        layer_menu = tk.Menu(class_nature_menu, tearoff=0)
+                        nature_var = tk.StringVar(value=str(current_nature.get(layer_idx, 'discrete')))
+                        _keep_var_ref(nature_var)
+
+                        def _set_line_nature(idx: int, value: str) -> None:
+                            overrides = config.get('class_layer_nature', {}) if isinstance(config.get('class_layer_nature', {}), dict) else {}
+                            updated = dict(overrides)
+                            updated[str(idx)] = value
+                            self._update_graph_section_config_option(
+                                instance_alias,
+                                section_id,
+                                'class_layer_nature',
+                                updated,
+                                popup_refresh_callback=popup_refresh_callback,
+                                refresh_analysis=True
+                            )
+
+                        layer_menu.add_radiobutton(
+                            label=self.language_manager.translate('menu.graph_context.class_discrete', 'Discrete'),
+                            variable=nature_var,
+                            value='discrete',
+                            command=lambda i=layer_idx: _set_line_nature(i, 'discrete')
+                        )
+                        layer_menu.add_radiobutton(
+                            label=self.language_manager.translate('menu.graph_context.class_continuous', 'Continuous'),
+                            variable=nature_var,
+                            value='continuous',
+                            command=lambda i=layer_idx: _set_line_nature(i, 'continuous')
+                        )
+
+                        class_nature_menu.add_cascade(label=f"Layer {layer_idx}", menu=layer_menu)
+
+                    menu.add_cascade(
+                        label=self.language_manager.translate('menu.graph_context.class_nature', 'Class Nature'),
+                        menu=class_nature_menu
+                    )
+                    item_count += 1
+
+                colormaps_data = self._load_colormaps_catalog()
+                continuous_data = colormaps_data.get("continuous", {})
+                qualitative_data = colormaps_data.get("qualitative", [])
+
+                def _build_line_color_colormap_menu() -> tk.Menu:
+                    aspect_menu = tk.Menu(menu, tearoff=0)
+                    mapped_layer = effective_map.get('color') if 'color' in effective_order else None
+                    if mapped_layer is None:
+                        aspect_menu.add_command(
+                            label=self.language_manager.translate(
+                                'menu.graph_context.assign_layer_first',
+                                'Assign a class layer first'
+                            ),
+                            state=tk.DISABLED
+                        )
+                        return aspect_menu
+
+                    layer_nature = str(line_state.get('layer_nature', {}).get(int(mapped_layer), 'discrete')).strip().lower()
+                    is_continuous = layer_nature == 'continuous'
+                    target_key = 'class_color_cmap_continuous' if is_continuous else 'class_color_cmap_qualitative'
+                    default_token = '__default__'
+                    current_value = str(config.get(target_key, default_token))
+                    cmap_var = tk.StringVar(value=current_value)
+                    _keep_var_ref(cmap_var)
+
+                    aspect_menu.add_radiobutton(
+                        label=self.language_manager.translate('menu.graph_context.use_default_colormap', 'Default (settings)'),
+                        variable=cmap_var,
+                        value=default_token,
+                        command=lambda: (
+                            self._remove_graph_section_config_option(
+                                instance_alias,
+                                section_id,
+                                'class_color_cmap_continuous',
+                                popup_refresh_callback=popup_refresh_callback,
+                                refresh_analysis=False
+                            ),
+                            self._remove_graph_section_config_option(
+                                instance_alias,
+                                section_id,
+                                'class_color_cmap_qualitative',
+                                popup_refresh_callback=popup_refresh_callback,
+                                refresh_analysis=True
+                            )
+                        )
+                    )
+                    aspect_menu.add_separator()
+
+                    has_any_maps = False
+                    if is_continuous:
+                        if isinstance(continuous_data, dict):
+                            for category, cmaps in continuous_data.items():
+                                if not isinstance(cmaps, list) or not cmaps:
+                                    continue
+                                category_menu = tk.Menu(aspect_menu, tearoff=0)
+                                for cmap_name in cmaps:
+                                    cmap_name = str(cmap_name)
+                                    category_menu.add_radiobutton(
+                                        label=cmap_name,
+                                        variable=cmap_var,
+                                        value=cmap_name,
+                                        command=lambda v=cmap_name, k=target_key: self._update_graph_section_config_option(
+                                            instance_alias,
+                                            section_id,
+                                            k,
+                                            v,
+                                            popup_refresh_callback=popup_refresh_callback,
+                                            refresh_analysis=True
+                                        )
+                                    )
+                                aspect_menu.add_cascade(label=str(category), menu=category_menu)
+                                has_any_maps = True
+                    else:
+                        if isinstance(qualitative_data, list):
+                            for cmap_name in qualitative_data:
+                                cmap_name = str(cmap_name)
+                                aspect_menu.add_radiobutton(
+                                    label=cmap_name,
+                                    variable=cmap_var,
+                                    value=cmap_name,
+                                    command=lambda v=cmap_name, k=target_key: self._update_graph_section_config_option(
+                                        instance_alias,
+                                        section_id,
+                                        k,
+                                        v,
+                                        popup_refresh_callback=popup_refresh_callback,
+                                        refresh_analysis=True
+                                    )
+                                )
+                                has_any_maps = True
+
+                    if not has_any_maps:
+                        aspect_menu.add_command(label='-', state=tk.DISABLED)
+                    return aspect_menu
+
+                class_colormaps_menu = tk.Menu(menu, tearoff=0)
+                class_colormaps_menu.add_cascade(
+                    label=line_aspects_display.get('color', 'Color'),
+                    menu=_build_line_color_colormap_menu()
                 )
 
                 menu.add_cascade(
@@ -7691,10 +8434,13 @@ class ChemometricsGUI:
                         'x_data': ds_x_data,
                         'y_data': ds_y_data,
                         'label': dataset_label,
-                        'marker': dataset_cfg.get('marker', 'o'),
                         'x_axis': ds_x_axis,  # Preserve axis config for label extraction
                         'y_axis': ds_y_axis   # Preserve axis config for label extraction
                     }
+                    if graph_type == 'scatter':
+                        dataset_entry['marker'] = dataset_cfg.get('marker', 'o')
+                    elif 'marker' in dataset_cfg:
+                        dataset_entry['marker'] = dataset_cfg.get('marker')
                     if ds_z_data is not None:
                         dataset_entry['z_data'] = ds_z_data
                     if ds_class_data is not None:
@@ -7711,7 +8457,7 @@ class ChemometricsGUI:
                     extracted_datasets.append(dataset_entry)
             
             # If main plot has class_labels config, treat it as a dataset for proper class coloring with qualitative colormap
-            if 'class_labels' in config and graph_type == 'scatter' and x_data is not None and y_data is not None:
+            if 'class_labels' in config and graph_type in ('scatter', 'line') and x_data is not None and y_data is not None:
                 class_source = config['class_labels']
                 class_val = self._get_data_from_source(outputs, class_source)
                 if class_val is not None:
@@ -7728,9 +8474,13 @@ class ChemometricsGUI:
                             'x_data': x_data,
                             'y_data': y_data,
                             'label': 'Main Dataset',
-                            'marker': 'o',
                             'class_data': main_class_data
                         }
+                        # Scatter uses marker for dataset identity; line uses linestyle
+                        if graph_type == 'scatter':
+                            main_dataset['marker'] = 'o'
+                        elif graph_type == 'line' and 'marker' in config:
+                            main_dataset['marker'] = config.get('marker')
                         if main_class_layers is not None:
                             main_dataset['class_layers'] = main_class_layers
                         if z_data is not None:
@@ -7781,33 +8531,44 @@ class ChemometricsGUI:
                             sample_labels = [str(lbl) for lbl in labels_data]
                             break
 
-            if str(graph_type).strip().lower() == 'scatter':
-                scatter_state = self._compute_scatter_class_layer_state(
-                    config,
-                    datasets_config,
-                    outputs,
-                    execution_results.get('inputs', {}) if isinstance(execution_results, dict) else {},
-                )
-                effective_order = list(scatter_state.get('effective_order', []))
-                effective_map = dict(scatter_state.get('effective_map', {}))
-                layer_nature = dict(scatter_state.get('layer_nature', {}))
-
-                configured_order_raw = config.get('class_layer_order', [])
-                if scatter_state.get('is_multi_dataset') and isinstance(configured_order_raw, list) and 'marker' in [str(v).strip().lower() for v in configured_order_raw]:
-                    self._show_graph_warning_once(
-                        instance_alias,
-                        section_id,
-                        'scatter_marker_reserved',
-                        self.language_manager.translate(
-                            'ui.messages.scatter_marker_reserved_multi_dataset',
-                            'Scatter class-layer marker mapping is disabled for multiple datasets; marker is reserved for dataset identity.'
-                        )
+            normalized_graph_type = str(graph_type).strip().lower()
+            if normalized_graph_type in {'scatter', 'line'}:
+                if normalized_graph_type == 'scatter':
+                    class_state = self._compute_scatter_class_layer_state(
+                        config,
+                        datasets_config,
+                        outputs,
+                        execution_results.get('inputs', {}) if isinstance(execution_results, dict) else {},
                     )
+                    configured_order_raw = config.get('class_layer_order', [])
+                    if class_state.get('is_multi_dataset') and isinstance(configured_order_raw, list) and 'marker' in [str(v).strip().lower() for v in configured_order_raw]:
+                        self._show_graph_warning_once(
+                            instance_alias,
+                            section_id,
+                            'scatter_marker_reserved',
+                            self.language_manager.translate(
+                                'ui.messages.scatter_marker_reserved_multi_dataset',
+                                'Scatter class-layer marker mapping is disabled for multiple datasets; marker is reserved for dataset identity.'
+                            )
+                        )
+                else:
+                    class_state = self._compute_line_class_layer_state(
+                        config,
+                        datasets_config,
+                        outputs,
+                        execution_results.get('inputs', {}) if isinstance(execution_results, dict) else {},
+                    )
+                    if class_state.get('marker_explicit'):
+                        render_config['line_marker_reserved'] = True
+
+                effective_order = list(class_state.get('effective_order', []))
+                effective_map = dict(class_state.get('effective_map', {}))
+                layer_nature = dict(class_state.get('layer_nature', {}))
 
                 render_config['class_layer_order_effective'] = effective_order
                 render_config['class_layer_map_effective'] = effective_map
                 render_config['class_layer_nature_effective'] = {str(k): str(v) for k, v in layer_nature.items()}
-                render_config['class_layer_count'] = int(scatter_state.get('layer_count', 0))
+                render_config['class_layer_count'] = int(class_state.get('layer_count', 0))
                 render_config['class_color_palette_mode'] = str(config.get('class_color_palette_mode', 'auto'))
                 render_config['class_edge_palette_mode'] = str(config.get('class_edge_palette_mode', 'auto'))
                 render_config['class_color_cmap_continuous'] = str(config.get('class_color_cmap_continuous', self.settings_manager.get('colormap', 'viridis')))
@@ -10746,10 +11507,13 @@ Count:
                         'x_data': ds_x_data,
                         'y_data': ds_y_data,
                         'label': dataset_label,
-                        'marker': dataset_cfg.get('marker', 'o'),
                         'x_axis': ds_x_axis,  # Preserve axis config for label extraction
                         'y_axis': ds_y_axis   # Preserve axis config for label extraction
                     }
+                    if graph_type == 'scatter':
+                        dataset_entry['marker'] = dataset_cfg.get('marker', 'o')
+                    elif 'marker' in dataset_cfg:
+                        dataset_entry['marker'] = dataset_cfg.get('marker')
                     if ds_z_data is not None:
                         dataset_entry['z_data'] = ds_z_data
                     if ds_class_data is not None:
@@ -10766,7 +11530,7 @@ Count:
                     extracted_datasets.append(dataset_entry)
             
             # If main plot has class_labels config, treat it as a dataset for proper class coloring with qualitative colormap
-            if 'class_labels' in config and graph_type == 'scatter' and x_data is not None and y_data is not None:
+            if 'class_labels' in config and graph_type in ('scatter', 'line') and x_data is not None and y_data is not None:
                 class_source = config['class_labels']
                 class_val = self._get_data_from_source(outputs, class_source)
                 if class_val is not None:
@@ -10783,9 +11547,13 @@ Count:
                             'x_data': x_data,
                             'y_data': y_data,
                             'label': 'Main Dataset',
-                            'marker': 'o',
                             'class_data': main_class_data
                         }
+                        # Scatter uses marker for dataset identity; line uses linestyle
+                        if graph_type == 'scatter':
+                            main_dataset['marker'] = 'o'
+                        elif graph_type == 'line' and 'marker' in config:
+                            main_dataset['marker'] = config.get('marker')
                         if main_class_layers is not None:
                             main_dataset['class_layers'] = main_class_layers
                         if z_data is not None:
@@ -10836,33 +11604,44 @@ Count:
                             sample_labels = [str(lbl) for lbl in labels_data]
                             break
 
-            if str(graph_type).strip().lower() == 'scatter':
-                scatter_state = self._compute_scatter_class_layer_state(
-                    config,
-                    datasets_config,
-                    outputs,
-                    execution_results.get('inputs', {}) if isinstance(execution_results, dict) else {},
-                )
-                effective_order = list(scatter_state.get('effective_order', []))
-                effective_map = dict(scatter_state.get('effective_map', {}))
-                layer_nature = dict(scatter_state.get('layer_nature', {}))
-
-                configured_order_raw = config.get('class_layer_order', [])
-                if scatter_state.get('is_multi_dataset') and isinstance(configured_order_raw, list) and 'marker' in [str(v).strip().lower() for v in configured_order_raw]:
-                    self._show_graph_warning_once(
-                        instance_alias,
-                        section_id,
-                        'scatter_marker_reserved',
-                        self.language_manager.translate(
-                            'ui.messages.scatter_marker_reserved_multi_dataset',
-                            'Scatter class-layer marker mapping is disabled for multiple datasets; marker is reserved for dataset identity.'
-                        )
+            normalized_graph_type = str(graph_type).strip().lower()
+            if normalized_graph_type in {'scatter', 'line'}:
+                if normalized_graph_type == 'scatter':
+                    class_state = self._compute_scatter_class_layer_state(
+                        config,
+                        datasets_config,
+                        outputs,
+                        execution_results.get('inputs', {}) if isinstance(execution_results, dict) else {},
                     )
+                    configured_order_raw = config.get('class_layer_order', [])
+                    if class_state.get('is_multi_dataset') and isinstance(configured_order_raw, list) and 'marker' in [str(v).strip().lower() for v in configured_order_raw]:
+                        self._show_graph_warning_once(
+                            instance_alias,
+                            section_id,
+                            'scatter_marker_reserved',
+                            self.language_manager.translate(
+                                'ui.messages.scatter_marker_reserved_multi_dataset',
+                                'Scatter class-layer marker mapping is disabled for multiple datasets; marker is reserved for dataset identity.'
+                            )
+                        )
+                else:
+                    class_state = self._compute_line_class_layer_state(
+                        config,
+                        datasets_config,
+                        outputs,
+                        execution_results.get('inputs', {}) if isinstance(execution_results, dict) else {},
+                    )
+                    if class_state.get('marker_explicit'):
+                        render_config['line_marker_reserved'] = True
+
+                effective_order = list(class_state.get('effective_order', []))
+                effective_map = dict(class_state.get('effective_map', {}))
+                layer_nature = dict(class_state.get('layer_nature', {}))
 
                 render_config['class_layer_order_effective'] = effective_order
                 render_config['class_layer_map_effective'] = effective_map
                 render_config['class_layer_nature_effective'] = {str(k): str(v) for k, v in layer_nature.items()}
-                render_config['class_layer_count'] = int(scatter_state.get('layer_count', 0))
+                render_config['class_layer_count'] = int(class_state.get('layer_count', 0))
                 render_config['class_color_palette_mode'] = str(config.get('class_color_palette_mode', 'auto'))
                 render_config['class_edge_palette_mode'] = str(config.get('class_edge_palette_mode', 'auto'))
                 render_config['class_color_cmap_continuous'] = str(config.get('class_color_cmap_continuous', self.settings_manager.get('colormap', 'viridis')))

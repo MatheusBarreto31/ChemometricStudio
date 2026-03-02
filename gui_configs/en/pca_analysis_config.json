@@ -315,9 +315,7 @@
                   },
                   "class_labels": "class_data_cal",
                   "point_labels_source": "smp_cal",
-                  "label": "Calibration",
-                  "marker": "o",
-                  "color": "#1f77b4"
+                  "label": "Calibration"
                 },
                 {
                   "x_axis": {
@@ -332,9 +330,7 @@
                   },
                   "class_labels": "class_data_cal",
                   "point_labels_source": "smp_cal",
-                  "label": "CV Calibration",
-                  "marker": "s",
-                  "color": "#ff7f0e"
+                  "label": "CV Calibration"
                 },
                 {
                   "x_axis": {
@@ -349,9 +345,7 @@
                   },
                   "class_labels": "class_data_val",
                   "point_labels_source": "smp_val",
-                  "label": "Validation",
-                  "marker": "^",
-                  "color": "#2ca02c"
+                  "label": "Validation"
                 }
               ],
               "data_slicing": [

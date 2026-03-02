@@ -703,7 +703,7 @@
         ]
       },
       {
-        "title": "Data Overview",
+        "title": "Data Overview (Class)",
         "layout": "ew",
         "sections": [
           {
@@ -720,20 +720,13 @@
                 "data_source": "out.X_cal",
                 "label": "Intensity"
               },
-              "title": "Spectral Data Overview",
+              "class_labels": "class_data_cal",
+              "title": "Spectral Data Overview (Class)",
               "dimension_labels": "dim_labels",
-              "variable_labels": "axis_t_info",
-              "data_slicing": [
-                {
-                  "name": "Sample",
-                  "dimension": 0,
-                  "axis": "y",
-                  "show_navigation_menu": true
-                }
-              ]
+              "variable_labels": "axis_t_info"
             },
-            "short_description": "Displays Spectral Data Overview as a line graph in the analysis section.",
-            "long_description": "This section visualizes 'Spectral Data Overview' using a line graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
+            "short_description": "Displays all spectra coloured by class as a line graph in the analysis section.",
+            "long_description": "This section visualizes all loaded spectra simultaneously. Lines are coloured by class value using the selected colormap settings. Class data must be loaded for class-driven styling to appear."
           }
         ]
       },
