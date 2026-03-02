@@ -2,7 +2,7 @@
   "display_name": "Load Data",
   "category": "1.Data Import",
   "data_type": "all",
-  "input_aliases": {
+    "input_aliases": {
     "d_specs_separator": "Data Separator",
     "d_specs_headlines": "Header Rows",
     "d_specs_type": "Data Type",
@@ -19,7 +19,13 @@
     "transpose": "Transpose",
     "reshape_order": "Reshape Order",
     "axis_info": "Axis Generation Info",
-    "cdata_path": "Classification Data File"
+    "cdata_path": "Classification Data File",
+    "y_from_x": "Y from X File",
+    "class_from_x": "Class from X File",
+    "smp_from_x": "Sample Labels from X File",
+    "y_columns": "Y Columns",
+    "class_columns": "Class Columns",
+    "smp_column": "Sample Label Column"
   },
   "output_aliases": {
     "X_cal": "X Data",
@@ -208,7 +214,10 @@
         "required": false,
         "input_type": "user",
         "tooltip": "Response variable(s) file",
-        "ispath": true
+        "ispath": true,
+        "visible_if": {
+          "y_from_x": false
+        }
       },
       {
         "name": "cdata_path",
@@ -219,18 +228,10 @@
         "required": false,
         "input_type": "user",
         "tooltip": "Classification file: one sample per row. Supports single label or multi-layer labels (comma/tab/space separated columns).",
-        "ispath": true
-      },
-      {
-        "name": "var_path",
-        "label": "Axis Labels Files",
-        "category": "Axis Configuration",
-        "widget": "file_selector_list",
-        "count_source": "nway_flag",
-        "required": false,
-        "input_type": "user",
-        "tooltip": "Files containing axis labels for each dimension (one file per dimension, based on Data Order)",
-        "ispath": true
+        "ispath": true,
+        "visible_if": {
+          "class_from_x": false
+        }
       },
       {
         "name": "smp_path",
@@ -241,6 +242,101 @@
         "required": false,
         "input_type": "user",
         "tooltip": "Labels for samples (e.g., sample IDs)",
+        "ispath": true,
+        "visible_if": {
+          "smp_from_x": false
+        }
+      },
+      {
+        "name": "y_from_x",
+        "label": "Y from X File",
+        "category": "Data Files",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Extract Y data from columns in the X file instead of loading a separate Y file. Only available for X Matrix data type.",
+        "visible_if": {
+          "d_specs_type": ["Auto detect", "x_matrix"]
+        }
+      },
+      {
+        "name": "class_from_x",
+        "label": "Class from X File",
+        "category": "Data Files",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Extract class labels from columns in the X file instead of loading a separate classification file. Only available for X Matrix data type.",
+        "visible_if": {
+          "d_specs_type": ["Auto detect", "x_matrix"]
+        }
+      },
+      {
+        "name": "smp_from_x",
+        "label": "Sample Labels from X File",
+        "category": "Data Files",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Extract sample labels from a single column in the X file instead of loading a separate labels file. Only available for X Matrix data type.",
+        "visible_if": {
+          "d_specs_type": ["Auto detect", "x_matrix"]
+        }
+      },
+      {
+        "name": "y_columns",
+        "label": "Y Columns",
+        "category": "Data Files",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Columns of the X file to use as Y data (1-based). Supports single values (3), comma/space lists (1,3,5), ranges (1:4 or 1-4), and stepped ranges (2:2:6).",
+        "visible_if": {
+          "y_from_x": true
+        }
+      },
+      {
+        "name": "class_columns",
+        "label": "Class Columns",
+        "category": "Data Files",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Columns of the X file to use as class labels (1-based). Supports single values (3), comma/space lists (1,3,5), ranges (1:4 or 1-4), and stepped ranges (2:2:6). String labels are preserved.",
+        "visible_if": {
+          "class_from_x": true
+        }
+      },
+      {
+        "name": "smp_column",
+        "label": "Sample Label Column",
+        "category": "Data Files",
+        "widget": "entry",
+        "type": "int",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Single column number (1-based) whose values become sample labels.",
+        "visible_if": {
+          "smp_from_x": true
+        }
+      },
+      {
+        "name": "var_path",
+        "label": "Axis Labels Files",
+        "category": "Axis Configuration",
+        "widget": "file_selector_list",
+        "count_source": "nway_flag",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Files containing axis labels for each dimension (one file per dimension, based on Data Order)",
         "ispath": true
       },
       {

@@ -31,7 +31,7 @@
     "workflow_parallel_branch": [],
     "workflow_parallel_end": [],
     "cv_configuration": ["use_cv", "cv_strategy", "n_splits", "random_state", "shuffle", "window_size", "n_repeats", "test_size"],
-    "load_data": ["d_specs_separator", "d_specs_headlines", "d_specs_type", "d_specs_dimensions", "data_path", "nway_flag", "y_path", "var_path", "smp_path", "transpose", "axis_info", "reshape_order", "multi_file_per_sample", "num_samples", "dim_labels", "scale_type", "cdata_path"],
+    "load_data": ["d_specs_separator", "d_specs_headlines", "d_specs_type", "d_specs_dimensions", "data_path", "nway_flag", "y_path", "var_path", "smp_path", "transpose", "axis_info", "reshape_order", "multi_file_per_sample", "num_samples", "dim_labels", "scale_type", "y_from_x", "class_from_x", "smp_from_x", "y_columns", "class_columns", "smp_column", "cdata_path"],
     "validation_data_main": ["X_cal", "Y_cal", "smp_cal", "class_data_cal", "cal_metadata", "validation_mode", "createVal", "creationMethod", "calProportion", "random_seed", "selection_file", "X_val_path", "Y_val_path", "val_labels_path", "cdata_path", "d_specs_separator", "d_specs_headlines", "d_specs_type", "d_specs_dimensions", "data_path", "y_path", "var_path", "smp_path", "transpose", "nway_flag", "reshape_order"],
     "baseline_correction": [
       {"key": "X_cal", "aliases": ["X", "X_train"]},
@@ -152,7 +152,13 @@
       "axis_info": "str",
       "reshape_order": "str",
       "multi_file_per_sample": "bool",
-      "num_samples": "int"
+      "num_samples": "int",
+      "y_from_x": "bool",
+      "class_from_x": "bool",
+      "smp_from_x": "bool",
+      "y_columns": "str",
+      "class_columns": "str",
+      "smp_column": "str"
     },
     "validation_data_main": {
       "X_cal": "ndarray",

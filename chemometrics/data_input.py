@@ -237,6 +237,8 @@ def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "
               transpose: bool = False, axis_info: Optional[List[str]] = None, reshape_order: str = 'F',
               dim_labels: Optional[List[str]] = None, scale_type: Optional[List[str]] = None,
               multi_file_per_sample: bool = False, num_samples: Optional[int] = None,
+              y_from_x: bool = False, class_from_x: bool = False, smp_from_x: bool = False,
+              y_columns: str = "", class_columns: str = "", smp_column: str = "",
               cdata_path: Optional[str] = None,
               source_metadata_overrides: Optional[Dict[str, Dict[str, Any]]] = None) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[List[List[str]]], List[str], Optional[List[np.ndarray]], List[str], Optional[List[Any]], Dict[str, Dict[str, Any]]]:
     """
@@ -261,6 +263,12 @@ def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "
         scale_type: Optional list of scale types for axis generation ('Linear', 'Log10', 'Log2', 'Ln')
         multi_file_per_sample: If True, each sample consists of multiple files (only for nway_flag >= 3)
         num_samples: Number of samples when using multi_file_per_sample mode (files divided equally)
+        y_from_x: If True, extract Y data from the X file using y_columns (only for x_matrix, nway_flag=1)
+        class_from_x: If True, extract class labels from the X file using class_columns (only for x_matrix, nway_flag=1)
+        smp_from_x: If True, extract sample labels from a single column in the X file (only for x_matrix, nway_flag=1)
+        y_columns: Column spec string for Y extraction (1-based; supports ranges like '1:4', '1-4', '2:2:6')
+        class_columns: Column spec string for class label extraction (same format as y_columns)
+        smp_column: Single column number (1-based integer) whose string values become sample labels
         cdata_path: Optional path to classification data file (one row per sample; supports multi-column labels)
         source_metadata_overrides: Optional mapping of absolute file paths to pre-recorded metadata
 
@@ -332,6 +340,18 @@ def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "
             axis_info_list = [a.strip() if isinstance(a, str) else a for a in axis_info if a]
 
     sample_paths = None
+    # These may be populated by auxiliary extraction from X
+    extracted_Y: Optional[np.ndarray] = None
+    extracted_class: Optional[List[Any]] = None
+    extracted_smp: Optional[List[str]] = None
+
+    # Determine whether to use column-extraction mode (y_from_x / class_from_x / smp_from_x)
+    use_extraction = (
+        (y_from_x or class_from_x or smp_from_x)
+        and data_type == "x_matrix"
+        and nway_flag == 1
+        and not multi_file_per_sample
+    )
 
     # Load X data - check if multi_file_per_sample mode is enabled
     if multi_file_per_sample and nway_flag >= 3 and data_path and num_samples:
@@ -353,6 +373,29 @@ def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "
             smp_labels = [f"Sample_{i+1}" for i in range(num_samples)]
         else:
             smp_labels = _load_labels(smp_path)
+    elif use_extraction:
+        # Extraction mode: pull Y and/or class and/or smp columns directly from the X file(s)
+        y_col_indices = _parse_column_spec(y_columns) if y_from_x else []
+        class_col_indices = _parse_column_spec(class_columns) if class_from_x else []
+        smp_col_idx: Optional[int] = None
+        if smp_from_x and str(smp_column).strip():
+            try:
+                val = int(str(smp_column).strip()) - 1  # convert to 0-based
+                smp_col_idx = val if val >= 0 else None
+            except ValueError:
+                smp_col_idx = None
+
+        X, extracted_Y, extracted_class, extracted_smp, row_counts = _load_x_matrix_with_extraction(
+            normalized_data_paths, separator, num_headlines, transpose,
+            y_col_indices, class_col_indices, smp_col_idx
+        )
+        # Load sample labels: extracted column wins, then explicit file, then auto-generated
+        if smp_from_x and extracted_smp is not None:
+            smp_labels = extracted_smp
+        elif smp_path is not None:
+            smp_labels = _load_labels(smp_path)
+        else:
+            smp_labels = _generate_row_labels(normalized_data_paths, row_counts)
     else:
         # Standard loading mode
         X, row_counts = _load_x_data(normalized_data_paths, separator, num_headlines, data_type, dimensions, transpose, nway_flag, reshape_order)
@@ -365,11 +408,25 @@ def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "
         else:
             smp_labels = _load_labels(smp_path)
 
-    # Load Y data (using same separator as X for consistency)
-    Y = _load_y_data(y_path, separator, 0) if y_path else None
+    # Load Y data
+    # Prefer extraction result; fall back to y_path when y_from_x is not active
+    if use_extraction and y_from_x:
+        Y = extracted_Y
+    else:
+        Y = _load_y_data(y_path, separator, 0) if y_path else None
 
-    # Load classification data (strings, one per line)
-    class_data = _load_class_data(cdata_path) if cdata_path else None
+    # Load classification data
+    # Prefer extraction result; fall back to cdata_path when class_from_x is not active
+    if use_extraction and class_from_x:
+        class_data = extracted_class
+    else:
+        class_data = _load_class_data(cdata_path) if cdata_path else None
+
+    # Override smp_labels with extracted values when smp_from_x is active and extraction ran
+    # (already handled above in the elif use_extraction branch, but guard here in case of future
+    #  refactoring that splits the branches differently)
+    if use_extraction and smp_from_x and extracted_smp is not None:
+        smp_labels = extracted_smp
 
     # Generate axis information (numerical vectors)
     if axis_info_list:
@@ -704,6 +761,224 @@ def _load_class_data(cdata_path: str) -> List[Any]:
         else:
             normalized_rows.append(row)
     return normalized_rows
+
+
+def _parse_column_spec(spec: str) -> List[int]:
+    """Parse a column specification string into a sorted list of 0-based column indices.
+
+    Supported formats (1-based indexing):
+    - Single value:           "3"      → [2]
+    - Comma/space separated:  "1,3,5"  → [0, 2, 4]
+    - Colon range:            "1:4"    → [0, 1, 2, 3]
+    - Dash range:             "1-4"    → [0, 1, 2, 3]
+    - Stepped colon range:    "2:2:6"  → [1, 3, 5]  (start:step:end)
+    - Mixed:                  "1,3:5"  → [0, 2, 3, 4]
+    """
+    if not spec or not spec.strip():
+        return []
+
+    indices: set = set()
+    # Split by commas and whitespace, but keep range tokens intact
+    tokens = re.split(r'[\s,]+', spec.strip())
+
+    for token in tokens:
+        if not token:
+            continue
+
+        if ':' in token:
+            # Colon-separated: a:b  or  a:step:b
+            parts = token.split(':')
+            try:
+                if len(parts) == 2:
+                    start, end = int(parts[0]), int(parts[1])
+                    step = 1
+                elif len(parts) == 3:
+                    start, step, end = int(parts[0]), int(parts[1]), int(parts[2])
+                else:
+                    continue
+                if step <= 0:
+                    continue
+                for i in range(start, end + 1, step):
+                    if i >= 1:
+                        indices.add(i - 1)  # convert to 0-based
+            except ValueError:
+                continue
+
+        elif re.match(r'^\d+-\d+$', token):
+            # Dash-separated range: a-b
+            parts = token.split('-')
+            try:
+                start, end = int(parts[0]), int(parts[1])
+                for i in range(start, end + 1):
+                    if i >= 1:
+                        indices.add(i - 1)
+            except ValueError:
+                continue
+
+        else:
+            # Single integer
+            try:
+                idx = int(token)
+                if idx >= 1:
+                    indices.add(idx - 1)
+            except ValueError:
+                continue
+
+    return sorted(indices)
+
+
+def _load_file_raw_rows(path: str, separator: Optional[str], num_headlines: int) -> List[List[str]]:
+    """Load a file and return every data row as a list of string tokens.
+
+    Headline rows are skipped.  Empty lines are ignored.
+    Works for both text files and Excel files.
+    """
+    rows: List[List[str]] = []
+
+    if path.lower().endswith(('.xlsx', '.xls')):
+        df = pd.read_excel(path, header=None, skiprows=num_headlines, dtype=str)
+        df = df.fillna('')
+        for _, row in df.iterrows():
+            tokens = [str(v).strip() for v in row.tolist()]
+            # Drop trailing empty tokens
+            while tokens and tokens[-1] == '':
+                tokens.pop()
+            if tokens:
+                rows.append(tokens)
+    else:
+        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+            all_lines = f.readlines()
+
+        # Skip headline rows
+        data_lines = all_lines[num_headlines:]
+
+        for line in data_lines:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if separator is None:
+                tokens = re.split(r'\s+', stripped)
+            elif separator == '\t':
+                tokens = stripped.split('\t')
+            else:
+                tokens = stripped.split(separator)
+            tokens = [t.strip() for t in tokens]
+            if tokens:
+                rows.append(tokens)
+
+    return rows
+
+
+def _load_x_matrix_with_extraction(
+    data_paths: List[str],
+    separator: Optional[str],
+    num_headlines: int,
+    transpose: bool,
+    y_col_indices: List[int],
+    class_col_indices: List[int],
+    smp_col_idx: Optional[int] = None,
+) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[List[Any]], Optional[List[str]], List[int]]:
+    """Load 1-way X matrix files, extracting Y, class, and/or sample-label columns before numeric conversion.
+
+    Y columns are numeric; class and sample-label columns are kept as raw strings so that
+    non-numeric labels survive the process unchanged.  All extracted columns are removed from X.
+
+    Args:
+        data_paths:        List of file paths for the X data.
+        separator:         Parsed separator character (or None for whitespace).
+        num_headlines:     Number of header rows to skip.
+        transpose:         Whether to transpose each file's data.
+        y_col_indices:     0-based original column indices to use as Y (must be numeric).
+        class_col_indices: 0-based original column indices to use as class labels.
+        smp_col_idx:       0-based column index whose values become sample labels, or None.
+
+    Returns:
+        X:             Processed X matrix (samples × remaining variables).
+        Y:             Y matrix (samples × y_cols) or None.
+        class_data:    List of class labels (1-D list of strings or 2-D list) or None.
+        smp_labels:    List of per-row sample label strings, or None.
+        row_counts:    Number of rows contributed by each file.
+    """
+    remove_set = set(y_col_indices) | set(class_col_indices)
+    if smp_col_idx is not None:
+        remove_set.add(smp_col_idx)
+
+    X_blocks: List[np.ndarray] = []
+    Y_rows: List[List[float]] = []
+    class_rows: List[List[str]] = []
+    smp_rows: List[str] = []
+    row_counts: List[int] = []
+
+    y_only = [c for c in sorted(y_col_indices) if c not in set(class_col_indices)]
+
+    for path in data_paths:
+        raw = _load_file_raw_rows(path, separator, num_headlines)
+        if not raw:
+            continue
+
+        n_cols = max(len(row) for row in raw)
+        x_col_indices = [c for c in range(n_cols) if c not in remove_set]
+
+        x_block: List[List[float]] = []
+        for row in raw:
+            # --- extract sample label value (single string column) ---
+            if smp_col_idx is not None:
+                smp_rows.append(row[smp_col_idx] if smp_col_idx < len(row) else '')
+
+            # --- extract class values (strings) ---
+            if class_col_indices:
+                c_vals = []
+                for ci in sorted(class_col_indices):
+                    c_vals.append(row[ci] if ci < len(row) else '')
+                class_rows.append(c_vals)
+
+            # --- extract numeric X values ---
+            x_vals: List[float] = []
+            for ci in x_col_indices:
+                raw_val = row[ci] if ci < len(row) else ''
+                try:
+                    x_vals.append(float(raw_val) if raw_val != '' else np.nan)
+                except ValueError:
+                    x_vals.append(np.nan)
+            x_block.append(x_vals)
+
+            # --- extract Y values ---
+            if y_only:
+                y_vals: List[float] = []
+                for ci in y_only:
+                    raw_val = row[ci] if ci < len(row) else ''
+                    try:
+                        y_vals.append(float(raw_val) if raw_val != '' else np.nan)
+                    except ValueError:
+                        y_vals.append(np.nan)
+                Y_rows.append(y_vals)
+
+        X_file = np.array(x_block, dtype=float)
+        if transpose:
+            X_file = X_file.T
+        X_blocks.append(X_file)
+        row_counts.append(X_file.shape[0])
+
+    X = np.concatenate(X_blocks, axis=0) if X_blocks else np.empty((0, 0))
+
+    Y: Optional[np.ndarray] = None
+    if Y_rows:
+        Y = np.array(Y_rows, dtype=float)
+        if Y.ndim == 1 or (Y.ndim == 2 and Y.shape[1] == 1):
+            Y = Y.reshape(-1, 1)
+
+    class_data: Optional[List[Any]] = None
+    if class_rows:
+        max_c = max(len(r) for r in class_rows)
+        if max_c <= 1:
+            class_data = [r[0] if r else '' for r in class_rows]
+        else:
+            # Pad shorter rows
+            class_data = [r + [''] * (max_c - len(r)) for r in class_rows]
+
+    smp_labels_out: Optional[List[str]] = smp_rows if smp_rows else None
+
+    return X, Y, class_data, smp_labels_out, row_counts
 
 
 def _load_labels(label_path: str) -> List[str]:
