@@ -110,6 +110,48 @@ def _looks_autoscaled(X_2d: np.ndarray) -> bool:
     return bool(mean_ok and std_ok)
 
 
+def _extract_stratification_labels(class_data_cal: Optional[Any], stratify_layer: int) -> Optional[np.ndarray]:
+    """Extract stratification labels from selected 1-based class layer.
+
+    Supports single-layer vectors and multi-layer matrices/lists.
+    Returns a 1D label array aligned by sample.
+    """
+    if class_data_cal is None:
+        return None
+
+    try:
+        layer_1based = max(1, int(stratify_layer))
+    except Exception:
+        layer_1based = 1
+
+    arr = np.asarray(class_data_cal, dtype=object)
+    if arr.ndim == 0 or arr.size == 0:
+        return None
+
+    if arr.ndim == 1:
+        first_item = arr[0] if arr.size > 0 else None
+        if isinstance(first_item, (list, tuple, np.ndarray)):
+            labels: List[Any] = []
+            for sample_entry in arr:
+                sample_layers = np.asarray(sample_entry, dtype=object).reshape(-1)
+                if sample_layers.size == 0:
+                    labels.append(None)
+                    continue
+                layer_idx = min(layer_1based - 1, sample_layers.size - 1)
+                labels.append(sample_layers[layer_idx])
+            return np.asarray(labels, dtype=object)
+        return arr.reshape(-1)
+
+    # 2D+ -> treat axis 0 as samples and flatten remaining axes into layer axis.
+    n_samples = arr.shape[0]
+    flat_layers = arr.reshape(n_samples, -1)
+    if flat_layers.shape[1] == 0:
+        return None
+
+    layer_idx = min(layer_1based - 1, flat_layers.shape[1] - 1)
+    return np.asarray(flat_layers[:, layer_idx], dtype=object)
+
+
 def _compute_reconstruction_rmse_vector(
     scores: np.ndarray,
     X_data: np.ndarray,
@@ -346,16 +388,33 @@ def pca_analysis(
                 return result_dict
             
             pipeline = CVPipeline(cv_config)
+            strat_labels_for_splitter = None
+
+            pipeline_kwargs = {
+                'X_cal': X_cal,
+                'n_components': n_components,
+                'capture_output_keys': ['model_scores'],
+            }
+
+            if str(getattr(cv_config, 'cv_strategy', '')).strip().lower() == 'stratified_kfold':
+                stratify_layer = getattr(cv_config, 'stratify_layer', 1)
+                strat_labels = _extract_stratification_labels(class_data_cal, stratify_layer)
+                if strat_labels is None:
+                    raise ValueError(
+                        "Stratified K-Fold requires class_data_cal. "
+                        "Provide class labels and set stratify_layer (1-based) in CV Configuration."
+                    )
+                if len(np.asarray(strat_labels).reshape(-1)) != len(np.asarray(X_cal)):
+                    raise ValueError(
+                        "Stratified K-Fold labels must match number of calibration samples."
+                    )
+                strat_labels_for_splitter = np.asarray(strat_labels).reshape(-1)
+                pipeline_kwargs['y'] = strat_labels_for_splitter
             
             # Run CV — only capture model_scores through the pipeline (scores are
             # sample-based and benefit from _reconstruct_from_folds).  Loadings are
             # collected via the closure above to avoid shape ambiguity.
-            cv_results_dict = pipeline.run(
-                _pca_analysis_for_cv,
-                X_cal=X_cal,
-                n_components=n_components,
-                capture_output_keys=['model_scores'],
-            )
+            cv_results_dict = pipeline.run(_pca_analysis_for_cv, **pipeline_kwargs)
             
             # Also compute single fit on full data (with X_val for projection)
             single_results = _pca_analysis_single_fit(
@@ -387,7 +446,9 @@ def pca_analysis(
                 sample_assigned = np.zeros(n_samples, dtype=bool)
 
                 # Recreate fold indices using the same splitter/config used by pipeline
-                for fold_idx, (train_idx, test_idx) in enumerate(pipeline.splitter.get_splits(X_cal)):
+                for fold_idx, (train_idx, test_idx) in enumerate(
+                    pipeline.splitter.get_splits(X_cal, strat_labels_for_splitter)
+                ):
                     if fold_idx >= len(_fold_loadings_collector):
                         break
                     fold_loadings = _fold_loadings_collector[fold_idx]

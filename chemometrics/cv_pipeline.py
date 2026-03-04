@@ -16,6 +16,7 @@ from sklearn.model_selection import (
     TimeSeriesSplit,
     RepeatedKFold,
     ShuffleSplit,
+    LeaveOneOut,
 )
 
 
@@ -109,9 +110,10 @@ class CVConfig:
     n_splits: int
     random_state: Optional[int] = 42
     shuffle: bool = True
-    window_size: Optional[int] = None  # For moving_window and venetian_windows strategies
+    window_size: Optional[int] = None  # For moving_window strategy
     n_repeats: Optional[int] = None  # For repeated_kfold strategy (default: 10)
     test_size: Optional[float] = None  # For shuffle_split strategy (default: 0.2)
+    stratify_layer: int = 1  # 1-based class layer index for stratified_kfold
     output_metrics: Optional[List[str]] = None  # Which metrics to compute (e.g., ['rmse', 'r2'])
     capture_outputs: Optional[List[str]] = None  # Outputs to preserve from each fold
     reference_input_key: Optional[str] = None  # Input key to use as reference (e.g., 'Y_cal')
@@ -128,6 +130,10 @@ class CVConfig:
             self.n_repeats = 10
         if self.test_size is None:
             self.test_size = 0.2
+        try:
+            self.stratify_layer = max(1, int(self.stratify_layer))
+        except Exception:
+            self.stratify_layer = 1
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dict for JSON serialization."""
@@ -168,7 +174,8 @@ class KFoldSplitter(CVSplitter):
     """K-Fold cross-validation splitter."""
 
     def __init__(self, n_splits: int = 5, shuffle: bool = True, random_state: Optional[int] = 42):
-        self.cv = KFold(n_splits=n_splits, shuffle=shuffle, random_state=random_state)
+        effective_random_state = random_state if shuffle else None
+        self.cv = KFold(n_splits=n_splits, shuffle=shuffle, random_state=effective_random_state)
 
     def get_splits(self, X, y=None, groups=None):
         return self.cv.split(X, y, groups)
@@ -178,7 +185,8 @@ class StratifiedKFoldSplitter(CVSplitter):
     """Stratified K-Fold (preserves class proportions per fold)."""
 
     def __init__(self, n_splits: int = 5, shuffle: bool = True, random_state: Optional[int] = 42):
-        self.cv = StratifiedKFold(n_splits=n_splits, shuffle=shuffle, random_state=random_state)
+        effective_random_state = random_state if shuffle else None
+        self.cv = StratifiedKFold(n_splits=n_splits, shuffle=shuffle, random_state=effective_random_state)
 
     def get_splits(self, X, y=None, groups=None):
         if y is None:
@@ -218,91 +226,93 @@ class ShuffleSplitSplitter(CVSplitter):
         return self.cv.split(X, y, groups)
 
 
-class VenetianWindowsSplitter(CVSplitter):
+class VenetianBlindsSplitter(CVSplitter):
     """
-    Venetian Windows CV: Creates k overlapping windows that cover the full dataset.
-    
-    Useful for continuous data with systematic patterns. Each window contains roughly
-    1/k of the samples, but windows overlap significantly.
-    
-    Example with n_samples=100, n_splits=5:
-    - Window 0: indices 0-50 (test), 0-100 (train)
-    - Window 1: indices 20-70 (test), 0-100 (train)
-    - Window 2: indices 40-90 (test), 0-100 (train)
-    - Window 3: indices 60-100 (test), 0-100 (train - includes some test indices)
-    - Window 4: indices 80-100 (test), 0-100 (train - includes some test indices)
+    Venetian Blinds CV.
+
+    Splits samples by periodic indexing: fold i uses every k-th sample starting at i
+    as test set, and all remaining samples as training set.
+
+    This avoids train/test overlap and produces k disjoint test partitions.
+
+    Example with n_samples=12, n_splits=4:
+    - Fold 0 test: [0, 4, 8]
+    - Fold 1 test: [1, 5, 9]
+    - Fold 2 test: [2, 6, 10]
+    - Fold 3 test: [3, 7, 11]
     """
     
-    def __init__(self, n_splits: int = 5, shuffle: bool = False, random_state: Optional[int] = None):
+    def __init__(self, n_splits: int = 5):
         self.n_splits = n_splits
-        self.shuffle = shuffle
-        self.random_state = random_state
     
     def get_splits(self, X, y=None, groups=None):
         n_samples = len(X)
-        window_size = max(1, n_samples // self.n_splits)
+        if self.n_splits < 2:
+            raise ValueError("venetian_blinds requires n_splits >= 2")
+        if n_samples < self.n_splits:
+            raise ValueError(
+                f"venetian_blinds requires n_samples >= n_splits (got n_samples={n_samples}, n_splits={self.n_splits})"
+            )
         
         indices = np.arange(n_samples)
-        if self.shuffle and self.random_state is not None:
-            rng = np.random.RandomState(self.random_state)
-            rng.shuffle(indices)
-        elif self.shuffle:
-            np.random.shuffle(indices)
         
         for fold_idx in range(self.n_splits):
-            test_start = fold_idx * window_size
-            test_end = min(test_start + window_size, n_samples)
-            
-            # All samples are training (to include overlapping context)
-            train_idx = indices
-            test_idx = indices[test_start:test_end]
+            test_idx = indices[fold_idx::self.n_splits]
+            if len(test_idx) == 0:
+                continue
+
+            train_mask = np.ones(n_samples, dtype=bool)
+            train_mask[fold_idx::self.n_splits] = False
+            train_idx = indices[train_mask]
             
             yield train_idx, test_idx
 
 
 class MovingWindowSplitter(CVSplitter):
     """
-    Moving Window CV: Progressive sliding windows for time-dependent or sequential data.
-    
-    Each fold uses a different window position, with windows moving through the dataset.
-    Useful for time series where you want to test generalization as the window moves forward.
-    
-    Example with n_samples=100, n_splits=5, window_size=50:
-    - Fold 0: train indices 0-49, test indices 50-59
-    - Fold 1: train indices 10-59, test indices 60-69
-    - Fold 2: train indices 20-69, test indices 70-79
-    - Fold 3: train indices 30-79, test indices 80-89
-    - Fold 4: train indices 40-89, test indices 90-99
+    Moving Window CV for sequential data.
+
+    Each fold trains on a contiguous fixed-size window and tests on the immediately
+    following block, then both windows slide forward.
+
+    Train/test sets never overlap.
     """
     
-    def __init__(self, n_splits: int = 5, window_size: Optional[int] = None, 
-                 shuffle: bool = False, random_state: Optional[int] = None):
+    def __init__(self, n_splits: int = 5, window_size: Optional[int] = None):
         self.n_splits = n_splits
         self.window_size = window_size
-        self.shuffle = shuffle
-        self.random_state = random_state
     
     def get_splits(self, X, y=None, groups=None):
         n_samples = len(X)
+        if self.n_splits < 1:
+            raise ValueError("moving_window requires n_splits >= 1")
         
-        # Default: window_size is total samples / n_splits
-        if self.window_size is None:
-            self.window_size = max(1, n_samples // (self.n_splits + 1))
+        # Default: training window is roughly half of each fold span
+        window_size = self.window_size
+        if window_size is None:
+            window_size = max(1, n_samples // (self.n_splits + 2))
+        if window_size >= n_samples:
+            raise ValueError(
+                f"moving_window requires window_size < n_samples (got window_size={window_size}, n_samples={n_samples})"
+            )
         
         indices = np.arange(n_samples)
-        if self.shuffle and self.random_state is not None:
-            rng = np.random.RandomState(self.random_state)
-            rng.shuffle(indices)
-        elif self.shuffle:
-            np.random.shuffle(indices)
-        
-        step = max(1, (n_samples - self.window_size) // self.n_splits)
+
+        remaining_after_train = n_samples - window_size
+        test_block_size = max(1, remaining_after_train // (self.n_splits + 1))
+        max_train_start = max(0, n_samples - window_size - test_block_size)
+        step = max(1, max_train_start // max(1, self.n_splits - 1))
         
         for fold_idx in range(self.n_splits):
-            test_start = fold_idx * step
-            test_end = min(test_start + self.window_size, n_samples)
-            
-            train_idx = indices
+            train_start = min(fold_idx * step, max_train_start)
+            train_end = train_start + window_size
+            test_start = train_end
+            test_end = min(test_start + test_block_size, n_samples)
+
+            if test_start >= n_samples or test_end <= test_start:
+                continue
+
+            train_idx = indices[train_start:train_end]
             test_idx = indices[test_start:test_end]
             
             yield train_idx, test_idx
@@ -317,22 +327,13 @@ class LOOCVSplitter(CVSplitter):
     Does not support shuffling (splits are deterministic).
     """
     
-    def __init__(self, n_splits: Optional[int] = None, shuffle: bool = False, 
+    def __init__(self, n_splits: Optional[int] = None, shuffle: bool = False,
                  random_state: Optional[int] = None):
-        # LOOCV ignores n_splits and shuffle parameters
-        self.shuffle = False
-        self.n_splits_param = n_splits  # Store for reference
+        # LOOCV ignores n_splits/shuffle/random_state by definition.
+        self.cv = LeaveOneOut()
     
     def get_splits(self, X, y=None, groups=None):
-        n_samples = len(X)
-        
-        for fold_idx in range(n_samples):
-            # Test: single sample at fold_idx
-            test_idx = np.array([fold_idx])
-            # Train: all except fold_idx
-            train_idx = np.concatenate([np.arange(fold_idx), np.arange(fold_idx + 1, n_samples)])
-            
-            yield train_idx, test_idx
+        return self.cv.split(X, y, groups)
 
 
 class BootstrapSplitter(CVSplitter):
@@ -378,7 +379,7 @@ class CVPipeline:
     Generic cross-validation pipeline that wraps any function.
 
     Usage:
-        config = CVConfig(use_cv=True, cv_strategy='kfold', n_splits=5, ...)
+        config = CVConfig(use_cv=True, cv_strategy='loocv', n_splits=5, ...)
         pipeline = CVPipeline(config)
         results = pipeline.run(func, X_cal=X_cal, Y_cal=Y_cal, ...)
     """
@@ -404,11 +405,9 @@ class CVPipeline:
             "shuffle_split": lambda cfg: ShuffleSplitSplitter(
                 n_splits=cfg.n_splits, test_size=cfg.test_size, random_state=cfg.random_state
             ),
-            "venetian_windows": lambda cfg: VenetianWindowsSplitter(
-                n_splits=cfg.n_splits, shuffle=cfg.shuffle, random_state=cfg.random_state
-            ),
+            "venetian_blinds": lambda cfg: VenetianBlindsSplitter(n_splits=cfg.n_splits),
             "moving_window": lambda cfg: MovingWindowSplitter(
-                n_splits=cfg.n_splits, window_size=cfg.window_size, shuffle=cfg.shuffle, random_state=cfg.random_state
+                n_splits=cfg.n_splits, window_size=cfg.window_size
             ),
             "loocv": lambda cfg: LOOCVSplitter(
                 n_splits=cfg.n_splits, shuffle=False, random_state=cfg.random_state
@@ -830,13 +829,14 @@ class CVPipeline:
 
 def cv_configuration(
     use_cv: bool,
-    cv_strategy: str = "kfold",
+    cv_strategy: str = "loocv",
     n_splits: int = 5,
     random_state: Optional[int] = 42,
     shuffle: bool = True,
     window_size: Optional[int] = None,
     n_repeats: Optional[int] = None,
     test_size: Optional[float] = None,
+    stratify_layer: int = 1,
     output_metrics: Optional[List[str]] = None,
     capture_outputs: Optional[List[str]] = None,
     reference_input_key: Optional[str] = None,
@@ -848,16 +848,18 @@ def cv_configuration(
 
     Args:
         use_cv: Enable/disable CV
-        cv_strategy: 'kfold', 'stratified_kfold', 'timeseries', 'repeated_kfold', 'shuffle_split',
-                     'venetian_windows', 'moving_window', 'loocv', 'bootstrap'
+        cv_strategy: 'loocv', 'kfold', 'stratified_kfold', 'timeseries', 'repeated_kfold',
+                 'shuffle_split', 'venetian_blinds', 'moving_window', 'bootstrap'
         n_splits: Number of folds/splits (ignored for LOOCV; auto-set to n_samples)
         random_state: Seed for reproducibility
-        shuffle: Randomize before splitting (applies to kfold, stratified_kfold, repeated_kfold,
-                 venetian_windows, moving_window; not applicable to timeseries, loocv, bootstrap)
-        window_size: Optional window size for moving_window and venetian_windows strategies.
-                    If None, auto-calculated as n_samples // n_splits
+           shuffle: Randomize before splitting (applies to kfold, stratified_kfold;
+              not applicable to venetian_blinds, timeseries, repeated_kfold,
+             shuffle_split, moving_window, loocv, bootstrap)
+        window_size: Optional training window size for moving_window strategy.
+                If None, auto-calculated from n_samples and n_splits.
         n_repeats: Number of repetitions for repeated_kfold strategy (default: 10)
         test_size: Test set proportion for shuffle_split strategy (default: 0.2 = 20%)
+        stratify_layer: 1-based class layer to use for stratified_kfold
         output_metrics: Which metrics to compute (e.g., ['rmse', 'r2', 'mae', 'bias', 'sep'])
         capture_outputs: Which function outputs to capture per-fold
                         (e.g., ['y_pred', 'scores']). Captured outputs appear
@@ -905,6 +907,7 @@ def cv_configuration(
         window_size=window_size,
         n_repeats=n_repeats,
         test_size=test_size,
+        stratify_layer=stratify_layer,
         output_metrics=output_metrics or ["rmse", "r2"],
         capture_outputs=capture_outputs or [],
         reference_input_key=reference_input_key,
