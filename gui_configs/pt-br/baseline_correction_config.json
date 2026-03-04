@@ -8,26 +8,31 @@
     "X_val": "X Validação",
     "nway_flag": "Dimensionalidade",
     "direction": "Direção",
-    "window_size": "Tamanho da Janela"
+    "window_size": "Tamanho da Janela",
+    "derivative_order": "Ordem da Derivada",
+    "axis_n_info": "Informação Numérica dos Eixos",
+    "axis_t_info": "Informação Textual dos Eixos"
   },
   "output_aliases": {
     "X_cal": "X Cal (Corrigido)",
-    "X_val": "X Val (Corrigido)"
+    "X_val": "X Val (Corrigido)",
+    "axis_n_info": "Informação Numérica dos Eixos (Atualizada)",
+    "axis_t_info": "Informação Textual dos Eixos (Atualizada)"
   },
   "output_synonyms": {
     "X_cal": ["X", "X_train"],
     "X_val": ["X_test", "X_validation"]
   },
   "short_description": "Remove a correção de linha de base dos espectros",
-  "long_description": "A correção de linha de base remove deslocamentos sistemáticos e tendências das medições espectroscópicas, melhorando a qualidade dos dados e o desempenho do modelo.\n\nMétodos Disponíveis:\n\n1. Correção de Espalhamento Multiplicativo (MSC)\n   - Corrige efeitos de espalhamento multiplicativo e aditivo\n   - Funciona bem para dados de refletância difusa e transmitância\n   - Preserva a forma espectral enquanto normaliza a intensidade\n\n2. Variante Normal Padrão (SNV)\n   - Centraliza e dimensiona cada espectro independentemente\n   - Remove desvio de linha de base e efeitos multiplicativos\n   - Adequado para espectroscopia de refletância\n\n3. Média Móvel\n   - Correção de linha de base simples baseada em suavização\n   - Usa tamanho de janela configurável\n   - Bom para dados ruidosos com linhas de base locais\n\nSuporte a Dados Multidirecionais:\n- Para dados 2D: processamento padrão (nway_flag=1)\n- Para dados 3D+: especifique dimensionalidade e direção\n- Parâmetro de direção controla em qual eixo a correção é aplicada\n\nEste pré-processamento melhora significativamente a precisão e interpretabilidade do modelo.",
+  "long_description": "A correção de linha de base remove deslocamentos sistemáticos e tendências das medições espectroscópicas, melhorando a qualidade dos dados e o desempenho do modelo.\n\nMétodos Disponíveis:\n\n1. Correção de Espalhamento Multiplicativo (MSC)\n   - Corrige efeitos de espalhamento multiplicativo e aditivo\n   - Funciona bem para dados de refletância difusa e transmitância\n   - Preserva a forma espectral enquanto normaliza a intensidade\n\n2. Variante Normal Padrão (SNV)\n   - Centraliza e dimensiona cada espectro independentemente\n   - Remove desvio de linha de base e efeitos multiplicativos\n   - Adequado para espectroscopia de refletância\n\n3. Média Móvel\n   - Correção de linha de base simples baseada em suavização\n   - Usa tamanho de janela configurável\n   - Bom para dados ruidosos com linhas de base locais\n\n4. Derivada\n   - Calcula derivadas numéricas (np.diff) ao longo da direção selecionada\n   - Reduz o tamanho dos dados na direção escolhida conforme a ordem da derivada\n   - Ajusta metadados numéricos/textuais de eixo para manter consistência\n\nSuporte a Dados Multidirecionais:\n- Para dados 2D: processamento padrão (nway_flag=1)\n- Para dados 3D+: especifique dimensionalidade e direção\n- Parâmetro de direção controla em qual eixo a correção é aplicada\n\nEste pré-processamento melhora significativamente a precisão e interpretabilidade do modelo.",
   "setup": {
     "layout": [
       {
         "name": "method",
         "label": "Método de Correção",
         "widget": "combobox",
-        "values": ["msc", "svn", "moving_average"],
-        "value_aliases": ["Correção de Espalhamento Multiplicativo", "Variante Normal Padrão", "Média Móvel"],
+        "values": ["msc", "snv", "moving_average", "derivative"],
+        "value_aliases": ["Correção de Espalhamento Multiplicativo", "Variante Normal Padrão", "Média Móvel", "Derivada"],
         "default": "msc",
         "required": true,
         "input_type": "user",
@@ -55,6 +60,17 @@
         "visible_if": {"method": "moving_average"}
       },
       {
+        "name": "derivative_order",
+        "label": "Ordem da Derivada",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Ordem da derivada usada no método derivative (deve ser >= 1)",
+        "visible_if": {"method": "derivative"}
+      },
+      {
         "name": "X_cal",
         "label": "Dados X Calibração",
         "widget": "data_input",
@@ -71,6 +87,24 @@
         "input_type": "routed",
         "visible_if": {"input_type": "user"},
         "tooltip": "Roteado da saída da função anterior"
+      },
+      {
+        "name": "axis_n_info",
+        "label": "Informação Numérica dos Eixos",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Vetores numéricos de eixo roteados (atualizados para saída derivative)"
+      },
+      {
+        "name": "axis_t_info",
+        "label": "Informação Textual dos Eixos",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Rótulos textuais de eixo roteados (atualizados para saída derivative)"
       },
       {
         "name": "nway_flag",

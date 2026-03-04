@@ -1,6 +1,6 @@
 ## Data processing functions for ChemometricsTool
 
-from typing import Tuple, Optional, Union
+from typing import Tuple, Optional, Union, List
 import numpy as np
 from scipy.signal import savgol_filter
 from scipy.ndimage import uniform_filter1d
@@ -25,15 +25,19 @@ def baseline_correction(
     X_val: Optional[np.ndarray] = None,
     nway_flag: Optional[int] = None,
     direction: Optional[int] = None,
-    window_size: int = 5
-) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+    window_size: int = 5,
+    derivative_order: int = 1,
+    axis_n_info: Optional[List[np.ndarray]] = None,
+    axis_t_info: Optional[List[List[str]]] = None,
+) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[List[np.ndarray]], Optional[List[List[str]]]]:
     """
     Apply baseline correction to spectroscopic data.
     
     Supports multiple baseline correction methods:
     - 'msc': Multiplicative Scatter Correction
-    - 'svn': Standard Normal Variate
+    - 'snv'/'svn': Standard Normal Variate
     - 'moving_average': Moving Average baseline subtraction
+    - 'derivative': Numerical derivative (np.diff)
     
     Args:
         X_cal: Calibration data (reference dataset)
@@ -42,36 +46,83 @@ def baseline_correction(
         nway_flag: Number of ways (if None, auto-determined from X_cal)
         direction: Direction for multiway data (0, 1, 2, etc.). If None, applied on last axis
         window_size: Window size for moving average method
+        derivative_order: Derivative order for derivative method
+        axis_n_info: Optional numerical axis info to propagate/update
+        axis_t_info: Optional text axis info to propagate/update
         
     Returns:
-        Baseline-corrected X_cal, or (X_cal, X_val) if X_val provided
+        Tuple with (X_cal, X_val, axis_n_info, axis_t_info)
     """
     if nway_flag is None:
         nway_flag = _determine_dimensionality(X_cal)
+
+    method = str(method or 'msc').strip().lower()
+    if method == 'svn':
+        method = 'snv'
+
+    axis_n_info_out = list(axis_n_info) if isinstance(axis_n_info, list) else axis_n_info
+    axis_t_info_out = list(axis_t_info) if isinstance(axis_t_info, list) else axis_t_info
     
     if method == 'msc':
-        X_cal = _msc(X_cal, nway_flag, direction)
+        msc_reference = _msc_reference(X_cal, direction=direction)
+        X_cal = _msc(X_cal, nway_flag, direction, msc_reference)
         if X_val is not None:
-            X_val = _msc(X_val, nway_flag, direction, X_cal)
-            return X_cal, X_val
-        return X_cal
+            X_val = _msc(X_val, nway_flag, direction, msc_reference)
+        return X_cal, X_val, axis_n_info_out, axis_t_info_out
     
-    elif method == 'svn':
-        X_cal = _svn(X_cal, nway_flag, direction)
+    elif method == 'snv':
+        X_cal = _snv(X_cal, nway_flag, direction)
         if X_val is not None:
-            X_val = _svn(X_val, nway_flag, direction)
-            return X_cal, X_val
-        return X_cal
+            X_val = _snv(X_val, nway_flag, direction)
+        return X_cal, X_val, axis_n_info_out, axis_t_info_out
     
     elif method == 'moving_average':
         X_cal = _moving_average_baseline(X_cal, nway_flag, direction, window_size)
         if X_val is not None:
             X_val = _moving_average_baseline(X_val, nway_flag, direction, window_size)
-            return X_cal, X_val
-        return X_cal
+        return X_cal, X_val, axis_n_info_out, axis_t_info_out
+
+    elif method == 'derivative':
+        axis = _resolve_axis(direction, X_cal.ndim)
+        X_cal = _derivative_baseline(X_cal, axis=axis, derivative_order=derivative_order)
+        if X_val is not None:
+            X_val = _derivative_baseline(X_val, axis=axis, derivative_order=derivative_order)
+        axis_n_info_out, axis_t_info_out = _trim_axis_info_for_derivative(
+            axis_n_info_out,
+            axis_t_info_out,
+            axis,
+            derivative_order
+        )
+        return X_cal, X_val, axis_n_info_out, axis_t_info_out
     
     else:
         raise ValueError(f"Unknown baseline correction method: {method}")
+
+
+def _resolve_axis(direction: Optional[int], ndim: int) -> int:
+    if direction is None:
+        return ndim - 1
+    axis = int(direction)
+    if axis < 0:
+        axis += ndim
+    if axis < 0 or axis >= ndim:
+        raise ValueError(f"Invalid direction/axis {direction} for data with ndim={ndim}")
+    return axis
+
+
+def _msc_reference(X_cal: np.ndarray, direction: Optional[int] = None) -> np.ndarray:
+    """
+    Compute MSC reference spectrum along the selected spectral axis.
+
+    For a selected axis, all remaining axes are treated as replicate/sample
+    dimensions and averaged to obtain the reference vector.
+    """
+    if X_cal.ndim == 1:
+        return np.asarray(X_cal, dtype=float)
+
+    axis = _resolve_axis(direction, X_cal.ndim)
+    reduction_axes = tuple(idx for idx in range(X_cal.ndim) if idx != axis)
+    return np.mean(X_cal, axis=reduction_axes)
 
 
 def _msc(X: np.ndarray, nway_flag: int, direction: Optional[int] = None, reference: Optional[np.ndarray] = None) -> np.ndarray:
@@ -87,19 +138,48 @@ def _msc(X: np.ndarray, nway_flag: int, direction: Optional[int] = None, referen
     Returns:
         MSC-corrected data
     """
-    if nway_flag == 1 or X.ndim == 1:
-        reference_spec = reference if reference is not None else np.mean(X)
-        return X / reference_spec if reference is not None else X / np.mean(X)
-    
-    # For 2D and multiway, apply along last axis (spectra)
+    axis = _resolve_axis(direction, X.ndim)
     if reference is None:
-        reference = np.mean(X, axis=0)
-    
-    X_corrected = X / (reference + 1e-10)
-    return X_corrected
+        reference = _msc_reference(X, direction=axis)
+
+    X_float = np.asarray(X, dtype=float)
+    ref = np.asarray(reference, dtype=float).reshape(-1)
+
+    n_features = X_float.shape[axis]
+    if ref.shape[0] != n_features:
+        raise ValueError(
+            f"MSC reference length ({ref.shape[0]}) does not match data size along axis {axis} ({n_features})"
+        )
+
+    # Bring spectral axis to the last dimension and treat all other dimensions
+    # as independent spectra.
+    moved = np.moveaxis(X_float, axis, -1)
+    flat = moved.reshape(-1, n_features)
+
+    ref_mean = np.mean(ref)
+    ref_centered = ref - ref_mean
+    ref_var = np.mean(ref_centered ** 2)
+    eps = 1e-12
+    if ref_var < eps:
+        raise ValueError("MSC reference variance is zero or too small for stable correction")
+
+    sample_means = np.mean(flat, axis=1)
+    sample_centered = flat - sample_means[:, None]
+    slopes = (sample_centered @ ref_centered) / (n_features * ref_var)
+    intercepts = sample_means - slopes * ref_mean
+
+    corrected_flat = flat.copy()
+    stable_mask = np.abs(slopes) >= eps
+    corrected_flat[stable_mask] = (
+        (flat[stable_mask] - intercepts[stable_mask, None]) /
+        slopes[stable_mask, None]
+    )
+
+    corrected_moved = corrected_flat.reshape(moved.shape)
+    return np.moveaxis(corrected_moved, -1, axis)
 
 
-def _svn(X: np.ndarray, nway_flag: int, direction: Optional[int] = None) -> np.ndarray:
+def _snv(X: np.ndarray, nway_flag: int, direction: Optional[int] = None) -> np.ndarray:
     """
     Standard Normal Variate (SNV) normalization.
     
@@ -111,14 +191,9 @@ def _svn(X: np.ndarray, nway_flag: int, direction: Optional[int] = None) -> np.n
     Returns:
         SNV-normalized data
     """
-    if nway_flag == 1 or X.ndim == 1:
-        mean = np.mean(X)
-        std = np.std(X)
-        return (X - mean) / (std + 1e-10)
-    
-    # For 2D and multiway, apply along last axis
-    mean = np.mean(X, axis=-1, keepdims=True)
-    std = np.std(X, axis=-1, keepdims=True)
+    axis = _resolve_axis(direction, X.ndim)
+    mean = np.mean(X, axis=axis, keepdims=True)
+    std = np.std(X, axis=axis, keepdims=True)
     return (X - mean) / (std + 1e-10)
 
 
@@ -135,19 +210,43 @@ def _moving_average_baseline(X: np.ndarray, nway_flag: int, direction: Optional[
     Returns:
         Baseline-corrected data
     """
-    if nway_flag == 1 or X.ndim == 1:
-        baseline = uniform_filter1d(X, size=window_size, mode='nearest')
-        return X - baseline
-    
-    # For 2D, apply along last axis
-    if X.ndim == 2:
-        baseline = uniform_filter1d(X, size=window_size, axis=1, mode='nearest')
-        return X - baseline
-    
-    # For multiway, apply along specified direction or last axis
-    axis = direction if direction is not None else X.ndim - 1
+    axis = _resolve_axis(direction, X.ndim)
     baseline = uniform_filter1d(X, size=window_size, axis=axis, mode='nearest')
     return X - baseline
+
+
+def _derivative_baseline(X: np.ndarray, axis: int, derivative_order: int = 1) -> np.ndarray:
+    order = int(derivative_order)
+    if order < 1:
+        raise ValueError("derivative_order must be >= 1")
+    if X.shape[axis] <= order:
+        raise ValueError(
+            f"derivative_order ({order}) must be smaller than data size along axis {axis} ({X.shape[axis]})"
+        )
+    return np.diff(X, n=order, axis=axis)
+
+
+def _trim_axis_info_for_derivative(
+    axis_n_info: Optional[List[np.ndarray]],
+    axis_t_info: Optional[List[List[str]]],
+    axis: int,
+    derivative_order: int,
+) -> Tuple[Optional[List[np.ndarray]], Optional[List[List[str]]]]:
+    order = int(derivative_order)
+    if order < 1:
+        return axis_n_info, axis_t_info
+
+    if isinstance(axis_n_info, list) and axis < len(axis_n_info):
+        axis_vector = axis_n_info[axis]
+        if axis_vector is not None and len(axis_vector) > order:
+            axis_n_info[axis] = axis_vector[order:]
+
+    if isinstance(axis_t_info, list) and axis < len(axis_t_info):
+        axis_labels = axis_t_info[axis]
+        if axis_labels is not None and len(axis_labels) > order:
+            axis_t_info[axis] = axis_labels[order:]
+
+    return axis_n_info, axis_t_info
 
 
 def smoothing(

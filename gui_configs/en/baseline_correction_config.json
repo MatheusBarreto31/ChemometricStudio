@@ -8,11 +8,16 @@
     "X_val": "X Validation",
     "nway_flag": "Dimensionality",
     "direction": "Direction",
-    "window_size": "Window Size"
+    "window_size": "Window Size",
+    "derivative_order": "Derivative Order",
+    "axis_n_info": "Axis Numeric Info",
+    "axis_t_info": "Axis Text Info"
   },
   "output_aliases": {
     "X_cal": "X Cal (Corrected)",
-    "X_val": "X Val (Corrected)"
+    "X_val": "X Val (Corrected)",
+    "axis_n_info": "Axis Numeric Info (Updated)",
+    "axis_t_info": "Axis Text Info (Updated)"
   },
   "output_synonyms": {
     "X_cal": [
@@ -25,7 +30,7 @@
     ]
   },
   "short_description": "Removes baseline offset from spectra",
-  "long_description": "Baseline correction removes systematic offsets and trends from spectroscopic measurements, improving data quality and model performance.\n\nAvailable Methods:\n\n1. Multiplicative Scatter Correction (MSC)\n   - Corrects for multiplicative and additive scatter effects\n   - Works well for diffuse reflectance and transmittance data\n   - Preserves spectral shape while normalizing intensity\n\n2. Standard Normal Variate (SNV)\n   - Center-scales each spectrum independently\n   - Removes baseline drift and multiplicative effects\n   - Suitable for reflectance spectroscopy\n\n3. Moving Average\n   - Simple smoothing-based baseline correction\n   - Uses configurable window size\n   - Good for noisy data with local baselines\n\nMultiway Data Support:\n- For 2D data: standard processing (nway_flag=1)\n- For 3D+ data: specify dimensionality and direction\n- Direction parameter controls along which axis correction is applied\n\nThis preprocessing significantly improves model accuracy and interpretability.",
+  "long_description": "Baseline correction removes systematic offsets and trends from spectroscopic measurements, improving data quality and model performance.\n\nAvailable Methods:\n\n1. Multiplicative Scatter Correction (MSC)\n   - Corrects for multiplicative and additive scatter effects\n   - Works well for diffuse reflectance and transmittance data\n   - Preserves spectral shape while normalizing intensity\n\n2. Standard Normal Variate (SNV)\n   - Center-scales each spectrum independently\n   - Removes baseline drift and multiplicative effects\n   - Suitable for reflectance spectroscopy\n\n3. Moving Average\n   - Simple smoothing-based baseline correction\n   - Uses configurable window size\n   - Good for noisy data with local baselines\n\n4. Derivative\n   - Computes numerical derivatives (np.diff) along selected direction\n   - Reduces data size in the selected direction according to derivative order\n   - Axis numeric/text metadata are adjusted to match output size\n\nMultiway Data Support:\n- For 2D data: standard processing (nway_flag=1)\n- For 3D+ data: specify dimensionality and direction\n- Direction parameter controls along which axis correction is applied\n\nThis preprocessing significantly improves model accuracy and interpretability.",
   "setup": {
     "categories": [
       "Method Parameters",
@@ -40,13 +45,15 @@
         "widget": "combobox",
         "values": [
           "msc",
-          "svn",
-          "moving_average"
+          "snv",
+          "moving_average",
+          "derivative"
         ],
         "value_aliases": [
           "Multiplicative Scatter Correction",
           "Standard Normal Variate",
-          "Moving Average"
+          "Moving Average",
+          "Derivative"
         ],
         "default": "msc",
         "required": true,
@@ -79,6 +86,20 @@
         }
       },
       {
+        "name": "derivative_order",
+        "label": "Derivative Order",
+        "category": "Method Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Derivative order used by derivative method (must be >= 1)",
+        "visible_if": {
+          "method": "derivative"
+        }
+      },
+      {
         "name": "X_cal",
         "label": "X Calibration Data",
         "category": "Data Inputs",
@@ -101,6 +122,30 @@
           "input_type": "user"
         },
         "tooltip": "Routed from previous function output"
+      },
+      {
+        "name": "axis_n_info",
+        "label": "Axis Numeric Info",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        },
+        "tooltip": "Optional routed axis numeric vectors (updated for derivative output)"
+      },
+      {
+        "name": "axis_t_info",
+        "label": "Axis Text Info",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        },
+        "tooltip": "Optional routed axis text labels (updated for derivative output)"
       },
       {
         "name": "nway_flag",
@@ -134,7 +179,7 @@
             "config": {
               "graph_type": "line",
               "x_axis": {
-                "data_source": "in.axis_n_info",
+                "data_source": "out.axis_n_info",
                 "index": 1,
                 "label": "in.dim_labels",
                 "l_index": 1
@@ -185,13 +230,13 @@
             "config": {
               "graph_type": "contour",
               "x_axis": {
-                "data_source": "in.axis_n_info",
+                "data_source": "out.axis_n_info",
                 "index": 2,
                 "label": "in.dim_labels",
                 "l_index": 2
               },
               "y_axis": {
-                "data_source": "in.axis_n_info",
+                "data_source": "out.axis_n_info",
                 "index": 1,
                 "label": "in.dim_labels",
                 "l_index": 1
@@ -238,7 +283,7 @@
               },
               "title": "Processed Spectra",
               "dimension_labels": "in.dim_labels",
-              "variable_labels": "in.axis_t_info",
+              "variable_labels": "out.axis_t_info",
               "data_slicing": [
                 {
                   "name": "Sample",
@@ -268,7 +313,7 @@
             "config": {
               "graph_type": "heatmap",
               "aux_axis": {
-                "data_source": "in.axis_n_info",
+                "data_source": "out.axis_n_info",
                 "labels": "in.dim_labels"
               },
               "z_axis": {
@@ -306,7 +351,7 @@
               },
               "title": "Processed Spectra",
               "dimension_labels": "in.dim_labels",
-              "variable_labels": "in.axis_t_info",
+              "variable_labels": "out.axis_t_info",
               "data_slicing": [
                 {
                   "name": "Sample",

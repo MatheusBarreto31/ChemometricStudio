@@ -656,20 +656,76 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
         class_layers = _normalize_class_layers(dataset, n_points)
         if class_layers is None or class_layers.size == 0:
             base_marker = 'o' if is_multi_dataset else marker
-            marker_obj = MarkerStyle(base_marker, fillstyle=dataset_fillstyle if is_multi_dataset else 'full')
+            fillstyle_str = dataset_fillstyle if is_multi_dataset else 'full'
+            marker_obj = MarkerStyle(base_marker, fillstyle=fillstyle_str)
             dataset_color = fallback_color if fallback_color else nonclass_base_color
-            scatter_kwargs = {
-                'marker': marker_obj,
-                'alpha': 0.6,
-                's': 30,
-                'picker': 5,  # Enable picking for tooltips
-                'color': dataset_color,
-            }
-            
-            if use_3d and z_data is not None:
-                scatter = ax.scatter(x_data, y_data, z_data, **scatter_kwargs)
+            marker_is_filled = bool(MarkerStyle(base_marker).is_filled())
+
+            if marker_is_filled and fillstyle_str in {'left', 'right', 'bottom', 'top'}:
+                outline_marker = MarkerStyle(base_marker, fillstyle='full')
+                fill_marker = MarkerStyle(base_marker, fillstyle=fillstyle_str)
+
+                if use_3d and z_data is not None:
+                    ax.scatter(
+                        x_data,
+                        y_data,
+                        z_data,
+                        marker=outline_marker,
+                        facecolors='none',
+                        edgecolors=dataset_color,
+                        alpha=0.6,
+                        s=30,
+                        linewidths=1.2,
+                        picker=0
+                    )
+                    scatter = ax.scatter(
+                        x_data,
+                        y_data,
+                        z_data,
+                        marker=fill_marker,
+                        c=dataset_color,
+                        edgecolors='none',
+                        alpha=0.6,
+                        s=30,
+                        linewidths=0.0,
+                        picker=5
+                    )
+                else:
+                    ax.scatter(
+                        x_data,
+                        y_data,
+                        marker=outline_marker,
+                        facecolors='none',
+                        edgecolors=dataset_color,
+                        alpha=0.6,
+                        s=30,
+                        linewidths=1.2,
+                        picker=0
+                    )
+                    scatter = ax.scatter(
+                        x_data,
+                        y_data,
+                        marker=fill_marker,
+                        c=dataset_color,
+                        edgecolors='none',
+                        alpha=0.6,
+                        s=30,
+                        linewidths=0.0,
+                        picker=5
+                    )
             else:
-                scatter = ax.scatter(x_data, y_data, **scatter_kwargs)
+                scatter_kwargs = {
+                    'marker': marker_obj,
+                    'alpha': 0.6,
+                    's': 30,
+                    'picker': 5,  # Enable picking for tooltips
+                    'color': dataset_color,
+                }
+
+                if use_3d and z_data is not None:
+                    scatter = ax.scatter(x_data, y_data, z_data, **scatter_kwargs)
+                else:
+                    scatter = ax.scatter(x_data, y_data, **scatter_kwargs)
             
             # Store sample labels on scatter object if provided
             if sample_labels_by_dataset and dataset_label in sample_labels_by_dataset:

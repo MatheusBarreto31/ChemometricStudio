@@ -8,10 +8,11 @@
     "cv_configuration": ["cv_config"],
     "load_data": ["X_cal", "Y_cal", "axis_t_info", "smp_cal", "axis_n_info", "axis_nature", "dim_labels", "class_data_cal", "cal_metadata"],
     "validation_data_main": ["X_cal", "Y_cal", "X_val", "Y_val", "smp_cal", "smp_val", "class_data_cal", "class_data_val", "cal_metadata", "val_metadata"],
-    "baseline_correction": ["X_cal", "X_val"],
+    "baseline_correction": ["X_cal", "X_val", "axis_n_info", "axis_t_info"],
     "smoothing": ["X_cal", "X_val"],
     "center_and_scale": ["X_cal", "X_val"],
     "univariate_calibration": ["y_cal_pred", "y_val_pred", "models", "metrics", "cv_results"],
+    "first_order_calibration": ["y_cal_pred", "y_val_pred", "y_cv_pred", "y_cal_true", "y_val_true", "model", "selected_parameter_name", "selected_parameter_value", "metrics", "cv_results", "optimization_results"],
     "pca_analysis": ["model_scores", "model_loadings", "val_scores", "model_scores_cv", "model_loadings_cv", "metrics", "cv_results", "data_shape", "data_shape_val", "axis_n_info", "pc_labels", "class_data_cal", "class_data_val", "smp_cal", "smp_val"]
   },
   "input_specs": {
@@ -39,7 +40,10 @@
       {"key": "X_val", "aliases": ["X_test", "X_validation"]},
       "nway_flag",
       "direction",
-      "window_size"
+      "window_size",
+      "derivative_order",
+      "axis_n_info",
+      "axis_t_info"
     ],
     "smoothing": [
       {"key": "X_cal", "aliases": ["X", "X_train"]},
@@ -52,6 +56,7 @@
     ],
     "center_and_scale": ["X_cal", "X_val", "scaling_method", "nway_flag"],
     "univariate_calibration": ["X_cal", "Y_cal", "X_val", "Y_val", "degree", "intercept", "cv_config"],
+    "first_order_calibration": ["X_cal", "Y_cal", "X_val", "Y_val", "model_type", "n_components", "ridge_alpha", "local_method", "local_distance", "n_neighbors", "idw_power", "adaptive_alpha", "radius_threshold", "kernel_bandwidth", "optimize_parameters", "n_components_range", "ridge_alpha_range", "n_neighbors_range", "idw_power_range", "adaptive_alpha_range", "radius_threshold_range", "kernel_bandwidth_range", "parameter_range", "cv_config"],
     "pca_analysis": ["X_cal", "X_val", "n_components", "cv_config", "axis_n_info", "axis_nature", "class_data_cal", "class_data_val", "smp_cal", "smp_val"]
   },
   "import_map": {
@@ -67,6 +72,7 @@
     "smoothing": ["chemometrics.data_processing", "smoothing"],
     "center_and_scale": ["chemometrics.data_processing", "center_and_scale"],
     "univariate_calibration": ["chemometrics.univ_calibration", "univariate_calibration"],
+    "first_order_calibration": ["chemometrics.first_order_calibration", "first_order_calibration"],
     "pca_analysis": ["chemometrics.pca_analysis", "pca_analysis"]
   },
   "gui_listing": {
@@ -105,6 +111,9 @@
     },
     "univariate_calibration": {
       "config_path": "gui_configs/univariate_calibration_config.json"
+    },
+    "first_order_calibration": {
+      "config_path": "gui_configs/first_order_calibration_config.json"
     },
     "pca_analysis": {
       "config_path": "gui_configs/pca_analysis_config.json"
@@ -194,7 +203,10 @@
       "X_val": "ndarray",
       "nway_flag": "int",
       "direction": "int",
-      "window_size": "int"
+      "window_size": "int",
+      "derivative_order": "int",
+      "axis_n_info": "list",
+      "axis_t_info": "list"
     },
     "smoothing": {
       "X_cal": "ndarray",
@@ -218,6 +230,32 @@
       "Y_val": "ndarray",
       "degree": "int",
       "intercept": "bool",
+      "cv_config": "CVConfig"
+    },
+    "first_order_calibration": {
+      "X_cal": "ndarray",
+      "Y_cal": "ndarray",
+      "X_val": "ndarray",
+      "Y_val": "ndarray",
+      "model_type": "str",
+      "n_components": "int",
+      "ridge_alpha": "float",
+      "local_method": "str",
+      "local_distance": "str",
+      "n_neighbors": "int",
+      "idw_power": "float",
+      "adaptive_alpha": "float",
+      "radius_threshold": "float",
+      "kernel_bandwidth": "float",
+      "optimize_parameters": "bool",
+      "n_components_range": "str",
+      "ridge_alpha_range": "str",
+      "n_neighbors_range": "str",
+      "idw_power_range": "str",
+      "adaptive_alpha_range": "str",
+      "radius_threshold_range": "str",
+      "kernel_bandwidth_range": "str",
+      "parameter_range": "str",
       "cv_config": "CVConfig"
     },
     "pca_analysis": {

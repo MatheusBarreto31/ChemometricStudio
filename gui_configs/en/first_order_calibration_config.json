@@ -1,0 +1,745 @@
+{
+  "display_name": "First-Order Calibration",
+  "category": "5.Modeling",
+  "data_type": "firstorder",
+  "input_aliases": {
+    "X_cal": "X Calibration",
+    "Y_cal": "Y Calibration",
+    "X_val": "X Validation",
+    "Y_val": "Y Validation",
+    "model_type": "Method",
+    "n_components": "Latent Variables / PCs",
+    "ridge_alpha": "Ridge Alpha",
+    "local_method": "Local Regression Mode",
+    "local_distance": "Local Distance Metric",
+    "n_neighbors": "Number of Neighbors",
+    "idw_power": "IDW Power",
+    "adaptive_alpha": "Adaptive Alpha",
+    "radius_threshold": "Radius Threshold",
+    "kernel_bandwidth": "Kernel Bandwidth",
+    "optimize_parameters": "Optimize Parameter",
+    "n_components_range": "LV/PC Optimization Range",
+    "ridge_alpha_range": "Ridge Alpha Optimization Range",
+    "n_neighbors_range": "Neighbors Optimization Range",
+    "idw_power_range": "IDW Power Optimization Range",
+    "adaptive_alpha_range": "Adaptive Alpha Optimization Range",
+    "radius_threshold_range": "Radius Threshold Optimization Range",
+    "kernel_bandwidth_range": "Kernel Bandwidth Optimization Range",
+    "cv_config": "CV Configuration"
+  },
+  "output_aliases": {
+    "y_cal_pred": "Calibration Predictions",
+    "y_val_pred": "Validation Predictions",
+    "y_cv_pred": "Cross-Validation Predictions",
+    "y_cal_true": "Calibration Reference",
+    "y_val_true": "Validation Reference",
+    "selected_parameter_name": "Selected Parameter Name",
+    "selected_parameter_value": "Selected Parameter Value",
+    "metrics": "Metrics",
+    "cv_results": "CV Results",
+    "optimization_results": "Optimization Results"
+  },
+  "short_description": "Unified first-order calibration with OLS, PLS, PCR, Ridge, and Local Regression",
+  "long_description": "Builds first-order calibration models for quantitative prediction with optional parameter optimization. Supports OLS, PLS, PCR, Ridge, and Local Regression (KNN, IDW, Adaptive Threshold, Radius, Kernel), computes calibration/CV/validation statistics, supports multiple local distance metrics, and exposes optimization curves for model tuning.",
+  "setup": {
+    "categories": [
+      "Model Parameters",
+      "Optimization",
+      "Data Inputs",
+      "Cross-Validation"
+    ],
+    "layout": [
+      {
+        "name": "model_type",
+        "label": "Method",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "pls",
+        "values": [
+          "ols",
+          "pls",
+          "pcr",
+          "ridge",
+          "local"
+        ],
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Calibration method: OLS, PLS, PCR, Ridge, or Local Regression"
+      },
+      {
+        "name": "local_method",
+        "label": "Local Regression Mode",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "knn",
+        "values": [
+          "knn",
+          "idw",
+          "adaptive",
+          "radius",
+          "kernel"
+        ],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "local"
+        },
+        "tooltip": "knn = nearest-neighbor averaging, idw = inverse-distance weighted averaging, adaptive = similarity-threshold averaging, radius = radius-based averaging, kernel = Gaussian-kernel weighted averaging"
+      },
+      {
+        "name": "local_distance",
+        "label": "Local Distance Metric",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "euclidean",
+        "values": [
+          "euclidean",
+          "mahalanobis",
+          "manhattan",
+          "minkowski",
+          "chebyshev",
+          "chord"
+        ],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "local"
+        },
+        "tooltip": "Distance metric for local regression neighborhood/weighting calculations"
+      },
+      {
+        "name": "n_components",
+        "label": "Latent Variables / PCs",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "2",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": [
+            "pls",
+            "pcr"
+          ],
+          "optimize_parameters": false
+        },
+        "tooltip": "Fixed latent-variable count (PLS) or principal components (PCR) when optimization is OFF"
+      },
+      {
+        "name": "ridge_alpha",
+        "label": "Ridge Alpha",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "ridge",
+          "optimize_parameters": false
+        },
+        "tooltip": "Fixed ridge regularization value when optimization is OFF"
+      },
+      {
+        "name": "n_neighbors",
+        "label": "Number of Neighbors",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "5",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "local",
+          "local_method": [
+            "knn",
+            "idw"
+          ],
+          "optimize_parameters": false
+        },
+        "tooltip": "Fixed local neighborhood size when optimization is OFF (used by KNN and IDW)"
+      },
+      {
+        "name": "idw_power",
+        "label": "IDW Power",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "local",
+          "local_method": "idw",
+          "optimize_parameters": false
+        },
+        "tooltip": "Distance-weight exponent for IDW mode using k nearest neighbors (higher = stronger near-neighbor emphasis)"
+      },
+      {
+        "name": "adaptive_alpha",
+        "label": "Adaptive Alpha",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "local",
+          "local_method": "adaptive",
+          "optimize_parameters": false
+        },
+        "tooltip": "Alpha exponent controlling adaptive similarity-threshold neighborhood selection"
+      },
+      {
+        "name": "radius_threshold",
+        "label": "Radius Threshold",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "local",
+          "local_method": "radius",
+          "optimize_parameters": false
+        },
+        "tooltip": "Distance cutoff used to include neighbors in Radius mode"
+      },
+      {
+        "name": "kernel_bandwidth",
+        "label": "Kernel Bandwidth",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "local",
+          "local_method": "kernel",
+          "optimize_parameters": false
+        },
+        "tooltip": "Gaussian kernel bandwidth used in Kernel mode"
+      },
+      {
+        "name": "optimize_parameters",
+        "label": "Optimize Parameter",
+        "category": "Optimization",
+        "widget": "checkbutton",
+        "default": false,
+        "required": true,
+        "input_type": "user",
+        "tooltip": "If enabled, fixed parameter inputs are hidden and a parameter range is used"
+      },
+      {
+        "name": "n_components_range",
+        "label": "LV/PC Optimization Range",
+        "category": "Optimization",
+        "widget": "entry",
+        "type": "str",
+        "default": "1:12",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "optimize_parameters": true,
+          "model_type": [
+            "pls",
+            "pcr"
+          ]
+        },
+        "tooltip": "Integer range for latent variables/components. Single value X is interpreted as 1:X"
+      },
+      {
+        "name": "ridge_alpha_range",
+        "label": "Ridge Alpha Optimization Range",
+        "category": "Optimization",
+        "widget": "entry",
+        "type": "str",
+        "default": "0.0001,0.001,0.01,0.1,1,10,100",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "optimize_parameters": true,
+          "model_type": "ridge"
+        },
+        "tooltip": "Positive alpha values to test for ridge regularization"
+      },
+      {
+        "name": "n_neighbors_range",
+        "label": "Neighbors Optimization Range",
+        "category": "Optimization",
+        "widget": "entry",
+        "type": "str",
+        "default": "3:2:21",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "optimize_parameters": true,
+          "model_type": "local",
+          "local_method": "knn"
+        },
+        "tooltip": "Neighbor counts to test for local regression (odd steps recommended)"
+      },
+      {
+        "name": "idw_power_range",
+        "label": "IDW Power Optimization Range",
+        "category": "Optimization",
+        "widget": "entry",
+        "type": "str",
+        "default": "0.25,0.5,1,2,3,5",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "optimize_parameters": true,
+          "model_type": "local",
+          "local_method": "idw"
+        },
+        "tooltip": "Positive power values to test for IDW distance weighting"
+      },
+      {
+        "name": "adaptive_alpha_range",
+        "label": "Adaptive Alpha Optimization Range",
+        "category": "Optimization",
+        "widget": "entry",
+        "type": "str",
+        "default": "0.25,0.5,1,2,3,5",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "optimize_parameters": true,
+          "model_type": "local",
+          "local_method": "adaptive"
+        },
+        "tooltip": "Positive alpha values to test adaptive threshold behavior"
+      },
+      {
+        "name": "radius_threshold_range",
+        "label": "Radius Threshold Optimization Range",
+        "category": "Optimization",
+        "widget": "entry",
+        "type": "str",
+        "default": "0.25,0.5,1,2,3,5",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "optimize_parameters": true,
+          "model_type": "local",
+          "local_method": "radius"
+        },
+        "tooltip": "Positive radius thresholds to test in Radius mode"
+      },
+      {
+        "name": "kernel_bandwidth_range",
+        "label": "Kernel Bandwidth Optimization Range",
+        "category": "Optimization",
+        "widget": "entry",
+        "type": "str",
+        "default": "0.25,0.5,1,2,3,5",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "optimize_parameters": true,
+          "model_type": "local",
+          "local_method": "kernel"
+        },
+        "tooltip": "Positive bandwidth values to test in Kernel mode"
+      },
+      {
+        "name": "cv_config",
+        "label": "CV Configuration",
+        "category": "Cross-Validation",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        },
+        "tooltip": "Routed from CV Configuration function"
+      },
+      {
+        "name": "X_cal",
+        "label": "X Calibration Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": true,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        },
+        "tooltip": "Routed from previous function output"
+      },
+      {
+        "name": "Y_cal",
+        "label": "Y Calibration Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": true,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        },
+        "tooltip": "Routed from previous function output"
+      },
+      {
+        "name": "X_val",
+        "label": "X Validation Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        },
+        "tooltip": "Optional validation predictors"
+      },
+      {
+        "name": "Y_val",
+        "label": "Y Validation Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        },
+        "tooltip": "Optional validation references"
+      }
+    ]
+  },
+  "analysis": {
+    "pages": [
+      {
+        "title": "Predictions",
+        "layout": "fp",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Measured vs Predicted",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "y_cal_true",
+                    "axis_type": "linear",
+                    "label": "Measured"
+                  },
+                  "y_axis": {
+                    "data_source": "y_cal_pred",
+                    "axis_type": "linear",
+                    "label": "Predicted"
+                  },
+                  "label": "Calibration"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "y_val_true",
+                    "axis_type": "linear",
+                    "label": "Measured"
+                  },
+                  "y_axis": {
+                    "data_source": "y_val_pred",
+                    "axis_type": "linear",
+                    "label": "Predicted"
+                  },
+                  "label": "Validation"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "y_cal_true",
+                    "axis_type": "linear",
+                    "label": "Measured"
+                  },
+                  "y_axis": {
+                    "data_source": "y_cv_pred",
+                    "axis_type": "linear",
+                    "label": "Predicted"
+                  },
+                  "label": "Cross-Validation"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "x",
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "y",
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Metrics",
+        "layout": "fp",
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "title": "RMSEP and R2 Summary",
+              "row_label": "Metric",
+              "columns": [
+                {
+                  "data_source": "metrics",
+                  "nested_key": "calibration.RMSEP",
+                  "name": "Calibration RMSEP"
+                },
+                {
+                  "data_source": "metrics",
+                  "nested_key": "cv.RMSEP",
+                  "name": "CV RMSEP"
+                },
+                {
+                  "data_source": "metrics",
+                  "nested_key": "validation.RMSEP",
+                  "name": "Validation RMSEP"
+                },
+                {
+                  "data_source": "metrics",
+                  "nested_key": "calibration.R2",
+                  "name": "Calibration R2"
+                },
+                {
+                  "data_source": "metrics",
+                  "nested_key": "cv.R2",
+                  "name": "CV R2"
+                },
+                {
+                  "data_source": "metrics",
+                  "nested_key": "validation.R2",
+                  "name": "Validation R2"
+                }
+              ],
+              "decimal_places": 6,
+              "max_rows": 20
+            }
+          }
+        ]
+      },
+      {
+        "title": "Text Report",
+        "layout": "fp",
+        "sections": [
+          {
+            "type": "text",
+            "config": {
+              "title": "Calibration Report",
+              "text_template": "First-Order Calibration Report\n==============================\nMethod: {method}\nLocal mode: {local_mode}\nSelected parameter: {param_name} = {param_value}\n\nPerformance\n-----------\nCalibration  -> R2: {r2_cal}, RMSEP: {rmsep_cal}\nCross-Validation -> R2: {r2_cv}, RMSEP: {rmsep_cv}\nValidation   -> R2: {r2_val}, RMSEP: {rmsep_val}\n\nOptimization enabled: {optimization_used}\nBest optimized value: {best_value}",
+              "bindings": [
+                {
+                  "name": "method",
+                  "data_source": "model",
+                  "nested_key": "model_type",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "local_mode",
+                  "data_source": "model",
+                  "nested_key": "local_method",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "param_name",
+                  "data_source": "selected_parameter_name",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "param_value",
+                  "data_source": "selected_parameter_value",
+                  "value_format": ".4g",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "r2_cal",
+                  "data_source": "metrics",
+                  "nested_key": "calibration.R2",
+                  "value_format": ".4f",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "rmsep_cal",
+                  "data_source": "metrics",
+                  "nested_key": "calibration.RMSEP",
+                  "value_format": ".4g",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "r2_cv",
+                  "data_source": "metrics",
+                  "nested_key": "cv.R2",
+                  "value_format": ".4f",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "rmsep_cv",
+                  "data_source": "metrics",
+                  "nested_key": "cv.RMSEP",
+                  "value_format": ".4g",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "r2_val",
+                  "data_source": "metrics",
+                  "nested_key": "validation.R2",
+                  "value_format": ".4f",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "rmsep_val",
+                  "data_source": "metrics",
+                  "nested_key": "validation.RMSEP",
+                  "value_format": ".4g",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "optimization_used",
+                  "data_source": "optimization_results",
+                  "nested_key": "optimization_used",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "best_value",
+                  "data_source": "optimization_results",
+                  "nested_key": "best_value",
+                  "value_format": ".4g",
+                  "selector": {
+                    "mode": "value"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Optimization",
+        "layout": "ew",
+        "condition": {
+          "parameter": "optimize_parameters",
+          "operator": "==",
+          "value": true
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "R2 Across Candidate Values",
+              "line_style": "lines+markers",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "optimization_results",
+                    "nested_key": "parameter_values",
+                    "axis_type": "linear",
+                    "label": "Parameter"
+                  },
+                  "y_axis": {
+                    "data_source": "optimization_results",
+                    "nested_key": "self_r2",
+                    "axis_type": "linear",
+                    "label": "R2"
+                  },
+                  "label": "Self Prediction",
+                  "marker": "o"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "optimization_results",
+                    "nested_key": "parameter_values",
+                    "axis_type": "linear",
+                    "label": "Parameter"
+                  },
+                  "y_axis": {
+                    "data_source": "optimization_results",
+                    "nested_key": "cv_r2",
+                    "axis_type": "linear",
+                    "label": "R2"
+                  },
+                  "label": "Cross-Validation",
+                  "marker": "s"
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "RMSEP Across Candidate Values",
+              "line_style": "lines+markers",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "optimization_results",
+                    "nested_key": "parameter_values",
+                    "axis_type": "linear",
+                    "label": "Parameter"
+                  },
+                  "y_axis": {
+                    "data_source": "optimization_results",
+                    "nested_key": "self_rmsep",
+                    "axis_type": "linear",
+                    "label": "RMSEP"
+                  },
+                  "label": "Self Prediction",
+                  "marker": "o"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "optimization_results",
+                    "nested_key": "parameter_values",
+                    "axis_type": "linear",
+                    "label": "Parameter"
+                  },
+                  "y_axis": {
+                    "data_source": "optimization_results",
+                    "nested_key": "cv_rmsep",
+                    "axis_type": "linear",
+                    "label": "RMSEP"
+                  },
+                  "label": "Cross-Validation",
+                  "marker": "s"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -226,6 +226,20 @@
         }
       },
       {
+        "name": "y_columns",
+        "label": "Y Columns",
+        "category": "Data Files",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Columns of the X file to use as Y data (1-based). Supports single values (3), comma/space lists (1,3,5), ranges (1:4 or 1-4), and stepped ranges (2:2:6).",
+        "visible_if": {
+          "y_from_x": true
+        }
+      },
+      {
         "name": "cdata_path",
         "label": "Classification Data File",
         "category": "Data Files",
@@ -240,6 +254,20 @@
         }
       },
       {
+        "name": "class_columns",
+        "label": "Class Columns",
+        "category": "Data Files",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Columns of the X file to use as class labels (1-based). Supports single values (3), comma/space lists (1,3,5), ranges (1:4 or 1-4), and stepped ranges (2:2:6). String labels are preserved.",
+        "visible_if": {
+          "class_from_x": true
+        }
+      },
+      {
         "name": "smp_path",
         "label": "Sample Labels",
         "category": "Data Files",
@@ -251,6 +279,20 @@
         "ispath": true,
         "visible_if": {
           "smp_from_x": false
+        }
+      },
+      {
+        "name": "smp_column",
+        "label": "Sample Label Column",
+        "category": "Data Files",
+        "widget": "entry",
+        "type": "int",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Single column number (1-based) whose values become sample labels.",
+        "visible_if": {
+          "smp_from_x": true
         }
       },
       {
@@ -290,48 +332,6 @@
         "tooltip": "Extract sample labels from a single column in the X file instead of loading a separate labels file. Only available for X Matrix data type.",
         "visible_if": {
           "d_specs_type": ["Auto detect", "x_matrix"]
-        }
-      },
-      {
-        "name": "y_columns",
-        "label": "Y Columns",
-        "category": "Data Files",
-        "widget": "entry",
-        "type": "str",
-        "default": "",
-        "required": false,
-        "input_type": "user",
-        "tooltip": "Columns of the X file to use as Y data (1-based). Supports single values (3), comma/space lists (1,3,5), ranges (1:4 or 1-4), and stepped ranges (2:2:6).",
-        "visible_if": {
-          "y_from_x": true
-        }
-      },
-      {
-        "name": "class_columns",
-        "label": "Class Columns",
-        "category": "Data Files",
-        "widget": "entry",
-        "type": "str",
-        "default": "",
-        "required": false,
-        "input_type": "user",
-        "tooltip": "Columns of the X file to use as class labels (1-based). Supports single values (3), comma/space lists (1,3,5), ranges (1:4 or 1-4), and stepped ranges (2:2:6). String labels are preserved.",
-        "visible_if": {
-          "class_from_x": true
-        }
-      },
-      {
-        "name": "smp_column",
-        "label": "Sample Label Column",
-        "category": "Data Files",
-        "widget": "entry",
-        "type": "int",
-        "default": "",
-        "required": false,
-        "input_type": "user",
-        "tooltip": "Single column number (1-based) whose values become sample labels.",
-        "visible_if": {
-          "smp_from_x": true
         }
       },
       {
