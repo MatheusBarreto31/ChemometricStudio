@@ -1,11 +1,12 @@
 
-from typing import Tuple, Optional, List, Dict, Any
+from typing import Tuple, Optional, List, Dict, Any, Set
 import numpy as np
 import os
 import csv
 import pandas as pd
 from datetime import datetime
 import re
+from chemometrics.input_parsing import parse_numeric_spec
 
 
 def _load_file(path: str, separator: Optional[str], num_headlines: int) -> np.ndarray:
@@ -809,52 +810,21 @@ def _parse_column_spec(spec: str) -> List[int]:
     if not spec or not spec.strip():
         return []
 
-    indices: set = set()
-    # Split by commas and whitespace, but keep range tokens intact
-    tokens = re.split(r'[\s,]+', spec.strip())
+    indices: Set[int] = set()
+    tokens = [token.strip() for token in re.split(r'[\s,]+', spec.strip()) if token.strip()]
 
     for token in tokens:
-        if not token:
+        try:
+            values = parse_numeric_spec(token)
+        except Exception:
             continue
 
-        if ':' in token:
-            # Colon-separated: a:b  or  a:step:b
-            parts = token.split(':')
-            try:
-                if len(parts) == 2:
-                    start, end = int(parts[0]), int(parts[1])
-                    step = 1
-                elif len(parts) == 3:
-                    start, step, end = int(parts[0]), int(parts[1]), int(parts[2])
-                else:
-                    continue
-                if step <= 0:
-                    continue
-                for i in range(start, end + 1, step):
-                    if i >= 1:
-                        indices.add(i - 1)  # convert to 0-based
-            except ValueError:
+        for value in values:
+            if isinstance(value, float) and not value.is_integer():
                 continue
-
-        elif re.match(r'^\d+-\d+$', token):
-            # Dash-separated range: a-b
-            parts = token.split('-')
-            try:
-                start, end = int(parts[0]), int(parts[1])
-                for i in range(start, end + 1):
-                    if i >= 1:
-                        indices.add(i - 1)
-            except ValueError:
-                continue
-
-        else:
-            # Single integer
-            try:
-                idx = int(token)
-                if idx >= 1:
-                    indices.add(idx - 1)
-            except ValueError:
-                continue
+            idx = int(value)
+            if idx >= 1:
+                indices.add(idx - 1)
 
     return sorted(indices)
 

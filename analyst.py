@@ -22,9 +22,9 @@ def analyst_main(
     import copy
     import importlib
     import json
-    import re
     import warnings
     from datetime import datetime
+    from chemometrics.input_parsing import parse_numeric_spec
     
     # Load model configuration from model.json
     with open('model.json', 'r', encoding='utf-8') as f:
@@ -208,110 +208,31 @@ def analyst_main(
         return -1
 
     def _parse_sweep_values(raw_value: Any) -> List[Any]:
-        def _to_number(text: str):
-            text = text.strip()
-            if text == "":
-                raise ValueError("empty")
-            num = float(text)
-            if num.is_integer():
-                return int(num)
-            return num
-
-        def _expand_colon_interval(token: str):
-            parts = [part.strip() for part in token.split(':')]
-            if len(parts) not in (2, 3):
-                return None
-            try:
-                start = float(parts[0])
-                if len(parts) == 2:
-                    end = float(parts[1])
-                    step = 1.0 if end >= start else -1.0
-                else:
-                    step = float(parts[1])
-                    end = float(parts[2])
-                if step == 0:
-                    return None
-
-                values = []
-                epsilon = abs(step) * 1e-9 + 1e-12
-                current = start
-                if step > 0:
-                    while current <= end + epsilon:
-                        values.append(int(current) if float(current).is_integer() else current)
-                        current += step
-                else:
-                    while current >= end - epsilon:
-                        values.append(int(current) if float(current).is_integer() else current)
-                        current += step
-                return values
-            except Exception:
-                return None
-
-        def _expand_dash_interval(token: str):
-            match = re.fullmatch(r"\s*(-?\d+(?:\.\d+)?)\s*-\s*(-?\d+(?:\.\d+)?)\s*", token)
-            if not match:
-                return None
-            try:
-                start = float(match.group(1))
-                end = float(match.group(2))
-                step = 1.0 if end >= start else -1.0
-                values = []
-                epsilon = 1e-9
-                current = start
-                if step > 0:
-                    while current <= end + epsilon:
-                        values.append(int(current) if float(current).is_integer() else current)
-                        current += step
-                else:
-                    while current >= end - epsilon:
-                        values.append(int(current) if float(current).is_integer() else current)
-                        current += step
-                return values
-            except Exception:
-                return None
-
         if raw_value is None:
             return []
+
         if isinstance(raw_value, list):
-            parsed = []
+            parsed_values: List[Any] = []
             for value in raw_value:
                 text_value = str(value).strip()
                 if not text_value:
                     continue
-                colon_values = _expand_colon_interval(text_value)
-                if colon_values is not None:
-                    parsed.extend(colon_values)
-                    continue
-                dash_values = _expand_dash_interval(text_value)
-                if dash_values is not None:
-                    parsed.extend(dash_values)
-                    continue
                 try:
-                    parsed.append(_to_number(text_value))
+                    parsed_values.extend(parse_numeric_spec(text_value))
                 except Exception:
-                    parsed.append(text_value)
-            return parsed
+                    parsed_values.append(text_value)
+            return parsed_values
+
         text = str(raw_value).strip()
         if not text:
             return []
 
-        parsed_values: List[Any] = []
+        parsed_values = []
         for part in [segment.strip() for segment in text.split(',') if segment.strip()]:
-            colon_values = _expand_colon_interval(part)
-            if colon_values is not None:
-                parsed_values.extend(colon_values)
-                continue
-
-            dash_values = _expand_dash_interval(part)
-            if dash_values is not None:
-                parsed_values.extend(dash_values)
-                continue
-
             try:
-                parsed_values.append(_to_number(part))
+                parsed_values.extend(parse_numeric_spec(part))
             except Exception:
                 parsed_values.append(part)
-
         return parsed_values
 
     function_timings = []
