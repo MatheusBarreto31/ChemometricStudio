@@ -1,9 +1,15 @@
 from typing import Optional, Dict, Any, List, Tuple
 import numpy as np
-from sklearn.linear_model import LinearRegression, Ridge
+from sklearn.linear_model import LinearRegression, Ridge, Lasso, MultiTaskLasso
 from sklearn.cross_decomposition import PLSRegression
 from sklearn.decomposition import PCA
 from scipy.spatial.distance import cdist
+
+try:
+    from execution_reporting import emit_execution_warning
+except ImportError:
+    def emit_execution_warning(code: Optional[str] = None, text: str = "", details: Optional[Dict[str, Any]] = None) -> None:
+        return
 
 try:
     from chemometrics.cv_pipeline import CVConfig, CVPipeline
@@ -83,7 +89,7 @@ def _parse_parameter_candidates(
 
     if model_type in ('pls', 'pcr'):
         return _coerce_int_candidates(parsed, default_max=min(max_latent, 15), from_one_on_single=True)
-    if model_type == 'ridge':
+    if model_type in ('ridge', 'lasso'):
         return _coerce_float_candidates(parsed, default_values=[1e-4, 1e-3, 1e-2, 1e-1, 1.0, 10.0, 100.0])
     if model_type == 'local':
         local_method_norm = str(local_method).strip().lower()
@@ -279,6 +285,7 @@ def _fit_model(
     Y_train: np.ndarray,
     n_components: int,
     ridge_alpha: float,
+    lasso_alpha: float,
     n_neighbors: int,
     local_method: str,
     idw_power: float,
@@ -300,6 +307,15 @@ def _fit_model(
         model = Ridge(alpha=float(ridge_alpha))
         model.fit(X_train, Y_train)
         return {'model_type': model_type, 'model': model, 'alpha': float(ridge_alpha)}
+
+    if model_type == 'lasso':
+        if Y_train.shape[1] > 1:
+            model = MultiTaskLasso(alpha=float(lasso_alpha), max_iter=10000)
+            model.fit(X_train, Y_train)
+        else:
+            model = Lasso(alpha=float(lasso_alpha), max_iter=10000)
+            model.fit(X_train, np.asarray(Y_train).reshape(-1))
+        return {'model_type': model_type, 'model': model, 'alpha': float(lasso_alpha)}
 
     if model_type == 'pls':
         max_comp = max(1, min(X_train.shape[1], X_train.shape[0] - 1))
@@ -345,6 +361,12 @@ def _predict_model(model_info: Dict[str, Any], X_data: np.ndarray) -> np.ndarray
 
     if model_type in ('ols', 'ridge', 'pls'):
         return np.asarray(model_info['model'].predict(X_data), dtype=float)
+
+    if model_type == 'lasso':
+        y_pred = np.asarray(model_info['model'].predict(X_data), dtype=float)
+        if y_pred.ndim == 1:
+            return y_pred.reshape(-1, 1)
+        return y_pred
 
     if model_type == 'pcr':
         pca = model_info['pca']
@@ -393,6 +415,7 @@ def _cross_validated_predictions(
     model_type: str,
     n_components: int,
     ridge_alpha: float,
+    lasso_alpha: float,
     n_neighbors: int,
     local_method: str,
     idw_power: float,
@@ -419,6 +442,7 @@ def _cross_validated_predictions(
             Y_train=Y_train,
             n_components=n_components,
             ridge_alpha=ridge_alpha,
+            lasso_alpha=lasso_alpha,
             n_neighbors=n_neighbors,
             local_method=local_method,
             idw_power=idw_power,
@@ -455,6 +479,7 @@ def first_order_calibration(
     model_type: str = 'pls',
     n_components: int = 2,
     ridge_alpha: float = 1.0,
+    lasso_alpha: float = 1.0,
     local_method: str = 'knn',
     n_neighbors: int = 5,
     idw_power: float = 1.0,
@@ -465,6 +490,7 @@ def first_order_calibration(
     optimize_parameters: bool = False,
     n_components_range: Optional[Any] = None,
     ridge_alpha_range: Optional[Any] = None,
+    lasso_alpha_range: Optional[Any] = None,
     n_neighbors_range: Optional[Any] = None,
     idw_power_range: Optional[Any] = None,
     adaptive_alpha_range: Optional[Any] = None,
@@ -516,6 +542,9 @@ def first_order_calibration(
     elif model_type_norm == 'ridge':
         parameter_name = 'ridge_alpha'
         fixed_value = float(ridge_alpha)
+    elif model_type_norm == 'lasso':
+        parameter_name = 'lasso_alpha'
+        fixed_value = float(lasso_alpha)
     elif model_type_norm == 'local':
         if local_method_norm == 'knn':
             parameter_name = 'n_neighbors'
@@ -538,6 +567,8 @@ def first_order_calibration(
         selected_range_input = n_components_range
     elif model_type_norm == 'ridge' and ridge_alpha_range not in (None, ''):
         selected_range_input = ridge_alpha_range
+    elif model_type_norm == 'lasso' and lasso_alpha_range not in (None, ''):
+        selected_range_input = lasso_alpha_range
     elif model_type_norm == 'local':
         if local_method_norm == 'knn' and n_neighbors_range not in (None, ''):
             selected_range_input = n_neighbors_range
@@ -570,11 +601,28 @@ def first_order_calibration(
     best_candidate = candidates[0] if candidates else fixed_value
     best_score = np.inf
     use_cv_for_selection = cv_config is not None and HAS_CV and cv_config.is_enabled()
+    if bool(optimize_parameters and parameter_name is not None) and not use_cv_for_selection:
+        if not HAS_CV:
+            raise ValueError("Parameter optimization requires CV support, but CV pipeline is unavailable.")
+        cv_config = CVConfig(
+            use_cv=True,
+            cv_strategy='loocv',
+            n_splits=max(2, int(X_cal.shape[0])),
+            random_state=42,
+            shuffle=False,
+        )
+        use_cv_for_selection = True
+        emit_execution_warning(
+            code='first_order_calibration_default_loocv',
+            text='No enabled CV configuration found during optimization. Defaulting to LOOCV for parameter selection.',
+            details={'function': 'first_order_calibration', 'cv_strategy': 'loocv'}
+        )
     local_self_uses_loo = model_type_norm == 'local'
 
     for candidate in candidates:
         c_n_components = int(candidate) if model_type_norm in ('pls', 'pcr') else int(n_components)
         c_alpha = float(candidate) if model_type_norm == 'ridge' else float(ridge_alpha)
+        c_lasso_alpha = float(candidate) if model_type_norm == 'lasso' else float(lasso_alpha)
         c_neighbors = int(candidate) if (model_type_norm == 'local' and local_method_norm == 'knn') else int(n_neighbors)
         c_idw_power = float(candidate) if (model_type_norm == 'local' and local_method_norm == 'idw') else float(idw_power)
         c_adaptive_alpha = float(candidate) if (model_type_norm == 'local' and local_method_norm == 'adaptive') else float(adaptive_alpha)
@@ -587,6 +635,7 @@ def first_order_calibration(
             Y_train=Y_cal,
             n_components=c_n_components,
             ridge_alpha=c_alpha,
+            lasso_alpha=c_lasso_alpha,
             n_neighbors=c_neighbors,
             local_method=local_method_norm,
             idw_power=c_idw_power,
@@ -620,6 +669,7 @@ def first_order_calibration(
             model_type=model_type_norm,
             n_components=c_n_components,
             ridge_alpha=c_alpha,
+            lasso_alpha=c_lasso_alpha,
             n_neighbors=c_neighbors,
             local_method=local_method_norm,
             idw_power=c_idw_power,
@@ -641,8 +691,6 @@ def first_order_calibration(
 
         if use_cv_for_selection and cv_metrics is not None:
             score = float(cv_metrics['RMSEP'])
-        elif val_metrics is not None:
-            score = float(val_metrics['RMSEP'])
         else:
             score = float(self_metrics['RMSEP'])
         if score < best_score:
@@ -651,6 +699,7 @@ def first_order_calibration(
 
     final_n_components = int(best_candidate) if model_type_norm in ('pls', 'pcr') else int(n_components)
     final_alpha = float(best_candidate) if model_type_norm == 'ridge' else float(ridge_alpha)
+    final_lasso_alpha = float(best_candidate) if model_type_norm == 'lasso' else float(lasso_alpha)
     final_neighbors = int(best_candidate) if (model_type_norm == 'local' and local_method_norm == 'knn') else int(n_neighbors)
     final_idw_power = float(best_candidate) if (model_type_norm == 'local' and local_method_norm == 'idw') else float(idw_power)
     final_adaptive_alpha = float(best_candidate) if (model_type_norm == 'local' and local_method_norm == 'adaptive') else float(adaptive_alpha)
@@ -663,6 +712,7 @@ def first_order_calibration(
         Y_train=Y_cal,
         n_components=final_n_components,
         ridge_alpha=final_alpha,
+        lasso_alpha=final_lasso_alpha,
         n_neighbors=final_neighbors,
         local_method=local_method_norm,
         idw_power=final_idw_power,
@@ -694,6 +744,7 @@ def first_order_calibration(
         model_type=model_type_norm,
         n_components=final_n_components,
         ridge_alpha=final_alpha,
+        lasso_alpha=final_lasso_alpha,
         n_neighbors=final_neighbors,
         local_method=local_method_norm,
         idw_power=final_idw_power,
@@ -718,7 +769,7 @@ def first_order_calibration(
         'cv_rmsep': optimization_cv_rmsep,
         'val_rmsep': optimization_val_rmsep,
         'best_value': best_candidate,
-        'selection_source': 'cv' if use_cv_for_selection else ('validation' if (X_val is not None and Y_val is not None) else 'self'),
+        'selection_source': 'cv' if use_cv_for_selection else 'self',
         'optimization_used': bool(optimize_parameters and parameter_name is not None),
     }
 
@@ -727,6 +778,8 @@ def first_order_calibration(
         selected_parameter_value = int(final_n_components)
     elif parameter_name == 'ridge_alpha':
         selected_parameter_value = float(final_alpha)
+    elif parameter_name == 'lasso_alpha':
+        selected_parameter_value = float(final_lasso_alpha)
     elif parameter_name == 'n_neighbors':
         selected_parameter_value = int(final_neighbors)
     elif parameter_name == 'idw_power':

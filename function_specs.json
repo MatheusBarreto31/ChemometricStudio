@@ -62,7 +62,7 @@
     ],
     "center_and_scale": ["X_cal", "X_val", "scaling_method", "nway_flag"],
     "univariate_calibration": ["X_cal", "Y_cal", "X_val", "Y_val", "degree", "intercept", "cv_config"],
-    "first_order_calibration": ["X_cal", "Y_cal", "X_val", "Y_val", "model_type", "n_components", "ridge_alpha", "local_method", "local_distance", "n_neighbors", "idw_power", "adaptive_alpha", "radius_threshold", "kernel_bandwidth", "optimize_parameters", "n_components_range", "ridge_alpha_range", "n_neighbors_range", "idw_power_range", "adaptive_alpha_range", "radius_threshold_range", "kernel_bandwidth_range", "parameter_range", "cv_config"],
+    "first_order_calibration": ["X_cal", "Y_cal", "X_val", "Y_val", "model_type", "n_components", "ridge_alpha", "lasso_alpha", "local_method", "local_distance", "n_neighbors", "idw_power", "adaptive_alpha", "radius_threshold", "kernel_bandwidth", "optimize_parameters", "n_components_range", "ridge_alpha_range", "lasso_alpha_range", "n_neighbors_range", "idw_power_range", "adaptive_alpha_range", "radius_threshold_range", "kernel_bandwidth_range", "parameter_range", "cv_config"],
     "pca_analysis": ["X_cal", "X_val", "n_components", "cv_config", "axis_n_info", "axis_nature", "class_data_cal", "class_data_val", "smp_cal", "smp_val"]
   },
   "import_map": {
@@ -285,6 +285,7 @@
       "model_type": "str",
       "n_components": "int",
       "ridge_alpha": "float",
+      "lasso_alpha": "float",
       "local_method": "str",
       "local_distance": "str",
       "n_neighbors": "int",
@@ -295,6 +296,7 @@
       "optimize_parameters": "bool",
       "n_components_range": "str",
       "ridge_alpha_range": "str",
+      "lasso_alpha_range": "str",
       "n_neighbors_range": "str",
       "idw_power_range": "str",
       "adaptive_alpha_range": "str",

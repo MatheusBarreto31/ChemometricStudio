@@ -10,6 +10,7 @@
     "model_type": "Method",
     "n_components": "Latent Variables / PCs",
     "ridge_alpha": "Ridge Alpha",
+    "lasso_alpha": "Lasso Alpha",
     "local_method": "Local Regression Mode",
     "local_distance": "Local Distance Metric",
     "n_neighbors": "Number of Neighbors",
@@ -20,6 +21,7 @@
     "optimize_parameters": "Optimize Parameter",
     "n_components_range": "LV/PC Optimization Range",
     "ridge_alpha_range": "Ridge Alpha Optimization Range",
+    "lasso_alpha_range": "Lasso Alpha Optimization Range",
     "n_neighbors_range": "Neighbors Optimization Range",
     "idw_power_range": "IDW Power Optimization Range",
     "adaptive_alpha_range": "Adaptive Alpha Optimization Range",
@@ -39,8 +41,8 @@
     "cv_results": "CV Results",
     "optimization_results": "Optimization Results"
   },
-  "short_description": "Unified first-order calibration with OLS, PLS, PCR, Ridge, and Local Regression",
-  "long_description": "Builds first-order calibration models for quantitative prediction with optional parameter optimization. Supports OLS, PLS, PCR, Ridge, and Local Regression (KNN, IDW, Adaptive Threshold, Radius, Kernel), computes calibration/CV/validation statistics, supports multiple local distance metrics, and exposes optimization curves for model tuning.",
+  "short_description": "Unified first-order calibration with OLS, PLS, PCR, Ridge, Lasso, and Local Regression",
+  "long_description": "Builds first-order calibration models for quantitative prediction with optional parameter optimization. Supports OLS, PLS, PCR, Ridge, Lasso, and Local Regression (KNN, IDW, Adaptive Threshold, Radius, Kernel), computes calibration/CV/validation statistics, supports multiple local distance metrics, and exposes optimization curves for model tuning.",
   "setup": {
     "categories": [
       "Model Parameters",
@@ -61,6 +63,7 @@
           "pls",
           "pcr",
           "ridge",
+          "lasso",
           "local"
         ],
         "value_aliases": [
@@ -68,11 +71,12 @@
           "Partial Least Squares",
           "Principal Component Regression",
           "Ridge Regression",
+          "Lasso Regression",
           "Local Regression"
         ],
         "required": true,
         "input_type": "user",
-        "tooltip": "Calibration method: OLS, PLS, PCR, Ridge, or Local Regression"
+        "tooltip": "Calibration method: OLS, PLS, PCR, Ridge, Lasso, or Local Regression"
       },
       {
         "name": "local_method",
@@ -149,6 +153,21 @@
           "optimize_parameters": false
         },
         "tooltip": "Fixed ridge regularization value when optimization is OFF"
+      },
+      {
+        "name": "lasso_alpha",
+        "label": "Lasso Alpha",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "lasso",
+          "optimize_parameters": false
+        },
+        "tooltip": "Fixed lasso regularization value when optimization is OFF"
       },
       {
         "name": "n_neighbors",
@@ -275,6 +294,21 @@
           "model_type": "ridge"
         },
         "tooltip": "Positive alpha values to test for ridge regularization"
+      },
+      {
+        "name": "lasso_alpha_range",
+        "label": "Lasso Alpha Optimization Range",
+        "category": "Optimization",
+        "widget": "entry",
+        "type": "str",
+        "default": "0.0001,0.001,0.01,0.1,1,10,100",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "optimize_parameters": true,
+          "model_type": "lasso"
+        },
+        "tooltip": "Positive alpha values to test for lasso regularization"
       },
       {
         "name": "n_neighbors_range",
