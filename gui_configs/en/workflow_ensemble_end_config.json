@@ -1,0 +1,13 @@
+{
+  "display_name": "Ensemble End",
+  "category": "8.Ensemble",
+  "data_type": "workflow",
+  "input_aliases": {},
+  "output_aliases": {},
+  "short_description": "End an ensemble wrapper block.",
+  "long_description": "Closes the active ensemble block and continues regular pipeline execution with aggregated ensemble outputs available for routing.",
+  "setup": {
+    "categories": ["Ensemble"],
+    "layout": []
+  }
+}

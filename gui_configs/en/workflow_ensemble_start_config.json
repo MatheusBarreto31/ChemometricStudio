@@ -1,0 +1,380 @@
+{
+  "display_name": "Ensemble Start",
+  "category": "8.Ensemble",
+  "data_type": "workflow",
+  "input_aliases": {
+    "ensemble_task_type": "Ensemble Task Type",
+    "regression_aggregation_method": "Regression Aggregation",
+    "classification_aggregation_method": "Classification Aggregation",
+    "weights": "Member Weights",
+    "smp_cal": "Calibration Sample IDs",
+    "smp_val": "Validation Sample IDs",
+    "X_cal": "Calibration Features",
+    "X_val": "Validation Features",
+    "cv_config": "CV Configuration",
+    "stacking_use_passthrough": "Stacking Passthrough",
+    "stacking_n_jobs": "Stacking Parallel Jobs",
+    "stacking_verbose": "Stacking Verbosity",
+    "stacking_regression_model": "Regression Stacker",
+    "stacking_regression_alpha": "Regression Alpha",
+    "stacking_regression_n_estimators": "Regression Trees",
+    "stacking_regression_max_depth": "Regression Tree Depth",
+    "stacking_classification_model": "Classification Stacker",
+    "stacking_classification_c": "Classification C",
+    "stacking_classification_max_iter": "Classification Max Iterations",
+    "stacking_classification_n_estimators": "Classification Trees",
+    "stacking_classification_max_depth": "Classification Tree Depth",
+    "stacking_regression_fit_intercept": "Regression Stacker Intercept",
+    "stacking_classification_fit_intercept": "Classification Stacker Intercept"
+  },
+  "output_aliases": {
+    "y_cal_pred": "Ensemble Calibration Prediction",
+    "y_val_pred": "Ensemble Validation Prediction",
+    "y_cv_pred": "Ensemble CV Prediction",
+    "y_cal_true": "Calibration Reference",
+    "y_val_true": "Validation Reference",
+    "class_cal_pred": "Ensemble Calibration Class Prediction",
+    "class_val_pred": "Ensemble Validation Class Prediction",
+    "class_cv_pred": "Ensemble CV Class Prediction",
+    "class_cal_true": "Calibration Class Reference",
+    "class_val_true": "Validation Class Reference",
+    "smp_cal": "Calibration Sample IDs",
+    "smp_val": "Validation Sample IDs",
+    "metrics": "Metrics",
+    "cv_results": "CV Results",
+    "member_sources": "Member Sources",
+    "member_count": "Member Count",
+    "aggregation_method": "Aggregation Method",
+    "ensemble_task_type": "Ensemble Task Type"
+  },
+  "short_description": "Start an ensemble wrapper block.",
+  "long_description": "Functions between Ensemble Start and Ensemble End are treated as independent ensemble members separated by Ensemble Member markers. Member predictions are aligned by sample IDs and then aggregated according to task type and aggregation method.",
+  "execution_report_specs": {
+    "messages": {},
+    "warnings": {},
+    "errors": {
+      "stacking_requires_cv_config": "Stacking requires a routed CV Configuration on Ensemble Start.",
+      "stacking_requires_cv_enabled": "Stacking requires CV Configuration with use_cv enabled on Ensemble Start."
+    }
+  },
+  "setup": {
+    "categories": ["Ensemble"],
+    "layout": [
+      {
+        "name": "ensemble_task_type",
+        "label": "Task Type",
+        "category": "Ensemble",
+        "widget": "combobox",
+        "values": ["regression", "classification"],
+        "value_aliases": ["Regression", "Classification"],
+        "default": "regression",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Select regression or classification; this determines supported aggregation behavior"
+      },
+      {
+        "name": "regression_aggregation_method",
+        "label": "Regression Aggregation",
+        "category": "Ensemble",
+        "widget": "combobox",
+        "values": ["mean", "weighted_mean", "median", "stacking"],
+        "value_aliases": ["Mean", "Weighted Mean", "Median", "Stacking"],
+        "default": "mean",
+        "required": true,
+        "input_type": "user",
+        "visible_if": {"ensemble_task_type": "regression"},
+        "tooltip": "Aggregation method used when ensemble task type is regression"
+      },
+      {
+        "name": "classification_aggregation_method",
+        "label": "Classification Aggregation",
+        "category": "Ensemble",
+        "widget": "combobox",
+        "values": ["majority_vote", "weighted_vote", "stacking"],
+        "value_aliases": ["Majority Vote", "Weighted Vote", "Stacking"],
+        "default": "majority_vote",
+        "required": true,
+        "input_type": "user",
+        "visible_if": {"ensemble_task_type": "classification"},
+        "tooltip": "Aggregation method used when ensemble task type is classification"
+      },
+      {
+        "name": "smp_cal",
+        "label": "Calibration Sample IDs",
+        "category": "Ensemble",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed sample IDs for calibration alignment (auto-matches smp_cal outputs)"
+      },
+      {
+        "name": "smp_val",
+        "label": "Validation Sample IDs",
+        "category": "Ensemble",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed sample IDs for validation alignment (auto-matches smp_val outputs)"
+      },
+      {
+        "name": "X_cal",
+        "label": "Calibration Features",
+        "category": "Ensemble",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed calibration feature matrix for stacking passthrough"
+      },
+      {
+        "name": "X_val",
+        "label": "Validation Features",
+        "category": "Ensemble",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed validation feature matrix for stacking passthrough"
+      },
+      {
+        "name": "cv_config",
+        "label": "CV Configuration",
+        "category": "Ensemble",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed CV configuration. Required when stacking aggregation is selected"
+      },
+      {
+        "name": "weights",
+        "label": "Member Weights",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Comma-separated weights for weighted methods, for example 1,2,1"
+      },
+      {
+        "name": "stacking_use_passthrough",
+        "label": "Stacking Passthrough",
+        "category": "Ensemble",
+        "widget": "checkbutton",
+        "type": "bool",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "regression_aggregation_method": "stacking"
+        },
+        "tooltip": "Append original X features to meta-features when fitting/predicting the stacker"
+      },
+      {
+        "name": "stacking_n_jobs",
+        "label": "Stacking Parallel Jobs",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "regression_aggregation_method": "stacking"
+        },
+        "tooltip": "Number of parallel jobs for compatible stacking estimators (for example random forest)"
+      },
+      {
+        "name": "stacking_verbose",
+        "label": "Stacking Verbosity",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "int",
+        "default": "0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "regression_aggregation_method": "stacking"
+        },
+        "tooltip": "Verbosity level for compatible stacking estimators"
+      },
+      {
+        "name": "stacking_regression_model",
+        "label": "Regression Stacker",
+        "category": "Ensemble",
+        "widget": "combobox",
+        "values": ["linear", "ridge", "random_forest"],
+        "value_aliases": ["Linear Regression", "Ridge Regression", "Random Forest"],
+        "default": "linear",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "regression",
+          "regression_aggregation_method": "stacking"
+        },
+        "tooltip": "Meta-model used by regression stacking"
+      },
+      {
+        "name": "stacking_regression_alpha",
+        "label": "Regression Alpha",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "regression",
+          "regression_aggregation_method": "stacking",
+          "stacking_regression_model": "ridge"
+        },
+        "tooltip": "Regularization alpha used by ridge regression stacker"
+      },
+      {
+        "name": "stacking_regression_n_estimators",
+        "label": "Regression Trees",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "int",
+        "default": "200",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "regression",
+          "regression_aggregation_method": "stacking",
+          "stacking_regression_model": "random_forest"
+        },
+        "tooltip": "Number of trees used by random forest regression stacker"
+      },
+      {
+        "name": "stacking_regression_max_depth",
+        "label": "Regression Tree Depth",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "int",
+        "default": "0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "regression",
+          "regression_aggregation_method": "stacking",
+          "stacking_regression_model": "random_forest"
+        },
+        "tooltip": "Maximum depth for random forest regression stacker (0 = unlimited)"
+      },
+      {
+        "name": "stacking_classification_model",
+        "label": "Classification Stacker",
+        "category": "Ensemble",
+        "widget": "combobox",
+        "values": ["logistic", "random_forest"],
+        "value_aliases": ["Logistic Regression", "Random Forest"],
+        "default": "logistic",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "classification",
+          "classification_aggregation_method": "stacking"
+        },
+        "tooltip": "Meta-model used by classification stacking"
+      },
+      {
+        "name": "stacking_classification_c",
+        "label": "Classification C",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "classification",
+          "classification_aggregation_method": "stacking"
+        },
+        "tooltip": "Inverse regularization strength C for logistic regression stacker"
+      },
+      {
+        "name": "stacking_classification_max_iter",
+        "label": "Classification Max Iterations",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "int",
+        "default": "1000",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "classification",
+          "classification_aggregation_method": "stacking"
+        },
+        "tooltip": "Maximum training iterations for logistic regression stacker"
+      },
+      {
+        "name": "stacking_classification_n_estimators",
+        "label": "Classification Trees",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "int",
+        "default": "200",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "classification",
+          "classification_aggregation_method": "stacking",
+          "stacking_classification_model": "random_forest"
+        },
+        "tooltip": "Number of trees used by random forest classification stacker"
+      },
+      {
+        "name": "stacking_classification_max_depth",
+        "label": "Classification Tree Depth",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "int",
+        "default": "0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "classification",
+          "classification_aggregation_method": "stacking",
+          "stacking_classification_model": "random_forest"
+        },
+        "tooltip": "Maximum depth for random forest classification stacker (0 = unlimited)"
+      },
+      {
+        "name": "stacking_regression_fit_intercept",
+        "label": "Regression Stacker Intercept",
+        "category": "Ensemble",
+        "widget": "checkbutton",
+        "type": "bool",
+        "default": true,
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "regression",
+          "regression_aggregation_method": "stacking",
+          "stacking_regression_model": ["linear", "ridge"]
+        },
+        "tooltip": "Whether the regression stacking meta-model includes an intercept term"
+      },
+      {
+        "name": "stacking_classification_fit_intercept",
+        "label": "Classification Stacker Intercept",
+        "category": "Ensemble",
+        "widget": "checkbutton",
+        "type": "bool",
+        "default": true,
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "classification",
+          "classification_aggregation_method": "stacking",
+          "stacking_classification_model": "logistic"
+        },
+        "tooltip": "Whether the classification stacking meta-model includes an intercept term"
+      }
+    ]
+  }
+}

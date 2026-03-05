@@ -279,7 +279,10 @@ class ChemometricsGUI:
             "workflow_loop_end",
             "workflow_parallel_start",
             "workflow_parallel_branch",
-            "workflow_parallel_end"
+            "workflow_parallel_end",
+            "workflow_ensemble_start",
+            "workflow_ensemble_member",
+            "workflow_ensemble_end"
         }
         self.gui_configs: Dict[str, Dict] = {}  # {func_alias: config_data}
         self.notification_color_schemes: Dict[str, Dict[str, str]] = {
@@ -3775,12 +3778,13 @@ class ChemometricsGUI:
     def _get_workflow_scope_signature(self, target_idx: int) -> Tuple:
         """Return active workflow scope signature before target index.
 
-        Signature includes loop/parallel nesting and current parallel branch so auto-routing
+        Signature includes loop/parallel/ensemble nesting and current branch/member so auto-routing
         can be constrained to the same branch context.
         """
         active_stack = []
         loop_counter = 0
         parallel_counter = 0
+        ensemble_counter = 0
 
         for idx in range(max(0, target_idx)):
             base_alias = self.function_base_aliases[idx] if idx < len(self.function_base_aliases) else ""
@@ -3804,6 +3808,20 @@ class ChemometricsGUI:
             elif base_alias == "workflow_parallel_end":
                 for stack_idx in range(len(active_stack) - 1, -1, -1):
                     if active_stack[stack_idx][0] == "parallel":
+                        active_stack.pop(stack_idx)
+                        break
+            elif base_alias == "workflow_ensemble_start":
+                ensemble_counter += 1
+                active_stack.append(("ensemble", ensemble_counter, 1))
+            elif base_alias == "workflow_ensemble_member":
+                for stack_idx in range(len(active_stack) - 1, -1, -1):
+                    if active_stack[stack_idx][0] == "ensemble":
+                        e_type, e_id, e_member = active_stack[stack_idx]
+                        active_stack[stack_idx] = (e_type, e_id, e_member + 1)
+                        break
+            elif base_alias == "workflow_ensemble_end":
+                for stack_idx in range(len(active_stack) - 1, -1, -1):
+                    if active_stack[stack_idx][0] == "ensemble":
                         active_stack.pop(stack_idx)
                         break
 
@@ -3914,6 +3932,12 @@ class ChemometricsGUI:
             text = f"├ {display_name}"
         elif base_alias == "workflow_parallel_end":
             text = f"└ {display_name}"
+        elif base_alias == "workflow_ensemble_start":
+            text = f"┌ {display_name}"
+        elif base_alias == "workflow_ensemble_member":
+            text = f"├ {display_name}"
+        elif base_alias == "workflow_ensemble_end":
+            text = f"└ {display_name}"
         else:
             text = display_name
 
@@ -3929,17 +3953,17 @@ class ChemometricsGUI:
         depth = 0
 
         for idx, base_alias in enumerate(self.function_base_aliases):
-            if base_alias in ("workflow_loop_end", "workflow_parallel_end"):
+            if base_alias in ("workflow_loop_end", "workflow_parallel_end", "workflow_ensemble_end"):
                 depth = max(0, depth - 1)
 
-            if base_alias == "workflow_parallel_branch":
+            if base_alias in ("workflow_parallel_branch", "workflow_ensemble_member"):
                 item_depth = max(0, depth - 1)
             else:
                 item_depth = depth
 
             self.methodology_listbox.insert(tk.END, self._get_methodology_item_display(idx, item_depth))
 
-            if base_alias in ("workflow_loop_start", "workflow_parallel_start"):
+            if base_alias in ("workflow_loop_start", "workflow_parallel_start", "workflow_ensemble_start"):
                 depth += 1
 
         if selected_idx is not None and 0 <= selected_idx < len(self.methodology_list):

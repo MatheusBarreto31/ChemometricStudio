@@ -5,6 +5,9 @@
     "workflow_parallel_start": [],
     "workflow_parallel_branch": [],
     "workflow_parallel_end": [],
+    "workflow_ensemble_start": ["y_cal_pred", "y_val_pred", "y_cv_pred", "y_cal_true", "y_val_true", "class_cal_pred", "class_val_pred", "class_cv_pred", "class_cal_true", "class_val_true", "smp_cal", "smp_val", "metrics", "cv_results", "member_sources", "member_count", "aggregation_method", "ensemble_task_type"],
+    "workflow_ensemble_member": [],
+    "workflow_ensemble_end": [],
     "cv_configuration": ["cv_config"],
     "load_data": ["X_cal", "Y_cal", "axis_t_info", "smp_cal", "axis_n_info", "axis_nature", "dim_labels", "class_data_cal", "cal_metadata"],
     "validation_data_main": ["X_cal", "Y_cal", "X_val", "Y_val", "smp_cal", "smp_val", "class_data_cal", "class_data_val", "cal_metadata", "val_metadata"],
@@ -31,6 +34,9 @@
     "workflow_parallel_start": ["merge_strategy"],
     "workflow_parallel_branch": [],
     "workflow_parallel_end": [],
+    "workflow_ensemble_start": ["ensemble_task_type", "regression_aggregation_method", "classification_aggregation_method", "weights", "smp_cal", "smp_val", "X_cal", "X_val", "cv_config", "stacking_use_passthrough", "stacking_n_jobs", "stacking_verbose", "stacking_regression_model", "stacking_regression_alpha", "stacking_regression_n_estimators", "stacking_regression_max_depth", "stacking_classification_model", "stacking_classification_c", "stacking_classification_max_iter", "stacking_classification_n_estimators", "stacking_classification_max_depth", "stacking_regression_fit_intercept", "stacking_classification_fit_intercept"],
+    "workflow_ensemble_member": [],
+    "workflow_ensemble_end": [],
     "cv_configuration": ["use_cv", "cv_strategy", "n_splits", "random_state", "shuffle", "window_size", "n_repeats", "test_size", "stratify_layer"],
     "load_data": ["d_specs_separator", "d_specs_headlines", "d_specs_type", "d_specs_dimensions", "data_path", "nway_flag", "y_path", "var_path", "smp_path", "transpose", "axis_info", "reshape_order", "multi_file_per_sample", "num_samples", "dim_labels", "axis_nature", "scale_type", "y_from_x", "class_from_x", "smp_from_x", "y_columns", "class_columns", "smp_column", "cdata_path"],
     "validation_data_main": ["X_cal", "Y_cal", "smp_cal", "class_data_cal", "cal_metadata", "validation_mode", "createVal", "creationMethod", "calProportion", "random_seed", "selection_file", "X_val_path", "Y_val_path", "val_labels_path", "cdata_path", "d_specs_separator", "d_specs_headlines", "d_specs_type", "d_specs_dimensions", "data_path", "y_path", "var_path", "smp_path", "transpose", "nway_flag", "reshape_order"],
@@ -65,6 +71,9 @@
     "workflow_parallel_start": ["builtins", "print"],
     "workflow_parallel_branch": ["builtins", "print"],
     "workflow_parallel_end": ["builtins", "print"],
+    "workflow_ensemble_start": ["builtins", "print"],
+    "workflow_ensemble_member": ["builtins", "print"],
+    "workflow_ensemble_end": ["builtins", "print"],
     "cv_configuration": ["chemometrics.cv_pipeline", "cv_configuration"],
     "load_data": ["chemometrics.data_input", "load_data"],
     "validation_data_main": ["chemometrics.validation_data_input", "validation_data_main"],
@@ -90,6 +99,15 @@
     },
     "workflow_parallel_end": {
       "config_path": "gui_configs/workflow_parallel_end_config.json"
+    },
+    "workflow_ensemble_start": {
+      "config_path": "gui_configs/workflow_ensemble_start_config.json"
+    },
+    "workflow_ensemble_member": {
+      "config_path": "gui_configs/workflow_ensemble_member_config.json"
+    },
+    "workflow_ensemble_end": {
+      "config_path": "gui_configs/workflow_ensemble_end_config.json"
     },
     "cv_configuration": {
       "config_path": "gui_configs/cv_configuration_config.json"
@@ -137,6 +155,33 @@
     },
     "workflow_parallel_branch": {},
     "workflow_parallel_end": {},
+    "workflow_ensemble_start": {
+      "ensemble_task_type": "str",
+      "regression_aggregation_method": "str",
+      "classification_aggregation_method": "str",
+      "weights": "str",
+      "smp_cal": "list",
+      "smp_val": "list",
+      "X_cal": "ndarray",
+      "X_val": "ndarray",
+      "cv_config": "CVConfig",
+      "stacking_use_passthrough": "bool",
+      "stacking_n_jobs": "int",
+      "stacking_verbose": "int",
+      "stacking_regression_model": "str",
+      "stacking_regression_alpha": "float",
+      "stacking_regression_n_estimators": "int",
+      "stacking_regression_max_depth": "int",
+      "stacking_classification_model": "str",
+      "stacking_classification_c": "float",
+      "stacking_classification_max_iter": "int",
+      "stacking_classification_n_estimators": "int",
+      "stacking_classification_max_depth": "int",
+      "stacking_regression_fit_intercept": "bool",
+      "stacking_classification_fit_intercept": "bool"
+    },
+    "workflow_ensemble_member": {},
+    "workflow_ensemble_end": {},
     "cv_configuration": {
       "use_cv": "bool",
       "cv_strategy": "str",

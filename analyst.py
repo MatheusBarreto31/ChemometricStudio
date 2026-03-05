@@ -19,11 +19,13 @@ def analyst_main(
     global nway_flag
 
     import ast
+    from collections import Counter
     import copy
     import importlib
     import json
     import warnings
     from datetime import datetime
+    import numpy as np
     from chemometrics.input_parsing import parse_numeric_spec
     
     # Load model configuration from model.json
@@ -47,7 +49,10 @@ def analyst_main(
         "workflow_loop_end",
         "workflow_parallel_start",
         "workflow_parallel_branch",
-        "workflow_parallel_end"
+        "workflow_parallel_end",
+        "workflow_ensemble_start",
+        "workflow_ensemble_member",
+        "workflow_ensemble_end"
     }
 
     # Extract function information from model
@@ -286,9 +291,11 @@ def analyst_main(
     execution_history_by_instance: Dict[str, List[Dict[str, Any]]] = {}
     loop_stack_context: List[Dict[str, Any]] = []
     parallel_stack_context: List[Dict[str, Any]] = []
+    ensemble_stack_context: List[Dict[str, Any]] = []
     sweep_override_stack: List[Dict[str, set]] = []
     loop_counter = 0
     parallel_counter = 0
+    ensemble_counter = 0
 
     def _snapshot_context() -> Dict[str, Any]:
         return {
@@ -308,8 +315,317 @@ def analyst_main(
                     'branch': entry.get('branch')
                 }
                 for entry in parallel_stack_context
+            ],
+            'ensemble_path': [
+                {
+                    'ensemble_id': entry.get('ensemble_id'),
+                    'member': entry.get('member')
+                }
+                for entry in ensemble_stack_context
             ]
         }
+
+    def _parse_weights(raw_value: Any) -> List[float]:
+        if raw_value is None:
+            return []
+        if isinstance(raw_value, list):
+            parsed = []
+            for item in raw_value:
+                try:
+                    parsed.append(float(item))
+                except Exception:
+                    continue
+            return parsed
+        text = str(raw_value).strip()
+        if not text:
+            return []
+        parsed = []
+        for token in [part.strip() for part in text.split(',') if part.strip()]:
+            try:
+                parsed.append(float(token))
+            except Exception:
+                continue
+        return parsed
+
+    def _resolve_control_params(
+        instance_alias: str,
+        base_params: Dict[str, Any],
+        current_outputs: Dict[str, Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Resolve routed values for workflow-control nodes without executing a function call."""
+        params = copy.deepcopy(base_params) if isinstance(base_params, dict) else {}
+        if instance_alias not in routing_map:
+            return params
+
+        for dst_param, source_mappings in routing_map[instance_alias].items():
+            for source_mapping in source_mappings:
+                src_alias = source_mapping.get('src_alias', '')
+                src_param = source_mapping.get('src_param', '')
+                src_nested_key = source_mapping.get('src_nested_key', '')
+                routed_value, found = _resolve_routed_value(src_alias, src_param, src_nested_key, current_outputs)
+                if found:
+                    params[dst_param] = routed_value
+                    break
+        return params
+
+    def _find_latest_output_value(
+        output_key: str,
+        nested_key: str,
+        current_outputs: Dict[str, Dict[str, Any]],
+        range_start: Optional[int] = None,
+        range_end: Optional[int] = None
+    ):
+        search_start = range_end if range_end is not None else len(functions_list) - 1
+        search_end = range_start if range_start is not None else 0
+        if search_start < search_end:
+            return None, False, None
+
+        for list_idx in range(search_start, search_end - 1, -1):
+            entry = functions_list[list_idx]
+            src_alias = entry['instance_alias']
+            src_base_alias = entry['base_alias']
+            if src_base_alias in workflow_control_aliases:
+                continue
+            resolved_value, found = _resolve_routed_value(src_alias, output_key, nested_key, current_outputs)
+            if found:
+                return resolved_value, True, src_alias
+        return None, False, None
+
+    def _coerce_sample_ids(sample_ids: Any) -> List[str]:
+        arr = np.asarray(sample_ids)
+        if arr.ndim == 0:
+            return [str(arr.item())]
+        return [str(item) for item in arr.reshape(-1)]
+
+    def _align_prediction_by_sample_ids(prediction: Any, source_sample_ids: Any, reference_sample_ids: Any):
+        pred_arr = np.asarray(prediction)
+        if pred_arr.ndim == 0:
+            raise ValueError("Prediction output must be array-like with sample axis in position 0")
+
+        src_ids = _coerce_sample_ids(source_sample_ids)
+        ref_ids = _coerce_sample_ids(reference_sample_ids)
+
+        if pred_arr.shape[0] != len(src_ids):
+            raise ValueError(
+                f"Prediction sample count ({pred_arr.shape[0]}) does not match source sample id count ({len(src_ids)})"
+            )
+
+        id_counter = Counter(src_ids)
+        duplicated = [sample_id for sample_id, count in id_counter.items() if count > 1]
+        if duplicated:
+            raise ValueError(
+                f"Duplicate sample ids are not supported for ensemble alignment: {duplicated[:5]}"
+            )
+
+        index_map = {sample_id: idx for idx, sample_id in enumerate(src_ids)}
+        try:
+            aligned_indices = [index_map[sample_id] for sample_id in ref_ids]
+        except KeyError as exc:
+            raise ValueError(f"Missing sample id during ensemble alignment: {exc}")
+
+        return pred_arr[aligned_indices]
+
+    def _aggregate_member_predictions(
+        task_type: str,
+        aggregation_method: str,
+        aligned_predictions: List[np.ndarray],
+        parsed_weights: List[float],
+        y_true: Optional[np.ndarray] = None,
+        stacking_regression_model: str = 'linear',
+        stacking_regression_alpha: float = 1.0,
+        stacking_classification_model: str = 'logistic',
+        stacking_classification_c: float = 1.0,
+        stacking_classification_max_iter: int = 1000,
+        stacking_fit_intercept: bool = True,
+    ) -> np.ndarray:
+        if not aligned_predictions:
+            raise ValueError("No member predictions available for ensemble aggregation")
+
+        normalized_task = str(task_type or "regression").lower()
+        method = str(aggregation_method or "mean").lower()
+
+        def _build_numeric_meta_matrix(predictions: List[np.ndarray]) -> np.ndarray:
+            cols: List[np.ndarray] = []
+            sample_count: Optional[int] = None
+            for pred in predictions:
+                arr = np.asarray(pred)
+                if arr.ndim == 1:
+                    col = arr.reshape(-1, 1)
+                elif arr.ndim == 2 and arr.shape[1] == 1:
+                    col = arr
+                else:
+                    raise ValueError("Stacking currently supports only single-output predictions per member")
+                if sample_count is None:
+                    sample_count = col.shape[0]
+                elif col.shape[0] != sample_count:
+                    raise ValueError("All member predictions must have the same sample count")
+                cols.append(col.astype(float))
+            return np.hstack(cols)
+
+        def _build_label_meta_matrix(predictions: List[np.ndarray]) -> np.ndarray:
+            cols: List[np.ndarray] = []
+            sample_count: Optional[int] = None
+            for pred in predictions:
+                arr = np.asarray(pred)
+                if arr.ndim == 1:
+                    col = arr.reshape(-1, 1)
+                elif arr.ndim == 2 and arr.shape[1] == 1:
+                    col = arr
+                else:
+                    raise ValueError("Classification stacking currently supports one label per sample/member")
+                if sample_count is None:
+                    sample_count = col.shape[0]
+                elif col.shape[0] != sample_count:
+                    raise ValueError("All member predictions must have the same sample count")
+                cols.append(col.astype(object))
+            return np.hstack(cols)
+
+        def _stacking_fit_predict(
+            train_predictions: List[np.ndarray],
+            predict_predictions: List[np.ndarray],
+            y_train: np.ndarray,
+        ) -> np.ndarray:
+            y_arr = np.asarray(y_train)
+            if y_arr.ndim == 2 and y_arr.shape[1] == 1:
+                y_arr = y_arr.reshape(-1)
+            elif y_arr.ndim > 1:
+                raise ValueError("Stacking currently supports only single-output target arrays")
+
+            if normalized_task == "classification":
+                try:
+                    from sklearn.linear_model import LogisticRegression
+                    from sklearn.preprocessing import OneHotEncoder
+                except Exception as exc:
+                    raise ValueError(f"Classification stacking requires scikit-learn: {exc}")
+
+                X_train_labels = _build_label_meta_matrix(train_predictions)
+                X_predict_labels = _build_label_meta_matrix(predict_predictions)
+                model_name = str(stacking_classification_model or 'logistic').lower()
+                if model_name != 'logistic':
+                    raise ValueError(f"Unsupported classification stacking model: {model_name}")
+
+                try:
+                    encoder = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
+                except TypeError:
+                    encoder = OneHotEncoder(handle_unknown='ignore', sparse=False)
+                X_train = encoder.fit_transform(X_train_labels)
+                X_predict = encoder.transform(X_predict_labels)
+                clf = LogisticRegression(
+                    C=float(stacking_classification_c),
+                    max_iter=max(100, int(stacking_classification_max_iter)),
+                    fit_intercept=bool(stacking_fit_intercept),
+                )
+                clf.fit(X_train, y_arr)
+                return np.asarray(clf.predict(X_predict), dtype=object)
+
+            try:
+                from sklearn.linear_model import LinearRegression, Ridge
+            except Exception as exc:
+                raise ValueError(f"Regression stacking requires scikit-learn: {exc}")
+
+            X_train = _build_numeric_meta_matrix(train_predictions)
+            X_predict = _build_numeric_meta_matrix(predict_predictions)
+            reg_model = str(stacking_regression_model or 'linear').lower()
+            if reg_model == 'ridge':
+                reg = Ridge(alpha=float(stacking_regression_alpha), fit_intercept=bool(stacking_fit_intercept))
+            else:
+                reg = LinearRegression(fit_intercept=bool(stacking_fit_intercept))
+            reg.fit(X_train, y_arr.astype(float))
+            return np.asarray(reg.predict(X_predict), dtype=float)
+
+        if method == "stacking":
+            if y_true is None:
+                raise ValueError("Stacking aggregation requires true target labels")
+            return _stacking_fit_predict(aligned_predictions, aligned_predictions, np.asarray(y_true))
+
+        if normalized_task == "classification":
+            member_labels = [np.asarray(pred).reshape(len(pred), -1)[:, 0] for pred in aligned_predictions]
+            sample_count = member_labels[0].shape[0]
+            for labels in member_labels:
+                if labels.shape[0] != sample_count:
+                    raise ValueError("Classification member predictions must have matching sample counts")
+
+            if method not in ("majority_vote", "weighted_vote"):
+                method = "majority_vote"
+
+            weights = np.asarray(parsed_weights, dtype=float) if parsed_weights else np.ones(len(member_labels), dtype=float)
+            if weights.shape[0] != len(member_labels) or np.allclose(np.sum(weights), 0.0):
+                weights = np.ones(len(member_labels), dtype=float)
+
+            winners: List[Any] = []
+            for sample_idx in range(sample_count):
+                vote_scores: Dict[Any, float] = {}
+                for member_idx, labels in enumerate(member_labels):
+                    label = labels[sample_idx]
+                    weight = float(weights[member_idx]) if method == "weighted_vote" else 1.0
+                    vote_scores[label] = vote_scores.get(label, 0.0) + weight
+                winners.append(max(vote_scores.items(), key=lambda item: item[1])[0])
+            return np.asarray(winners, dtype=object)
+
+        stacked = np.stack([np.asarray(pred, dtype=float) for pred in aligned_predictions], axis=0)
+        if method == "median":
+            return np.median(stacked, axis=0)
+
+        if method == "weighted_mean":
+            weights = np.asarray(parsed_weights, dtype=float) if parsed_weights else np.ones(stacked.shape[0], dtype=float)
+            if weights.shape[0] != stacked.shape[0] or np.allclose(np.sum(weights), 0.0):
+                weights = np.ones(stacked.shape[0], dtype=float)
+            return np.tensordot(weights, stacked, axes=(0, 0)) / np.sum(weights)
+
+        return np.mean(stacked, axis=0)
+
+    def _collect_member_prediction_arrays(
+        prediction_key: str,
+        member_output_snapshots: List[Dict[str, Dict[str, Any]]],
+        member_ranges: List[Tuple[int, int]],
+        provided_smp_cal: Any,
+        provided_smp_val: Any,
+    ) -> Tuple[Optional[List[np.ndarray]], Optional[List[str]], Optional[np.ndarray]]:
+        member_prediction_arrays: List[np.ndarray] = []
+        member_sources: List[str] = []
+        reference_sample_ids = None
+
+        for member_position, snapshot in enumerate(member_output_snapshots, start=1):
+            range_start, range_end = member_ranges[member_position - 1]
+            prediction_value, found_prediction, source_alias = _find_latest_output_value(
+                output_key=prediction_key,
+                nested_key='',
+                current_outputs=snapshot,
+                range_start=range_start,
+                range_end=range_end,
+            )
+            if not found_prediction:
+                return None, None, None
+
+            uses_validation_ids = "_val" in prediction_key
+            default_id_key = "smp_val" if uses_validation_ids else "smp_cal"
+            configured_sample_ids = provided_smp_val if uses_validation_ids else provided_smp_cal
+            sample_ids_value, sample_ids_found, _ = _find_latest_output_value(
+                output_key=default_id_key,
+                nested_key="",
+                current_outputs=snapshot,
+                range_start=0,
+                range_end=range_end,
+            )
+            if not sample_ids_found and configured_sample_ids is not None:
+                sample_ids_value = configured_sample_ids
+                sample_ids_found = True
+            if not sample_ids_found:
+                raise ValueError(
+                    f"Ensemble member {member_position} is missing sample ids for alignment ({default_id_key})"
+                )
+
+            if reference_sample_ids is None:
+                reference_sample_ids = configured_sample_ids if configured_sample_ids is not None else sample_ids_value
+            aligned_prediction = _align_prediction_by_sample_ids(
+                prediction=prediction_value,
+                source_sample_ids=sample_ids_value,
+                reference_sample_ids=reference_sample_ids,
+            )
+            member_prediction_arrays.append(aligned_prediction)
+            member_sources.append(source_alias or f"member_{member_position}")
+
+        return member_prediction_arrays, member_sources, np.asarray(reference_sample_ids) if reference_sample_ids is not None else None
 
     def _execute_regular_function(entry: Dict[str, Any], current_outputs: Dict[str, Dict[str, Any]]):
         nonlocal executed_steps
@@ -425,7 +741,7 @@ def analyst_main(
                 pass
 
     def _execute_range(start_idx: int, end_idx: int, current_outputs: Dict[str, Dict[str, Any]]):
-        nonlocal loop_counter, parallel_counter
+        nonlocal loop_counter, parallel_counter, ensemble_counter
         idx = start_idx
         while idx <= end_idx and idx < len(functions_list):
             entry = functions_list[idx]
@@ -616,7 +932,501 @@ def analyst_main(
                 idx = parallel_end_idx + 1
                 continue
 
-            if base_alias in ("workflow_loop_end", "workflow_parallel_branch", "workflow_parallel_end"):
+            if base_alias == "workflow_ensemble_start":
+                ensemble_end_idx = _find_matching_end(idx, "workflow_ensemble_start", "workflow_ensemble_end")
+                if ensemble_end_idx < 0:
+                    print("Warning: Ensemble Start without matching Ensemble End. Skipping control node.")
+                    idx += 1
+                    continue
+
+                ensemble_instance_alias = entry['instance_alias']
+                raw_ensemble_params = functions_info.get(ensemble_instance_alias, {}).get('parameters', {})
+                ensemble_params = _resolve_control_params(ensemble_instance_alias, raw_ensemble_params, current_outputs)
+                ensemble_task_type = str(ensemble_params.get('ensemble_task_type', 'regression') or 'regression').lower()
+                regression_aggregation_method = str(
+                    ensemble_params.get('regression_aggregation_method', 'mean') or 'mean'
+                ).lower()
+                classification_aggregation_method = str(
+                    ensemble_params.get('classification_aggregation_method', 'majority_vote') or 'majority_vote'
+                ).lower()
+                aggregation_method = (
+                    classification_aggregation_method
+                    if ensemble_task_type == 'classification'
+                    else regression_aggregation_method
+                )
+                cv_config_for_stacking = ensemble_params.get('cv_config', None)
+                if isinstance(cv_config_for_stacking, dict) and 'cv_config' in cv_config_for_stacking:
+                    cv_config_for_stacking = cv_config_for_stacking.get('cv_config')
+
+                cv_enabled_for_stacking = False
+                if cv_config_for_stacking is not None:
+                    if hasattr(cv_config_for_stacking, 'is_enabled'):
+                        try:
+                            cv_enabled_for_stacking = bool(cv_config_for_stacking.is_enabled())
+                        except Exception:
+                            cv_enabled_for_stacking = False
+                    elif isinstance(cv_config_for_stacking, dict):
+                        cv_enabled_for_stacking = bool(cv_config_for_stacking.get('use_cv', False))
+
+                if aggregation_method == 'stacking' and cv_config_for_stacking is None:
+                    error_text = "Stacking requires routed cv_config on Ensemble Start."
+                    _append_execution_report_entry(
+                        instance_alias=ensemble_instance_alias,
+                        base_alias=base_alias,
+                        level='error',
+                        code='stacking_requires_cv_config',
+                        text=error_text,
+                        source='workflow_control',
+                    )
+                    raise ValueError(error_text)
+
+                if aggregation_method == 'stacking' and not cv_enabled_for_stacking:
+                    error_text = "Stacking requires cv_config.use_cv=True on Ensemble Start."
+                    _append_execution_report_entry(
+                        instance_alias=ensemble_instance_alias,
+                        base_alias=base_alias,
+                        level='error',
+                        code='stacking_requires_cv_enabled',
+                        text=error_text,
+                        source='workflow_control',
+                    )
+                    raise ValueError(error_text)
+                provided_smp_cal = ensemble_params.get('smp_cal', None)
+                provided_smp_val = ensemble_params.get('smp_val', None)
+                provided_x_cal = ensemble_params.get('X_cal', None)
+                provided_x_val = ensemble_params.get('X_val', None)
+                parsed_weights = _parse_weights(ensemble_params.get('weights', ''))
+                stacking_use_passthrough = bool(ensemble_params.get('stacking_use_passthrough', False))
+                try:
+                    stacking_n_jobs = int(ensemble_params.get('stacking_n_jobs', 1))
+                except Exception:
+                    stacking_n_jobs = 1
+                try:
+                    stacking_verbose = int(ensemble_params.get('stacking_verbose', 0))
+                except Exception:
+                    stacking_verbose = 0
+                stacking_regression_model = str(ensemble_params.get('stacking_regression_model', 'linear') or 'linear').lower()
+                try:
+                    stacking_regression_alpha = float(ensemble_params.get('stacking_regression_alpha', 1.0))
+                except Exception:
+                    stacking_regression_alpha = 1.0
+                try:
+                    stacking_regression_n_estimators = int(ensemble_params.get('stacking_regression_n_estimators', 200))
+                except Exception:
+                    stacking_regression_n_estimators = 200
+                try:
+                    stacking_regression_max_depth = int(ensemble_params.get('stacking_regression_max_depth', 0))
+                except Exception:
+                    stacking_regression_max_depth = 0
+                stacking_classification_model = str(ensemble_params.get('stacking_classification_model', 'logistic') or 'logistic').lower()
+                try:
+                    stacking_classification_c = float(ensemble_params.get('stacking_classification_c', 1.0))
+                except Exception:
+                    stacking_classification_c = 1.0
+                try:
+                    stacking_classification_max_iter = int(ensemble_params.get('stacking_classification_max_iter', 1000))
+                except Exception:
+                    stacking_classification_max_iter = 1000
+                try:
+                    stacking_classification_n_estimators = int(ensemble_params.get('stacking_classification_n_estimators', 200))
+                except Exception:
+                    stacking_classification_n_estimators = 200
+                try:
+                    stacking_classification_max_depth = int(ensemble_params.get('stacking_classification_max_depth', 0))
+                except Exception:
+                    stacking_classification_max_depth = 0
+                stacking_regression_fit_intercept = bool(ensemble_params.get('stacking_regression_fit_intercept', True))
+                stacking_classification_fit_intercept = bool(ensemble_params.get('stacking_classification_fit_intercept', True))
+
+                block_start = idx + 1
+                block_end = ensemble_end_idx - 1
+                if block_start > block_end:
+                    idx = ensemble_end_idx + 1
+                    continue
+
+                member_ranges: List[Tuple[int, int]] = []
+                member_start = block_start
+                nested_ensemble_depth = 0
+                for member_idx in range(block_start, block_end + 1):
+                    member_alias = functions_list[member_idx]['base_alias']
+                    if member_alias == "workflow_ensemble_start":
+                        nested_ensemble_depth += 1
+                    elif member_alias == "workflow_ensemble_end" and nested_ensemble_depth > 0:
+                        nested_ensemble_depth -= 1
+                    elif member_alias == "workflow_ensemble_member" and nested_ensemble_depth == 0:
+                        if member_start <= member_idx - 1:
+                            member_ranges.append((member_start, member_idx - 1))
+                        member_start = member_idx + 1
+                if member_start <= block_end:
+                    member_ranges.append((member_start, block_end))
+
+                if not member_ranges:
+                    print("Warning: Ensemble block has no members to execute.")
+                    idx = ensemble_end_idx + 1
+                    continue
+
+                baseline_outputs = copy.deepcopy(current_outputs)
+                member_output_snapshots: List[Dict[str, Dict[str, Any]]] = []
+
+                ensemble_counter += 1
+                current_ensemble_id = ensemble_counter
+                ensemble_stack_context.append({
+                    'ensemble_id': current_ensemble_id,
+                    'member': 0
+                })
+
+                print(f"\nExecuting ensemble block ({len(member_ranges)} member(s), task={ensemble_task_type}, method={aggregation_method})")
+                for member_position, (range_start, range_end) in enumerate(member_ranges, start=1):
+                    ensemble_stack_context[-1]['member'] = member_position
+                    member_outputs = copy.deepcopy(baseline_outputs)
+                    _execute_range(range_start, range_end, member_outputs)
+                    member_output_snapshots.append(member_outputs)
+
+                y_cal_true_value = None
+                y_val_true_value = None
+                class_cal_true_value = None
+                class_val_true_value = None
+                if member_output_snapshots:
+                    first_snapshot = member_output_snapshots[0]
+                    y_cal_true_value, y_cal_true_found, _ = _find_latest_output_value(
+                        output_key='y_cal_true',
+                        nested_key='',
+                        current_outputs=first_snapshot,
+                        range_start=0,
+                        range_end=len(functions_list) - 1,
+                    )
+                    if not y_cal_true_found:
+                        y_cal_true_value = None
+
+                    y_val_true_value, y_val_true_found, _ = _find_latest_output_value(
+                        output_key='y_val_true',
+                        nested_key='',
+                        current_outputs=first_snapshot,
+                        range_start=0,
+                        range_end=len(functions_list) - 1,
+                    )
+                    if not y_val_true_found:
+                        y_val_true_value = None
+
+                    class_cal_true_value, class_cal_true_found, _ = _find_latest_output_value(
+                        output_key='class_cal_true',
+                        nested_key='',
+                        current_outputs=first_snapshot,
+                        range_start=0,
+                        range_end=len(functions_list) - 1,
+                    )
+                    if not class_cal_true_found:
+                        class_cal_true_value = None
+
+                    class_val_true_value, class_val_true_found, _ = _find_latest_output_value(
+                        output_key='class_val_true',
+                        nested_key='',
+                        current_outputs=first_snapshot,
+                        range_start=0,
+                        range_end=len(functions_list) - 1,
+                    )
+                    if not class_val_true_found:
+                        class_val_true_value = None
+
+                prediction_keys = (
+                    ['class_cal_pred', 'class_val_pred', 'class_cv_pred']
+                    if ensemble_task_type == 'classification'
+                    else ['y_cal_pred', 'y_val_pred', 'y_cv_pred']
+                )
+
+                aggregated_predictions: Dict[str, Optional[np.ndarray]] = {key: None for key in prediction_keys}
+                sample_ids_for_target: Dict[str, Optional[np.ndarray]] = {
+                    'smp_cal': None,
+                    'smp_val': None,
+                }
+                member_sources_by_key: Dict[str, List[str]] = {}
+
+                for prediction_key in prediction_keys:
+                    collected = _collect_member_prediction_arrays(
+                        prediction_key=prediction_key,
+                        member_output_snapshots=member_output_snapshots,
+                        member_ranges=member_ranges,
+                        provided_smp_cal=provided_smp_cal,
+                        provided_smp_val=provided_smp_val,
+                    )
+                    member_prediction_arrays, member_sources, reference_sample_ids = collected
+                    if member_prediction_arrays is None:
+                        continue
+
+                    if aggregation_method == 'stacking':
+                        if ensemble_task_type == 'classification':
+                            train_key_preferred = 'class_cv_pred'
+                            train_true = class_cal_true_value
+                        else:
+                            train_key_preferred = 'y_cv_pred'
+                            train_true = y_cal_true_value
+
+                        train_collected = _collect_member_prediction_arrays(
+                            prediction_key=train_key_preferred,
+                            member_output_snapshots=member_output_snapshots,
+                            member_ranges=member_ranges,
+                            provided_smp_cal=provided_smp_cal,
+                            provided_smp_val=provided_smp_val,
+                        )
+                        train_member_predictions, _train_sources, _train_sample_ids = train_collected
+
+                        if train_member_predictions is None or train_true is None:
+                            raise ValueError(
+                                f"Stacking for {prediction_key} requires training meta-features "
+                                f"({train_key_preferred}) and calibration true targets."
+                            )
+
+                        target_count = np.asarray(train_true).shape[0]
+                        if train_member_predictions and train_member_predictions[0].shape[0] != target_count:
+                            raise ValueError(
+                                f"Stacking training size mismatch: features={train_member_predictions[0].shape[0]}, "
+                                f"target={target_count}"
+                            )
+
+                        # Fit stacker on calibration-derived meta-features, then predict requested target split.
+                        if ensemble_task_type == 'classification':
+                            from sklearn.linear_model import LogisticRegression
+                            from sklearn.ensemble import RandomForestClassifier
+                            from sklearn.preprocessing import OneHotEncoder
+                            X_train_raw = np.hstack([np.asarray(pred).reshape(-1, 1).astype(object) for pred in train_member_predictions])
+                            X_pred_raw = np.hstack([np.asarray(pred).reshape(-1, 1).astype(object) for pred in member_prediction_arrays])
+
+                            if stacking_use_passthrough:
+                                if provided_x_cal is None:
+                                    raise ValueError("Stacking passthrough requires routed X_cal")
+                                if _train_sample_ids is None:
+                                    raise ValueError("Stacking passthrough requires training sample ids")
+
+                                source_ids_for_cal = provided_smp_cal
+                                if source_ids_for_cal is None:
+                                    source_ids_for_cal, source_ids_found, _ = _find_latest_output_value(
+                                        output_key='smp_cal',
+                                        nested_key='',
+                                        current_outputs=current_outputs,
+                                        range_start=0,
+                                        range_end=len(functions_list) - 1,
+                                    )
+                                    if not source_ids_found:
+                                        raise ValueError("Stacking passthrough requires routed smp_cal")
+
+                                X_cal_aligned_for_train = _align_prediction_by_sample_ids(
+                                    prediction=np.asarray(provided_x_cal),
+                                    source_sample_ids=source_ids_for_cal,
+                                    reference_sample_ids=_train_sample_ids,
+                                )
+
+                                if '_val' in prediction_key:
+                                    if provided_x_val is None:
+                                        raise ValueError("Stacking passthrough for validation predictions requires routed X_val")
+                                    source_ids_for_val = provided_smp_val
+                                    if source_ids_for_val is None:
+                                        source_ids_for_val, source_ids_found, _ = _find_latest_output_value(
+                                            output_key='smp_val',
+                                            nested_key='',
+                                            current_outputs=current_outputs,
+                                            range_start=0,
+                                            range_end=len(functions_list) - 1,
+                                        )
+                                        if not source_ids_found:
+                                            raise ValueError("Stacking passthrough for validation predictions requires routed smp_val")
+                                    X_pred_aligned = _align_prediction_by_sample_ids(
+                                        prediction=np.asarray(provided_x_val),
+                                        source_sample_ids=source_ids_for_val,
+                                        reference_sample_ids=reference_sample_ids,
+                                    )
+                                else:
+                                    X_pred_aligned = _align_prediction_by_sample_ids(
+                                        prediction=np.asarray(provided_x_cal),
+                                        source_sample_ids=source_ids_for_cal,
+                                        reference_sample_ids=reference_sample_ids,
+                                    )
+
+                                X_train_raw = np.hstack([X_train_raw, np.asarray(X_cal_aligned_for_train).astype(object)])
+                                X_pred_raw = np.hstack([X_pred_raw, np.asarray(X_pred_aligned).astype(object)])
+
+                            try:
+                                encoder = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
+                            except TypeError:
+                                encoder = OneHotEncoder(handle_unknown='ignore', sparse=False)
+                            X_train = encoder.fit_transform(X_train_raw)
+                            X_pred = encoder.transform(X_pred_raw)
+                            if stacking_classification_model == 'random_forest':
+                                max_depth = stacking_classification_max_depth if stacking_classification_max_depth > 0 else None
+                                clf = RandomForestClassifier(
+                                    n_estimators=max(10, int(stacking_classification_n_estimators)),
+                                    max_depth=max_depth,
+                                    n_jobs=stacking_n_jobs,
+                                    verbose=max(0, stacking_verbose),
+                                )
+                            else:
+                                clf = LogisticRegression(
+                                    C=float(stacking_classification_c),
+                                    max_iter=max(100, int(stacking_classification_max_iter)),
+                                    fit_intercept=bool(stacking_classification_fit_intercept),
+                                )
+                            clf.fit(X_train, np.asarray(train_true).reshape(-1))
+                            aggregated_predictions[prediction_key] = np.asarray(clf.predict(X_pred), dtype=object)
+                        else:
+                            from sklearn.linear_model import LinearRegression, Ridge
+                            from sklearn.ensemble import RandomForestRegressor
+                            X_train = np.hstack([np.asarray(pred).reshape(-1, 1).astype(float) for pred in train_member_predictions])
+                            X_pred = np.hstack([np.asarray(pred).reshape(-1, 1).astype(float) for pred in member_prediction_arrays])
+
+                            if stacking_use_passthrough:
+                                if provided_x_cal is None:
+                                    raise ValueError("Stacking passthrough requires routed X_cal")
+                                if _train_sample_ids is None:
+                                    raise ValueError("Stacking passthrough requires training sample ids")
+
+                                source_ids_for_cal = provided_smp_cal
+                                if source_ids_for_cal is None:
+                                    source_ids_for_cal, source_ids_found, _ = _find_latest_output_value(
+                                        output_key='smp_cal',
+                                        nested_key='',
+                                        current_outputs=current_outputs,
+                                        range_start=0,
+                                        range_end=len(functions_list) - 1,
+                                    )
+                                    if not source_ids_found:
+                                        raise ValueError("Stacking passthrough requires routed smp_cal")
+
+                                X_cal_aligned_for_train = _align_prediction_by_sample_ids(
+                                    prediction=np.asarray(provided_x_cal),
+                                    source_sample_ids=source_ids_for_cal,
+                                    reference_sample_ids=_train_sample_ids,
+                                )
+
+                                if '_val' in prediction_key:
+                                    if provided_x_val is None:
+                                        raise ValueError("Stacking passthrough for validation predictions requires routed X_val")
+                                    source_ids_for_val = provided_smp_val
+                                    if source_ids_for_val is None:
+                                        source_ids_for_val, source_ids_found, _ = _find_latest_output_value(
+                                            output_key='smp_val',
+                                            nested_key='',
+                                            current_outputs=current_outputs,
+                                            range_start=0,
+                                            range_end=len(functions_list) - 1,
+                                        )
+                                        if not source_ids_found:
+                                            raise ValueError("Stacking passthrough for validation predictions requires routed smp_val")
+                                    X_pred_aligned = _align_prediction_by_sample_ids(
+                                        prediction=np.asarray(provided_x_val),
+                                        source_sample_ids=source_ids_for_val,
+                                        reference_sample_ids=reference_sample_ids,
+                                    )
+                                else:
+                                    X_pred_aligned = _align_prediction_by_sample_ids(
+                                        prediction=np.asarray(provided_x_cal),
+                                        source_sample_ids=source_ids_for_cal,
+                                        reference_sample_ids=reference_sample_ids,
+                                    )
+
+                                X_train = np.hstack([X_train, np.asarray(X_cal_aligned_for_train, dtype=float)])
+                                X_pred = np.hstack([X_pred, np.asarray(X_pred_aligned, dtype=float)])
+
+                            if stacking_regression_model == 'ridge':
+                                reg = Ridge(alpha=float(stacking_regression_alpha), fit_intercept=bool(stacking_regression_fit_intercept))
+                            elif stacking_regression_model == 'random_forest':
+                                max_depth = stacking_regression_max_depth if stacking_regression_max_depth > 0 else None
+                                reg = RandomForestRegressor(
+                                    n_estimators=max(10, int(stacking_regression_n_estimators)),
+                                    max_depth=max_depth,
+                                    n_jobs=stacking_n_jobs,
+                                    verbose=max(0, stacking_verbose),
+                                )
+                            else:
+                                reg = LinearRegression(fit_intercept=bool(stacking_regression_fit_intercept))
+                            reg.fit(X_train, np.asarray(train_true).reshape(-1).astype(float))
+                            aggregated_predictions[prediction_key] = np.asarray(reg.predict(X_pred), dtype=float)
+                    else:
+                        aggregated_predictions[prediction_key] = _aggregate_member_predictions(
+                            task_type=ensemble_task_type,
+                            aggregation_method=aggregation_method,
+                            aligned_predictions=member_prediction_arrays,
+                            parsed_weights=parsed_weights,
+                            y_true=None,
+                            stacking_regression_model=stacking_regression_model,
+                            stacking_regression_alpha=stacking_regression_alpha,
+                            stacking_classification_model=stacking_classification_model,
+                            stacking_classification_c=stacking_classification_c,
+                            stacking_classification_max_iter=stacking_classification_max_iter,
+                            stacking_fit_intercept=(
+                                stacking_classification_fit_intercept
+                                if ensemble_task_type == 'classification'
+                                else stacking_regression_fit_intercept
+                            ),
+                        )
+
+                    member_sources_by_key[prediction_key] = member_sources
+
+                    if reference_sample_ids is not None:
+                        if "_val" in prediction_key:
+                            sample_ids_for_target['smp_val'] = np.asarray(reference_sample_ids)
+                        else:
+                            sample_ids_for_target['smp_cal'] = np.asarray(reference_sample_ids)
+
+                # Choose a concise source list for UI (prefer validation, then CV, then calibration)
+                preferred_source_keys = ['y_val_pred', 'y_cv_pred', 'y_cal_pred']
+                if ensemble_task_type == 'classification':
+                    preferred_source_keys = ['class_val_pred', 'class_cv_pred', 'class_cal_pred']
+                member_sources = []
+                for source_key in preferred_source_keys:
+                    if source_key in member_sources_by_key:
+                        member_sources = member_sources_by_key[source_key]
+                        break
+                if not member_sources and member_sources_by_key:
+                    first_key = next(iter(member_sources_by_key.keys()))
+                    member_sources = member_sources_by_key[first_key]
+
+                if not member_sources_by_key:
+                    raise ValueError(
+                        "Ensemble members did not expose any standardized prediction keys to aggregate. "
+                        "Expected regression keys (y_cal_pred/y_val_pred/y_cv_pred) or classification keys "
+                        "(class_cal_pred/class_val_pred/class_cv_pred)."
+                    )
+
+                ensemble_output_payload = {
+                    'y_cal_pred': aggregated_predictions.get('y_cal_pred'),
+                    'y_val_pred': aggregated_predictions.get('y_val_pred'),
+                    'y_cv_pred': aggregated_predictions.get('y_cv_pred'),
+                    'y_cal_true': y_cal_true_value,
+                    'y_val_true': y_val_true_value,
+                    'class_cal_pred': aggregated_predictions.get('class_cal_pred'),
+                    'class_val_pred': aggregated_predictions.get('class_val_pred'),
+                    'class_cv_pred': aggregated_predictions.get('class_cv_pred'),
+                    'class_cal_true': class_cal_true_value,
+                    'class_val_true': class_val_true_value,
+                    'member_sources': member_sources,
+                    'member_count': len(member_output_snapshots),
+                    'aggregation_method': aggregation_method,
+                    'ensemble_task_type': ensemble_task_type,
+                    'smp_cal': sample_ids_for_target.get('smp_cal'),
+                    'smp_val': sample_ids_for_target.get('smp_val'),
+                    'metrics': None,
+                    'cv_results': None,
+                }
+
+                current_outputs.clear()
+                current_outputs.update(baseline_outputs)
+                for snapshot in member_output_snapshots:
+                    current_outputs.update(snapshot)
+
+                current_outputs[ensemble_instance_alias] = ensemble_output_payload
+
+                if ensemble_stack_context:
+                    ensemble_stack_context.pop()
+
+                idx = ensemble_end_idx + 1
+                continue
+
+            if base_alias in (
+                "workflow_loop_end",
+                "workflow_parallel_branch",
+                "workflow_parallel_end",
+                "workflow_ensemble_member",
+                "workflow_ensemble_end",
+            ):
                 idx += 1
                 continue
 

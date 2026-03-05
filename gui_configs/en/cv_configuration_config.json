@@ -1,6 +1,6 @@
 {
   "display_name": "CV Configuration",
-  "category": "3.Configuration",
+  "category": "3.Cross-Validation",
   "data_type": "configuration",
   "input_aliases": {},
   "output_aliases": {

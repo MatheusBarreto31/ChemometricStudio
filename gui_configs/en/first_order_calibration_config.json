@@ -63,6 +63,13 @@
           "ridge",
           "local"
         ],
+        "value_aliases": [
+          "Ordinary Least Squares",
+          "Partial Least Squares",
+          "Principal Component Regression",
+          "Ridge Regression",
+          "Local Regression"
+        ],
         "required": true,
         "input_type": "user",
         "tooltip": "Calibration method: OLS, PLS, PCR, Ridge, or Local Regression"
