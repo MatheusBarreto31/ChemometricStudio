@@ -1,6 +1,6 @@
 {
   "display_name": "First-Order Calibration",
-  "category": "5.Modeling",
+  "category": "5.Regression",
   "data_type": "firstorder",
   "input_aliases": {
     "X_cal": "X Calibration",

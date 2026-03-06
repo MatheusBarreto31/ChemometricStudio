@@ -168,9 +168,6 @@
         "default": false,
         "required": false,
         "input_type": "user",
-        "visible_if": {
-          "regression_aggregation_method": "stacking"
-        },
         "tooltip": "Append original X features to meta-features when fitting/predicting the stacker"
       },
       {
@@ -182,9 +179,6 @@
         "default": "1",
         "required": false,
         "input_type": "user",
-        "visible_if": {
-          "regression_aggregation_method": "stacking"
-        },
         "tooltip": "Number of parallel jobs for compatible stacking estimators (for example random forest)"
       },
       {
@@ -196,9 +190,6 @@
         "default": "0",
         "required": false,
         "input_type": "user",
-        "visible_if": {
-          "regression_aggregation_method": "stacking"
-        },
         "tooltip": "Verbosity level for compatible stacking estimators"
       },
       {
@@ -206,8 +197,8 @@
         "label": "Regression Stacker",
         "category": "Ensemble",
         "widget": "combobox",
-        "values": ["linear", "ridge", "random_forest"],
-        "value_aliases": ["Linear Regression", "Ridge Regression", "Random Forest"],
+        "values": ["linear", "ridge", "random_forest", "extra_trees", "bagging", "adaboost", "gradient_boosting", "hist_gradient_boosting"],
+        "value_aliases": ["Linear Regression", "Ridge Regression", "Random Forest", "Extra Trees", "Bagging", "AdaBoost", "Gradient Boosting", "Histogram Gradient Boosting"],
         "default": "linear",
         "required": false,
         "input_type": "user",
@@ -245,9 +236,9 @@
         "visible_if": {
           "ensemble_task_type": "regression",
           "regression_aggregation_method": "stacking",
-          "stacking_regression_model": "random_forest"
+          "stacking_regression_model": ["random_forest", "extra_trees", "bagging", "adaboost", "gradient_boosting", "hist_gradient_boosting"]
         },
-        "tooltip": "Number of trees used by random forest regression stacker"
+        "tooltip": "Number of estimators/iterations used by supported regression ensemble stackers"
       },
       {
         "name": "stacking_regression_max_depth",
@@ -261,17 +252,17 @@
         "visible_if": {
           "ensemble_task_type": "regression",
           "regression_aggregation_method": "stacking",
-          "stacking_regression_model": "random_forest"
+          "stacking_regression_model": ["random_forest", "extra_trees", "gradient_boosting", "hist_gradient_boosting"]
         },
-        "tooltip": "Maximum depth for random forest regression stacker (0 = unlimited)"
+        "tooltip": "Maximum tree depth for supported regression tree-based stackers (0 = estimator default/unlimited depending on model)"
       },
       {
         "name": "stacking_classification_model",
         "label": "Classification Stacker",
         "category": "Ensemble",
         "widget": "combobox",
-        "values": ["logistic", "random_forest"],
-        "value_aliases": ["Logistic Regression", "Random Forest"],
+        "values": ["logistic", "random_forest", "extra_trees", "bagging", "adaboost", "gradient_boosting", "hist_gradient_boosting"],
+        "value_aliases": ["Logistic Regression", "Random Forest", "Extra Trees", "Bagging", "AdaBoost", "Gradient Boosting", "Histogram Gradient Boosting"],
         "default": "logistic",
         "required": false,
         "input_type": "user",
@@ -292,7 +283,8 @@
         "input_type": "user",
         "visible_if": {
           "ensemble_task_type": "classification",
-          "classification_aggregation_method": "stacking"
+          "classification_aggregation_method": "stacking",
+          "stacking_classification_model": "logistic"
         },
         "tooltip": "Inverse regularization strength C for logistic regression stacker"
       },
@@ -307,7 +299,8 @@
         "input_type": "user",
         "visible_if": {
           "ensemble_task_type": "classification",
-          "classification_aggregation_method": "stacking"
+          "classification_aggregation_method": "stacking",
+          "stacking_classification_model": "logistic"
         },
         "tooltip": "Maximum training iterations for logistic regression stacker"
       },
@@ -323,9 +316,9 @@
         "visible_if": {
           "ensemble_task_type": "classification",
           "classification_aggregation_method": "stacking",
-          "stacking_classification_model": "random_forest"
+          "stacking_classification_model": ["random_forest", "extra_trees", "bagging", "adaboost", "gradient_boosting", "hist_gradient_boosting"]
         },
-        "tooltip": "Number of trees used by random forest classification stacker"
+        "tooltip": "Number of estimators/iterations used by supported classification ensemble stackers"
       },
       {
         "name": "stacking_classification_max_depth",
@@ -339,9 +332,57 @@
         "visible_if": {
           "ensemble_task_type": "classification",
           "classification_aggregation_method": "stacking",
-          "stacking_classification_model": "random_forest"
+          "stacking_classification_model": ["random_forest", "extra_trees", "gradient_boosting", "hist_gradient_boosting"]
         },
-        "tooltip": "Maximum depth for random forest classification stacker (0 = unlimited)"
+        "tooltip": "Maximum tree depth for supported classification tree-based stackers (0 = estimator default/unlimited depending on model)"
+      },
+      {
+        "name": "stacking_classification_min_samples_leaf",
+        "label": "Classification Min Samples Leaf",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "classification",
+          "classification_aggregation_method": "stacking",
+          "stacking_classification_model": ["random_forest", "extra_trees", "gradient_boosting", "hist_gradient_boosting"]
+        },
+        "tooltip": "Minimum samples per leaf for supported classification tree-based stackers"
+      },
+      {
+        "name": "stacking_classification_max_features",
+        "label": "Classification Max Features",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "classification",
+          "classification_aggregation_method": "stacking",
+          "stacking_classification_model": ["random_forest", "extra_trees", "bagging", "gradient_boosting"]
+        },
+        "tooltip": "Feature subset size per learner split/model; supports blank, int, float. sqrt/log2 apply to random_forest, extra_trees, and gradient_boosting"
+      },
+      {
+        "name": "stacking_classification_learning_rate",
+        "label": "Classification Learning Rate",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.1",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "classification",
+          "classification_aggregation_method": "stacking",
+          "stacking_classification_model": ["adaboost", "gradient_boosting", "hist_gradient_boosting"]
+        },
+        "tooltip": "Learning-rate shrinkage for supported boosting classification stackers"
       },
       {
         "name": "stacking_regression_fit_intercept",
@@ -358,6 +399,54 @@
           "stacking_regression_model": ["linear", "ridge"]
         },
         "tooltip": "Whether the regression stacking meta-model includes an intercept term"
+      },
+      {
+        "name": "stacking_regression_min_samples_leaf",
+        "label": "Regression Min Samples Leaf",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "regression",
+          "regression_aggregation_method": "stacking",
+          "stacking_regression_model": ["random_forest", "extra_trees", "gradient_boosting", "hist_gradient_boosting"]
+        },
+        "tooltip": "Minimum samples per leaf for supported regression tree-based stackers"
+      },
+      {
+        "name": "stacking_regression_max_features",
+        "label": "Regression Max Features",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "regression",
+          "regression_aggregation_method": "stacking",
+          "stacking_regression_model": ["random_forest", "extra_trees", "bagging", "gradient_boosting"]
+        },
+        "tooltip": "Feature subset size per learner split/model; supports blank, int, float. sqrt/log2 apply to random_forest, extra_trees, and gradient_boosting"
+      },
+      {
+        "name": "stacking_regression_learning_rate",
+        "label": "Regression Learning Rate",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.1",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "regression",
+          "regression_aggregation_method": "stacking",
+          "stacking_regression_model": ["adaboost", "gradient_boosting", "hist_gradient_boosting"]
+        },
+        "tooltip": "Learning-rate shrinkage for supported boosting regression stackers"
       },
       {
         "name": "stacking_classification_fit_intercept",

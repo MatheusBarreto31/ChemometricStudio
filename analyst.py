@@ -1018,6 +1018,41 @@ def analyst_main(
                     stacking_regression_max_depth = int(ensemble_params.get('stacking_regression_max_depth', 0))
                 except Exception:
                     stacking_regression_max_depth = 0
+                try:
+                    stacking_regression_min_samples_leaf = int(ensemble_params.get('stacking_regression_min_samples_leaf', 1))
+                except Exception:
+                    stacking_regression_min_samples_leaf = 1
+                try:
+                    stacking_regression_learning_rate = float(ensemble_params.get('stacking_regression_learning_rate', 0.1))
+                except Exception:
+                    stacking_regression_learning_rate = 0.1
+                if stacking_regression_learning_rate <= 0:
+                    stacking_regression_learning_rate = 0.1
+
+                def _parse_stacking_max_features(raw_value: Any):
+                    if raw_value is None:
+                        return None
+                    raw_text = str(raw_value).strip()
+                    if not raw_text:
+                        return None
+                    lowered = raw_text.lower()
+                    if lowered in ('none', 'null'):
+                        return None
+                    if lowered in ('sqrt', 'log2'):
+                        return lowered
+                    try:
+                        numeric = float(raw_text)
+                    except Exception:
+                        return None
+                    if numeric <= 0:
+                        return None
+                    if abs(numeric - int(numeric)) < 1e-12:
+                        return int(numeric)
+                    return numeric
+
+                stacking_regression_max_features = _parse_stacking_max_features(
+                    ensemble_params.get('stacking_regression_max_features', '')
+                )
                 stacking_classification_model = str(ensemble_params.get('stacking_classification_model', 'logistic') or 'logistic').lower()
                 try:
                     stacking_classification_c = float(ensemble_params.get('stacking_classification_c', 1.0))
@@ -1035,6 +1070,19 @@ def analyst_main(
                     stacking_classification_max_depth = int(ensemble_params.get('stacking_classification_max_depth', 0))
                 except Exception:
                     stacking_classification_max_depth = 0
+                try:
+                    stacking_classification_min_samples_leaf = int(ensemble_params.get('stacking_classification_min_samples_leaf', 1))
+                except Exception:
+                    stacking_classification_min_samples_leaf = 1
+                try:
+                    stacking_classification_learning_rate = float(ensemble_params.get('stacking_classification_learning_rate', 0.1))
+                except Exception:
+                    stacking_classification_learning_rate = 0.1
+                if stacking_classification_learning_rate <= 0:
+                    stacking_classification_learning_rate = 0.1
+                stacking_classification_max_features = _parse_stacking_max_features(
+                    ensemble_params.get('stacking_classification_max_features', '')
+                )
                 stacking_regression_fit_intercept = bool(ensemble_params.get('stacking_regression_fit_intercept', True))
                 stacking_classification_fit_intercept = bool(ensemble_params.get('stacking_classification_fit_intercept', True))
 
@@ -1186,7 +1234,14 @@ def analyst_main(
                         # Fit stacker on calibration-derived meta-features, then predict requested target split.
                         if ensemble_task_type == 'classification':
                             from sklearn.linear_model import LogisticRegression
-                            from sklearn.ensemble import RandomForestClassifier
+                            from sklearn.ensemble import (
+                                AdaBoostClassifier,
+                                BaggingClassifier,
+                                ExtraTreesClassifier,
+                                GradientBoostingClassifier,
+                                HistGradientBoostingClassifier,
+                                RandomForestClassifier,
+                            )
                             from sklearn.preprocessing import OneHotEncoder
                             X_train_raw = np.hstack([np.asarray(pred).reshape(-1, 1).astype(object) for pred in train_member_predictions])
                             X_pred_raw = np.hstack([np.asarray(pred).reshape(-1, 1).astype(object) for pred in member_prediction_arrays])
@@ -1255,20 +1310,80 @@ def analyst_main(
                                 clf = RandomForestClassifier(
                                     n_estimators=max(10, int(stacking_classification_n_estimators)),
                                     max_depth=max_depth,
+                                    max_features=stacking_classification_max_features,
+                                    min_samples_leaf=max(1, int(stacking_classification_min_samples_leaf)),
                                     n_jobs=stacking_n_jobs,
                                     verbose=max(0, stacking_verbose),
                                 )
-                            else:
+                            elif stacking_classification_model == 'extra_trees':
+                                max_depth = stacking_classification_max_depth if stacking_classification_max_depth > 0 else None
+                                clf = ExtraTreesClassifier(
+                                    n_estimators=max(10, int(stacking_classification_n_estimators)),
+                                    max_depth=max_depth,
+                                    max_features=stacking_classification_max_features,
+                                    min_samples_leaf=max(1, int(stacking_classification_min_samples_leaf)),
+                                    n_jobs=stacking_n_jobs,
+                                    verbose=max(0, stacking_verbose),
+                                )
+                            elif stacking_classification_model == 'bagging':
+                                bagging_kwargs = {
+                                    'n_estimators': max(10, int(stacking_classification_n_estimators)),
+                                    'n_jobs': stacking_n_jobs,
+                                    'verbose': max(0, stacking_verbose),
+                                }
+                                if stacking_classification_max_features is not None and not isinstance(stacking_classification_max_features, str):
+                                    bagging_kwargs['max_features'] = stacking_classification_max_features
+                                clf = BaggingClassifier(**bagging_kwargs)
+                            elif stacking_classification_model == 'adaboost':
+                                clf = AdaBoostClassifier(
+                                    n_estimators=max(10, int(stacking_classification_n_estimators)),
+                                    learning_rate=float(stacking_classification_learning_rate),
+                                )
+                            elif stacking_classification_model == 'gradient_boosting':
+                                max_depth = stacking_classification_max_depth if stacking_classification_max_depth > 0 else 3
+                                gb_kwargs = {
+                                    n_estimators=max(10, int(stacking_classification_n_estimators)),
+                                    'max_depth': max_depth,
+                                    'learning_rate': float(stacking_classification_learning_rate),
+                                    'min_samples_leaf': max(1, int(stacking_classification_min_samples_leaf)),
+                                    'verbose': max(0, stacking_verbose),
+                                }
+                                if stacking_classification_max_features is not None:
+                                    gb_kwargs['max_features'] = stacking_classification_max_features
+                                clf = GradientBoostingClassifier(**gb_kwargs)
+                            elif stacking_classification_model == 'hist_gradient_boosting':
+                                max_depth = stacking_classification_max_depth if stacking_classification_max_depth > 0 else None
+                                clf = HistGradientBoostingClassifier(
+                                    max_iter=max(10, int(stacking_classification_n_estimators)),
+                                    max_depth=max_depth,
+                                    learning_rate=float(stacking_classification_learning_rate),
+                                    min_samples_leaf=max(1, int(stacking_classification_min_samples_leaf)),
+                                    verbose=max(0, stacking_verbose),
+                                )
+                            elif stacking_classification_model == 'logistic':
                                 clf = LogisticRegression(
                                     C=float(stacking_classification_c),
                                     max_iter=max(100, int(stacking_classification_max_iter)),
                                     fit_intercept=bool(stacking_classification_fit_intercept),
                                 )
+                            else:
+                                raise ValueError(
+                                    "Unsupported classification stacking model: "
+                                    f"{stacking_classification_model}. Supported: logistic, random_forest, "
+                                    "extra_trees, bagging, adaboost, gradient_boosting, hist_gradient_boosting"
+                                )
                             clf.fit(X_train, np.asarray(train_true).reshape(-1))
                             aggregated_predictions[prediction_key] = np.asarray(clf.predict(X_pred), dtype=object)
                         else:
                             from sklearn.linear_model import LinearRegression, Ridge
-                            from sklearn.ensemble import RandomForestRegressor
+                            from sklearn.ensemble import (
+                                AdaBoostRegressor,
+                                BaggingRegressor,
+                                ExtraTreesRegressor,
+                                GradientBoostingRegressor,
+                                HistGradientBoostingRegressor,
+                                RandomForestRegressor,
+                            )
                             X_train = np.hstack([np.asarray(pred).reshape(-1, 1).astype(float) for pred in train_member_predictions])
                             X_pred = np.hstack([np.asarray(pred).reshape(-1, 1).astype(float) for pred in member_prediction_arrays])
 
@@ -1332,11 +1447,64 @@ def analyst_main(
                                 reg = RandomForestRegressor(
                                     n_estimators=max(10, int(stacking_regression_n_estimators)),
                                     max_depth=max_depth,
+                                    max_features=stacking_regression_max_features,
+                                    min_samples_leaf=max(1, int(stacking_regression_min_samples_leaf)),
                                     n_jobs=stacking_n_jobs,
                                     verbose=max(0, stacking_verbose),
                                 )
-                            else:
+                            elif stacking_regression_model == 'extra_trees':
+                                max_depth = stacking_regression_max_depth if stacking_regression_max_depth > 0 else None
+                                reg = ExtraTreesRegressor(
+                                    n_estimators=max(10, int(stacking_regression_n_estimators)),
+                                    max_depth=max_depth,
+                                    max_features=stacking_regression_max_features,
+                                    min_samples_leaf=max(1, int(stacking_regression_min_samples_leaf)),
+                                    n_jobs=stacking_n_jobs,
+                                    verbose=max(0, stacking_verbose),
+                                )
+                            elif stacking_regression_model == 'bagging':
+                                bagging_kwargs = {
+                                    'n_estimators': max(10, int(stacking_regression_n_estimators)),
+                                    'n_jobs': stacking_n_jobs,
+                                    'verbose': max(0, stacking_verbose),
+                                }
+                                if stacking_regression_max_features is not None and not isinstance(stacking_regression_max_features, str):
+                                    bagging_kwargs['max_features'] = stacking_regression_max_features
+                                reg = BaggingRegressor(**bagging_kwargs)
+                            elif stacking_regression_model == 'adaboost':
+                                reg = AdaBoostRegressor(
+                                    n_estimators=max(10, int(stacking_regression_n_estimators)),
+                                    learning_rate=float(stacking_regression_learning_rate),
+                                )
+                            elif stacking_regression_model == 'gradient_boosting':
+                                max_depth = stacking_regression_max_depth if stacking_regression_max_depth > 0 else 3
+                                gb_kwargs = {
+                                    n_estimators=max(10, int(stacking_regression_n_estimators)),
+                                    'max_depth': max_depth,
+                                    'learning_rate': float(stacking_regression_learning_rate),
+                                    'min_samples_leaf': max(1, int(stacking_regression_min_samples_leaf)),
+                                    'verbose': max(0, stacking_verbose),
+                                }
+                                if stacking_regression_max_features is not None:
+                                    gb_kwargs['max_features'] = stacking_regression_max_features
+                                reg = GradientBoostingRegressor(**gb_kwargs)
+                            elif stacking_regression_model == 'hist_gradient_boosting':
+                                max_depth = stacking_regression_max_depth if stacking_regression_max_depth > 0 else None
+                                reg = HistGradientBoostingRegressor(
+                                    max_iter=max(10, int(stacking_regression_n_estimators)),
+                                    max_depth=max_depth,
+                                    learning_rate=float(stacking_regression_learning_rate),
+                                    min_samples_leaf=max(1, int(stacking_regression_min_samples_leaf)),
+                                    verbose=max(0, stacking_verbose),
+                                )
+                            elif stacking_regression_model == 'linear':
                                 reg = LinearRegression(fit_intercept=bool(stacking_regression_fit_intercept))
+                            else:
+                                raise ValueError(
+                                    "Unsupported regression stacking model: "
+                                    f"{stacking_regression_model}. Supported: linear, ridge, random_forest, "
+                                    "extra_trees, bagging, adaboost, gradient_boosting, hist_gradient_boosting"
+                                )
                             reg.fit(X_train, np.asarray(train_true).reshape(-1).astype(float))
                             aggregated_predictions[prediction_key] = np.asarray(reg.predict(X_pred), dtype=float)
                     else:
