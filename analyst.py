@@ -1342,7 +1342,7 @@ def analyst_main(
                             elif stacking_classification_model == 'gradient_boosting':
                                 max_depth = stacking_classification_max_depth if stacking_classification_max_depth > 0 else 3
                                 gb_kwargs = {
-                                    n_estimators=max(10, int(stacking_classification_n_estimators)),
+                                    'n_estimators': max(10, int(stacking_classification_n_estimators)),
                                     'max_depth': max_depth,
                                     'learning_rate': float(stacking_classification_learning_rate),
                                     'min_samples_leaf': max(1, int(stacking_classification_min_samples_leaf)),
@@ -1479,7 +1479,7 @@ def analyst_main(
                             elif stacking_regression_model == 'gradient_boosting':
                                 max_depth = stacking_regression_max_depth if stacking_regression_max_depth > 0 else 3
                                 gb_kwargs = {
-                                    n_estimators=max(10, int(stacking_regression_n_estimators)),
+                                    'n_estimators': max(10, int(stacking_regression_n_estimators)),
                                     'max_depth': max_depth,
                                     'learning_rate': float(stacking_regression_learning_rate),
                                     'min_samples_leaf': max(1, int(stacking_regression_min_samples_leaf)),

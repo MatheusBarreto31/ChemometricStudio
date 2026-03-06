@@ -1,0 +1,15 @@
+:root {
+  /* Background anchored to Icon.png background tone */
+  --bg: #d2d6f5;
+  --bg-soft: #eef1ff;
+  --surface: #ffffff;
+  --surface-alt: #f5f7ff;
+  --text: #1f2438;
+  --muted: #59607a;
+  --primary: #2f3b73;
+  --primary-strong: #232c57;
+  --accent: #4b64b0;
+  --success: #2d6a4f;
+  --border: #c4cce9;
+  --shadow: rgba(35, 44, 87, 0.16);
+}

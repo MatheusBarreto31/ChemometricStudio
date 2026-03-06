@@ -31,6 +31,41 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+### Windows PowerShell (Execution Policy)
+
+If activation is blocked in PowerShell, run this once:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force
+```
+
+Then activate normally:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+### Windows Python 3.11 Setup
+
+Install Python 3.11 with winget (side-by-side):
+
+```powershell
+winget install -e --id Python.Python.3.11 --accept-source-agreements --accept-package-agreements
+```
+
+Create and populate a dedicated 3.11 environment:
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+You can also run the helper script:
+
+```powershell
+.\scripts\setup_windows_py311.ps1
+```
+
 Tkinter: On Windows, Tkinter is included with Python installers. On macOS/Linux, install via package manager or use Python from python.org.
 
 ## Quick Start
@@ -94,7 +129,7 @@ cm-studio/
 
 ## Requirements
 
-- Python 3.8+
+- Python 3.11+
 - tkinter (included with most Python distributions)
 - Dependencies listed in [requirements.txt](requirements.txt):
   - numpy 2.3.5

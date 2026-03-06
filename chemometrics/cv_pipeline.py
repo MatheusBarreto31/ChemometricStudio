@@ -760,9 +760,43 @@ class CVPipeline:
         """
         fold_output = np.asarray(fold_output)
         fold_reference = np.asarray(fold_reference)
-        
-        # Check if data is 2D (matrix) or 1D (vector)
-        is_matrix = fold_output.ndim == 2
+
+        # Normalize vectors to explicit 2D matrices to handle mixed-shape
+        # cases safely (e.g., output=(n, m) and reference=(n,)).
+        if fold_output.ndim == 1:
+            fold_output = fold_output.reshape(-1, 1)
+        if fold_reference.ndim == 1:
+            fold_reference = fold_reference.reshape(-1, 1)
+
+        if fold_output.ndim != 2 or fold_reference.ndim != 2:
+            raise ValueError(
+                "CV metrics expect fold_output and fold_reference to be vector/matrix-like with sample axis first"
+            )
+
+        if fold_output.shape[0] != fold_reference.shape[0]:
+            raise ValueError(
+                f"CV metrics sample mismatch: output has {fold_output.shape[0]} samples, "
+                f"reference has {fold_reference.shape[0]}"
+            )
+
+        out_cols = fold_output.shape[1]
+        ref_cols = fold_reference.shape[1]
+
+        if ref_cols == 1 and out_cols > 1:
+            # Broadcast single reference column across model/output columns.
+            fold_reference = np.repeat(fold_reference, out_cols, axis=1)
+        elif out_cols == 1 and ref_cols > 1:
+            # Broadcast single output column across multi-column references.
+            fold_output = np.repeat(fold_output, ref_cols, axis=1)
+
+        if fold_output.shape[1] != fold_reference.shape[1]:
+            raise ValueError(
+                f"CV metrics column mismatch: output has {fold_output.shape[1]} columns, "
+                f"reference has {fold_reference.shape[1]}"
+            )
+
+        # Check if data is matrix-valued (multiple columns) after normalization.
+        is_matrix = fold_output.shape[1] > 1
         
         if is_matrix:
             # Compute metrics per column and return as vector

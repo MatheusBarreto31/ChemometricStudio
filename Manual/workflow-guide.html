@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Workflow Guide - Chemometric Studio User Manual</title>
+  <link rel="stylesheet" href="assets/css/manual.css">
+</head>
+<body data-manual-page="workflow" data-manual-group="qa-workflow">
+  <div data-manual-header></div>
+
+  <main class="layout">
+    <aside class="manual-sidebar" data-manual-sidebar data-reveal></aside>
+
+    <div class="content-column">
+      <section class="grid" id="setup-tab" data-reveal>
+        <article class="panel">
+          <h1>Setup Tab</h1>
+          <p>The Setup tab is where you build and configure the methodology pipeline.</p>
+          <h2>Checklist</h2>
+          <ol class="step-list">
+            <li>Browse function categories in the left panel.</li>
+            <li>Add functions to Methodology in execution order.</li>
+            <li>Select each instance and provide required parameters.</li>
+            <li>Save the model periodically using <strong>File -> Save Model</strong>.</li>
+          </ol>
+        </article>
+        <aside class="panel alt">
+          <h2>Best Practice</h2>
+          <p>Configure inputs and preprocessing first. Then add model and validation steps. This makes routing and debugging easier.</p>
+        </aside>
+      </section>
+
+      <section class="panel" id="routing-tab" data-reveal>
+        <h2>Routing Tab</h2>
+        <p>Routing defines exactly how data moves between functions.</p>
+        <div class="media-card">
+          <img src="assets/images/workflow-map.svg" alt="Routing map diagram">
+        </div>
+        <ol class="step-list">
+          <li>Pick a source function output.</li>
+          <li>Pick the destination function input.</li>
+          <li>Create the route and confirm it appears in the map.</li>
+          <li>Repeat until all required inputs are connected.</li>
+        </ol>
+        <div class="note">If the model fails quickly, check for missing routes first.</div>
+      </section>
+
+      <section class="panel" id="execution-controls" data-reveal>
+        <h2>Execution Controls</h2>
+        <ul>
+          <li><strong>Run Model</strong>: full methodology execution.</li>
+          <li><strong>Run to here</strong>: run only up to selected function instance.</li>
+          <li><strong>Timing Report</strong> in Tools menu: detailed runtime breakdown after execution.</li>
+        </ul>
+      </section>
+    </div>
+  </main>
+
+  <footer data-manual-footer></footer>
+
+  <script src="assets/js/manual-common.js"></script>
+  <script src="assets/js/manual-shell.js"></script>
+  <script src="assets/js/manual.js"></script>
+</body>
+</html>

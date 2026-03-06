@@ -15,6 +15,7 @@ from typing import Dict, List, Tuple, Optional, Any, Callable, Set
 from functools import lru_cache
 import subprocess
 import sys
+import webbrowser
 from io import StringIO
 import shlex
 import zipfile
@@ -44,6 +45,7 @@ LICENSES_DIR = BASE_DIR / "Licenses"
 PROJECT_LICENSE_PATH = BASE_DIR / "LICENSE"
 EULA_PATH = BASE_DIR / "EULA.md"
 PYPROJECT_PATH = BASE_DIR / "pyproject.toml"
+MANUAL_INDEX_PATH = BASE_DIR / "Manual" / "index.html"
 SELAWIK_TTF_PATH = FONTS_DIR / "Selawik" / "selawk.ttf"
 SPLASH_VERSION_FONT_SIZE = 14
 SPLASH_SUBTITLE_FONT_SIZE = 13
@@ -2927,6 +2929,11 @@ class ChemometricsGUI:
         help_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label=self.language_manager.translate("menu.help", "Help"), menu=help_menu)
         help_menu.add_command(
+            label=self.language_manager.translate("menu.user_manual", "User Manual"),
+            command=self._open_user_manual,
+        )
+        help_menu.add_separator()
+        help_menu.add_command(
             label=self.language_manager.translate("menu.project_license", "Project License (Apache-2.0)"),
             command=lambda: self._show_license_file_popup(
                 self.language_manager.translate("licenses.project_license", "Project License (Apache-2.0)"),
@@ -3366,6 +3373,29 @@ class ChemometricsGUI:
         # Close button
         close_btn = ttk.Button(about_win, text=self.language_manager.translate("ui.buttons.close", "Close"), command=about_win.destroy)
         close_btn.pack(pady=(0, 10))
+
+    def _open_user_manual(self):
+        """Open the HTML5 user manual in the system default browser."""
+        if not MANUAL_INDEX_PATH.exists():
+            messagebox.showerror(
+                self.language_manager.translate("ui.dialogs.error", "Error"),
+                self.language_manager.translate(
+                    "ui.messages.manual_missing",
+                    "User manual not found. Expected file:"
+                ) + f"\n{MANUAL_INDEX_PATH}"
+            )
+            return
+
+        try:
+            webbrowser.open(MANUAL_INDEX_PATH.resolve().as_uri(), new=2)
+        except Exception as exc:
+            messagebox.showerror(
+                self.language_manager.translate("ui.dialogs.error", "Error"),
+                self.language_manager.translate(
+                    "ui.messages.manual_open_failed",
+                    "Could not open the user manual in the default browser:"
+                ) + f"\n{MANUAL_INDEX_PATH}\n\n{exc}"
+            )
 
     def _open_path_with_system_default(self, target_path: Path):
         """Open file/folder with system default app."""

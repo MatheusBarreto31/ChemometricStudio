@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Settings and Support - Chemometric Studio User Manual</title>
+  <link rel="stylesheet" href="assets/css/manual.css">
+</head>
+<body data-manual-page="support" data-manual-group="qa-support">
+  <div data-manual-header></div>
+
+  <main class="layout">
+    <aside class="manual-sidebar" data-manual-sidebar data-reveal></aside>
+
+    <div class="content-column">
+      <section class="grid" id="settings-menu" data-reveal>
+        <article class="panel">
+          <h1>Settings Menu</h1>
+          <h2>Language</h2>
+          <p>Switch language from Settings -> Language. The selected language is persisted for next startup.</p>
+          <h2>Startup</h2>
+          <ul>
+            <li>Import Loading mode: lazy or eager.</li>
+            <li>Display Splashscreen: on/off.</li>
+            <li>Start Categories Collapsed: on/off.</li>
+          </ul>
+          <h2>Graph Style</h2>
+          <ul>
+            <li>Choose continuous and qualitative colormaps.</li>
+            <li>Adjust graph font scaling globally.</li>
+          </ul>
+        </article>
+        <aside class="panel alt" id="help-menu">
+          <h2>Help Menu</h2>
+          <ul>
+            <li><strong>User Manual</strong>: opens this HTML5 manual in the default browser.</li>
+            <li><strong>Project License</strong>: opens the Apache-2.0 license text.</li>
+            <li><strong>End-User License Agreement</strong>: opens EULA.</li>
+            <li><strong>Third-Party Licenses</strong>: bundled notices and license files.</li>
+            <li><strong>About</strong>: app details and project website link.</li>
+          </ul>
+        </aside>
+      </section>
+
+      <section class="panel" id="troubleshooting" data-reveal>
+        <h2>Troubleshooting Checklist</h2>
+        <ol class="step-list">
+          <li>Verify required function parameters in Setup.</li>
+          <li>Verify routing completeness in Routing tab.</li>
+          <li>Use <strong>Run to here</strong> for fault isolation.</li>
+          <li>Inspect <code>model_log.txt</code> and <code>error_log.txt</code>.</li>
+          <li>Load saved model to reproduce and validate fixes.</li>
+        </ol>
+        <div class="note">When reporting issues, include model file and relevant logs.</div>
+      </section>
+    </div>
+  </main>
+
+  <footer data-manual-footer></footer>
+
+  <script src="assets/js/manual-common.js"></script>
+  <script src="assets/js/manual-shell.js"></script>
+  <script src="assets/js/manual.js"></script>
+</body>
+</html>

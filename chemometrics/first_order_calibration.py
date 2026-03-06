@@ -451,8 +451,12 @@ def _cross_validated_predictions(
             kernel_bandwidth=kernel_bandwidth,
             local_distance=local_distance,
         )
-        fold_pred = _predict_model(fold_model, X_test)
-        y_cv_pred[test_idx] = fold_pred
+        fold_pred = np.asarray(_predict_model(fold_model, X_test), dtype=float)
+        target_slice = y_cv_pred[test_idx]
+        if target_slice.ndim == 2 and target_slice.shape[1] == 1 and fold_pred.ndim == 1:
+            y_cv_pred[test_idx] = fold_pred.reshape(-1, 1)
+        else:
+            y_cv_pred[test_idx] = fold_pred
 
         fold_metrics.append({
             'fold': int(fold_idx),
