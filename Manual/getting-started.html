@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Getting Started - Chemometric Studio User Manual</title>
+  <link rel="stylesheet" href="assets/css/manual.css">
+</head>
+<body data-manual-page="start" data-manual-group="qa-start">
+  <div data-manual-header></div>
+
+  <main class="layout">
+    <aside class="manual-sidebar" data-manual-sidebar data-reveal></aside>
+
+    <div class="content-column">
+      <section class="panel" id="install-run" data-reveal>
+        <h1>Install and Run</h1>
+        <ol class="step-list">
+          <li>Create and activate a Python environment.</li>
+          <li>Install requirements from <code>requirements.txt</code>.</li>
+          <li>Start the app with <code>python launcher.py</code>.</li>
+        </ol>
+        <pre><code>python -m venv .venv
+.\\.venv\\Scripts\\Activate.ps1
+pip install -r requirements.txt
+python launcher.py</code></pre>
+      </section>
+
+      <section class="grid" id="first-run" data-reveal>
+        <article class="panel">
+          <h2>First Pipeline in 7 Steps</h2>
+          <ol class="step-list">
+            <li>Open the <strong>Setup</strong> tab and add a data input function.</li>
+            <li>Add preprocessing and model functions to Methodology.</li>
+            <li>Select each function and fill required parameters.</li>
+            <li>Move to <strong>Routing</strong> and connect outputs to inputs.</li>
+            <li>Click <strong>Run Model</strong> to execute.</li>
+            <li>Open <strong>Analysis</strong> to inspect generated outputs.</li>
+            <li>Use <strong>Report</strong> to prepare and export PDF.</li>
+          </ol>
+        </article>
+        <aside class="panel alt">
+          <h2>Files You Will See</h2>
+          <ul>
+            <li><code>model.json</code>: generated pipeline definition.</li>
+            <li><code>model_log.txt</code>: model run logs.</li>
+            <li><code>error_log.txt</code>: error details from failed runs.</li>
+          </ul>
+        </aside>
+      </section>
+
+      <section class="panel" id="interface-regions" data-reveal>
+        <h2>Core Interface Regions</h2>
+        <ul>
+          <li><strong>Available Functions</strong>: function list grouped by category.</li>
+          <li><strong>Methodology</strong>: ordered list of selected steps.</li>
+          <li><strong>Routing View</strong>: visual links between outputs and inputs.</li>
+          <li><strong>Analysis Viewer</strong>: graph, table, and text content.</li>
+          <li><strong>Report Builder</strong>: page/section/report structure editor.</li>
+        </ul>
+      </section>
+    </div>
+  </main>
+
+  <footer data-manual-footer></footer>
+
+  <script src="assets/js/manual-common.js"></script>
+  <script src="assets/js/manual-shell.js"></script>
+  <script src="assets/js/manual.js"></script>
+</body>
+</html>

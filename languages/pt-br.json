@@ -340,6 +340,8 @@
       "graph_data_save_failed": "Falha ao salvar dados do gráfico:",
       "license_open_failed": "Não foi possível abrir o arquivo ou pasta de licença:",
       "license_path_missing": "Arquivo ou pasta de licença não encontrado:",
+      "manual_missing": "Manual do usuário não encontrado. Arquivo esperado:",
+      "manual_open_failed": "Não foi possível abrir o manual do usuário no navegador padrão:",
       "cannot_remove_last_page": "Não é possível remover a última página",
       "function_not_found_methodology": "Função não encontrada na metodologia",
       "generate_model_json_failed": "Falha ao gerar model.json",
@@ -507,6 +509,7 @@
       "force_integer_ticks": "Forçar Ticks Inteiros"
     },
     "help": "Ajuda",
+    "user_manual": "Manual do Usuário",
     "project_license": "Licença do projeto (Apache-2.0)",
     "eula": "Contrato de Licença do Usuário Final",
     "licenses": "Licenças de terceiros",

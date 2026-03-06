@@ -89,6 +89,7 @@ celerybeat-schedule
 # Environments
 .env
 .venv
+.venv311
 env/
 venv/
 ENV/
@@ -163,3 +164,6 @@ Documentation/
 # Local maintainer-only licensing notes
 Licenses/*.local.md
 Licenses/Python/*.local.md
+
+# Manual maintainer-only pages
+Manual/index.internal.html

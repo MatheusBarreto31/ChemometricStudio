@@ -340,6 +340,8 @@
       "graph_data_save_failed": "Failed to save graph data:",
       "license_open_failed": "Could not open license file or folder:",
       "license_path_missing": "License file or folder not found:",
+      "manual_missing": "User manual not found. Expected file:",
+      "manual_open_failed": "Could not open the user manual in the default browser:",
       "cannot_remove_last_page": "Cannot remove the last page",
       "function_not_found_methodology": "Function not found in methodology",
       "generate_model_json_failed": "Failed to generate model.json",
@@ -507,6 +509,7 @@
       "force_integer_ticks": "Force Integer Ticks"
     },
     "help": "Help",
+    "user_manual": "User Manual",
     "project_license": "Project License (Apache-2.0)",
     "eula": "End-User License Agreement",
     "licenses": "Third-Party Licenses",
