@@ -1,6 +1,12 @@
 from typing import Optional, Dict, Any, List, Tuple
 import numpy as np
-from sklearn.linear_model import LinearRegression, Ridge, Lasso, MultiTaskLasso
+from sklearn.linear_model import LinearRegression, Ridge, Lasso, MultiTaskLasso, ElasticNet, MultiTaskElasticNet
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, HistGradientBoostingRegressor
+from sklearn.multioutput import MultiOutputRegressor
+from sklearn.svm import SVR
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import RBF as GPRRBFKernel, ConstantKernel
+from sklearn.kernel_approximation import RBFSampler
 from sklearn.cross_decomposition import PLSRegression
 from sklearn.decomposition import PCA
 from scipy.spatial.distance import cdist
@@ -61,6 +67,15 @@ def _compute_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]
         'R2': r2,
         'n_samples': int(y_true.shape[0]),
     }
+
+
+def _to_serializable_vector(values: Any) -> Optional[List[float]]:
+    if values is None:
+        return None
+    arr = np.asarray(values, dtype=float).reshape(-1)
+    if arr.size == 0:
+        return []
+    return [float(v) for v in arr.tolist()]
 
 
 def _autoscale_from_calibration(
@@ -137,10 +152,18 @@ def _parse_parameter_candidates(
 
     parsed = parse_numeric_spec(parameter_range)
 
-    if model_type in ('pls', 'pcr'):
+    if model_type in ('pls', 'pcr', 'kernel_pls'):
         return _coerce_int_candidates(parsed, default_max=min(max_latent, 15), from_one_on_single=True)
-    if model_type in ('ridge', 'lasso'):
+    if model_type in ('ridge', 'lasso', 'elastic_net'):
         return _coerce_float_candidates(parsed, default_values=[1e-4, 1e-3, 1e-2, 1e-1, 1.0, 10.0, 100.0])
+    if model_type == 'svr':
+        return _coerce_float_candidates(parsed, default_values=[0.1, 1.0, 10.0, 100.0])
+    if model_type == 'gaussian_process':
+        return _coerce_float_candidates(parsed, default_values=[1e-8, 1e-6, 1e-4, 1e-2, 1e-1])
+    if model_type == 'random_forest':
+        return _coerce_int_candidates(parsed, default_max=300, from_one_on_single=False)
+    if model_type in ('gradient_boosting', 'hist_gradient_boosting'):
+        return _coerce_int_candidates(parsed, default_max=400, from_one_on_single=False)
     if model_type == 'local':
         local_method_norm = str(local_method).strip().lower()
         if local_method_norm == 'idw':
@@ -153,6 +176,321 @@ def _parse_parameter_candidates(
             return _coerce_float_candidates(parsed, default_values=[0.25, 0.5, 1.0, 2.0, 3.0, 5.0])
         return _coerce_int_candidates(parsed, default_max=max_neighbors, from_one_on_single=True)
     return [fixed_value]
+
+
+def _resolve_optimization_target(
+    model_type_norm: str,
+    local_method_norm: str,
+    n_components: int,
+    ridge_alpha: float,
+    lasso_alpha: float,
+    elastic_net_alpha: float,
+    random_forest_n_estimators: int,
+    svr_c: float,
+    gradient_boosting_n_estimators: int,
+    hist_gradient_boosting_n_estimators: int,
+    gaussian_process_alpha: float,
+    n_neighbors: int,
+    idw_power: float,
+    adaptive_alpha: float,
+    radius_threshold: float,
+    kernel_bandwidth: float,
+    parameter_range: Optional[Any],
+    n_components_range: Optional[Any],
+    ridge_alpha_range: Optional[Any],
+    lasso_alpha_range: Optional[Any],
+    elastic_net_alpha_range: Optional[Any],
+    random_forest_n_estimators_range: Optional[Any],
+    svr_c_range: Optional[Any],
+    gradient_boosting_n_estimators_range: Optional[Any],
+    hist_gradient_boosting_n_estimators_range: Optional[Any],
+    gaussian_process_alpha_range: Optional[Any],
+    n_neighbors_range: Optional[Any],
+    idw_power_range: Optional[Any],
+    adaptive_alpha_range: Optional[Any],
+    radius_threshold_range: Optional[Any],
+    kernel_bandwidth_range: Optional[Any],
+) -> Tuple[Optional[str], Optional[Any], Optional[Any]]:
+    parameter_name: Optional[str] = None
+    fixed_value: Optional[Any] = None
+
+    if model_type_norm in ('pls', 'pcr', 'kernel_pls'):
+        parameter_name = 'n_components'
+        fixed_value = int(n_components)
+    elif model_type_norm == 'ridge':
+        parameter_name = 'ridge_alpha'
+        fixed_value = float(ridge_alpha)
+    elif model_type_norm == 'lasso':
+        parameter_name = 'lasso_alpha'
+        fixed_value = float(lasso_alpha)
+    elif model_type_norm == 'elastic_net':
+        parameter_name = 'elastic_net_alpha'
+        fixed_value = float(elastic_net_alpha)
+    elif model_type_norm == 'random_forest':
+        parameter_name = 'random_forest_n_estimators'
+        fixed_value = int(random_forest_n_estimators)
+    elif model_type_norm == 'svr':
+        parameter_name = 'svr_c'
+        fixed_value = float(svr_c)
+    elif model_type_norm == 'gradient_boosting':
+        parameter_name = 'gradient_boosting_n_estimators'
+        fixed_value = int(gradient_boosting_n_estimators)
+    elif model_type_norm == 'hist_gradient_boosting':
+        parameter_name = 'hist_gradient_boosting_n_estimators'
+        fixed_value = int(hist_gradient_boosting_n_estimators)
+    elif model_type_norm == 'gaussian_process':
+        parameter_name = 'gaussian_process_alpha'
+        fixed_value = float(gaussian_process_alpha)
+    elif model_type_norm == 'local':
+        if local_method_norm == 'knn':
+            parameter_name = 'n_neighbors'
+            fixed_value = int(n_neighbors)
+        elif local_method_norm == 'idw':
+            parameter_name = 'idw_power'
+            fixed_value = float(idw_power)
+        elif local_method_norm == 'adaptive':
+            parameter_name = 'adaptive_alpha'
+            fixed_value = float(adaptive_alpha)
+        elif local_method_norm == 'radius':
+            parameter_name = 'radius_threshold'
+            fixed_value = float(radius_threshold)
+        elif local_method_norm == 'kernel':
+            parameter_name = 'kernel_bandwidth'
+            fixed_value = float(kernel_bandwidth)
+
+    selected_range_input = parameter_range
+    if model_type_norm in ('pls', 'pcr', 'kernel_pls') and n_components_range not in (None, ''):
+        selected_range_input = n_components_range
+    elif model_type_norm == 'ridge' and ridge_alpha_range not in (None, ''):
+        selected_range_input = ridge_alpha_range
+    elif model_type_norm == 'lasso' and lasso_alpha_range not in (None, ''):
+        selected_range_input = lasso_alpha_range
+    elif model_type_norm == 'elastic_net' and elastic_net_alpha_range not in (None, ''):
+        selected_range_input = elastic_net_alpha_range
+    elif model_type_norm == 'random_forest' and random_forest_n_estimators_range not in (None, ''):
+        selected_range_input = random_forest_n_estimators_range
+    elif model_type_norm == 'svr' and svr_c_range not in (None, ''):
+        selected_range_input = svr_c_range
+    elif model_type_norm == 'gradient_boosting' and gradient_boosting_n_estimators_range not in (None, ''):
+        selected_range_input = gradient_boosting_n_estimators_range
+    elif model_type_norm == 'hist_gradient_boosting' and hist_gradient_boosting_n_estimators_range not in (None, ''):
+        selected_range_input = hist_gradient_boosting_n_estimators_range
+    elif model_type_norm == 'gaussian_process' and gaussian_process_alpha_range not in (None, ''):
+        selected_range_input = gaussian_process_alpha_range
+    elif model_type_norm == 'local':
+        if local_method_norm == 'knn' and n_neighbors_range not in (None, ''):
+            selected_range_input = n_neighbors_range
+        elif local_method_norm == 'idw' and idw_power_range not in (None, ''):
+            selected_range_input = idw_power_range
+        elif local_method_norm == 'adaptive' and adaptive_alpha_range not in (None, ''):
+            selected_range_input = adaptive_alpha_range
+        elif local_method_norm == 'radius' and radius_threshold_range not in (None, ''):
+            selected_range_input = radius_threshold_range
+        elif local_method_norm == 'kernel' and kernel_bandwidth_range not in (None, ''):
+            selected_range_input = kernel_bandwidth_range
+
+    return parameter_name, fixed_value, selected_range_input
+
+
+def _candidate_hyperparameters(
+    candidate: Any,
+    model_type_norm: str,
+    local_method_norm: str,
+    n_components: int,
+    ridge_alpha: float,
+    lasso_alpha: float,
+    elastic_net_alpha: float,
+    elastic_net_l1_ratio: float,
+    random_forest_n_estimators: int,
+    svr_c: float,
+    svr_epsilon: float,
+    svr_gamma: float,
+    svr_kernel: str,
+    gradient_boosting_n_estimators: int,
+    gradient_boosting_learning_rate: float,
+    gradient_boosting_max_depth: int,
+    gradient_boosting_min_samples_leaf: int,
+    hist_gradient_boosting_n_estimators: int,
+    hist_gradient_boosting_learning_rate: float,
+    hist_gradient_boosting_max_depth: int,
+    hist_gradient_boosting_min_samples_leaf: int,
+    gaussian_process_alpha: float,
+    gaussian_process_length_scale: float,
+    gaussian_process_constant_value: float,
+    gaussian_process_n_restarts_optimizer: int,
+    kernel_pls_gamma: float,
+    kernel_pls_n_features: int,
+    n_neighbors: int,
+    idw_power: float,
+    adaptive_alpha: float,
+    radius_threshold: float,
+    kernel_bandwidth: float,
+) -> Dict[str, Any]:
+    return {
+        'n_components': int(candidate) if model_type_norm in ('pls', 'pcr', 'kernel_pls') else int(n_components),
+        'ridge_alpha': float(candidate) if model_type_norm == 'ridge' else float(ridge_alpha),
+        'lasso_alpha': float(candidate) if model_type_norm == 'lasso' else float(lasso_alpha),
+        'elastic_net_alpha': float(candidate) if model_type_norm == 'elastic_net' else float(elastic_net_alpha),
+        'elastic_net_l1_ratio': float(elastic_net_l1_ratio),
+        'random_forest_n_estimators': int(candidate) if model_type_norm == 'random_forest' else int(random_forest_n_estimators),
+        'svr_c': float(candidate) if model_type_norm == 'svr' else float(svr_c),
+        'svr_epsilon': float(svr_epsilon),
+        'svr_gamma': float(svr_gamma),
+        'svr_kernel': str(svr_kernel),
+        'gradient_boosting_n_estimators': int(candidate) if model_type_norm == 'gradient_boosting' else int(gradient_boosting_n_estimators),
+        'gradient_boosting_learning_rate': float(gradient_boosting_learning_rate),
+        'gradient_boosting_max_depth': int(gradient_boosting_max_depth),
+        'gradient_boosting_min_samples_leaf': int(gradient_boosting_min_samples_leaf),
+        'hist_gradient_boosting_n_estimators': int(candidate) if model_type_norm == 'hist_gradient_boosting' else int(hist_gradient_boosting_n_estimators),
+        'hist_gradient_boosting_learning_rate': float(hist_gradient_boosting_learning_rate),
+        'hist_gradient_boosting_max_depth': int(hist_gradient_boosting_max_depth),
+        'hist_gradient_boosting_min_samples_leaf': int(hist_gradient_boosting_min_samples_leaf),
+        'gaussian_process_alpha': float(candidate) if model_type_norm == 'gaussian_process' else float(gaussian_process_alpha),
+        'gaussian_process_length_scale': float(gaussian_process_length_scale),
+        'gaussian_process_constant_value': float(gaussian_process_constant_value),
+        'gaussian_process_n_restarts_optimizer': int(gaussian_process_n_restarts_optimizer),
+        'kernel_pls_gamma': float(kernel_pls_gamma),
+        'kernel_pls_n_features': int(kernel_pls_n_features),
+        'n_neighbors': int(candidate) if (model_type_norm == 'local' and local_method_norm == 'knn') else int(n_neighbors),
+        'idw_power': float(candidate) if (model_type_norm == 'local' and local_method_norm == 'idw') else float(idw_power),
+        'adaptive_alpha': float(candidate) if (model_type_norm == 'local' and local_method_norm == 'adaptive') else float(adaptive_alpha),
+        'radius_threshold': float(candidate) if (model_type_norm == 'local' and local_method_norm == 'radius') else float(radius_threshold),
+        'kernel_bandwidth': float(candidate) if (model_type_norm == 'local' and local_method_norm == 'kernel') else float(kernel_bandwidth),
+    }
+
+
+def _selected_parameter_value(
+    parameter_name: Optional[str],
+    params: Dict[str, Any],
+) -> Optional[Any]:
+    if parameter_name is None:
+        return None
+    if parameter_name in (
+        'n_components',
+        'n_neighbors',
+        'random_forest_n_estimators',
+        'gradient_boosting_n_estimators',
+        'hist_gradient_boosting_n_estimators',
+    ):
+        return int(params[parameter_name])
+    return float(params[parameter_name])
+
+
+def _build_model_specific_payload(
+    model_type: str,
+    fitted_model: Dict[str, Any],
+    params: Dict[str, Any],
+    local_method: str,
+    local_distance: str,
+) -> Dict[str, Any]:
+    model_type_norm = str(model_type).strip().lower()
+
+    if model_type_norm == 'random_forest':
+        model = fitted_model.get('model')
+        importances = _to_serializable_vector(getattr(model, 'feature_importances_', None))
+        n_trees = int(params.get('random_forest_n_estimators', fitted_model.get('n_estimators', 0)))
+        return {
+            'summary': f"Random Forest with {n_trees} trees",
+            'random_forest': {
+                'n_estimators': n_trees,
+                'feature_importances': importances,
+            },
+        }
+
+    if model_type_norm in ('ols', 'ridge', 'lasso', 'elastic_net'):
+        model = fitted_model.get('model')
+        coef = getattr(model, 'coef_', None)
+        intercept = getattr(model, 'intercept_', None)
+        nz = None
+        if coef is not None:
+            nz = int(np.count_nonzero(np.asarray(coef)))
+        return {
+            'summary': f"Linear coefficients available ({'sparse' if model_type_norm == 'lasso' else 'dense'})",
+            'linear': {
+                'coefficients': _to_serializable_vector(coef),
+                'intercept': _to_serializable_vector(intercept),
+                'nonzero_coefficients': nz,
+                'alpha': float(fitted_model.get('alpha')) if 'alpha' in fitted_model else None,
+                'l1_ratio': float(fitted_model.get('l1_ratio')) if 'l1_ratio' in fitted_model else None,
+            },
+        }
+
+    if model_type_norm in ('svr', 'gradient_boosting', 'hist_gradient_boosting', 'gaussian_process'):
+        payload = {
+            'summary': f"{model_type_norm.replace('_', ' ').title()} model diagnostics",
+            model_type_norm: {
+                'kernel': fitted_model.get('kernel'),
+                'C': fitted_model.get('C'),
+                'epsilon': fitted_model.get('epsilon'),
+                'gamma': fitted_model.get('gamma'),
+                'n_estimators': fitted_model.get('n_estimators'),
+                'learning_rate': fitted_model.get('learning_rate'),
+                'max_depth': fitted_model.get('max_depth'),
+                'min_samples_leaf': fitted_model.get('min_samples_leaf'),
+                'alpha': fitted_model.get('alpha'),
+                'length_scale': fitted_model.get('length_scale'),
+                'constant_value': fitted_model.get('constant_value'),
+                'n_restarts_optimizer': fitted_model.get('n_restarts_optimizer'),
+            },
+        }
+        return payload
+
+    if model_type_norm in ('pls', 'kernel_pls'):
+        model = fitted_model.get('model')
+        x_weights = getattr(model, 'x_weights_', None)
+        x_loadings = getattr(model, 'x_loadings_', None)
+        weight_norms = None
+        loading_norms = None
+        if x_weights is not None:
+            xw = np.asarray(x_weights, dtype=float)
+            if xw.ndim == 2:
+                weight_norms = [float(v) for v in np.linalg.norm(xw, axis=0).tolist()]
+        if x_loadings is not None:
+            xl = np.asarray(x_loadings, dtype=float)
+            if xl.ndim == 2:
+                loading_norms = [float(v) for v in np.linalg.norm(xl, axis=0).tolist()]
+        return {
+            'summary': f"{('Kernel PLS' if model_type_norm == 'kernel_pls' else 'PLS')} with {int(params.get('n_components', fitted_model.get('n_components', 0)))} components",
+            'pls': {
+                'n_components': int(params.get('n_components', fitted_model.get('n_components', 0))),
+                'pls_scale': bool(fitted_model.get('pls_scale', False)),
+                'x_weights_norm': weight_norms,
+                'x_loadings_norm': loading_norms,
+                'kernel_gamma': float(fitted_model.get('gamma')) if model_type_norm == 'kernel_pls' else None,
+                'mapped_features': int(fitted_model.get('mapped_features')) if model_type_norm == 'kernel_pls' else None,
+            },
+        }
+
+    if model_type_norm == 'pcr':
+        pca = fitted_model.get('pca')
+        evr = _to_serializable_vector(getattr(pca, 'explained_variance_ratio_', None))
+        cumsum = None
+        if evr is not None:
+            cumsum = [float(v) for v in np.cumsum(np.asarray(evr, dtype=float)).tolist()]
+        return {
+            'summary': f"PCR with {int(params.get('n_components', fitted_model.get('n_components', 0)))} components",
+            'pcr': {
+                'n_components': int(params.get('n_components', fitted_model.get('n_components', 0))),
+                'explained_variance_ratio': evr,
+                'cumulative_explained_variance_ratio': cumsum,
+            },
+        }
+
+    if model_type_norm == 'local':
+        return {
+            'summary': f"Local regression ({local_method}, {local_distance})",
+            'local': {
+                'method': local_method,
+                'distance': local_distance,
+                'n_neighbors': int(params.get('n_neighbors', 0)),
+                'idw_power': float(params.get('idw_power', 1.0)),
+                'adaptive_alpha': float(params.get('adaptive_alpha', 1.0)),
+                'radius_threshold': float(params.get('radius_threshold', 1.0)),
+                'kernel_bandwidth': float(params.get('kernel_bandwidth', 1.0)),
+            },
+        }
+
+    return {'summary': f"Model details for '{model_type_norm}' are not available."}
 
 
 def _compute_query_distances(
@@ -337,6 +675,27 @@ def _fit_model(
     pls_scale: bool,
     ridge_alpha: float,
     lasso_alpha: float,
+    elastic_net_alpha: float,
+    elastic_net_l1_ratio: float,
+    random_forest_n_estimators: int,
+    svr_c: float,
+    svr_epsilon: float,
+    svr_gamma: float,
+    svr_kernel: str,
+    gradient_boosting_n_estimators: int,
+    gradient_boosting_learning_rate: float,
+    gradient_boosting_max_depth: int,
+    gradient_boosting_min_samples_leaf: int,
+    hist_gradient_boosting_n_estimators: int,
+    hist_gradient_boosting_learning_rate: float,
+    hist_gradient_boosting_max_depth: int,
+    hist_gradient_boosting_min_samples_leaf: int,
+    gaussian_process_alpha: float,
+    gaussian_process_length_scale: float,
+    gaussian_process_constant_value: float,
+    gaussian_process_n_restarts_optimizer: int,
+    kernel_pls_gamma: float,
+    kernel_pls_n_features: int,
     n_neighbors: int,
     local_method: str,
     idw_power: float,
@@ -368,6 +727,138 @@ def _fit_model(
             model.fit(X_train, np.asarray(Y_train).reshape(-1))
         return {'model_type': model_type, 'model': model, 'alpha': float(lasso_alpha)}
 
+    if model_type == 'elastic_net':
+        l1_ratio = min(1.0, max(0.0, float(elastic_net_l1_ratio)))
+        if Y_train.shape[1] > 1:
+            model = MultiTaskElasticNet(alpha=float(elastic_net_alpha), l1_ratio=l1_ratio, max_iter=10000)
+            model.fit(X_train, Y_train)
+        else:
+            model = ElasticNet(alpha=float(elastic_net_alpha), l1_ratio=l1_ratio, max_iter=10000)
+            model.fit(X_train, np.asarray(Y_train).reshape(-1))
+        return {
+            'model_type': model_type,
+            'model': model,
+            'alpha': float(elastic_net_alpha),
+            'l1_ratio': l1_ratio,
+        }
+
+    if model_type == 'random_forest':
+        model = RandomForestRegressor(
+            n_estimators=max(10, int(random_forest_n_estimators)),
+            random_state=42,
+            n_jobs=-1,
+        )
+        if Y_train.shape[1] == 1:
+            model.fit(X_train, np.asarray(Y_train).reshape(-1))
+        else:
+            model.fit(X_train, Y_train)
+        return {
+            'model_type': model_type,
+            'model': model,
+            'n_estimators': int(max(10, int(random_forest_n_estimators))),
+        }
+
+    if model_type == 'svr':
+        kernel = str(svr_kernel).strip().lower()
+        if kernel not in ('rbf', 'linear', 'poly', 'sigmoid'):
+            raise ValueError("svr_kernel must be one of: 'rbf', 'linear', 'poly', 'sigmoid'.")
+        gamma_value: Any = float(svr_gamma)
+        if gamma_value <= 0:
+            gamma_value = 'scale'
+        base = SVR(
+            kernel=kernel,
+            C=float(max(1e-12, svr_c)),
+            epsilon=float(max(1e-12, svr_epsilon)),
+            gamma=gamma_value,
+        )
+        if Y_train.shape[1] > 1:
+            model = MultiOutputRegressor(base)
+            model.fit(X_train, Y_train)
+        else:
+            model = base
+            model.fit(X_train, np.asarray(Y_train).reshape(-1))
+        return {
+            'model_type': model_type,
+            'model': model,
+            'kernel': kernel,
+            'C': float(max(1e-12, svr_c)),
+            'epsilon': float(max(1e-12, svr_epsilon)),
+            'gamma': gamma_value,
+        }
+
+    if model_type == 'gradient_boosting':
+        base = GradientBoostingRegressor(
+            n_estimators=max(10, int(gradient_boosting_n_estimators)),
+            learning_rate=float(max(1e-6, gradient_boosting_learning_rate)),
+            max_depth=max(1, int(gradient_boosting_max_depth)),
+            min_samples_leaf=max(1, int(gradient_boosting_min_samples_leaf)),
+            random_state=42,
+        )
+        if Y_train.shape[1] > 1:
+            model = MultiOutputRegressor(base)
+            model.fit(X_train, Y_train)
+        else:
+            model = base
+            model.fit(X_train, np.asarray(Y_train).reshape(-1))
+        return {
+            'model_type': model_type,
+            'model': model,
+            'n_estimators': int(max(10, int(gradient_boosting_n_estimators))),
+            'learning_rate': float(max(1e-6, gradient_boosting_learning_rate)),
+            'max_depth': int(max(1, gradient_boosting_max_depth)),
+            'min_samples_leaf': int(max(1, gradient_boosting_min_samples_leaf)),
+        }
+
+    if model_type == 'hist_gradient_boosting':
+        max_depth = int(hist_gradient_boosting_max_depth)
+        base = HistGradientBoostingRegressor(
+            max_iter=max(10, int(hist_gradient_boosting_n_estimators)),
+            learning_rate=float(max(1e-6, hist_gradient_boosting_learning_rate)),
+            max_depth=max_depth if max_depth > 0 else None,
+            min_samples_leaf=max(1, int(hist_gradient_boosting_min_samples_leaf)),
+            random_state=42,
+        )
+        if Y_train.shape[1] > 1:
+            model = MultiOutputRegressor(base)
+            model.fit(X_train, Y_train)
+        else:
+            model = base
+            model.fit(X_train, np.asarray(Y_train).reshape(-1))
+        return {
+            'model_type': model_type,
+            'model': model,
+            'n_estimators': int(max(10, int(hist_gradient_boosting_n_estimators))),
+            'learning_rate': float(max(1e-6, hist_gradient_boosting_learning_rate)),
+            'max_depth': None if max_depth <= 0 else int(max_depth),
+            'min_samples_leaf': int(max(1, hist_gradient_boosting_min_samples_leaf)),
+        }
+
+    if model_type == 'gaussian_process':
+        kernel = ConstantKernel(constant_value=max(1e-8, float(gaussian_process_constant_value))) * GPRRBFKernel(
+            length_scale=max(1e-8, float(gaussian_process_length_scale))
+        )
+        base = GaussianProcessRegressor(
+            kernel=kernel,
+            alpha=max(1e-12, float(gaussian_process_alpha)),
+            n_restarts_optimizer=max(0, int(gaussian_process_n_restarts_optimizer)),
+            normalize_y=True,
+            random_state=42,
+        )
+        if Y_train.shape[1] > 1:
+            model = MultiOutputRegressor(base)
+            model.fit(X_train, Y_train)
+        else:
+            model = base
+            model.fit(X_train, np.asarray(Y_train).reshape(-1))
+        return {
+            'model_type': model_type,
+            'model': model,
+            'alpha': float(max(1e-12, gaussian_process_alpha)),
+            'length_scale': float(max(1e-8, gaussian_process_length_scale)),
+            'constant_value': float(max(1e-8, gaussian_process_constant_value)),
+            'n_restarts_optimizer': int(max(0, gaussian_process_n_restarts_optimizer)),
+        }
+
     if model_type == 'pls':
         # sklearn PLS always mean-centers X and Y internally.
         # `pls_scale` controls only standard-deviation scaling after centering.
@@ -396,6 +887,27 @@ def _fit_model(
             'n_components': int(n_comp),
         }
 
+    if model_type == 'kernel_pls':
+        max_comp = max(1, min(X_train.shape[0] - 1, int(max(1, kernel_pls_n_features)) - 1))
+        n_comp = max(1, min(int(n_components), max_comp))
+        sampler = RBFSampler(
+            gamma=max(1e-12, float(kernel_pls_gamma)),
+            n_components=max(10, int(kernel_pls_n_features)),
+            random_state=42,
+        )
+        X_map = sampler.fit_transform(X_train)
+        model = PLSRegression(n_components=n_comp, scale=bool(pls_scale))
+        model.fit(X_map, Y_train)
+        return {
+            'model_type': model_type,
+            'model': model,
+            'sampler': sampler,
+            'n_components': int(n_comp),
+            'gamma': float(max(1e-12, kernel_pls_gamma)),
+            'mapped_features': int(max(10, int(kernel_pls_n_features))),
+            'pls_scale': bool(pls_scale),
+        }
+
     if model_type == 'local':
         return {
             'model_type': model_type,
@@ -417,10 +929,16 @@ def _predict_model(model_info: Dict[str, Any], X_data: np.ndarray) -> np.ndarray
     model_type = model_info.get('model_type')
     X_data = np.asarray(X_data, dtype=float)
 
-    if model_type in ('ols', 'ridge', 'pls'):
+    if model_type in ('ols', 'ridge', 'pls', 'elastic_net', 'svr', 'gradient_boosting', 'hist_gradient_boosting', 'gaussian_process'):
         return np.asarray(model_info['model'].predict(X_data), dtype=float)
 
     if model_type == 'lasso':
+        y_pred = np.asarray(model_info['model'].predict(X_data), dtype=float)
+        if y_pred.ndim == 1:
+            return y_pred.reshape(-1, 1)
+        return y_pred
+
+    if model_type == 'random_forest':
         y_pred = np.asarray(model_info['model'].predict(X_data), dtype=float)
         if y_pred.ndim == 1:
             return y_pred.reshape(-1, 1)
@@ -431,6 +949,11 @@ def _predict_model(model_info: Dict[str, Any], X_data: np.ndarray) -> np.ndarray
         reg = model_info['reg']
         scores = pca.transform(X_data)
         return np.asarray(reg.predict(scores), dtype=float)
+
+    if model_type == 'kernel_pls':
+        sampler = model_info['sampler']
+        X_map = sampler.transform(X_data)
+        return np.asarray(model_info['model'].predict(X_map), dtype=float)
 
     if model_type == 'local':
         return _fit_predict_local(
@@ -475,6 +998,27 @@ def _cross_validated_predictions(
     pls_scale: bool,
     ridge_alpha: float,
     lasso_alpha: float,
+    elastic_net_alpha: float,
+    elastic_net_l1_ratio: float,
+    random_forest_n_estimators: int,
+    svr_c: float,
+    svr_epsilon: float,
+    svr_gamma: float,
+    svr_kernel: str,
+    gradient_boosting_n_estimators: int,
+    gradient_boosting_learning_rate: float,
+    gradient_boosting_max_depth: int,
+    gradient_boosting_min_samples_leaf: int,
+    hist_gradient_boosting_n_estimators: int,
+    hist_gradient_boosting_learning_rate: float,
+    hist_gradient_boosting_max_depth: int,
+    hist_gradient_boosting_min_samples_leaf: int,
+    gaussian_process_alpha: float,
+    gaussian_process_length_scale: float,
+    gaussian_process_constant_value: float,
+    gaussian_process_n_restarts_optimizer: int,
+    kernel_pls_gamma: float,
+    kernel_pls_n_features: int,
     n_neighbors: int,
     local_method: str,
     idw_power: float,
@@ -503,6 +1047,27 @@ def _cross_validated_predictions(
             pls_scale=pls_scale,
             ridge_alpha=ridge_alpha,
             lasso_alpha=lasso_alpha,
+            elastic_net_alpha=elastic_net_alpha,
+            elastic_net_l1_ratio=elastic_net_l1_ratio,
+            random_forest_n_estimators=random_forest_n_estimators,
+            svr_c=svr_c,
+            svr_epsilon=svr_epsilon,
+            svr_gamma=svr_gamma,
+            svr_kernel=svr_kernel,
+            gradient_boosting_n_estimators=gradient_boosting_n_estimators,
+            gradient_boosting_learning_rate=gradient_boosting_learning_rate,
+            gradient_boosting_max_depth=gradient_boosting_max_depth,
+            gradient_boosting_min_samples_leaf=gradient_boosting_min_samples_leaf,
+            hist_gradient_boosting_n_estimators=hist_gradient_boosting_n_estimators,
+            hist_gradient_boosting_learning_rate=hist_gradient_boosting_learning_rate,
+            hist_gradient_boosting_max_depth=hist_gradient_boosting_max_depth,
+            hist_gradient_boosting_min_samples_leaf=hist_gradient_boosting_min_samples_leaf,
+            gaussian_process_alpha=gaussian_process_alpha,
+            gaussian_process_length_scale=gaussian_process_length_scale,
+            gaussian_process_constant_value=gaussian_process_constant_value,
+            gaussian_process_n_restarts_optimizer=gaussian_process_n_restarts_optimizer,
+            kernel_pls_gamma=kernel_pls_gamma,
+            kernel_pls_n_features=kernel_pls_n_features,
             n_neighbors=n_neighbors,
             local_method=local_method,
             idw_power=idw_power,
@@ -541,6 +1106,27 @@ def first_order_calibration(
     pls_scale: bool = False,
     ridge_alpha: float = 1.0,
     lasso_alpha: float = 1.0,
+    elastic_net_alpha: float = 1.0,
+    elastic_net_l1_ratio: float = 0.5,
+    random_forest_n_estimators: int = 200,
+    svr_c: float = 1.0,
+    svr_epsilon: float = 0.1,
+    svr_gamma: float = 0.1,
+    svr_kernel: str = 'rbf',
+    gradient_boosting_n_estimators: int = 200,
+    gradient_boosting_learning_rate: float = 0.05,
+    gradient_boosting_max_depth: int = 3,
+    gradient_boosting_min_samples_leaf: int = 1,
+    hist_gradient_boosting_n_estimators: int = 200,
+    hist_gradient_boosting_learning_rate: float = 0.05,
+    hist_gradient_boosting_max_depth: int = 0,
+    hist_gradient_boosting_min_samples_leaf: int = 20,
+    gaussian_process_alpha: float = 1e-6,
+    gaussian_process_length_scale: float = 1.0,
+    gaussian_process_constant_value: float = 1.0,
+    gaussian_process_n_restarts_optimizer: int = 0,
+    kernel_pls_gamma: float = 0.1,
+    kernel_pls_n_features: int = 300,
     local_method: str = 'knn',
     n_neighbors: int = 5,
     idw_power: float = 1.0,
@@ -552,6 +1138,12 @@ def first_order_calibration(
     n_components_range: Optional[Any] = None,
     ridge_alpha_range: Optional[Any] = None,
     lasso_alpha_range: Optional[Any] = None,
+    elastic_net_alpha_range: Optional[Any] = None,
+    random_forest_n_estimators_range: Optional[Any] = None,
+    svr_c_range: Optional[Any] = None,
+    gradient_boosting_n_estimators_range: Optional[Any] = None,
+    hist_gradient_boosting_n_estimators_range: Optional[Any] = None,
+    gaussian_process_alpha_range: Optional[Any] = None,
     n_neighbors_range: Optional[Any] = None,
     idw_power_range: Optional[Any] = None,
     adaptive_alpha_range: Optional[Any] = None,
@@ -593,7 +1185,7 @@ def first_order_calibration(
     was_scaled = _coerce_optional_bool(was_scaled)
 
     scaling_fallback_applied = False
-    if model_type_norm in ('ridge', 'lasso') and was_scaled is not True:
+    if model_type_norm in ('ridge', 'lasso', 'elastic_net', 'svr', 'gaussian_process', 'kernel_pls') and was_scaled is not True:
         X_cal, X_val = _autoscale_from_calibration(X_cal=X_cal, X_val=X_val)
         scaling_fallback_applied = True
         emit_execution_warning(
@@ -616,52 +1208,39 @@ def first_order_calibration(
             "local_distance must be one of: 'euclidean', 'mahalanobis', 'manhattan', 'minkowski', 'chebyshev', 'chord'."
         )
 
-    parameter_name = None
-    fixed_value = None
-    if model_type_norm in ('pls', 'pcr'):
-        parameter_name = 'n_components'
-        fixed_value = int(n_components)
-    elif model_type_norm == 'ridge':
-        parameter_name = 'ridge_alpha'
-        fixed_value = float(ridge_alpha)
-    elif model_type_norm == 'lasso':
-        parameter_name = 'lasso_alpha'
-        fixed_value = float(lasso_alpha)
-    elif model_type_norm == 'local':
-        if local_method_norm == 'knn':
-            parameter_name = 'n_neighbors'
-            fixed_value = int(n_neighbors)
-        elif local_method_norm == 'idw':
-            parameter_name = 'idw_power'
-            fixed_value = float(idw_power)
-        elif local_method_norm == 'adaptive':
-            parameter_name = 'adaptive_alpha'
-            fixed_value = float(adaptive_alpha)
-        elif local_method_norm == 'radius':
-            parameter_name = 'radius_threshold'
-            fixed_value = float(radius_threshold)
-        elif local_method_norm == 'kernel':
-            parameter_name = 'kernel_bandwidth'
-            fixed_value = float(kernel_bandwidth)
-
-    selected_range_input = parameter_range
-    if model_type_norm in ('pls', 'pcr') and n_components_range not in (None, ''):
-        selected_range_input = n_components_range
-    elif model_type_norm == 'ridge' and ridge_alpha_range not in (None, ''):
-        selected_range_input = ridge_alpha_range
-    elif model_type_norm == 'lasso' and lasso_alpha_range not in (None, ''):
-        selected_range_input = lasso_alpha_range
-    elif model_type_norm == 'local':
-        if local_method_norm == 'knn' and n_neighbors_range not in (None, ''):
-            selected_range_input = n_neighbors_range
-        elif local_method_norm == 'idw' and idw_power_range not in (None, ''):
-            selected_range_input = idw_power_range
-        elif local_method_norm == 'adaptive' and adaptive_alpha_range not in (None, ''):
-            selected_range_input = adaptive_alpha_range
-        elif local_method_norm == 'radius' and radius_threshold_range not in (None, ''):
-            selected_range_input = radius_threshold_range
-        elif local_method_norm == 'kernel' and kernel_bandwidth_range not in (None, ''):
-            selected_range_input = kernel_bandwidth_range
+    parameter_name, fixed_value, selected_range_input = _resolve_optimization_target(
+        model_type_norm=model_type_norm,
+        local_method_norm=local_method_norm,
+        n_components=n_components,
+        ridge_alpha=ridge_alpha,
+        lasso_alpha=lasso_alpha,
+        elastic_net_alpha=elastic_net_alpha,
+        random_forest_n_estimators=random_forest_n_estimators,
+        svr_c=svr_c,
+        gradient_boosting_n_estimators=gradient_boosting_n_estimators,
+        hist_gradient_boosting_n_estimators=hist_gradient_boosting_n_estimators,
+        gaussian_process_alpha=gaussian_process_alpha,
+        n_neighbors=n_neighbors,
+        idw_power=idw_power,
+        adaptive_alpha=adaptive_alpha,
+        radius_threshold=radius_threshold,
+        kernel_bandwidth=kernel_bandwidth,
+        parameter_range=parameter_range,
+        n_components_range=n_components_range,
+        ridge_alpha_range=ridge_alpha_range,
+        lasso_alpha_range=lasso_alpha_range,
+        elastic_net_alpha_range=elastic_net_alpha_range,
+        random_forest_n_estimators_range=random_forest_n_estimators_range,
+        svr_c_range=svr_c_range,
+        gradient_boosting_n_estimators_range=gradient_boosting_n_estimators_range,
+        hist_gradient_boosting_n_estimators_range=hist_gradient_boosting_n_estimators_range,
+        gaussian_process_alpha_range=gaussian_process_alpha_range,
+        n_neighbors_range=n_neighbors_range,
+        idw_power_range=idw_power_range,
+        adaptive_alpha_range=adaptive_alpha_range,
+        radius_threshold_range=radius_threshold_range,
+        kernel_bandwidth_range=kernel_bandwidth_range,
+    )
 
     candidates = _parse_parameter_candidates(
         optimize_parameters=bool(optimize_parameters and parameter_name is not None),
@@ -701,41 +1280,88 @@ def first_order_calibration(
     local_self_uses_loo = model_type_norm == 'local'
 
     for candidate in candidates:
-        c_n_components = int(candidate) if model_type_norm in ('pls', 'pcr') else int(n_components)
-        c_alpha = float(candidate) if model_type_norm == 'ridge' else float(ridge_alpha)
-        c_lasso_alpha = float(candidate) if model_type_norm == 'lasso' else float(lasso_alpha)
-        c_neighbors = int(candidate) if (model_type_norm == 'local' and local_method_norm == 'knn') else int(n_neighbors)
-        c_idw_power = float(candidate) if (model_type_norm == 'local' and local_method_norm == 'idw') else float(idw_power)
-        c_adaptive_alpha = float(candidate) if (model_type_norm == 'local' and local_method_norm == 'adaptive') else float(adaptive_alpha)
-        c_radius = float(candidate) if (model_type_norm == 'local' and local_method_norm == 'radius') else float(radius_threshold)
-        c_kernel_bw = float(candidate) if (model_type_norm == 'local' and local_method_norm == 'kernel') else float(kernel_bandwidth)
+        candidate_params = _candidate_hyperparameters(
+            candidate=candidate,
+            model_type_norm=model_type_norm,
+            local_method_norm=local_method_norm,
+            n_components=n_components,
+            ridge_alpha=ridge_alpha,
+            lasso_alpha=lasso_alpha,
+            elastic_net_alpha=elastic_net_alpha,
+            elastic_net_l1_ratio=elastic_net_l1_ratio,
+            random_forest_n_estimators=random_forest_n_estimators,
+            svr_c=svr_c,
+            svr_epsilon=svr_epsilon,
+            svr_gamma=svr_gamma,
+            svr_kernel=svr_kernel,
+            gradient_boosting_n_estimators=gradient_boosting_n_estimators,
+            gradient_boosting_learning_rate=gradient_boosting_learning_rate,
+            gradient_boosting_max_depth=gradient_boosting_max_depth,
+            gradient_boosting_min_samples_leaf=gradient_boosting_min_samples_leaf,
+            hist_gradient_boosting_n_estimators=hist_gradient_boosting_n_estimators,
+            hist_gradient_boosting_learning_rate=hist_gradient_boosting_learning_rate,
+            hist_gradient_boosting_max_depth=hist_gradient_boosting_max_depth,
+            hist_gradient_boosting_min_samples_leaf=hist_gradient_boosting_min_samples_leaf,
+            gaussian_process_alpha=gaussian_process_alpha,
+            gaussian_process_length_scale=gaussian_process_length_scale,
+            gaussian_process_constant_value=gaussian_process_constant_value,
+            gaussian_process_n_restarts_optimizer=gaussian_process_n_restarts_optimizer,
+            kernel_pls_gamma=kernel_pls_gamma,
+            kernel_pls_n_features=kernel_pls_n_features,
+            n_neighbors=n_neighbors,
+            idw_power=idw_power,
+            adaptive_alpha=adaptive_alpha,
+            radius_threshold=radius_threshold,
+            kernel_bandwidth=kernel_bandwidth,
+        )
 
         model_info = _fit_model(
             model_type=model_type_norm,
             X_train=X_cal,
             Y_train=Y_cal,
-            n_components=c_n_components,
+            n_components=candidate_params['n_components'],
             pls_scale=pls_scale,
-            ridge_alpha=c_alpha,
-            lasso_alpha=c_lasso_alpha,
-            n_neighbors=c_neighbors,
+            ridge_alpha=candidate_params['ridge_alpha'],
+            lasso_alpha=candidate_params['lasso_alpha'],
+            elastic_net_alpha=candidate_params['elastic_net_alpha'],
+            elastic_net_l1_ratio=candidate_params['elastic_net_l1_ratio'],
+            random_forest_n_estimators=candidate_params['random_forest_n_estimators'],
+            svr_c=candidate_params['svr_c'],
+            svr_epsilon=candidate_params['svr_epsilon'],
+            svr_gamma=candidate_params['svr_gamma'],
+            svr_kernel=candidate_params['svr_kernel'],
+            gradient_boosting_n_estimators=candidate_params['gradient_boosting_n_estimators'],
+            gradient_boosting_learning_rate=candidate_params['gradient_boosting_learning_rate'],
+            gradient_boosting_max_depth=candidate_params['gradient_boosting_max_depth'],
+            gradient_boosting_min_samples_leaf=candidate_params['gradient_boosting_min_samples_leaf'],
+            hist_gradient_boosting_n_estimators=candidate_params['hist_gradient_boosting_n_estimators'],
+            hist_gradient_boosting_learning_rate=candidate_params['hist_gradient_boosting_learning_rate'],
+            hist_gradient_boosting_max_depth=candidate_params['hist_gradient_boosting_max_depth'],
+            hist_gradient_boosting_min_samples_leaf=candidate_params['hist_gradient_boosting_min_samples_leaf'],
+            gaussian_process_alpha=candidate_params['gaussian_process_alpha'],
+            gaussian_process_length_scale=candidate_params['gaussian_process_length_scale'],
+            gaussian_process_constant_value=candidate_params['gaussian_process_constant_value'],
+            gaussian_process_n_restarts_optimizer=candidate_params['gaussian_process_n_restarts_optimizer'],
+            kernel_pls_gamma=candidate_params['kernel_pls_gamma'],
+            kernel_pls_n_features=candidate_params['kernel_pls_n_features'],
+            n_neighbors=candidate_params['n_neighbors'],
             local_method=local_method_norm,
-            idw_power=c_idw_power,
-            adaptive_alpha=c_adaptive_alpha,
-            radius_threshold=c_radius,
-            kernel_bandwidth=c_kernel_bw,
+            idw_power=candidate_params['idw_power'],
+            adaptive_alpha=candidate_params['adaptive_alpha'],
+            radius_threshold=candidate_params['radius_threshold'],
+            kernel_bandwidth=candidate_params['kernel_bandwidth'],
             local_distance=local_distance_norm,
         )
         if local_self_uses_loo:
             y_self_pred = _predict_local_leave_one_out(
                 X_data=X_cal,
                 Y_data=Y_cal,
-                n_neighbors=c_neighbors,
+                n_neighbors=candidate_params['n_neighbors'],
                 local_method=local_method_norm,
-                idw_power=c_idw_power,
-                adaptive_alpha=c_adaptive_alpha,
-                radius_threshold=c_radius,
-                kernel_bandwidth=c_kernel_bw,
+                idw_power=candidate_params['idw_power'],
+                adaptive_alpha=candidate_params['adaptive_alpha'],
+                radius_threshold=candidate_params['radius_threshold'],
+                kernel_bandwidth=candidate_params['kernel_bandwidth'],
                 local_distance=local_distance_norm,
             )
         else:
@@ -752,16 +1378,37 @@ def first_order_calibration(
             X_cal=X_cal,
             Y_cal=Y_cal,
             model_type=model_type_norm,
-            n_components=c_n_components,
+            n_components=candidate_params['n_components'],
             pls_scale=pls_scale,
-            ridge_alpha=c_alpha,
-            lasso_alpha=c_lasso_alpha,
-            n_neighbors=c_neighbors,
+            ridge_alpha=candidate_params['ridge_alpha'],
+            lasso_alpha=candidate_params['lasso_alpha'],
+            elastic_net_alpha=candidate_params['elastic_net_alpha'],
+            elastic_net_l1_ratio=candidate_params['elastic_net_l1_ratio'],
+            random_forest_n_estimators=candidate_params['random_forest_n_estimators'],
+            svr_c=candidate_params['svr_c'],
+            svr_epsilon=candidate_params['svr_epsilon'],
+            svr_gamma=candidate_params['svr_gamma'],
+            svr_kernel=candidate_params['svr_kernel'],
+            gradient_boosting_n_estimators=candidate_params['gradient_boosting_n_estimators'],
+            gradient_boosting_learning_rate=candidate_params['gradient_boosting_learning_rate'],
+            gradient_boosting_max_depth=candidate_params['gradient_boosting_max_depth'],
+            gradient_boosting_min_samples_leaf=candidate_params['gradient_boosting_min_samples_leaf'],
+            hist_gradient_boosting_n_estimators=candidate_params['hist_gradient_boosting_n_estimators'],
+            hist_gradient_boosting_learning_rate=candidate_params['hist_gradient_boosting_learning_rate'],
+            hist_gradient_boosting_max_depth=candidate_params['hist_gradient_boosting_max_depth'],
+            hist_gradient_boosting_min_samples_leaf=candidate_params['hist_gradient_boosting_min_samples_leaf'],
+            gaussian_process_alpha=candidate_params['gaussian_process_alpha'],
+            gaussian_process_length_scale=candidate_params['gaussian_process_length_scale'],
+            gaussian_process_constant_value=candidate_params['gaussian_process_constant_value'],
+            gaussian_process_n_restarts_optimizer=candidate_params['gaussian_process_n_restarts_optimizer'],
+            kernel_pls_gamma=candidate_params['kernel_pls_gamma'],
+            kernel_pls_n_features=candidate_params['kernel_pls_n_features'],
+            n_neighbors=candidate_params['n_neighbors'],
             local_method=local_method_norm,
-            idw_power=c_idw_power,
-            adaptive_alpha=c_adaptive_alpha,
-            radius_threshold=c_radius,
-            kernel_bandwidth=c_kernel_bw,
+            idw_power=candidate_params['idw_power'],
+            adaptive_alpha=candidate_params['adaptive_alpha'],
+            radius_threshold=candidate_params['radius_threshold'],
+            kernel_bandwidth=candidate_params['kernel_bandwidth'],
             local_distance=local_distance_norm,
             cv_config=cv_config,
         )
@@ -783,29 +1430,76 @@ def first_order_calibration(
             best_score = score
             best_candidate = candidate
 
-    final_n_components = int(best_candidate) if model_type_norm in ('pls', 'pcr') else int(n_components)
-    final_alpha = float(best_candidate) if model_type_norm == 'ridge' else float(ridge_alpha)
-    final_lasso_alpha = float(best_candidate) if model_type_norm == 'lasso' else float(lasso_alpha)
-    final_neighbors = int(best_candidate) if (model_type_norm == 'local' and local_method_norm == 'knn') else int(n_neighbors)
-    final_idw_power = float(best_candidate) if (model_type_norm == 'local' and local_method_norm == 'idw') else float(idw_power)
-    final_adaptive_alpha = float(best_candidate) if (model_type_norm == 'local' and local_method_norm == 'adaptive') else float(adaptive_alpha)
-    final_radius = float(best_candidate) if (model_type_norm == 'local' and local_method_norm == 'radius') else float(radius_threshold)
-    final_kernel_bw = float(best_candidate) if (model_type_norm == 'local' and local_method_norm == 'kernel') else float(kernel_bandwidth)
+    final_params = _candidate_hyperparameters(
+        candidate=best_candidate,
+        model_type_norm=model_type_norm,
+        local_method_norm=local_method_norm,
+        n_components=n_components,
+        ridge_alpha=ridge_alpha,
+        lasso_alpha=lasso_alpha,
+        elastic_net_alpha=elastic_net_alpha,
+        elastic_net_l1_ratio=elastic_net_l1_ratio,
+        random_forest_n_estimators=random_forest_n_estimators,
+        svr_c=svr_c,
+        svr_epsilon=svr_epsilon,
+        svr_gamma=svr_gamma,
+        svr_kernel=svr_kernel,
+        gradient_boosting_n_estimators=gradient_boosting_n_estimators,
+        gradient_boosting_learning_rate=gradient_boosting_learning_rate,
+        gradient_boosting_max_depth=gradient_boosting_max_depth,
+        gradient_boosting_min_samples_leaf=gradient_boosting_min_samples_leaf,
+        hist_gradient_boosting_n_estimators=hist_gradient_boosting_n_estimators,
+        hist_gradient_boosting_learning_rate=hist_gradient_boosting_learning_rate,
+        hist_gradient_boosting_max_depth=hist_gradient_boosting_max_depth,
+        hist_gradient_boosting_min_samples_leaf=hist_gradient_boosting_min_samples_leaf,
+        gaussian_process_alpha=gaussian_process_alpha,
+        gaussian_process_length_scale=gaussian_process_length_scale,
+        gaussian_process_constant_value=gaussian_process_constant_value,
+        gaussian_process_n_restarts_optimizer=gaussian_process_n_restarts_optimizer,
+        kernel_pls_gamma=kernel_pls_gamma,
+        kernel_pls_n_features=kernel_pls_n_features,
+        n_neighbors=n_neighbors,
+        idw_power=idw_power,
+        adaptive_alpha=adaptive_alpha,
+        radius_threshold=radius_threshold,
+        kernel_bandwidth=kernel_bandwidth,
+    )
 
     final_model = _fit_model(
         model_type=model_type_norm,
         X_train=X_cal,
         Y_train=Y_cal,
-        n_components=final_n_components,
+        n_components=final_params['n_components'],
         pls_scale=pls_scale,
-        ridge_alpha=final_alpha,
-        lasso_alpha=final_lasso_alpha,
-        n_neighbors=final_neighbors,
+        ridge_alpha=final_params['ridge_alpha'],
+        lasso_alpha=final_params['lasso_alpha'],
+        elastic_net_alpha=final_params['elastic_net_alpha'],
+        elastic_net_l1_ratio=final_params['elastic_net_l1_ratio'],
+        random_forest_n_estimators=final_params['random_forest_n_estimators'],
+        svr_c=final_params['svr_c'],
+        svr_epsilon=final_params['svr_epsilon'],
+        svr_gamma=final_params['svr_gamma'],
+        svr_kernel=final_params['svr_kernel'],
+        gradient_boosting_n_estimators=final_params['gradient_boosting_n_estimators'],
+        gradient_boosting_learning_rate=final_params['gradient_boosting_learning_rate'],
+        gradient_boosting_max_depth=final_params['gradient_boosting_max_depth'],
+        gradient_boosting_min_samples_leaf=final_params['gradient_boosting_min_samples_leaf'],
+        hist_gradient_boosting_n_estimators=final_params['hist_gradient_boosting_n_estimators'],
+        hist_gradient_boosting_learning_rate=final_params['hist_gradient_boosting_learning_rate'],
+        hist_gradient_boosting_max_depth=final_params['hist_gradient_boosting_max_depth'],
+        hist_gradient_boosting_min_samples_leaf=final_params['hist_gradient_boosting_min_samples_leaf'],
+        gaussian_process_alpha=final_params['gaussian_process_alpha'],
+        gaussian_process_length_scale=final_params['gaussian_process_length_scale'],
+        gaussian_process_constant_value=final_params['gaussian_process_constant_value'],
+        gaussian_process_n_restarts_optimizer=final_params['gaussian_process_n_restarts_optimizer'],
+        kernel_pls_gamma=final_params['kernel_pls_gamma'],
+        kernel_pls_n_features=final_params['kernel_pls_n_features'],
+        n_neighbors=final_params['n_neighbors'],
         local_method=local_method_norm,
-        idw_power=final_idw_power,
-        adaptive_alpha=final_adaptive_alpha,
-        radius_threshold=final_radius,
-        kernel_bandwidth=final_kernel_bw,
+        idw_power=final_params['idw_power'],
+        adaptive_alpha=final_params['adaptive_alpha'],
+        radius_threshold=final_params['radius_threshold'],
+        kernel_bandwidth=final_params['kernel_bandwidth'],
         local_distance=local_distance_norm,
     )
 
@@ -815,12 +1509,12 @@ def first_order_calibration(
         y_cal_pred = _predict_local_leave_one_out(
             X_data=X_cal,
             Y_data=Y_cal,
-            n_neighbors=final_neighbors,
+            n_neighbors=final_params['n_neighbors'],
             local_method=local_method_norm,
-            idw_power=final_idw_power,
-            adaptive_alpha=final_adaptive_alpha,
-            radius_threshold=final_radius,
-            kernel_bandwidth=final_kernel_bw,
+            idw_power=final_params['idw_power'],
+            adaptive_alpha=final_params['adaptive_alpha'],
+            radius_threshold=final_params['radius_threshold'],
+            kernel_bandwidth=final_params['kernel_bandwidth'],
             local_distance=local_distance_norm,
         )
         y_cal_pred = _align_prediction_shape(y_cal_pred, Y_cal)
@@ -840,16 +1534,37 @@ def first_order_calibration(
         X_cal=X_cal,
         Y_cal=Y_cal,
         model_type=model_type_norm,
-        n_components=final_n_components,
+        n_components=final_params['n_components'],
         pls_scale=pls_scale,
-        ridge_alpha=final_alpha,
-        lasso_alpha=final_lasso_alpha,
-        n_neighbors=final_neighbors,
+        ridge_alpha=final_params['ridge_alpha'],
+        lasso_alpha=final_params['lasso_alpha'],
+        elastic_net_alpha=final_params['elastic_net_alpha'],
+        elastic_net_l1_ratio=final_params['elastic_net_l1_ratio'],
+        random_forest_n_estimators=final_params['random_forest_n_estimators'],
+        svr_c=final_params['svr_c'],
+        svr_epsilon=final_params['svr_epsilon'],
+        svr_gamma=final_params['svr_gamma'],
+        svr_kernel=final_params['svr_kernel'],
+        gradient_boosting_n_estimators=final_params['gradient_boosting_n_estimators'],
+        gradient_boosting_learning_rate=final_params['gradient_boosting_learning_rate'],
+        gradient_boosting_max_depth=final_params['gradient_boosting_max_depth'],
+        gradient_boosting_min_samples_leaf=final_params['gradient_boosting_min_samples_leaf'],
+        hist_gradient_boosting_n_estimators=final_params['hist_gradient_boosting_n_estimators'],
+        hist_gradient_boosting_learning_rate=final_params['hist_gradient_boosting_learning_rate'],
+        hist_gradient_boosting_max_depth=final_params['hist_gradient_boosting_max_depth'],
+        hist_gradient_boosting_min_samples_leaf=final_params['hist_gradient_boosting_min_samples_leaf'],
+        gaussian_process_alpha=final_params['gaussian_process_alpha'],
+        gaussian_process_length_scale=final_params['gaussian_process_length_scale'],
+        gaussian_process_constant_value=final_params['gaussian_process_constant_value'],
+        gaussian_process_n_restarts_optimizer=final_params['gaussian_process_n_restarts_optimizer'],
+        kernel_pls_gamma=final_params['kernel_pls_gamma'],
+        kernel_pls_n_features=final_params['kernel_pls_n_features'],
+        n_neighbors=final_params['n_neighbors'],
         local_method=local_method_norm,
-        idw_power=final_idw_power,
-        adaptive_alpha=final_adaptive_alpha,
-        radius_threshold=final_radius,
-        kernel_bandwidth=final_kernel_bw,
+        idw_power=final_params['idw_power'],
+        adaptive_alpha=final_params['adaptive_alpha'],
+        radius_threshold=final_params['radius_threshold'],
+        kernel_bandwidth=final_params['kernel_bandwidth'],
         local_distance=local_distance_norm,
         cv_config=cv_config,
     )
@@ -872,35 +1587,62 @@ def first_order_calibration(
         'optimization_used': bool(optimize_parameters and parameter_name is not None),
     }
 
-    selected_parameter_value = None
-    if parameter_name == 'n_components':
-        selected_parameter_value = int(final_n_components)
-    elif parameter_name == 'ridge_alpha':
-        selected_parameter_value = float(final_alpha)
-    elif parameter_name == 'lasso_alpha':
-        selected_parameter_value = float(final_lasso_alpha)
-    elif parameter_name == 'n_neighbors':
-        selected_parameter_value = int(final_neighbors)
-    elif parameter_name == 'idw_power':
-        selected_parameter_value = float(final_idw_power)
-    elif parameter_name == 'adaptive_alpha':
-        selected_parameter_value = float(final_adaptive_alpha)
-    elif parameter_name == 'radius_threshold':
-        selected_parameter_value = float(final_radius)
-    elif parameter_name == 'kernel_bandwidth':
-        selected_parameter_value = float(final_kernel_bw)
+    selected_parameter_value = _selected_parameter_value(parameter_name=parameter_name, params=final_params)
+
+    model_specific_payload = _build_model_specific_payload(
+        model_type=model_type_norm,
+        fitted_model=final_model,
+        params=final_params,
+        local_method=local_method_norm,
+        local_distance=local_distance_norm,
+    )
+
+    residual_cal = np.asarray(Y_cal, dtype=float) - np.asarray(y_cal_pred, dtype=float)
+    residual_flat = residual_cal.reshape(-1)
+    diagnostics = {
+        'calibration_residuals': [float(v) for v in residual_flat.tolist()],
+        'residual_mean': float(np.mean(residual_flat)) if residual_flat.size else 0.0,
+        'residual_std': float(np.std(residual_flat)) if residual_flat.size else 0.0,
+        'residual_max_abs': float(np.max(np.abs(residual_flat))) if residual_flat.size else 0.0,
+    }
+    if y_val_pred is not None and Y_val is not None:
+        residual_val = np.asarray(Y_val, dtype=float) - np.asarray(y_val_pred, dtype=float)
+        diagnostics['validation_residuals'] = [float(v) for v in residual_val.reshape(-1).tolist()]
+    model_specific_payload['diagnostics'] = diagnostics
 
     model_payload = {
         'model_type': model_type_norm,
-        'pls_scale': pls_scale if model_type_norm == 'pls' else None,
+        'pls_scale': pls_scale if model_type_norm in ('pls', 'kernel_pls') else None,
         'was_scaled': bool(was_scaled) if was_scaled is not None else None,
         'autoscale_fallback_applied': bool(scaling_fallback_applied),
         'local_method': local_method_norm if model_type_norm == 'local' else None,
         'local_distance': local_distance_norm if model_type_norm == 'local' else None,
-        'idw_power': float(final_idw_power) if model_type_norm == 'local' and local_method_norm == 'idw' else None,
-        'adaptive_alpha': float(final_adaptive_alpha) if model_type_norm == 'local' and local_method_norm == 'adaptive' else None,
-        'radius_threshold': float(final_radius) if model_type_norm == 'local' and local_method_norm == 'radius' else None,
-        'kernel_bandwidth': float(final_kernel_bw) if model_type_norm == 'local' and local_method_norm == 'kernel' else None,
+        'elastic_net_alpha': float(final_params['elastic_net_alpha']) if model_type_norm == 'elastic_net' else None,
+        'elastic_net_l1_ratio': float(final_params['elastic_net_l1_ratio']) if model_type_norm == 'elastic_net' else None,
+        'random_forest_n_estimators': int(final_params['random_forest_n_estimators']) if model_type_norm == 'random_forest' else None,
+        'svr_c': float(final_params['svr_c']) if model_type_norm == 'svr' else None,
+        'svr_epsilon': float(final_params['svr_epsilon']) if model_type_norm == 'svr' else None,
+        'svr_gamma': float(final_params['svr_gamma']) if model_type_norm == 'svr' else None,
+        'svr_kernel': str(final_params['svr_kernel']) if model_type_norm == 'svr' else None,
+        'gradient_boosting_n_estimators': int(final_params['gradient_boosting_n_estimators']) if model_type_norm == 'gradient_boosting' else None,
+        'gradient_boosting_learning_rate': float(final_params['gradient_boosting_learning_rate']) if model_type_norm == 'gradient_boosting' else None,
+        'gradient_boosting_max_depth': int(final_params['gradient_boosting_max_depth']) if model_type_norm == 'gradient_boosting' else None,
+        'gradient_boosting_min_samples_leaf': int(final_params['gradient_boosting_min_samples_leaf']) if model_type_norm == 'gradient_boosting' else None,
+        'hist_gradient_boosting_n_estimators': int(final_params['hist_gradient_boosting_n_estimators']) if model_type_norm == 'hist_gradient_boosting' else None,
+        'hist_gradient_boosting_learning_rate': float(final_params['hist_gradient_boosting_learning_rate']) if model_type_norm == 'hist_gradient_boosting' else None,
+        'hist_gradient_boosting_max_depth': int(final_params['hist_gradient_boosting_max_depth']) if model_type_norm == 'hist_gradient_boosting' else None,
+        'hist_gradient_boosting_min_samples_leaf': int(final_params['hist_gradient_boosting_min_samples_leaf']) if model_type_norm == 'hist_gradient_boosting' else None,
+        'gaussian_process_alpha': float(final_params['gaussian_process_alpha']) if model_type_norm == 'gaussian_process' else None,
+        'gaussian_process_length_scale': float(final_params['gaussian_process_length_scale']) if model_type_norm == 'gaussian_process' else None,
+        'gaussian_process_constant_value': float(final_params['gaussian_process_constant_value']) if model_type_norm == 'gaussian_process' else None,
+        'gaussian_process_n_restarts_optimizer': int(final_params['gaussian_process_n_restarts_optimizer']) if model_type_norm == 'gaussian_process' else None,
+        'kernel_pls_gamma': float(final_params['kernel_pls_gamma']) if model_type_norm == 'kernel_pls' else None,
+        'kernel_pls_n_features': int(final_params['kernel_pls_n_features']) if model_type_norm == 'kernel_pls' else None,
+        'idw_power': float(final_params['idw_power']) if model_type_norm == 'local' and local_method_norm == 'idw' else None,
+        'adaptive_alpha': float(final_params['adaptive_alpha']) if model_type_norm == 'local' and local_method_norm == 'adaptive' else None,
+        'radius_threshold': float(final_params['radius_threshold']) if model_type_norm == 'local' and local_method_norm == 'radius' else None,
+        'kernel_bandwidth': float(final_params['kernel_bandwidth']) if model_type_norm == 'local' and local_method_norm == 'kernel' else None,
+        'model_specific': model_specific_payload,
     }
     metrics_payload = {
         'calibration': metrics_cal,

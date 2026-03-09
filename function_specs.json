@@ -16,7 +16,8 @@
     "center_and_scale": ["X_cal", "X_val", "was_scaled"],
     "univariate_calibration": ["y_cal_pred", "y_val_pred", "models", "metrics", "cv_results"],
     "first_order_calibration": ["y_cal_pred", "y_val_pred", "y_cv_pred", "y_cal_true", "y_val_true", "model", "selected_parameter_name", "selected_parameter_value", "metrics", "cv_results", "optimization_results"],
-    "pca_analysis": ["model_scores", "model_loadings", "val_scores", "model_scores_cv", "model_loadings_cv", "metrics", "cv_results", "data_shape", "data_shape_val", "axis_n_info", "pc_labels", "class_data_cal", "class_data_val", "smp_cal", "smp_val"]
+    "pca_analysis": ["model_scores", "model_loadings", "val_scores", "model_scores_cv", "model_loadings_cv", "metrics", "cv_results", "data_shape", "data_shape_val", "axis_n_info", "pc_labels", "class_data_cal", "class_data_val", "smp_cal", "smp_val"],
+    "parafac_analysis": ["scores_mode_a", "factors", "weights", "instrumental_profiles", "reconstructed", "residual", "metrics", "calibration_models", "component_y_mapping", "reference_angles", "parafac_report", "sweep_results", "selected_n_components", "axis_n_info", "dim_labels", "nway_flag", "cv_results", "y_cv_pred"]
   },
   "input_specs": {
     "workflow_loop_start": [
@@ -62,8 +63,9 @@
     ],
     "center_and_scale": ["X_cal", "X_val", "scaling_method", "nway_flag"],
     "univariate_calibration": ["X_cal", "Y_cal", "X_val", "Y_val", "degree", "intercept", "cv_config"],
-    "first_order_calibration": ["X_cal", "Y_cal", "X_val", "Y_val", "model_type", "n_components", "ridge_alpha", "lasso_alpha", "local_method", "local_distance", "n_neighbors", "idw_power", "adaptive_alpha", "radius_threshold", "kernel_bandwidth", "optimize_parameters", "n_components_range", "ridge_alpha_range", "lasso_alpha_range", "n_neighbors_range", "idw_power_range", "adaptive_alpha_range", "radius_threshold_range", "kernel_bandwidth_range", "parameter_range", "cv_config", "was_scaled"],
-    "pca_analysis": ["X_cal", "X_val", "n_components", "cv_config", "axis_n_info", "axis_nature", "class_data_cal", "class_data_val", "smp_cal", "smp_val"]
+    "first_order_calibration": ["X_cal", "Y_cal", "X_val", "Y_val", "model_type", "n_components", "ridge_alpha", "lasso_alpha", "elastic_net_alpha", "elastic_net_l1_ratio", "random_forest_n_estimators", "svr_c", "svr_epsilon", "svr_gamma", "svr_kernel", "gradient_boosting_n_estimators", "gradient_boosting_learning_rate", "gradient_boosting_max_depth", "gradient_boosting_min_samples_leaf", "hist_gradient_boosting_n_estimators", "hist_gradient_boosting_learning_rate", "hist_gradient_boosting_max_depth", "hist_gradient_boosting_min_samples_leaf", "gaussian_process_alpha", "gaussian_process_length_scale", "gaussian_process_constant_value", "gaussian_process_n_restarts_optimizer", "kernel_pls_gamma", "kernel_pls_n_features", "local_method", "local_distance", "n_neighbors", "idw_power", "adaptive_alpha", "radius_threshold", "kernel_bandwidth", "optimize_parameters", "n_components_range", "ridge_alpha_range", "lasso_alpha_range", "elastic_net_alpha_range", "random_forest_n_estimators_range", "svr_c_range", "gradient_boosting_n_estimators_range", "hist_gradient_boosting_n_estimators_range", "gaussian_process_alpha_range", "n_neighbors_range", "idw_power_range", "adaptive_alpha_range", "radius_threshold_range", "kernel_bandwidth_range", "parameter_range", "cv_config", "was_scaled"],
+    "pca_analysis": ["X_cal", "X_val", "n_components", "cv_config", "axis_n_info", "axis_nature", "class_data_cal", "class_data_val", "smp_cal", "smp_val"],
+    "parafac_analysis": ["X_cal", "Y_cal", "X_val", "Y_val", "n_components", "nway_flag", "mode_centering", "mode_normalization", "mode_restrictions", "tensorly_constraints", "init_method", "max_iter", "tol", "random_state", "random_multi_start", "allow_missing", "missing_constrained_solver", "profile_paths", "profile_usage", "sweep_mode", "component_range", "component_y_mapping", "cv_config", "axis_n_info", "dim_labels"]
   },
   "import_map": {
     "workflow_loop_start": ["builtins", "print"],
@@ -82,7 +84,8 @@
     "center_and_scale": ["chemometrics.data_processing", "center_and_scale"],
     "univariate_calibration": ["chemometrics.univ_calibration", "univariate_calibration"],
     "first_order_calibration": ["chemometrics.first_order_calibration", "first_order_calibration"],
-    "pca_analysis": ["chemometrics.pca_analysis", "pca_analysis"]
+    "pca_analysis": ["chemometrics.pca_analysis", "pca_analysis"],
+    "parafac_analysis": ["chemometrics.parafac_analysis", "parafac_analysis"]
   },
   "gui_listing": {
     "workflow_loop_start": {
@@ -135,6 +138,9 @@
     },
     "pca_analysis": {
       "config_path": "gui_configs/pca_analysis_config.json"
+    },
+    "parafac_analysis": {
+      "config_path": "gui_configs/parafac_analysis_config.json"
     }
   },
   "parameter_types": {
@@ -292,6 +298,27 @@
       "n_components": "int",
       "ridge_alpha": "float",
       "lasso_alpha": "float",
+      "elastic_net_alpha": "float",
+      "elastic_net_l1_ratio": "float",
+      "random_forest_n_estimators": "int",
+      "svr_c": "float",
+      "svr_epsilon": "float",
+      "svr_gamma": "float",
+      "svr_kernel": "str",
+      "gradient_boosting_n_estimators": "int",
+      "gradient_boosting_learning_rate": "float",
+      "gradient_boosting_max_depth": "int",
+      "gradient_boosting_min_samples_leaf": "int",
+      "hist_gradient_boosting_n_estimators": "int",
+      "hist_gradient_boosting_learning_rate": "float",
+      "hist_gradient_boosting_max_depth": "int",
+      "hist_gradient_boosting_min_samples_leaf": "int",
+      "gaussian_process_alpha": "float",
+      "gaussian_process_length_scale": "float",
+      "gaussian_process_constant_value": "float",
+      "gaussian_process_n_restarts_optimizer": "int",
+      "kernel_pls_gamma": "float",
+      "kernel_pls_n_features": "int",
       "local_method": "str",
       "local_distance": "str",
       "n_neighbors": "int",
@@ -303,6 +330,12 @@
       "n_components_range": "str",
       "ridge_alpha_range": "str",
       "lasso_alpha_range": "str",
+      "elastic_net_alpha_range": "str",
+      "random_forest_n_estimators_range": "str",
+      "svr_c_range": "str",
+      "gradient_boosting_n_estimators_range": "str",
+      "hist_gradient_boosting_n_estimators_range": "str",
+      "gaussian_process_alpha_range": "str",
       "n_neighbors_range": "str",
       "idw_power_range": "str",
       "adaptive_alpha_range": "str",
@@ -318,6 +351,33 @@
       "n_components": "int",
       "cv_config": "CVConfig",
       "axis_nature": "list"
+    },
+    "parafac_analysis": {
+      "X_cal": "ndarray",
+      "Y_cal": "ndarray",
+      "X_val": "ndarray",
+      "Y_val": "ndarray",
+      "n_components": "int",
+      "nway_flag": "int",
+      "mode_centering": "list",
+      "mode_normalization": "list",
+      "mode_restrictions": "list",
+      "tensorly_constraints": "dict",
+      "init_method": "str",
+      "max_iter": "int",
+      "tol": "float",
+      "random_state": "str",
+      "random_multi_start": "bool",
+      "allow_missing": "bool",
+      "missing_constrained_solver": "str",
+      "profile_paths": "list",
+      "profile_usage": "list",
+      "sweep_mode": "bool",
+      "component_range": "str",
+      "component_y_mapping": "str",
+      "cv_config": "CVConfig",
+      "axis_n_info": "list",
+      "dim_labels": "list"
     }
   }
 }

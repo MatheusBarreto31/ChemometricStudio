@@ -11,6 +11,27 @@
     "n_components": "Latent Variables / PCs",
     "ridge_alpha": "Ridge Alpha",
     "lasso_alpha": "Lasso Alpha",
+    "elastic_net_alpha": "Elastic Net Alpha",
+    "elastic_net_l1_ratio": "Elastic Net L1 Ratio",
+    "random_forest_n_estimators": "Random Forest Trees",
+    "svr_c": "SVR C",
+    "svr_epsilon": "SVR Epsilon",
+    "svr_gamma": "SVR Gamma",
+    "svr_kernel": "SVR Kernel",
+    "gradient_boosting_n_estimators": "GB Trees",
+    "gradient_boosting_learning_rate": "GB Learning Rate",
+    "gradient_boosting_max_depth": "GB Max Depth",
+    "gradient_boosting_min_samples_leaf": "GB Min Samples Leaf",
+    "hist_gradient_boosting_n_estimators": "HistGB Iterations",
+    "hist_gradient_boosting_learning_rate": "HistGB Learning Rate",
+    "hist_gradient_boosting_max_depth": "HistGB Max Depth",
+    "hist_gradient_boosting_min_samples_leaf": "HistGB Min Samples Leaf",
+    "gaussian_process_alpha": "GPR Alpha",
+    "gaussian_process_length_scale": "GPR Length Scale",
+    "gaussian_process_constant_value": "GPR Constant Value",
+    "gaussian_process_n_restarts_optimizer": "GPR Optimizer Restarts",
+    "kernel_pls_gamma": "Kernel PLS Gamma",
+    "kernel_pls_n_features": "Kernel PLS Mapped Features",
     "local_method": "Local Regression Mode",
     "local_distance": "Local Distance Metric",
     "n_neighbors": "Number of Neighbors",
@@ -22,6 +43,12 @@
     "n_components_range": "LV/PC Optimization Range",
     "ridge_alpha_range": "Ridge Alpha Optimization Range",
     "lasso_alpha_range": "Lasso Alpha Optimization Range",
+    "elastic_net_alpha_range": "Elastic Net Alpha Optimization Range",
+    "random_forest_n_estimators_range": "RF Trees Optimization Range",
+    "svr_c_range": "SVR C Optimization Range",
+    "gradient_boosting_n_estimators_range": "GB Trees Optimization Range",
+    "hist_gradient_boosting_n_estimators_range": "HistGB Iterations Optimization Range",
+    "gaussian_process_alpha_range": "GPR Alpha Optimization Range",
     "n_neighbors_range": "Neighbors Optimization Range",
     "idw_power_range": "IDW Power Optimization Range",
     "adaptive_alpha_range": "Adaptive Alpha Optimization Range",
@@ -42,8 +69,8 @@
     "cv_results": "CV Results",
     "optimization_results": "Optimization Results"
   },
-  "short_description": "Unified first-order calibration with OLS, PLS, PCR, Ridge, Lasso, and Local Regression",
-  "long_description": "Builds first-order calibration models for quantitative prediction with optional parameter optimization. Supports OLS, PLS, PCR, Ridge, Lasso, and Local Regression (KNN, IDW, Adaptive Threshold, Radius, Kernel), computes calibration/CV/validation statistics, supports multiple local distance metrics, and exposes optimization curves for model tuning. Note: PLS and PCR always apply internal mean-centering of predictors (X); PLS also mean-centers responses (Y). For Ridge and Lasso, scaled predictors are recommended; if the routed flag 'was_scaled' is missing or false, this function auto-applies autoscaling as a fallback and emits a warning.",
+  "short_description": "Unified first-order calibration with linear, kernel, tree, kernelized latent-variable, and local regression models",
+  "long_description": "Builds first-order calibration models for quantitative prediction with optional parameter optimization. Supports OLS, Ridge, Lasso, Elastic Net, Random Forest, SVR, Gradient Boosting, HistGradientBoosting, Gaussian Process Regression, PLS, PCR, Kernel PLS extension, and Local Regression (KNN, IDW, Adaptive Threshold, Radius, Kernel). Computes calibration/CV/validation statistics, provides model-specific diagnostics, supports local distance metrics, and exposes optimization curves for parameter tuning. Note: PLS/PCR/Kernel PLS apply latent-variable modeling of transformed predictors. For scale-sensitive models (Ridge, Lasso, Elastic Net, SVR, Gaussian Process, Kernel PLS), if routed flag 'was_scaled' is missing or false, autoscaling fallback is applied with a warning.",
   "execution_report_specs": {
     "messages": {
       "first_order_calibration_default_loocv": "No enabled CV configuration was found during optimization. Defaulted to LOOCV for parameter selection."
@@ -69,24 +96,38 @@
         "type": "str",
         "default": "pls",
         "values": [
-          "lasso",
-          "local",
           "ols",
+          "ridge",
+          "lasso",
+          "elastic_net",
           "pls",
           "pcr",
-          "ridge"
+          "kernel_pls",
+          "svr",
+          "gaussian_process",
+          "random_forest",
+          "gradient_boosting",
+          "hist_gradient_boosting",
+          "local"
         ],
         "value_aliases": [
-          "Lasso Regression",
-          "Local Regression",
           "Ordinary Least Squares",
+          "Ridge Regression",
+          "Lasso Regression",
+          "Elastic Net Regression",
           "Partial Least Squares",
           "Principal Component Regression",
-          "Ridge Regression"
+          "Kernel PLS Regression",
+          "Support Vector Regression",
+          "Gaussian Process Regression",
+          "Random Forest Regression",
+          "Gradient Boosting Regression",
+          "Histogram Gradient Boosting Regression",
+          "Local Regression"
         ],
         "required": true,
         "input_type": "user",
-        "tooltip": "Calibration method: OLS, PLS, PCR, Lasso, Local, or Ridge Regression. Note: PLS and PCR always mean-center X internally; PLS also mean-centers Y."
+        "tooltip": "Calibration method: OLS, Ridge, Lasso, Elastic Net, Random Forest, SVR, Gradient Boosting, HistGradientBoosting, Gaussian Process, PLS, PCR, Kernel PLS, or Local Regression."
       },
       {
         "name": "local_method",
@@ -178,6 +219,307 @@
           "optimize_parameters": false
         },
         "tooltip": "Fixed lasso regularization value when optimization is OFF"
+      },
+      {
+        "name": "elastic_net_alpha",
+        "label": "Elastic Net Alpha",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "elastic_net",
+          "optimize_parameters": false
+        },
+        "tooltip": "Elastic Net regularization strength when optimization is OFF"
+      },
+      {
+        "name": "elastic_net_l1_ratio",
+        "label": "Elastic Net L1 Ratio",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.5",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "elastic_net"
+        },
+        "tooltip": "Elastic Net L1 ratio in [0,1] controlling L1 vs L2 balance"
+      },
+      {
+        "name": "random_forest_n_estimators",
+        "label": "Random Forest Trees",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "200",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "random_forest",
+          "optimize_parameters": false
+        },
+        "tooltip": "Number of trees in the Random Forest when optimization is OFF"
+      },
+      {
+        "name": "svr_kernel",
+        "label": "SVR Kernel",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "rbf",
+        "values": ["rbf", "linear", "poly", "sigmoid"],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "svr"
+        },
+        "tooltip": "Kernel for support vector regression"
+      },
+      {
+        "name": "svr_c",
+        "label": "SVR C",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "svr",
+          "optimize_parameters": false
+        },
+        "tooltip": "SVR regularization parameter C when optimization is OFF"
+      },
+      {
+        "name": "svr_epsilon",
+        "label": "SVR Epsilon",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.1",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "svr"
+        },
+        "tooltip": "SVR epsilon-insensitive loss width"
+      },
+      {
+        "name": "svr_gamma",
+        "label": "SVR Gamma",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.1",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "svr"
+        },
+        "tooltip": "SVR kernel gamma (>0, <=0 uses internal scaling)"
+      },
+      {
+        "name": "gradient_boosting_n_estimators",
+        "label": "GB Trees",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "200",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "gradient_boosting",
+          "optimize_parameters": false
+        },
+        "tooltip": "Number of trees for Gradient Boosting when optimization is OFF"
+      },
+      {
+        "name": "gradient_boosting_learning_rate",
+        "label": "GB Learning Rate",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.05",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "gradient_boosting"
+        },
+        "tooltip": "Learning rate for Gradient Boosting"
+      },
+      {
+        "name": "gradient_boosting_max_depth",
+        "label": "GB Max Depth",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "3",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "gradient_boosting"
+        },
+        "tooltip": "Tree depth for Gradient Boosting base learners"
+      },
+      {
+        "name": "gradient_boosting_min_samples_leaf",
+        "label": "GB Min Samples Leaf",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "gradient_boosting"
+        },
+        "tooltip": "Minimum samples per leaf for Gradient Boosting"
+      },
+      {
+        "name": "hist_gradient_boosting_n_estimators",
+        "label": "HistGB Iterations",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "200",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "hist_gradient_boosting",
+          "optimize_parameters": false
+        },
+        "tooltip": "Boosting iterations for HistGradientBoosting when optimization is OFF"
+      },
+      {
+        "name": "hist_gradient_boosting_learning_rate",
+        "label": "HistGB Learning Rate",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.05",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "hist_gradient_boosting"
+        },
+        "tooltip": "Learning rate for HistGradientBoosting"
+      },
+      {
+        "name": "hist_gradient_boosting_max_depth",
+        "label": "HistGB Max Depth",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "hist_gradient_boosting"
+        },
+        "tooltip": "Maximum depth for HistGradientBoosting (0 means no limit)"
+      },
+      {
+        "name": "hist_gradient_boosting_min_samples_leaf",
+        "label": "HistGB Min Samples Leaf",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "20",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "hist_gradient_boosting"
+        },
+        "tooltip": "Minimum samples per leaf for HistGradientBoosting"
+      },
+      {
+        "name": "gaussian_process_alpha",
+        "label": "GPR Alpha",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.000001",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "gaussian_process",
+          "optimize_parameters": false
+        },
+        "tooltip": "Noise regularization alpha for Gaussian Process"
+      },
+      {
+        "name": "gaussian_process_length_scale",
+        "label": "GPR Length Scale",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "gaussian_process"
+        },
+        "tooltip": "RBF length scale for Gaussian Process kernel"
+      },
+      {
+        "name": "gaussian_process_constant_value",
+        "label": "GPR Constant Value",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "gaussian_process"
+        },
+        "tooltip": "Constant multiplier for Gaussian Process kernel"
+      },
+      {
+        "name": "gaussian_process_n_restarts_optimizer",
+        "label": "GPR Optimizer Restarts",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "gaussian_process"
+        },
+        "tooltip": "Number of optimizer restarts for Gaussian Process hyperparameter tuning"
+      },
+      {
+        "name": "kernel_pls_gamma",
+        "label": "Kernel PLS Gamma",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.1",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "kernel_pls"
+        },
+        "tooltip": "RBF mapping gamma for Kernel PLS extension"
+      },
+      {
+        "name": "kernel_pls_n_features",
+        "label": "Kernel PLS Mapped Features",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "300",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "kernel_pls"
+        },
+        "tooltip": "Number of random Fourier mapped features for Kernel PLS"
       },
       {
         "name": "n_neighbors",
@@ -285,7 +627,8 @@
           "optimize_parameters": true,
           "model_type": [
             "pls",
-            "pcr"
+            "pcr",
+            "kernel_pls"
           ]
         },
         "tooltip": "Integer range for latent variables/components. Single value X is interpreted as 1:X"
@@ -319,6 +662,96 @@
           "model_type": "lasso"
         },
         "tooltip": "Positive alpha values to test for lasso regularization"
+      },
+      {
+        "name": "elastic_net_alpha_range",
+        "label": "Elastic Net Alpha Optimization Range",
+        "category": "Optimization",
+        "widget": "entry",
+        "type": "str",
+        "default": "0.0001,0.001,0.01,0.1,1,10,100",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "optimize_parameters": true,
+          "model_type": "elastic_net"
+        },
+        "tooltip": "Positive alpha values to test for Elastic Net regularization"
+      },
+      {
+        "name": "random_forest_n_estimators_range",
+        "label": "RF Trees Optimization Range",
+        "category": "Optimization",
+        "widget": "entry",
+        "type": "str",
+        "default": "100,200,300,500",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "optimize_parameters": true,
+          "model_type": "random_forest"
+        },
+        "tooltip": "Tree counts to test for Random Forest regression"
+      },
+      {
+        "name": "svr_c_range",
+        "label": "SVR C Optimization Range",
+        "category": "Optimization",
+        "widget": "entry",
+        "type": "str",
+        "default": "0.1,1,10,100",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "optimize_parameters": true,
+          "model_type": "svr"
+        },
+        "tooltip": "C values to test for Support Vector Regression"
+      },
+      {
+        "name": "gradient_boosting_n_estimators_range",
+        "label": "GB Trees Optimization Range",
+        "category": "Optimization",
+        "widget": "entry",
+        "type": "str",
+        "default": "100,200,300,500",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "optimize_parameters": true,
+          "model_type": "gradient_boosting"
+        },
+        "tooltip": "Tree counts to test for Gradient Boosting"
+      },
+      {
+        "name": "hist_gradient_boosting_n_estimators_range",
+        "label": "HistGB Iterations Optimization Range",
+        "category": "Optimization",
+        "widget": "entry",
+        "type": "str",
+        "default": "100,200,300,500",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "optimize_parameters": true,
+          "model_type": "hist_gradient_boosting"
+        },
+        "tooltip": "Iteration counts to test for HistGradientBoosting"
+      },
+      {
+        "name": "gaussian_process_alpha_range",
+        "label": "GPR Alpha Optimization Range",
+        "category": "Optimization",
+        "widget": "entry",
+        "type": "str",
+        "default": "1e-8,1e-6,1e-4,1e-2,1e-1",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "optimize_parameters": true,
+          "model_type": "gaussian_process"
+        },
+        "tooltip": "Alpha values to test for Gaussian Process regularization"
       },
       {
         "name": "n_neighbors_range",
@@ -546,53 +979,6 @@
         ]
       },
       {
-        "title": "Metrics",
-        "layout": "fp",
-        "sections": [
-          {
-            "type": "table",
-            "config": {
-              "title": "RMSEP and R2 Summary",
-              "row_label": "Metric",
-              "columns": [
-                {
-                  "data_source": "metrics",
-                  "nested_key": "calibration.RMSEP",
-                  "name": "Calibration RMSEP"
-                },
-                {
-                  "data_source": "metrics",
-                  "nested_key": "cv.RMSEP",
-                  "name": "CV RMSEP"
-                },
-                {
-                  "data_source": "metrics",
-                  "nested_key": "validation.RMSEP",
-                  "name": "Validation RMSEP"
-                },
-                {
-                  "data_source": "metrics",
-                  "nested_key": "calibration.R2",
-                  "name": "Calibration R2"
-                },
-                {
-                  "data_source": "metrics",
-                  "nested_key": "cv.R2",
-                  "name": "CV R2"
-                },
-                {
-                  "data_source": "metrics",
-                  "nested_key": "validation.R2",
-                  "name": "Validation R2"
-                }
-              ],
-              "decimal_places": 6,
-              "max_rows": 20
-            }
-          }
-        ]
-      },
-      {
         "title": "Text Report",
         "layout": "fp",
         "sections": [
@@ -600,7 +986,7 @@
             "type": "text",
             "config": {
               "title": "Calibration Report",
-              "text_template": "First-Order Calibration Report\n==============================\nMethod: {method}\nLocal mode: {local_mode}\nSelected parameter: {param_name} = {param_value}\n\nPerformance\n-----------\nCalibration  -> R2: {r2_cal}, RMSEP: {rmsep_cal}\nCross-Validation -> R2: {r2_cv}, RMSEP: {rmsep_cv}\nValidation   -> R2: {r2_val}, RMSEP: {rmsep_val}\n\nOptimization enabled: {optimization_used}\nBest optimized value: {best_value}",
+              "text_template": "First-Order Calibration Report\n==============================\nMethod: {method}\nLocal mode: {local_mode}\nModel details: {model_details}\nSelected parameter: {param_name} = {param_value}\n\nPerformance\n-----------\nCalibration  -> R2: {r2_cal}, RMSEP: {rmsep_cal}\nCross-Validation -> R2: {r2_cv}, RMSEP: {rmsep_cv}\nValidation   -> R2: {r2_val}, RMSEP: {rmsep_val}\n\nOptimization enabled: {optimization_used}\nBest optimized value: {best_value}",
               "bindings": [
                 {
                   "name": "method",
@@ -614,6 +1000,14 @@
                   "name": "local_mode",
                   "data_source": "model",
                   "nested_key": "local_method",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "model_details",
+                  "data_source": "model",
+                  "nested_key": "model_specific.summary",
                   "selector": {
                     "mode": "value"
                   }
@@ -704,6 +1098,1295 @@
                     "mode": "value"
                   }
                 }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Model Specific - OLS",
+        "layout": "fp",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "ols"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "OLS Coefficient Profile",
+              "x_axis": {
+                "data_source": "__index__",
+                "axis_type": "linear",
+                "label": "Feature Index",
+                "reference_source": "model",
+                "reference_nested_key": "model_specific.linear.coefficients"
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.linear.coefficients",
+                "axis_type": "linear",
+                "label": "Coefficient"
+              },
+              "line_style": "lines+markers"
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "data_source": "model",
+              "nested_key": "model_specific.linear.coefficients",
+              "title": "OLS Coefficients",
+              "row_label": "Feature",
+              "decimal_places": 6,
+              "max_rows": 200
+            }
+          },
+          {
+            "type": "text",
+            "config": {
+              "title": "OLS Details",
+              "text_template": "OLS Model\n=========\nSummary: {summary}\nIntercept vector: {intercept}\nNonzero coefficients: {nonzero}",
+              "bindings": [
+                {
+                  "name": "summary",
+                  "data_source": "model",
+                  "nested_key": "model_specific.summary",
+                  "selector": {"mode": "value"}
+                },
+                {
+                  "name": "intercept",
+                  "data_source": "model",
+                  "nested_key": "model_specific.linear.intercept",
+                  "selector": {"mode": "value"}
+                },
+                {
+                  "name": "nonzero",
+                  "data_source": "model",
+                  "nested_key": "model_specific.linear.nonzero_coefficients",
+                  "selector": {"mode": "value"}
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Model Specific - Ridge",
+        "layout": "fp",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "ridge"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Ridge Coefficient Profile",
+              "x_axis": {
+                "data_source": "__index__",
+                "axis_type": "linear",
+                "label": "Feature Index",
+                "reference_source": "model",
+                "reference_nested_key": "model_specific.linear.coefficients"
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.linear.coefficients",
+                "axis_type": "linear",
+                "label": "Coefficient"
+              },
+              "line_style": "lines+markers"
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "data_source": "model",
+              "nested_key": "model_specific.linear.coefficients",
+              "title": "Ridge Coefficients",
+              "row_label": "Feature",
+              "decimal_places": 6,
+              "max_rows": 200
+            }
+          },
+          {
+            "type": "text",
+            "config": {
+              "title": "Ridge Details",
+              "text_template": "Ridge Model\n===========\nSummary: {summary}\nSelected alpha: {alpha}\nIntercept vector: {intercept}\nAutoscale fallback applied: {autoscale}",
+              "bindings": [
+                {
+                  "name": "summary",
+                  "data_source": "model",
+                  "nested_key": "model_specific.summary",
+                  "selector": {"mode": "value"}
+                },
+                {
+                  "name": "alpha",
+                  "data_source": "selected_parameter_value",
+                  "selector": {"mode": "value"}
+                },
+                {
+                  "name": "intercept",
+                  "data_source": "model",
+                  "nested_key": "model_specific.linear.intercept",
+                  "selector": {"mode": "value"}
+                },
+                {
+                  "name": "autoscale",
+                  "data_source": "model",
+                  "nested_key": "autoscale_fallback_applied",
+                  "selector": {"mode": "value"}
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Model Specific - Lasso",
+        "layout": "fp",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "lasso"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Lasso Coefficient Profile",
+              "x_axis": {
+                "data_source": "__index__",
+                "axis_type": "linear",
+                "label": "Feature Index",
+                "reference_source": "model",
+                "reference_nested_key": "model_specific.linear.coefficients"
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.linear.coefficients",
+                "axis_type": "linear",
+                "label": "Coefficient"
+              },
+              "line_style": "lines+markers"
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "data_source": "model",
+              "nested_key": "model_specific.linear.coefficients",
+              "title": "Lasso Coefficients",
+              "row_label": "Feature",
+              "decimal_places": 6,
+              "max_rows": 200
+            }
+          },
+          {
+            "type": "text",
+            "config": {
+              "title": "Lasso Details",
+              "text_template": "Lasso Model\n===========\nSummary: {summary}\nSelected alpha: {alpha}\nNonzero coefficients: {nonzero}\nAutoscale fallback applied: {autoscale}",
+              "bindings": [
+                {
+                  "name": "summary",
+                  "data_source": "model",
+                  "nested_key": "model_specific.summary",
+                  "selector": {"mode": "value"}
+                },
+                {
+                  "name": "alpha",
+                  "data_source": "selected_parameter_value",
+                  "selector": {"mode": "value"}
+                },
+                {
+                  "name": "nonzero",
+                  "data_source": "model",
+                  "nested_key": "model_specific.linear.nonzero_coefficients",
+                  "selector": {"mode": "value"}
+                },
+                {
+                  "name": "autoscale",
+                  "data_source": "model",
+                  "nested_key": "autoscale_fallback_applied",
+                  "selector": {"mode": "value"}
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Model Specific - PLS",
+        "layout": "fp",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "pls"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "PLS Component Norms",
+              "line_style": "lines+markers",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Component",
+                    "reference_source": "model",
+                    "reference_nested_key": "model_specific.pls.x_weights_norm"
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pls.x_weights_norm",
+                    "axis_type": "linear",
+                    "label": "Norm"
+                  },
+                  "label": "X Weights Norm",
+                  "marker": "o"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Component",
+                    "reference_source": "model",
+                    "reference_nested_key": "model_specific.pls.x_loadings_norm"
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pls.x_loadings_norm",
+                    "axis_type": "linear",
+                    "label": "Norm"
+                  },
+                  "label": "X Loadings Norm",
+                  "marker": "s"
+                }
+              ]
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "PLS Component Diagnostics",
+              "row_label": "Component",
+              "columns": [
+                {
+                  "data_source": "model",
+                  "nested_key": "model_specific.pls.x_weights_norm",
+                  "name": "X Weights Norm"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "model_specific.pls.x_loadings_norm",
+                  "name": "X Loadings Norm"
+                }
+              ],
+              "decimal_places": 6,
+              "max_rows": 100
+            }
+          },
+          {
+            "type": "text",
+            "config": {
+              "title": "PLS Details",
+              "text_template": "PLS Model\n=========\nSummary: {summary}\nSelected components: {components}\nPLS scaling enabled: {pls_scale}",
+              "bindings": [
+                {
+                  "name": "summary",
+                  "data_source": "model",
+                  "nested_key": "model_specific.summary",
+                  "selector": {"mode": "value"}
+                },
+                {
+                  "name": "components",
+                  "data_source": "selected_parameter_value",
+                  "selector": {"mode": "value"}
+                },
+                {
+                  "name": "pls_scale",
+                  "data_source": "model",
+                  "nested_key": "model_specific.pls.pls_scale",
+                  "selector": {"mode": "value"}
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Model Specific - PCR",
+        "layout": "fp",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "pcr"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "PCR Explained Variance",
+              "line_style": "lines+markers",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Component",
+                    "reference_source": "model",
+                    "reference_nested_key": "model_specific.pcr.explained_variance_ratio"
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pcr.explained_variance_ratio",
+                    "axis_type": "linear",
+                    "label": "Explained Variance Ratio"
+                  },
+                  "label": "Individual",
+                  "marker": "o"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Component",
+                    "reference_source": "model",
+                    "reference_nested_key": "model_specific.pcr.cumulative_explained_variance_ratio"
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pcr.cumulative_explained_variance_ratio",
+                    "axis_type": "linear",
+                    "label": "Cumulative Explained Variance Ratio"
+                  },
+                  "label": "Cumulative",
+                  "marker": "s"
+                }
+              ]
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "PCR Variance Table",
+              "row_label": "Component",
+              "columns": [
+                {
+                  "data_source": "model",
+                  "nested_key": "model_specific.pcr.explained_variance_ratio",
+                  "name": "Individual EVR"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "model_specific.pcr.cumulative_explained_variance_ratio",
+                  "name": "Cumulative EVR"
+                }
+              ],
+              "decimal_places": 6,
+              "max_rows": 100
+            }
+          },
+          {
+            "type": "text",
+            "config": {
+              "title": "PCR Details",
+              "text_template": "PCR Model\n=========\nSummary: {summary}\nSelected components: {components}\nExplained variance ratio: {evr}",
+              "bindings": [
+                {
+                  "name": "summary",
+                  "data_source": "model",
+                  "nested_key": "model_specific.summary",
+                  "selector": {"mode": "value"}
+                },
+                {
+                  "name": "components",
+                  "data_source": "selected_parameter_value",
+                  "selector": {"mode": "value"}
+                },
+                {
+                  "name": "evr",
+                  "data_source": "model",
+                  "nested_key": "model_specific.pcr.explained_variance_ratio",
+                  "selector": {"mode": "value"}
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Model Specific - Random Forest",
+        "layout": "fp",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "random_forest"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Random Forest Feature Importance Profile",
+              "x_axis": {
+                "data_source": "__index__",
+                "axis_type": "linear",
+                "label": "Feature Index",
+                "reference_source": "model",
+                "reference_nested_key": "model_specific.random_forest.feature_importances"
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.random_forest.feature_importances",
+                "axis_type": "linear",
+                "label": "Importance"
+              },
+              "line_style": "lines+markers"
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "data_source": "model",
+              "nested_key": "model_specific.random_forest.feature_importances",
+              "title": "Random Forest Feature Importances",
+              "row_label": "Feature",
+              "decimal_places": 6,
+              "max_rows": 300
+            }
+          },
+          {
+            "type": "text",
+            "config": {
+              "title": "Random Forest Details",
+              "text_template": "Random Forest Model\n===================\nSummary: {summary}\nSelected trees: {trees}\nFeature importances: {importances}",
+              "bindings": [
+                {
+                  "name": "summary",
+                  "data_source": "model",
+                  "nested_key": "model_specific.summary",
+                  "selector": {"mode": "value"}
+                },
+                {
+                  "name": "trees",
+                  "data_source": "model",
+                  "nested_key": "model_specific.random_forest.n_estimators",
+                  "selector": {"mode": "value"}
+                },
+                {
+                  "name": "importances",
+                  "data_source": "model",
+                  "nested_key": "model_specific.random_forest.feature_importances",
+                  "selector": {"mode": "value"}
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Model Specific - Local",
+        "layout": "fp",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "local"
+        },
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "title": "Local Regression Parameter Snapshot",
+              "row_label": "Parameter",
+              "columns": [
+                {
+                  "data_source": "model",
+                  "nested_key": "model_specific.local.n_neighbors",
+                  "name": "Neighbors"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "model_specific.local.idw_power",
+                  "name": "IDW Power"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "model_specific.local.adaptive_alpha",
+                  "name": "Adaptive Alpha"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "model_specific.local.radius_threshold",
+                  "name": "Radius Threshold"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "model_specific.local.kernel_bandwidth",
+                  "name": "Kernel Bandwidth"
+                }
+              ],
+              "decimal_places": 6,
+              "max_rows": 20
+            }
+          },
+          {
+            "type": "text",
+            "config": {
+              "title": "Local Regression Details",
+              "text_template": "Local Regression\n================\nSummary: {summary}\nMethod: {method}\nDistance: {distance}\nNeighbors: {neighbors}\nIDW power: {idw}\nAdaptive alpha: {adaptive}\nRadius threshold: {radius}\nKernel bandwidth: {kernel}",
+              "bindings": [
+                {
+                  "name": "summary",
+                  "data_source": "model",
+                  "nested_key": "model_specific.summary",
+                  "selector": {"mode": "value"}
+                },
+                {
+                  "name": "method",
+                  "data_source": "model",
+                  "nested_key": "model_specific.local.method",
+                  "selector": {"mode": "value"}
+                },
+                {
+                  "name": "distance",
+                  "data_source": "model",
+                  "nested_key": "model_specific.local.distance",
+                  "selector": {"mode": "value"}
+                },
+                {
+                  "name": "neighbors",
+                  "data_source": "model",
+                  "nested_key": "model_specific.local.n_neighbors",
+                  "selector": {"mode": "value"}
+                },
+                {
+                  "name": "idw",
+                  "data_source": "model",
+                  "nested_key": "model_specific.local.idw_power",
+                  "selector": {"mode": "value"}
+                },
+                {
+                  "name": "adaptive",
+                  "data_source": "model",
+                  "nested_key": "model_specific.local.adaptive_alpha",
+                  "selector": {"mode": "value"}
+                },
+                {
+                  "name": "radius",
+                  "data_source": "model",
+                  "nested_key": "model_specific.local.radius_threshold",
+                  "selector": {"mode": "value"}
+                },
+                {
+                  "name": "kernel",
+                  "data_source": "model",
+                  "nested_key": "model_specific.local.kernel_bandwidth",
+                  "selector": {"mode": "value"}
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Model Specific - Elastic Net",
+        "layout": "fp",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "elastic_net"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Elastic Net Coefficient Profile",
+              "x_axis": {
+                "data_source": "__index__",
+                "axis_type": "linear",
+                "label": "Feature Index",
+                "reference_source": "model",
+                "reference_nested_key": "model_specific.linear.coefficients"
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.linear.coefficients",
+                "axis_type": "linear",
+                "label": "Coefficient"
+              },
+              "line_style": "lines+markers"
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Elastic Net Diagnostics",
+              "row_label": "Metric",
+              "columns": [
+                {"data_source": "model", "nested_key": "elastic_net_alpha", "name": "Alpha"},
+                {"data_source": "model", "nested_key": "elastic_net_l1_ratio", "name": "L1 Ratio"},
+                {"data_source": "model", "nested_key": "model_specific.linear.nonzero_coefficients", "name": "Nonzero Coefficients"},
+                {"data_source": "model", "nested_key": "model_specific.diagnostics.residual_std", "name": "Residual Std"}
+              ],
+              "decimal_places": 6,
+              "max_rows": 20
+            }
+          },
+          {
+            "type": "text",
+            "config": {
+              "title": "Elastic Net Details",
+              "text_template": "Elastic Net\n===========\nSummary: {summary}\nAlpha: {alpha}\nL1 ratio: {l1r}\nResidual mean/std/max|abs|: {rmean} / {rstd} / {rmax}",
+              "bindings": [
+                {"name": "summary", "data_source": "model", "nested_key": "model_specific.summary", "selector": {"mode": "value"}},
+                {"name": "alpha", "data_source": "model", "nested_key": "elastic_net_alpha", "selector": {"mode": "value"}},
+                {"name": "l1r", "data_source": "model", "nested_key": "elastic_net_l1_ratio", "selector": {"mode": "value"}},
+                {"name": "rmean", "data_source": "model", "nested_key": "model_specific.diagnostics.residual_mean", "selector": {"mode": "value"}},
+                {"name": "rstd", "data_source": "model", "nested_key": "model_specific.diagnostics.residual_std", "selector": {"mode": "value"}},
+                {"name": "rmax", "data_source": "model", "nested_key": "model_specific.diagnostics.residual_max_abs", "selector": {"mode": "value"}}
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Model Specific - SVR",
+        "layout": "fp",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "svr"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "SVR Calibration Residual Profile",
+              "x_axis": {
+                "data_source": "__index__",
+                "axis_type": "linear",
+                "label": "Residual Index",
+                "reference_source": "model",
+                "reference_nested_key": "model_specific.diagnostics.calibration_residuals"
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.diagnostics.calibration_residuals",
+                "axis_type": "linear",
+                "label": "Residual"
+              },
+              "line_style": "lines+markers"
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "SVR Hyperparameters",
+              "row_label": "Parameter",
+              "columns": [
+                {"data_source": "model", "nested_key": "svr_kernel", "name": "Kernel"},
+                {"data_source": "model", "nested_key": "svr_c", "name": "C"},
+                {"data_source": "model", "nested_key": "svr_epsilon", "name": "Epsilon"},
+                {"data_source": "model", "nested_key": "svr_gamma", "name": "Gamma"}
+              ],
+              "decimal_places": 6,
+              "max_rows": 20
+            }
+          },
+          {
+            "type": "text",
+            "config": {
+              "title": "SVR Details",
+              "text_template": "SVR\n===\nSummary: {summary}\nKernel: {kernel}\nC/epsilon/gamma: {c} / {eps} / {gam}",
+              "bindings": [
+                {"name": "summary", "data_source": "model", "nested_key": "model_specific.summary", "selector": {"mode": "value"}},
+                {"name": "kernel", "data_source": "model", "nested_key": "svr_kernel", "selector": {"mode": "value"}},
+                {"name": "c", "data_source": "model", "nested_key": "svr_c", "selector": {"mode": "value"}},
+                {"name": "eps", "data_source": "model", "nested_key": "svr_epsilon", "selector": {"mode": "value"}},
+                {"name": "gam", "data_source": "model", "nested_key": "svr_gamma", "selector": {"mode": "value"}}
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Model Specific - Gradient Boosting",
+        "layout": "fp",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "gradient_boosting"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Gradient Boosting Calibration Residual Profile",
+              "x_axis": {
+                "data_source": "__index__",
+                "axis_type": "linear",
+                "label": "Residual Index",
+                "reference_source": "model",
+                "reference_nested_key": "model_specific.diagnostics.calibration_residuals"
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.diagnostics.calibration_residuals",
+                "axis_type": "linear",
+                "label": "Residual"
+              },
+              "line_style": "lines+markers"
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Gradient Boosting Hyperparameters",
+              "row_label": "Parameter",
+              "columns": [
+                {"data_source": "model", "nested_key": "gradient_boosting_n_estimators", "name": "Trees"},
+                {"data_source": "model", "nested_key": "gradient_boosting_learning_rate", "name": "Learning Rate"},
+                {"data_source": "model", "nested_key": "gradient_boosting_max_depth", "name": "Max Depth"},
+                {"data_source": "model", "nested_key": "gradient_boosting_min_samples_leaf", "name": "Min Samples Leaf"}
+              ],
+              "decimal_places": 6,
+              "max_rows": 20
+            }
+          },
+          {
+            "type": "text",
+            "config": {
+              "title": "Gradient Boosting Details",
+              "text_template": "Gradient Boosting\n=================\nSummary: {summary}\nTrees/LR/Depth/Leaf: {n} / {lr} / {d} / {leaf}",
+              "bindings": [
+                {"name": "summary", "data_source": "model", "nested_key": "model_specific.summary", "selector": {"mode": "value"}},
+                {"name": "n", "data_source": "model", "nested_key": "gradient_boosting_n_estimators", "selector": {"mode": "value"}},
+                {"name": "lr", "data_source": "model", "nested_key": "gradient_boosting_learning_rate", "selector": {"mode": "value"}},
+                {"name": "d", "data_source": "model", "nested_key": "gradient_boosting_max_depth", "selector": {"mode": "value"}},
+                {"name": "leaf", "data_source": "model", "nested_key": "gradient_boosting_min_samples_leaf", "selector": {"mode": "value"}}
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Model Specific - Hist Gradient Boosting",
+        "layout": "fp",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "hist_gradient_boosting"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "HistGradientBoosting Calibration Residual Profile",
+              "x_axis": {
+                "data_source": "__index__",
+                "axis_type": "linear",
+                "label": "Residual Index",
+                "reference_source": "model",
+                "reference_nested_key": "model_specific.diagnostics.calibration_residuals"
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.diagnostics.calibration_residuals",
+                "axis_type": "linear",
+                "label": "Residual"
+              },
+              "line_style": "lines+markers"
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "HistGradientBoosting Hyperparameters",
+              "row_label": "Parameter",
+              "columns": [
+                {"data_source": "model", "nested_key": "hist_gradient_boosting_n_estimators", "name": "Iterations"},
+                {"data_source": "model", "nested_key": "hist_gradient_boosting_learning_rate", "name": "Learning Rate"},
+                {"data_source": "model", "nested_key": "hist_gradient_boosting_max_depth", "name": "Max Depth"},
+                {"data_source": "model", "nested_key": "hist_gradient_boosting_min_samples_leaf", "name": "Min Samples Leaf"}
+              ],
+              "decimal_places": 6,
+              "max_rows": 20
+            }
+          },
+          {
+            "type": "text",
+            "config": {
+              "title": "HistGradientBoosting Details",
+              "text_template": "HistGradientBoosting\n====================\nSummary: {summary}\nIter/LR/Depth/Leaf: {n} / {lr} / {d} / {leaf}",
+              "bindings": [
+                {"name": "summary", "data_source": "model", "nested_key": "model_specific.summary", "selector": {"mode": "value"}},
+                {"name": "n", "data_source": "model", "nested_key": "hist_gradient_boosting_n_estimators", "selector": {"mode": "value"}},
+                {"name": "lr", "data_source": "model", "nested_key": "hist_gradient_boosting_learning_rate", "selector": {"mode": "value"}},
+                {"name": "d", "data_source": "model", "nested_key": "hist_gradient_boosting_max_depth", "selector": {"mode": "value"}},
+                {"name": "leaf", "data_source": "model", "nested_key": "hist_gradient_boosting_min_samples_leaf", "selector": {"mode": "value"}}
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Model Specific - Gaussian Process",
+        "layout": "fp",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "gaussian_process"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Gaussian Process Calibration Residual Profile",
+              "x_axis": {
+                "data_source": "__index__",
+                "axis_type": "linear",
+                "label": "Residual Index",
+                "reference_source": "model",
+                "reference_nested_key": "model_specific.diagnostics.calibration_residuals"
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.diagnostics.calibration_residuals",
+                "axis_type": "linear",
+                "label": "Residual"
+              },
+              "line_style": "lines+markers"
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Gaussian Process Hyperparameters",
+              "row_label": "Parameter",
+              "columns": [
+                {"data_source": "model", "nested_key": "gaussian_process_alpha", "name": "Alpha"},
+                {"data_source": "model", "nested_key": "gaussian_process_length_scale", "name": "Length Scale"},
+                {"data_source": "model", "nested_key": "gaussian_process_constant_value", "name": "Constant"},
+                {"data_source": "model", "nested_key": "gaussian_process_n_restarts_optimizer", "name": "Optimizer Restarts"}
+              ],
+              "decimal_places": 6,
+              "max_rows": 20
+            }
+          },
+          {
+            "type": "text",
+            "config": {
+              "title": "Gaussian Process Details",
+              "text_template": "Gaussian Process\n================\nSummary: {summary}\nAlpha/Length/Constant/Restarts: {a} / {l} / {c} / {r}",
+              "bindings": [
+                {"name": "summary", "data_source": "model", "nested_key": "model_specific.summary", "selector": {"mode": "value"}},
+                {"name": "a", "data_source": "model", "nested_key": "gaussian_process_alpha", "selector": {"mode": "value"}},
+                {"name": "l", "data_source": "model", "nested_key": "gaussian_process_length_scale", "selector": {"mode": "value"}},
+                {"name": "c", "data_source": "model", "nested_key": "gaussian_process_constant_value", "selector": {"mode": "value"}},
+                {"name": "r", "data_source": "model", "nested_key": "gaussian_process_n_restarts_optimizer", "selector": {"mode": "value"}}
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Model Specific - Kernel PLS",
+        "layout": "fp",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "kernel_pls"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Kernel PLS Component Norms",
+              "line_style": "lines+markers",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Component",
+                    "reference_source": "model",
+                    "reference_nested_key": "model_specific.pls.x_weights_norm"
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pls.x_weights_norm",
+                    "axis_type": "linear",
+                    "label": "Norm"
+                  },
+                  "label": "X Weights Norm",
+                  "marker": "o"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Component",
+                    "reference_source": "model",
+                    "reference_nested_key": "model_specific.pls.x_loadings_norm"
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pls.x_loadings_norm",
+                    "axis_type": "linear",
+                    "label": "Norm"
+                  },
+                  "label": "X Loadings Norm",
+                  "marker": "s"
+                }
+              ]
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Kernel PLS Diagnostics",
+              "row_label": "Metric",
+              "columns": [
+                {"data_source": "model", "nested_key": "kernel_pls_gamma", "name": "Kernel Gamma"},
+                {"data_source": "model", "nested_key": "kernel_pls_n_features", "name": "Mapped Features"},
+                {"data_source": "model", "nested_key": "selected_parameter_value", "name": "Selected Components"}
+              ],
+              "decimal_places": 6,
+              "max_rows": 20
+            }
+          },
+          {
+            "type": "text",
+            "config": {
+              "title": "Kernel PLS Details",
+              "text_template": "Kernel PLS\n==========\nSummary: {summary}\nGamma: {g}\nMapped features: {m}\nComponents: {c}",
+              "bindings": [
+                {"name": "summary", "data_source": "model", "nested_key": "model_specific.summary", "selector": {"mode": "value"}},
+                {"name": "g", "data_source": "model", "nested_key": "kernel_pls_gamma", "selector": {"mode": "value"}},
+                {"name": "m", "data_source": "model", "nested_key": "kernel_pls_n_features", "selector": {"mode": "value"}},
+                {"name": "c", "data_source": "selected_parameter_value", "selector": {"mode": "value"}}
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Chemometric Diagnostics - OLS",
+        "layout": "fp",
+        "condition": {"parameter": "model_type", "operator": "==", "value": "ols"},
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "OLS Fit Quality (Measured vs Predicted)",
+              "datasets": [
+                {"x_axis": {"data_source": "y_cal_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_cal_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Calibration"},
+                {"x_axis": {"data_source": "y_val_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_val_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Validation"},
+                {"x_axis": {"data_source": "y_cal_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_cv_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Cross-Validation"}
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "OLS Calibration Residual Profile",
+              "x_axis": {"data_source": "__index__", "axis_type": "linear", "label": "Residual Index", "reference_source": "model", "reference_nested_key": "model_specific.diagnostics.calibration_residuals"},
+              "y_axis": {"data_source": "model", "nested_key": "model_specific.diagnostics.calibration_residuals", "axis_type": "linear", "label": "Residual"},
+              "line_style": "lines+markers"
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "OLS Performance and Residual Statistics",
+              "row_label": "Metric",
+              "columns": [
+                {"data_source": "metrics", "nested_key": "calibration.RMSEP", "name": "Cal RMSEP"},
+                {"data_source": "metrics", "nested_key": "cv.RMSEP", "name": "CV RMSEP"},
+                {"data_source": "metrics", "nested_key": "validation.RMSEP", "name": "Val RMSEP"},
+                {"data_source": "metrics", "nested_key": "calibration.R2", "name": "Cal R2"},
+                {"data_source": "metrics", "nested_key": "cv.R2", "name": "CV R2"},
+                {"data_source": "metrics", "nested_key": "validation.R2", "name": "Val R2"},
+                {"data_source": "model", "nested_key": "model_specific.diagnostics.residual_std", "name": "Residual Std"}
+              ],
+              "decimal_places": 6,
+              "max_rows": 20
+            }
+          }
+        ]
+      },
+      {
+        "title": "Chemometric Diagnostics - Ridge",
+        "layout": "fp",
+        "condition": {"parameter": "model_type", "operator": "==", "value": "ridge"},
+        "sections": [
+          {"type": "graph", "config": {"graph_type": "scatter", "title": "Ridge Fit Quality (Measured vs Predicted)", "datasets": [{"x_axis": {"data_source": "y_cal_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_cal_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Calibration"}, {"x_axis": {"data_source": "y_val_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_val_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Validation"}, {"x_axis": {"data_source": "y_cal_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_cv_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Cross-Validation"}] }},
+          {"type": "graph", "config": {"graph_type": "line", "title": "Ridge Calibration Residual Profile", "x_axis": {"data_source": "__index__", "axis_type": "linear", "label": "Residual Index", "reference_source": "model", "reference_nested_key": "model_specific.diagnostics.calibration_residuals"}, "y_axis": {"data_source": "model", "nested_key": "model_specific.diagnostics.calibration_residuals", "axis_type": "linear", "label": "Residual"}, "line_style": "lines+markers"}},
+          {"type": "table", "config": {"title": "Ridge Performance and Residual Statistics", "row_label": "Metric", "columns": [{"data_source": "metrics", "nested_key": "calibration.RMSEP", "name": "Cal RMSEP"}, {"data_source": "metrics", "nested_key": "cv.RMSEP", "name": "CV RMSEP"}, {"data_source": "metrics", "nested_key": "validation.RMSEP", "name": "Val RMSEP"}, {"data_source": "metrics", "nested_key": "calibration.R2", "name": "Cal R2"}, {"data_source": "metrics", "nested_key": "cv.R2", "name": "CV R2"}, {"data_source": "metrics", "nested_key": "validation.R2", "name": "Val R2"}, {"data_source": "model", "nested_key": "model_specific.diagnostics.residual_std", "name": "Residual Std"}], "decimal_places": 6, "max_rows": 20}}
+        ]
+      },
+      {
+        "title": "Chemometric Diagnostics - Lasso",
+        "layout": "fp",
+        "condition": {"parameter": "model_type", "operator": "==", "value": "lasso"},
+        "sections": [
+          {"type": "graph", "config": {"graph_type": "scatter", "title": "Lasso Fit Quality (Measured vs Predicted)", "datasets": [{"x_axis": {"data_source": "y_cal_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_cal_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Calibration"}, {"x_axis": {"data_source": "y_val_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_val_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Validation"}, {"x_axis": {"data_source": "y_cal_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_cv_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Cross-Validation"}] }},
+          {"type": "graph", "config": {"graph_type": "line", "title": "Lasso Calibration Residual Profile", "x_axis": {"data_source": "__index__", "axis_type": "linear", "label": "Residual Index", "reference_source": "model", "reference_nested_key": "model_specific.diagnostics.calibration_residuals"}, "y_axis": {"data_source": "model", "nested_key": "model_specific.diagnostics.calibration_residuals", "axis_type": "linear", "label": "Residual"}, "line_style": "lines+markers"}},
+          {"type": "table", "config": {"title": "Lasso Performance and Residual Statistics", "row_label": "Metric", "columns": [{"data_source": "metrics", "nested_key": "calibration.RMSEP", "name": "Cal RMSEP"}, {"data_source": "metrics", "nested_key": "cv.RMSEP", "name": "CV RMSEP"}, {"data_source": "metrics", "nested_key": "validation.RMSEP", "name": "Val RMSEP"}, {"data_source": "metrics", "nested_key": "calibration.R2", "name": "Cal R2"}, {"data_source": "metrics", "nested_key": "cv.R2", "name": "CV R2"}, {"data_source": "metrics", "nested_key": "validation.R2", "name": "Val R2"}, {"data_source": "model", "nested_key": "model_specific.linear.nonzero_coefficients", "name": "Nonzero Coefs"}], "decimal_places": 6, "max_rows": 20}}
+        ]
+      },
+      {
+        "title": "Chemometric Diagnostics - Elastic Net",
+        "layout": "fp",
+        "condition": {"parameter": "model_type", "operator": "==", "value": "elastic_net"},
+        "sections": [
+          {"type": "graph", "config": {"graph_type": "scatter", "title": "Elastic Net Fit Quality (Measured vs Predicted)", "datasets": [{"x_axis": {"data_source": "y_cal_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_cal_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Calibration"}, {"x_axis": {"data_source": "y_val_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_val_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Validation"}, {"x_axis": {"data_source": "y_cal_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_cv_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Cross-Validation"}] }},
+          {"type": "graph", "config": {"graph_type": "line", "title": "Elastic Net Calibration Residual Profile", "x_axis": {"data_source": "__index__", "axis_type": "linear", "label": "Residual Index", "reference_source": "model", "reference_nested_key": "model_specific.diagnostics.calibration_residuals"}, "y_axis": {"data_source": "model", "nested_key": "model_specific.diagnostics.calibration_residuals", "axis_type": "linear", "label": "Residual"}, "line_style": "lines+markers"}},
+          {"type": "table", "config": {"title": "Elastic Net Performance and Residual Statistics", "row_label": "Metric", "columns": [{"data_source": "metrics", "nested_key": "calibration.RMSEP", "name": "Cal RMSEP"}, {"data_source": "metrics", "nested_key": "cv.RMSEP", "name": "CV RMSEP"}, {"data_source": "metrics", "nested_key": "validation.RMSEP", "name": "Val RMSEP"}, {"data_source": "metrics", "nested_key": "calibration.R2", "name": "Cal R2"}, {"data_source": "metrics", "nested_key": "cv.R2", "name": "CV R2"}, {"data_source": "metrics", "nested_key": "validation.R2", "name": "Val R2"}, {"data_source": "model", "nested_key": "elastic_net_l1_ratio", "name": "L1 Ratio"}], "decimal_places": 6, "max_rows": 20}}
+        ]
+      },
+      {
+        "title": "Chemometric Diagnostics - PLS",
+        "layout": "fp",
+        "condition": {"parameter": "model_type", "operator": "==", "value": "pls"},
+        "sections": [
+          {"type": "graph", "config": {"graph_type": "scatter", "title": "PLS Fit Quality (Measured vs Predicted)", "datasets": [{"x_axis": {"data_source": "y_cal_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_cal_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Calibration"}, {"x_axis": {"data_source": "y_val_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_val_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Validation"}, {"x_axis": {"data_source": "y_cal_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_cv_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Cross-Validation"}] }},
+          {"type": "graph", "config": {"graph_type": "line", "title": "PLS Calibration Residual Profile", "x_axis": {"data_source": "__index__", "axis_type": "linear", "label": "Residual Index", "reference_source": "model", "reference_nested_key": "model_specific.diagnostics.calibration_residuals"}, "y_axis": {"data_source": "model", "nested_key": "model_specific.diagnostics.calibration_residuals", "axis_type": "linear", "label": "Residual"}, "line_style": "lines+markers"}},
+          {"type": "table", "config": {"title": "PLS Performance and Component Summary", "row_label": "Metric", "columns": [{"data_source": "metrics", "nested_key": "calibration.RMSEP", "name": "Cal RMSEP"}, {"data_source": "metrics", "nested_key": "cv.RMSEP", "name": "CV RMSEP"}, {"data_source": "metrics", "nested_key": "validation.RMSEP", "name": "Val RMSEP"}, {"data_source": "metrics", "nested_key": "calibration.R2", "name": "Cal R2"}, {"data_source": "metrics", "nested_key": "cv.R2", "name": "CV R2"}, {"data_source": "metrics", "nested_key": "validation.R2", "name": "Val R2"}, {"data_source": "model", "nested_key": "model_specific.pls.n_components", "name": "Components"}], "decimal_places": 6, "max_rows": 20}}
+        ]
+      },
+      {
+        "title": "Chemometric Diagnostics - PCR",
+        "layout": "fp",
+        "condition": {"parameter": "model_type", "operator": "==", "value": "pcr"},
+        "sections": [
+          {"type": "graph", "config": {"graph_type": "scatter", "title": "PCR Fit Quality (Measured vs Predicted)", "datasets": [{"x_axis": {"data_source": "y_cal_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_cal_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Calibration"}, {"x_axis": {"data_source": "y_val_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_val_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Validation"}, {"x_axis": {"data_source": "y_cal_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_cv_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Cross-Validation"}] }},
+          {"type": "graph", "config": {"graph_type": "line", "title": "PCR Calibration Residual Profile", "x_axis": {"data_source": "__index__", "axis_type": "linear", "label": "Residual Index", "reference_source": "model", "reference_nested_key": "model_specific.diagnostics.calibration_residuals"}, "y_axis": {"data_source": "model", "nested_key": "model_specific.diagnostics.calibration_residuals", "axis_type": "linear", "label": "Residual"}, "line_style": "lines+markers"}},
+          {"type": "table", "config": {"title": "PCR Performance and Component Summary", "row_label": "Metric", "columns": [{"data_source": "metrics", "nested_key": "calibration.RMSEP", "name": "Cal RMSEP"}, {"data_source": "metrics", "nested_key": "cv.RMSEP", "name": "CV RMSEP"}, {"data_source": "metrics", "nested_key": "validation.RMSEP", "name": "Val RMSEP"}, {"data_source": "metrics", "nested_key": "calibration.R2", "name": "Cal R2"}, {"data_source": "metrics", "nested_key": "cv.R2", "name": "CV R2"}, {"data_source": "metrics", "nested_key": "validation.R2", "name": "Val R2"}, {"data_source": "model", "nested_key": "model_specific.pcr.n_components", "name": "Components"}], "decimal_places": 6, "max_rows": 20}}
+        ]
+      },
+      {
+        "title": "Chemometric Diagnostics - Kernel PLS",
+        "layout": "fp",
+        "condition": {"parameter": "model_type", "operator": "==", "value": "kernel_pls"},
+        "sections": [
+          {"type": "graph", "config": {"graph_type": "scatter", "title": "Kernel PLS Fit Quality (Measured vs Predicted)", "datasets": [{"x_axis": {"data_source": "y_cal_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_cal_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Calibration"}, {"x_axis": {"data_source": "y_val_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_val_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Validation"}, {"x_axis": {"data_source": "y_cal_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_cv_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Cross-Validation"}] }},
+          {"type": "graph", "config": {"graph_type": "line", "title": "Kernel PLS Calibration Residual Profile", "x_axis": {"data_source": "__index__", "axis_type": "linear", "label": "Residual Index", "reference_source": "model", "reference_nested_key": "model_specific.diagnostics.calibration_residuals"}, "y_axis": {"data_source": "model", "nested_key": "model_specific.diagnostics.calibration_residuals", "axis_type": "linear", "label": "Residual"}, "line_style": "lines+markers"}},
+          {"type": "table", "config": {"title": "Kernel PLS Performance and Mapping Summary", "row_label": "Metric", "columns": [{"data_source": "metrics", "nested_key": "calibration.RMSEP", "name": "Cal RMSEP"}, {"data_source": "metrics", "nested_key": "cv.RMSEP", "name": "CV RMSEP"}, {"data_source": "metrics", "nested_key": "validation.RMSEP", "name": "Val RMSEP"}, {"data_source": "metrics", "nested_key": "calibration.R2", "name": "Cal R2"}, {"data_source": "metrics", "nested_key": "cv.R2", "name": "CV R2"}, {"data_source": "metrics", "nested_key": "validation.R2", "name": "Val R2"}, {"data_source": "model", "nested_key": "kernel_pls_n_features", "name": "Mapped Features"}], "decimal_places": 6, "max_rows": 20}}
+        ]
+      },
+      {
+        "title": "Chemometric Diagnostics - Random Forest",
+        "layout": "fp",
+        "condition": {"parameter": "model_type", "operator": "==", "value": "random_forest"},
+        "sections": [
+          {"type": "graph", "config": {"graph_type": "scatter", "title": "Random Forest Fit Quality (Measured vs Predicted)", "datasets": [{"x_axis": {"data_source": "y_cal_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_cal_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Calibration"}, {"x_axis": {"data_source": "y_val_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_val_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Validation"}, {"x_axis": {"data_source": "y_cal_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_cv_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Cross-Validation"}] }},
+          {"type": "graph", "config": {"graph_type": "line", "title": "Random Forest Calibration Residual Profile", "x_axis": {"data_source": "__index__", "axis_type": "linear", "label": "Residual Index", "reference_source": "model", "reference_nested_key": "model_specific.diagnostics.calibration_residuals"}, "y_axis": {"data_source": "model", "nested_key": "model_specific.diagnostics.calibration_residuals", "axis_type": "linear", "label": "Residual"}, "line_style": "lines+markers"}},
+          {"type": "table", "config": {"title": "Random Forest Performance and Residual Statistics", "row_label": "Metric", "columns": [{"data_source": "metrics", "nested_key": "calibration.RMSEP", "name": "Cal RMSEP"}, {"data_source": "metrics", "nested_key": "cv.RMSEP", "name": "CV RMSEP"}, {"data_source": "metrics", "nested_key": "validation.RMSEP", "name": "Val RMSEP"}, {"data_source": "metrics", "nested_key": "calibration.R2", "name": "Cal R2"}, {"data_source": "metrics", "nested_key": "cv.R2", "name": "CV R2"}, {"data_source": "metrics", "nested_key": "validation.R2", "name": "Val R2"}, {"data_source": "model", "nested_key": "model_specific.random_forest.n_estimators", "name": "Trees"}], "decimal_places": 6, "max_rows": 20}}
+        ]
+      },
+      {
+        "title": "Chemometric Diagnostics - Gradient Boosting",
+        "layout": "fp",
+        "condition": {"parameter": "model_type", "operator": "==", "value": "gradient_boosting"},
+        "sections": [
+          {"type": "graph", "config": {"graph_type": "scatter", "title": "Gradient Boosting Fit Quality (Measured vs Predicted)", "datasets": [{"x_axis": {"data_source": "y_cal_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_cal_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Calibration"}, {"x_axis": {"data_source": "y_val_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_val_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Validation"}, {"x_axis": {"data_source": "y_cal_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_cv_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Cross-Validation"}] }},
+          {"type": "graph", "config": {"graph_type": "line", "title": "Gradient Boosting Calibration Residual Profile", "x_axis": {"data_source": "__index__", "axis_type": "linear", "label": "Residual Index", "reference_source": "model", "reference_nested_key": "model_specific.diagnostics.calibration_residuals"}, "y_axis": {"data_source": "model", "nested_key": "model_specific.diagnostics.calibration_residuals", "axis_type": "linear", "label": "Residual"}, "line_style": "lines+markers"}},
+          {"type": "table", "config": {"title": "Gradient Boosting Performance and Residual Statistics", "row_label": "Metric", "columns": [{"data_source": "metrics", "nested_key": "calibration.RMSEP", "name": "Cal RMSEP"}, {"data_source": "metrics", "nested_key": "cv.RMSEP", "name": "CV RMSEP"}, {"data_source": "metrics", "nested_key": "validation.RMSEP", "name": "Val RMSEP"}, {"data_source": "metrics", "nested_key": "calibration.R2", "name": "Cal R2"}, {"data_source": "metrics", "nested_key": "cv.R2", "name": "CV R2"}, {"data_source": "metrics", "nested_key": "validation.R2", "name": "Val R2"}, {"data_source": "model", "nested_key": "gradient_boosting_n_estimators", "name": "Trees"}], "decimal_places": 6, "max_rows": 20}}
+        ]
+      },
+      {
+        "title": "Chemometric Diagnostics - Hist Gradient Boosting",
+        "layout": "fp",
+        "condition": {"parameter": "model_type", "operator": "==", "value": "hist_gradient_boosting"},
+        "sections": [
+          {"type": "graph", "config": {"graph_type": "scatter", "title": "HistGradientBoosting Fit Quality (Measured vs Predicted)", "datasets": [{"x_axis": {"data_source": "y_cal_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_cal_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Calibration"}, {"x_axis": {"data_source": "y_val_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_val_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Validation"}, {"x_axis": {"data_source": "y_cal_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_cv_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Cross-Validation"}] }},
+          {"type": "graph", "config": {"graph_type": "line", "title": "HistGradientBoosting Calibration Residual Profile", "x_axis": {"data_source": "__index__", "axis_type": "linear", "label": "Residual Index", "reference_source": "model", "reference_nested_key": "model_specific.diagnostics.calibration_residuals"}, "y_axis": {"data_source": "model", "nested_key": "model_specific.diagnostics.calibration_residuals", "axis_type": "linear", "label": "Residual"}, "line_style": "lines+markers"}},
+          {"type": "table", "config": {"title": "HistGradientBoosting Performance and Residual Statistics", "row_label": "Metric", "columns": [{"data_source": "metrics", "nested_key": "calibration.RMSEP", "name": "Cal RMSEP"}, {"data_source": "metrics", "nested_key": "cv.RMSEP", "name": "CV RMSEP"}, {"data_source": "metrics", "nested_key": "validation.RMSEP", "name": "Val RMSEP"}, {"data_source": "metrics", "nested_key": "calibration.R2", "name": "Cal R2"}, {"data_source": "metrics", "nested_key": "cv.R2", "name": "CV R2"}, {"data_source": "metrics", "nested_key": "validation.R2", "name": "Val R2"}, {"data_source": "model", "nested_key": "hist_gradient_boosting_n_estimators", "name": "Iterations"}], "decimal_places": 6, "max_rows": 20}}
+        ]
+      },
+      {
+        "title": "Chemometric Diagnostics - SVR",
+        "layout": "fp",
+        "condition": {"parameter": "model_type", "operator": "==", "value": "svr"},
+        "sections": [
+          {"type": "graph", "config": {"graph_type": "scatter", "title": "SVR Fit Quality (Measured vs Predicted)", "datasets": [{"x_axis": {"data_source": "y_cal_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_cal_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Calibration"}, {"x_axis": {"data_source": "y_val_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_val_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Validation"}, {"x_axis": {"data_source": "y_cal_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_cv_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Cross-Validation"}] }},
+          {"type": "graph", "config": {"graph_type": "line", "title": "SVR Calibration Residual Profile", "x_axis": {"data_source": "__index__", "axis_type": "linear", "label": "Residual Index", "reference_source": "model", "reference_nested_key": "model_specific.diagnostics.calibration_residuals"}, "y_axis": {"data_source": "model", "nested_key": "model_specific.diagnostics.calibration_residuals", "axis_type": "linear", "label": "Residual"}, "line_style": "lines+markers"}},
+          {"type": "table", "config": {"title": "SVR Performance and Residual Statistics", "row_label": "Metric", "columns": [{"data_source": "metrics", "nested_key": "calibration.RMSEP", "name": "Cal RMSEP"}, {"data_source": "metrics", "nested_key": "cv.RMSEP", "name": "CV RMSEP"}, {"data_source": "metrics", "nested_key": "validation.RMSEP", "name": "Val RMSEP"}, {"data_source": "metrics", "nested_key": "calibration.R2", "name": "Cal R2"}, {"data_source": "metrics", "nested_key": "cv.R2", "name": "CV R2"}, {"data_source": "metrics", "nested_key": "validation.R2", "name": "Val R2"}, {"data_source": "model", "nested_key": "svr_kernel", "name": "Kernel"}], "decimal_places": 6, "max_rows": 20}}
+        ]
+      },
+      {
+        "title": "Chemometric Diagnostics - Gaussian Process",
+        "layout": "fp",
+        "condition": {"parameter": "model_type", "operator": "==", "value": "gaussian_process"},
+        "sections": [
+          {"type": "graph", "config": {"graph_type": "scatter", "title": "Gaussian Process Fit Quality (Measured vs Predicted)", "datasets": [{"x_axis": {"data_source": "y_cal_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_cal_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Calibration"}, {"x_axis": {"data_source": "y_val_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_val_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Validation"}, {"x_axis": {"data_source": "y_cal_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_cv_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Cross-Validation"}] }},
+          {"type": "graph", "config": {"graph_type": "line", "title": "Gaussian Process Calibration Residual Profile", "x_axis": {"data_source": "__index__", "axis_type": "linear", "label": "Residual Index", "reference_source": "model", "reference_nested_key": "model_specific.diagnostics.calibration_residuals"}, "y_axis": {"data_source": "model", "nested_key": "model_specific.diagnostics.calibration_residuals", "axis_type": "linear", "label": "Residual"}, "line_style": "lines+markers"}},
+          {"type": "table", "config": {"title": "Gaussian Process Performance and Residual Statistics", "row_label": "Metric", "columns": [{"data_source": "metrics", "nested_key": "calibration.RMSEP", "name": "Cal RMSEP"}, {"data_source": "metrics", "nested_key": "cv.RMSEP", "name": "CV RMSEP"}, {"data_source": "metrics", "nested_key": "validation.RMSEP", "name": "Val RMSEP"}, {"data_source": "metrics", "nested_key": "calibration.R2", "name": "Cal R2"}, {"data_source": "metrics", "nested_key": "cv.R2", "name": "CV R2"}, {"data_source": "metrics", "nested_key": "validation.R2", "name": "Val R2"}, {"data_source": "model", "nested_key": "gaussian_process_alpha", "name": "Alpha"}], "decimal_places": 6, "max_rows": 20}}
+        ]
+      },
+      {
+        "title": "Chemometric Diagnostics - Local",
+        "layout": "fp",
+        "condition": {"parameter": "model_type", "operator": "==", "value": "local"},
+        "sections": [
+          {"type": "graph", "config": {"graph_type": "scatter", "title": "Local Regression Fit Quality (Measured vs Predicted)", "datasets": [{"x_axis": {"data_source": "y_cal_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_cal_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Calibration"}, {"x_axis": {"data_source": "y_val_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_val_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Validation"}, {"x_axis": {"data_source": "y_cal_true", "axis_type": "linear", "label": "Measured"}, "y_axis": {"data_source": "y_cv_pred", "axis_type": "linear", "label": "Predicted"}, "label": "Cross-Validation"}] }},
+          {"type": "graph", "config": {"graph_type": "line", "title": "Local Regression Calibration Residual Profile", "x_axis": {"data_source": "__index__", "axis_type": "linear", "label": "Residual Index", "reference_source": "model", "reference_nested_key": "model_specific.diagnostics.calibration_residuals"}, "y_axis": {"data_source": "model", "nested_key": "model_specific.diagnostics.calibration_residuals", "axis_type": "linear", "label": "Residual"}, "line_style": "lines+markers"}},
+          {"type": "table", "config": {"title": "Local Regression Performance and Residual Statistics", "row_label": "Metric", "columns": [{"data_source": "metrics", "nested_key": "calibration.RMSEP", "name": "Cal RMSEP"}, {"data_source": "metrics", "nested_key": "cv.RMSEP", "name": "CV RMSEP"}, {"data_source": "metrics", "nested_key": "validation.RMSEP", "name": "Val RMSEP"}, {"data_source": "metrics", "nested_key": "calibration.R2", "name": "Cal R2"}, {"data_source": "metrics", "nested_key": "cv.R2", "name": "CV R2"}, {"data_source": "metrics", "nested_key": "validation.R2", "name": "Val R2"}, {"data_source": "model", "nested_key": "local_method", "name": "Method"}], "decimal_places": 6, "max_rows": 20}}
+        ]
+      },
+      {
+        "title": "Chemometrist View - Linear Models",
+        "layout": "fp",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "in",
+          "value": ["ols", "ridge", "lasso", "elastic_net"]
+        },
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "title": "Linear Model Performance Snapshot",
+              "row_label": "Metric",
+              "columns": [
+                {"data_source": "metrics", "nested_key": "calibration.R2", "name": "Cal R2"},
+                {"data_source": "metrics", "nested_key": "cv.R2", "name": "CV R2"},
+                {"data_source": "metrics", "nested_key": "validation.R2", "name": "Val R2"},
+                {"data_source": "metrics", "nested_key": "calibration.RMSEP", "name": "Cal RMSEP"},
+                {"data_source": "metrics", "nested_key": "cv.RMSEP", "name": "CV RMSEP"},
+                {"data_source": "metrics", "nested_key": "validation.RMSEP", "name": "Val RMSEP"},
+                {"data_source": "model", "nested_key": "model_specific.linear.nonzero_coefficients", "name": "Nonzero Coefs"},
+                {"data_source": "model", "nested_key": "model_specific.diagnostics.residual_std", "name": "Residual Std"}
+              ],
+              "decimal_places": 6,
+              "max_rows": 20
+            }
+          },
+          {
+            "type": "text",
+            "config": {
+              "title": "Linear Model Interpretation",
+              "text_template": "Linear Model Interpretation\n===========================\nModel: {model}\nSelected parameter: {param_name} = {param_value}\nCoefficient sparsity indicator (nonzero): {nonzero}\nResidual mean/std/max|abs|: {rmean} / {rstd} / {rmax}",
+              "bindings": [
+                {"name": "model", "data_source": "model", "nested_key": "model_type", "selector": {"mode": "value"}},
+                {"name": "param_name", "data_source": "selected_parameter_name", "selector": {"mode": "value"}},
+                {"name": "param_value", "data_source": "selected_parameter_value", "selector": {"mode": "value"}},
+                {"name": "nonzero", "data_source": "model", "nested_key": "model_specific.linear.nonzero_coefficients", "selector": {"mode": "value"}},
+                {"name": "rmean", "data_source": "model", "nested_key": "model_specific.diagnostics.residual_mean", "selector": {"mode": "value"}},
+                {"name": "rstd", "data_source": "model", "nested_key": "model_specific.diagnostics.residual_std", "selector": {"mode": "value"}},
+                {"name": "rmax", "data_source": "model", "nested_key": "model_specific.diagnostics.residual_max_abs", "selector": {"mode": "value"}}
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Chemometrist View - Latent Variable Models",
+        "layout": "fp",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "in",
+          "value": ["pls", "pcr", "kernel_pls"]
+        },
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "title": "Latent Variable Performance Snapshot",
+              "row_label": "Metric",
+              "columns": [
+                {"data_source": "metrics", "nested_key": "calibration.R2", "name": "Cal R2"},
+                {"data_source": "metrics", "nested_key": "cv.R2", "name": "CV R2"},
+                {"data_source": "metrics", "nested_key": "validation.R2", "name": "Val R2"},
+                {"data_source": "metrics", "nested_key": "calibration.RMSEP", "name": "Cal RMSEP"},
+                {"data_source": "metrics", "nested_key": "cv.RMSEP", "name": "CV RMSEP"},
+                {"data_source": "metrics", "nested_key": "validation.RMSEP", "name": "Val RMSEP"},
+                {"data_source": "selected_parameter_value", "name": "Selected Components"},
+                {"data_source": "model", "nested_key": "kernel_pls_n_features", "name": "Mapped Features (Kernel PLS)"}
+              ],
+              "decimal_places": 6,
+              "max_rows": 20
+            }
+          },
+          {
+            "type": "text",
+            "config": {
+              "title": "Latent Variable Interpretation",
+              "text_template": "Latent Variable Model Interpretation\n====================================\nModel: {model}\nSelected components: {components}\nPLS/Kernel PLS summary: {pls_summary}\nPCR cumulative explained variance: {pcr_cum}",
+              "bindings": [
+                {"name": "model", "data_source": "model", "nested_key": "model_type", "selector": {"mode": "value"}},
+                {"name": "components", "data_source": "selected_parameter_value", "selector": {"mode": "value"}},
+                {"name": "pls_summary", "data_source": "model", "nested_key": "model_specific.summary", "selector": {"mode": "value"}},
+                {"name": "pcr_cum", "data_source": "model", "nested_key": "model_specific.pcr.cumulative_explained_variance_ratio", "selector": {"mode": "value"}}
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Chemometrist View - Nonlinear and Local Models",
+        "layout": "fp",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "in",
+          "value": ["svr", "gaussian_process", "random_forest", "gradient_boosting", "hist_gradient_boosting", "local"]
+        },
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "title": "Nonlinear/Local Performance Snapshot",
+              "row_label": "Metric",
+              "columns": [
+                {"data_source": "metrics", "nested_key": "calibration.R2", "name": "Cal R2"},
+                {"data_source": "metrics", "nested_key": "cv.R2", "name": "CV R2"},
+                {"data_source": "metrics", "nested_key": "validation.R2", "name": "Val R2"},
+                {"data_source": "metrics", "nested_key": "calibration.RMSEP", "name": "Cal RMSEP"},
+                {"data_source": "metrics", "nested_key": "cv.RMSEP", "name": "CV RMSEP"},
+                {"data_source": "metrics", "nested_key": "validation.RMSEP", "name": "Val RMSEP"},
+                {"data_source": "model", "nested_key": "model_specific.diagnostics.residual_std", "name": "Residual Std"},
+                {"data_source": "model", "nested_key": "model_specific.random_forest.n_estimators", "name": "RF Trees"}
+              ],
+              "decimal_places": 6,
+              "max_rows": 20
+            }
+          },
+          {
+            "type": "text",
+            "config": {
+              "title": "Nonlinear/Local Interpretation",
+              "text_template": "Nonlinear/Local Interpretation\n=============================\nModel: {model}\nSummary: {summary}\nSVR kernel: {svr_kernel}\nLocal mode/distance: {local_mode} / {local_distance}\nResidual mean/std/max|abs|: {rmean} / {rstd} / {rmax}",
+              "bindings": [
+                {"name": "model", "data_source": "model", "nested_key": "model_type", "selector": {"mode": "value"}},
+                {"name": "summary", "data_source": "model", "nested_key": "model_specific.summary", "selector": {"mode": "value"}},
+                {"name": "svr_kernel", "data_source": "model", "nested_key": "svr_kernel", "selector": {"mode": "value"}},
+                {"name": "local_mode", "data_source": "model", "nested_key": "local_method", "selector": {"mode": "value"}},
+                {"name": "local_distance", "data_source": "model", "nested_key": "local_distance", "selector": {"mode": "value"}},
+                {"name": "rmean", "data_source": "model", "nested_key": "model_specific.diagnostics.residual_mean", "selector": {"mode": "value"}},
+                {"name": "rstd", "data_source": "model", "nested_key": "model_specific.diagnostics.residual_std", "selector": {"mode": "value"}},
+                {"name": "rmax", "data_source": "model", "nested_key": "model_specific.diagnostics.residual_max_abs", "selector": {"mode": "value"}}
               ]
             }
           }

@@ -1,0 +1,408 @@
+{
+  "display_name": "PARAFAC Analysis",
+  "category": "4.Dimensionality Reduction",
+  "data_type": "multiway",
+  "input_aliases": {
+    "X_cal": "X Calibration",
+    "Y_cal": "Y Calibration",
+    "X_val": "X Validation",
+    "Y_val": "Y Validation",
+    "n_components": "Components",
+    "nway_flag": "Data Order",
+    "mode_centering": "Mode Centering",
+    "mode_normalization": "Mode Normalization",
+    "mode_restrictions": "Mode Restrictions",
+    "tensorly_constraints": "TensorLy Constraints",
+    "init_method": "Initialization",
+    "random_multi_start": "Random Multi-Start",
+    "max_iter": "Max Iterations",
+    "tol": "Tolerance",
+    "random_state": "Random Seed",
+    "allow_missing": "Allow NaN",
+    "missing_constrained_solver": "Missing+Constraint Solver",
+    "profile_paths": "Profile Files",
+    "profile_usage": "Profile Usage",
+    "sweep_mode": "Sweep Mode",
+    "component_range": "Component Range",
+    "component_y_mapping": "Component-Y Mapping",
+    "cv_config": "CV Configuration",
+    "axis_n_info": "Axis Vectors",
+    "dim_labels": "Dimension Labels"
+  },
+  "output_aliases": {
+    "scores_mode_a": "Scores (Mode A)",
+    "factors": "Factors",
+    "weights": "Weights",
+    "instrumental_profiles": "Instrumental Profiles",
+    "reconstructed": "Reconstructed Tensor",
+    "residual": "Residual Tensor",
+    "metrics": "Metrics",
+    "calibration_models": "Calibration Models",
+    "component_y_mapping": "Component-Y Pairing",
+    "reference_angles": "Reference Angles",
+    "parafac_report": "PARAFAC Report",
+    "sweep_results": "Sweep Results",
+    "selected_n_components": "Selected Components",
+    "cv_results": "CV Results",
+    "y_cv_pred": "CV Predictions"
+  },
+  "short_description": "PARAFAC decomposition with missing-data, profile constraints, sweep, calibration, and CV support.",
+  "long_description": "Fits a CP/PARAFAC model to multiway data, supports NaN-aware fitting, optional reference/initial/fixed profiles, optional sweep across component counts, and calibration of mode-A scores against Y.",
+  "setup": {
+    "categories": [
+      "Model Parameters",
+      "Data Inputs",
+      "Per-Mode Options",
+      "Profiles",
+      "Calibration",
+      "Cross-Validation"
+    ],
+    "layout": [
+      {
+        "name": "n_components",
+        "label": "Number of Components",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "2",
+        "required": true,
+        "input_type": "user"
+      },
+      {
+        "name": "init_method",
+        "label": "Initialization",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "values": ["svd", "random", "custom"],
+        "default": "svd",
+        "required": true,
+        "input_type": "user"
+      },
+      {
+        "name": "max_iter",
+        "label": "Maximum Iterations",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "500",
+        "required": true,
+        "input_type": "user"
+      },
+      {
+        "name": "random_multi_start",
+        "label": "Random Multi-Start",
+        "category": "Model Parameters",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "init_method": "random"
+        },
+        "tooltip": "When enabled, run multiple random initializations and keep the best fit."
+      },
+      {
+        "name": "tol",
+        "label": "Tolerance",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1e-7",
+        "required": true,
+        "input_type": "user"
+      },
+      {
+        "name": "random_state",
+        "label": "Random Seed",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Optional integer seed. Leave blank for different random results on each run."
+      },
+      {
+        "name": "allow_missing",
+        "label": "Allow Missing Values (NaN)",
+        "category": "Model Parameters",
+        "widget": "checkbutton",
+        "default": true,
+        "required": false,
+        "input_type": "user"
+      },
+      {
+        "name": "missing_constrained_solver",
+        "label": "Missing+Constraint Solver",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "values": ["em", "em_adaptive", "weighted_ao_admm"],
+        "default": "em",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "allow_missing": true
+        },
+        "tooltip": "Used only when both missing values and TensorLy constraints are active."
+      },
+      {
+        "name": "sweep_mode",
+        "label": "Sweep Components",
+        "category": "Model Parameters",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user"
+      },
+      {
+        "name": "component_range",
+        "label": "Component Range",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "sweep_mode": true
+        },
+        "tooltip": "Examples: 2:6, 2-8, 2,3,4,5"
+      },
+      {
+        "name": "mode_centering",
+        "label": "Mode Centering",
+        "category": "Per-Mode Options",
+        "widget": "entry",
+        "type": "str",
+        "default": "false,false,false",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Comma list per mode including sample mode. Example: true,false,false"
+      },
+      {
+        "name": "mode_normalization",
+        "label": "Mode Normalization",
+        "category": "Per-Mode Options",
+        "widget": "entry",
+        "type": "str",
+        "default": "false,false,false",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Comma list per mode including sample mode. Example: false,true,true"
+      },
+      {
+        "name": "mode_restrictions",
+        "label": "Mode Restrictions",
+        "category": "Per-Mode Options",
+        "widget": "entry",
+        "type": "str",
+        "default": "none,none,none",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Comma list per mode: none, non_negative, fixed"
+      },
+      {
+        "name": "tensorly_constraints",
+        "label": "TensorLy Constraints (JSON)",
+        "category": "Per-Mode Options",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "JSON dict for constrained_parafac, e.g. {\"non_negative\":[true,true,true],\"smoothness\":[null,1.0,1.0]}"
+      },
+      {
+        "name": "profile_paths",
+        "label": "Profile Files",
+        "category": "Profiles",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Comma list of profile file paths (one per mode)."
+      },
+      {
+        "name": "profile_usage",
+        "label": "Profile Usage",
+        "category": "Profiles",
+        "widget": "entry",
+        "type": "str",
+        "default": "none,none,none",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Comma list per mode: none, reference, initial, fixed"
+      },
+      {
+        "name": "component_y_mapping",
+        "label": "Component to Y Mapping",
+        "category": "Calibration",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Format: 1:1,2:2 (component:y_column, 1-based)."
+      },
+      {
+        "name": "X_cal",
+        "label": "X Calibration Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": true,
+        "input_type": "routed"
+      },
+      {
+        "name": "Y_cal",
+        "label": "Y Calibration Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed"
+      },
+      {
+        "name": "X_val",
+        "label": "X Validation Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed"
+      },
+      {
+        "name": "Y_val",
+        "label": "Y Validation Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed"
+      },
+      {
+        "name": "nway_flag",
+        "label": "Data Order",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed"
+      },
+      {
+        "name": "axis_n_info",
+        "label": "Axis Vectors",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed"
+      },
+      {
+        "name": "dim_labels",
+        "label": "Dimension Labels",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed"
+      },
+      {
+        "name": "cv_config",
+        "label": "CV Configuration",
+        "category": "Cross-Validation",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed"
+      }
+    ]
+  },
+  "analysis": {
+    "pages": [
+      {
+        "title": "PARAFAC Report",
+        "layout": "fp",
+        "sections": [
+          {
+            "type": "text",
+            "config": {
+              "title": "PARAFAC Text Report",
+              "text_template": "{report_text}",
+              "bindings": [
+                {
+                  "name": "report_text",
+                  "data_source": "parafac_report",
+                  "selector": {
+                    "mode": "value"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Mode A Scores",
+        "layout": "fp",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "x_axis": {
+                "data_source": "scores_mode_a",
+                "axis_type": "linear"
+              },
+              "y_axis": {
+                "data_source": "scores_mode_a",
+                "axis_type": "linear"
+              },
+              "title": "Mode A Scores",
+              "data_slicing": [
+                {
+                  "name": "Component-X",
+                  "dimension": 1,
+                  "axis": "x",
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "Component-Y",
+                  "dimension": 1,
+                  "axis": "y",
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Instrumental Profiles",
+        "layout": "ew",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "aux_axis": {
+                "data_source": "axis_n_info",
+                "labels": "dim_labels"
+              },
+              "z_axis": {
+                "data_source": "instrumental_profiles",
+                "label": "Contribution"
+              },
+              "title": "Instrumental Profiles by Component",
+              "dimension_labels": "dim_labels",
+              "data_slicing": [
+                {
+                  "name": "Component",
+                  "dimension": 0,
+                  "default": 0,
+                  "axis": "z",
+                  "show_navigation_menu": true
+                }
+              ],
+              "show_md_menu": true
+            }
+          }
+        ]
+      }
+    ],
+    "current_page": 0
+  }
+}
