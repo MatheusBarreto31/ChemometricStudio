@@ -22,7 +22,9 @@ def analyst_main(
     from collections import Counter
     import copy
     import importlib
+    import inspect
     import json
+    import os
     import warnings
     from datetime import datetime
     import numpy as np
@@ -38,6 +40,66 @@ def analyst_main(
     
     return_specs = specs_data['return_specs']
     input_specs = specs_data['input_specs']
+    workspace_root = os.path.dirname(os.path.abspath(__file__))
+
+    def _resolve_gui_config_path(config_path: str) -> Optional[str]:
+        """Resolve GUI config path with an English fallback for analyst-mode execution."""
+        if not config_path:
+            return None
+
+        normalized = str(config_path).replace('\\\\', os.sep).replace('/', os.sep)
+        candidates = [normalized]
+
+        # Backward compatibility: specs may omit language folder (e.g., gui_configs/<file>.json).
+        if normalized.startswith(f"gui_configs{os.sep}"):
+            filename = os.path.basename(normalized)
+            candidates.append(os.path.join('gui_configs', 'en', filename))
+
+        for candidate in candidates:
+            absolute_candidate = candidate if os.path.isabs(candidate) else os.path.join(workspace_root, candidate)
+            if os.path.exists(absolute_candidate):
+                return absolute_candidate
+        return None
+
+    def _build_function_default_params(spec_data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+        """Build {base_alias: {param_name: default_value}} from GUI config files."""
+        defaults_by_function: Dict[str, Dict[str, Any]] = {}
+        gui_listing = spec_data.get('gui_listing', {})
+        if not isinstance(gui_listing, dict):
+            return defaults_by_function
+
+        for base_alias, gui_meta in gui_listing.items():
+            if not isinstance(gui_meta, dict):
+                continue
+            config_path = _resolve_gui_config_path(gui_meta.get('config_path', ''))
+            if not config_path:
+                continue
+
+            try:
+                with open(config_path, 'r', encoding='utf-8') as config_file:
+                    config_data = json.load(config_file)
+            except Exception:
+                continue
+
+            layout = config_data.get('setup', {}).get('layout', [])
+            if not isinstance(layout, list):
+                continue
+
+            function_defaults: Dict[str, Any] = {}
+            for field in layout:
+                if not isinstance(field, dict):
+                    continue
+                param_name = field.get('name')
+                if not param_name or 'default' not in field:
+                    continue
+                function_defaults[param_name] = field.get('default')
+
+            if function_defaults:
+                defaults_by_function[base_alias] = function_defaults
+
+        return defaults_by_function
+
+    function_default_params = _build_function_default_params(specs_data)
     
     # Convert import_map tuples back from list format
     import_map = {}
@@ -61,7 +123,8 @@ def analyst_main(
     for func_entry in model_data.get('functions', []):
         instance_alias = func_entry.get('instance_alias', '')
         base_alias = func_entry.get('base_alias', '')
-        params = func_entry.get('parameters', {}).copy()
+        saved_params = func_entry.get('parameters', {})
+        params = saved_params.copy() if isinstance(saved_params, dict) else {}
         param_types = func_entry.get('parameter_types', {})
         
         functions_info[instance_alias] = {
@@ -368,6 +431,34 @@ def analyst_main(
                     break
         return params
 
+    def _fill_missing_required_params(base_alias: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Fill only missing required function args using GUI defaults."""
+        function_obj = globals().get(base_alias)
+        if function_obj is None:
+            return params
+
+        defaults = function_default_params.get(base_alias, {})
+        if not isinstance(defaults, dict) or not defaults:
+            return params
+
+        try:
+            signature = inspect.signature(function_obj)
+        except (TypeError, ValueError):
+            return params
+
+        filled = params.copy()
+        for param_name, signature_param in signature.parameters.items():
+            if signature_param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
+                continue
+            if signature_param.default is not inspect.Parameter.empty:
+                continue
+            if param_name in filled:
+                continue
+            if param_name in defaults:
+                filled[param_name] = defaults[param_name]
+
+        return filled
+
     def _find_latest_output_value(
         output_key: str,
         nested_key: str,
@@ -669,6 +760,8 @@ def analyst_main(
                         nested_suffix = f".{src_nested_key}" if src_nested_key else ""
                         print(f"  Routed {src_alias}.{src_param}{nested_suffix} -> {dst_param}")
                         break
+
+        params = _fill_missing_required_params(base_alias, params)
 
         converted_params = {}
         for param_name, value in params.items():

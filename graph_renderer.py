@@ -637,12 +637,16 @@ def _render_scatter_multi_dataset(ax, datasets: List[Dict[str, Any]], config: di
 
     show_labels = config.get('show_labels', False)
     for dataset_idx, dataset in enumerate(datasets):
+        try:
+            style_slot = int(dataset.get('style_slot', dataset_idx))
+        except Exception:
+            style_slot = dataset_idx
         x_data = _flatten_axis(dataset.get('x_data'))
         y_data = _flatten_axis(dataset.get('y_data'))
         z_data = dataset.get('z_data')
         dataset_label = dataset.get('label', 'Dataset')
         marker = dataset.get('marker', 'o')
-        dataset_fillstyle = fill_style_cycle[dataset_idx % len(fill_style_cycle)]
+        dataset_fillstyle = fill_style_cycle[style_slot % len(fill_style_cycle)]
         fallback_color = dataset.get('color')  # Optional explicit color for non-class mode
 
         if x_data is None or y_data is None or len(x_data) == 0 or len(y_data) == 0:
@@ -1384,6 +1388,10 @@ def _render_line_multi_dataset(ax, datasets: List[Dict[str, Any]], config: dict,
         marker_legend_mapping: Dict[str, str] = {}
 
         for dataset_idx, dataset in enumerate(datasets):
+            try:
+                style_slot = int(dataset.get('style_slot', dataset_idx))
+            except Exception:
+                style_slot = dataset_idx
             x_data_d = dataset.get('x_data')
             y_data_d = dataset.get('y_data')
             dataset_label = dataset.get('label', f'Dataset {dataset_idx + 1}')
@@ -1401,7 +1409,7 @@ def _render_line_multi_dataset(ax, datasets: List[Dict[str, Any]], config: dict,
             n_lines = len(y_rows)
             if n_lines <= 0:
                 continue
-            dataset_linestyle = dataset_linestyle_cycle[dataset_idx % len(dataset_linestyle_cycle)] if is_multi_dataset else '-'
+            dataset_linestyle = dataset_linestyle_cycle[style_slot % len(dataset_linestyle_cycle)] if is_multi_dataset else '-'
 
             class_layers = _normalize_class_layers(dataset, n_lines)
             if class_layers is None or class_layers.size == 0:
@@ -1569,9 +1577,26 @@ def _render_line_multi_dataset(ax, datasets: List[Dict[str, Any]], config: dict,
         for dataset in datasets:
             _x_rows_tmp, _y_rows_tmp = _prepare_line_rows(dataset.get('x_data'), dataset.get('y_data'))
             total_lines += len(_y_rows_tmp)
+
+        style_total_lines = max(1, total_lines)
+        for dataset in datasets:
+            try:
+                style_total_lines = max(style_total_lines, int(dataset.get('style_total_lines', style_total_lines)))
+            except Exception:
+                continue
+
         global_line_idx = 0
 
         for dataset_idx, dataset in enumerate(datasets):
+            try:
+                style_slot = int(dataset.get('style_slot', dataset_idx))
+            except Exception:
+                style_slot = dataset_idx
+            try:
+                style_line_start = int(dataset.get('style_line_start', global_line_idx))
+            except Exception:
+                style_line_start = global_line_idx
+
             x_data_d = dataset.get('x_data')
             y_data_d = dataset.get('y_data')
             label = dataset.get('label', f'Dataset {dataset_idx + 1}')
@@ -1586,7 +1611,7 @@ def _render_line_multi_dataset(ax, datasets: List[Dict[str, Any]], config: dict,
             if x_data_d is None or y_data_d is None:
                 continue
 
-            linestyle = dataset_linestyle_cycle[dataset_idx % len(dataset_linestyle_cycle)] if is_multi_dataset else '-'
+            linestyle = dataset_linestyle_cycle[style_slot % len(dataset_linestyle_cycle)] if is_multi_dataset else '-'
             x_rows, y_rows = _prepare_line_rows(x_data_d, y_data_d)
             for line_idx, y_line in enumerate(y_rows):
                 plot_kwargs = {'label': label if line_idx == 0 else None, 'linestyle': linestyle}
@@ -1597,7 +1622,8 @@ def _render_line_multi_dataset(ax, datasets: List[Dict[str, Any]], config: dict,
                 if color is not None:
                     plot_kwargs['color'] = color
                 else:
-                    plot_kwargs['color'] = cmap_obj(global_line_idx / max(1, total_lines - 1))
+                    color_slot = style_line_start + line_idx
+                    plot_kwargs['color'] = cmap_obj(color_slot / max(1, style_total_lines - 1))
 
                 x_line = x_rows[line_idx]
                 if x_line is not None and len(x_line) == len(y_line):

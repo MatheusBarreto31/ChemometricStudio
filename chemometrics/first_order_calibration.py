@@ -6,8 +6,11 @@ from sklearn.decomposition import PCA
 from scipy.spatial.distance import cdist
 
 try:
-    from execution_reporting import emit_execution_warning
+    from execution_reporting import emit_execution_message, emit_execution_warning
 except ImportError:
+    def emit_execution_message(code: Optional[str] = None, text: str = "", details: Optional[Dict[str, Any]] = None) -> None:
+        return
+
     def emit_execution_warning(code: Optional[str] = None, text: str = "", details: Optional[Dict[str, Any]] = None) -> None:
         return
 
@@ -29,6 +32,18 @@ def _ensure_2d(arr: Optional[np.ndarray]) -> Optional[np.ndarray]:
     return arr
 
 
+def _align_prediction_shape(y_pred: np.ndarray, y_ref: np.ndarray) -> np.ndarray:
+    """Align prediction shape with reference shape to avoid broadcast artifacts."""
+    yp = np.asarray(y_pred, dtype=float)
+    yr = np.asarray(y_ref)
+
+    if yr.ndim == 2 and yr.shape[1] == 1 and yp.ndim == 1:
+        return yp.reshape(-1, 1)
+    if yr.ndim == 1 and yp.ndim == 2 and yp.shape[1] == 1:
+        return yp.reshape(-1)
+    return yp
+
+
 def _compute_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
     y_true = np.asarray(y_true, dtype=float)
     y_pred = np.asarray(y_pred, dtype=float)
@@ -46,6 +61,41 @@ def _compute_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]
         'R2': r2,
         'n_samples': int(y_true.shape[0]),
     }
+
+
+def _autoscale_from_calibration(
+    X_cal: np.ndarray,
+    X_val: Optional[np.ndarray] = None,
+) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+    """Autoscale data using calibration-derived mean/std statistics."""
+    eps = 1e-10
+    mean = np.mean(X_cal, axis=0, keepdims=True)
+    std = np.std(X_cal, axis=0, keepdims=True)
+
+    X_cal_scaled = (np.asarray(X_cal, dtype=float) - mean) / (std + eps)
+    X_val_scaled = None
+    if X_val is not None:
+        X_val_scaled = (np.asarray(X_val, dtype=float) - mean) / (std + eps)
+
+    return X_cal_scaled, X_val_scaled
+
+
+def _coerce_optional_bool(value: Optional[Any]) -> Optional[bool]:
+    """Normalize optional bool-like values from routing/UI payloads."""
+    if value is None:
+        return None
+    if isinstance(value, (bool, np.bool_)):
+        return bool(value)
+    if isinstance(value, str):
+        norm = value.strip().lower()
+        if norm in ('true', '1', 'yes', 'y', 'on'):
+            return True
+        if norm in ('false', '0', 'no', 'n', 'off', ''):
+            return False
+        return None
+    if isinstance(value, (int, float, np.integer, np.floating)):
+        return bool(value)
+    return None
 
 
 def _coerce_int_candidates(
@@ -284,6 +334,7 @@ def _fit_model(
     X_train: np.ndarray,
     Y_train: np.ndarray,
     n_components: int,
+    pls_scale: bool,
     ridge_alpha: float,
     lasso_alpha: float,
     n_neighbors: int,
@@ -318,14 +369,21 @@ def _fit_model(
         return {'model_type': model_type, 'model': model, 'alpha': float(lasso_alpha)}
 
     if model_type == 'pls':
-        max_comp = max(1, min(X_train.shape[1], X_train.shape[0] - 1))
+        # sklearn PLS always mean-centers X and Y internally.
+        # `pls_scale` controls only standard-deviation scaling after centering.
+        max_comp = max(1, min(X_train.shape[1], X_train.shape[0]))
         n_comp = max(1, min(int(n_components), max_comp))
-        model = PLSRegression(n_components=n_comp)
+        model = PLSRegression(n_components=n_comp, scale=bool(pls_scale))
         model.fit(X_train, Y_train)
-        return {'model_type': model_type, 'model': model, 'n_components': int(n_comp)}
+        return {
+            'model_type': model_type,
+            'model': model,
+            'n_components': int(n_comp),
+            'pls_scale': bool(pls_scale),
+        }
 
     if model_type == 'pcr':
-        max_comp = max(1, min(X_train.shape[1], X_train.shape[0] - 1))
+        max_comp = max(1, min(X_train.shape[1], X_train.shape[0]))
         n_comp = max(1, min(int(n_components), max_comp))
         pca = PCA(n_components=n_comp)
         scores = pca.fit_transform(X_train)
@@ -414,6 +472,7 @@ def _cross_validated_predictions(
     Y_cal: np.ndarray,
     model_type: str,
     n_components: int,
+    pls_scale: bool,
     ridge_alpha: float,
     lasso_alpha: float,
     n_neighbors: int,
@@ -441,6 +500,7 @@ def _cross_validated_predictions(
             X_train=X_train,
             Y_train=Y_train,
             n_components=n_components,
+            pls_scale=pls_scale,
             ridge_alpha=ridge_alpha,
             lasso_alpha=lasso_alpha,
             n_neighbors=n_neighbors,
@@ -451,12 +511,8 @@ def _cross_validated_predictions(
             kernel_bandwidth=kernel_bandwidth,
             local_distance=local_distance,
         )
-        fold_pred = np.asarray(_predict_model(fold_model, X_test), dtype=float)
-        target_slice = y_cv_pred[test_idx]
-        if target_slice.ndim == 2 and target_slice.shape[1] == 1 and fold_pred.ndim == 1:
-            y_cv_pred[test_idx] = fold_pred.reshape(-1, 1)
-        else:
-            y_cv_pred[test_idx] = fold_pred
+        fold_pred = _align_prediction_shape(_predict_model(fold_model, X_test), Y_test)
+        y_cv_pred[test_idx] = fold_pred
 
         fold_metrics.append({
             'fold': int(fold_idx),
@@ -482,6 +538,7 @@ def first_order_calibration(
     Y_val: Optional[np.ndarray] = None,
     model_type: str = 'pls',
     n_components: int = 2,
+    pls_scale: bool = False,
     ridge_alpha: float = 1.0,
     lasso_alpha: float = 1.0,
     local_method: str = 'knn',
@@ -502,6 +559,7 @@ def first_order_calibration(
     kernel_bandwidth_range: Optional[Any] = None,
     parameter_range: Optional[Any] = None,
     cv_config: Optional[Any] = None,
+    was_scaled: Optional[bool] = None,
     fold: int = 0,
     **kwargs,
 ) -> Tuple[Any, ...]:
@@ -528,6 +586,26 @@ def first_order_calibration(
         raise ValueError('X_cal and Y_cal must have the same number of samples.')
 
     model_type_norm = str(model_type).strip().lower()
+    pls_scale = bool(pls_scale)
+
+    if was_scaled is None and 'was_scaled' in kwargs:
+        was_scaled = kwargs.get('was_scaled')
+    was_scaled = _coerce_optional_bool(was_scaled)
+
+    scaling_fallback_applied = False
+    if model_type_norm in ('ridge', 'lasso') and was_scaled is not True:
+        X_cal, X_val = _autoscale_from_calibration(X_cal=X_cal, X_val=X_val)
+        scaling_fallback_applied = True
+        emit_execution_warning(
+            code='first_order_calibration_autoscale_fallback',
+            details={
+                'function': 'first_order_calibration',
+                'model_type': model_type_norm,
+                'autoscale_fallback_applied': True,
+                'was_scaled': None if was_scaled is None else bool(was_scaled),
+            },
+        )
+
     local_method_norm = str(local_method).strip().lower()
     if local_method_norm not in ('knn', 'idw', 'adaptive', 'radius', 'kernel'):
         raise ValueError("local_method must be one of: 'knn', 'idw', 'adaptive', 'radius', 'kernel'.")
@@ -616,9 +694,8 @@ def first_order_calibration(
             shuffle=False,
         )
         use_cv_for_selection = True
-        emit_execution_warning(
+        emit_execution_message(
             code='first_order_calibration_default_loocv',
-            text='No enabled CV configuration found during optimization. Defaulting to LOOCV for parameter selection.',
             details={'function': 'first_order_calibration', 'cv_strategy': 'loocv'}
         )
     local_self_uses_loo = model_type_norm == 'local'
@@ -638,6 +715,7 @@ def first_order_calibration(
             X_train=X_cal,
             Y_train=Y_cal,
             n_components=c_n_components,
+            pls_scale=pls_scale,
             ridge_alpha=c_alpha,
             lasso_alpha=c_lasso_alpha,
             n_neighbors=c_neighbors,
@@ -662,9 +740,12 @@ def first_order_calibration(
             )
         else:
             y_self_pred = _predict_model(model_info, X_cal)
+        y_self_pred = _align_prediction_shape(y_self_pred, Y_cal)
         self_metrics = _compute_metrics(Y_cal, y_self_pred)
 
         y_val_pred_candidate = _predict_model(model_info, X_val) if X_val is not None else None
+        if y_val_pred_candidate is not None and Y_val is not None:
+            y_val_pred_candidate = _align_prediction_shape(y_val_pred_candidate, Y_val)
         val_metrics = _compute_metrics(Y_val, y_val_pred_candidate) if (Y_val is not None and y_val_pred_candidate is not None) else None
 
         y_cv_pred_candidate, _ = _cross_validated_predictions(
@@ -672,6 +753,7 @@ def first_order_calibration(
             Y_cal=Y_cal,
             model_type=model_type_norm,
             n_components=c_n_components,
+            pls_scale=pls_scale,
             ridge_alpha=c_alpha,
             lasso_alpha=c_lasso_alpha,
             n_neighbors=c_neighbors,
@@ -715,6 +797,7 @@ def first_order_calibration(
         X_train=X_cal,
         Y_train=Y_cal,
         n_components=final_n_components,
+        pls_scale=pls_scale,
         ridge_alpha=final_alpha,
         lasso_alpha=final_lasso_alpha,
         n_neighbors=final_neighbors,
@@ -725,6 +808,8 @@ def first_order_calibration(
         kernel_bandwidth=final_kernel_bw,
         local_distance=local_distance_norm,
     )
+
+    y_val_pred = None
 
     if local_self_uses_loo:
         y_cal_pred = _predict_local_leave_one_out(
@@ -738,15 +823,25 @@ def first_order_calibration(
             kernel_bandwidth=final_kernel_bw,
             local_distance=local_distance_norm,
         )
+        y_cal_pred = _align_prediction_shape(y_cal_pred, Y_cal)
+
+        y_val_pred = _predict_model(final_model, X_val) if X_val is not None else None
+        if y_val_pred is not None and Y_val is not None:
+            y_val_pred = _align_prediction_shape(y_val_pred, Y_val)
     else:
         y_cal_pred = _predict_model(final_model, X_cal)
-    y_val_pred = _predict_model(final_model, X_val) if X_val is not None else None
+        y_cal_pred = _align_prediction_shape(y_cal_pred, Y_cal)
+
+        y_val_pred = _predict_model(final_model, X_val) if X_val is not None else None
+        if y_val_pred is not None and Y_val is not None:
+            y_val_pred = _align_prediction_shape(y_val_pred, Y_val)
 
     y_cv_pred, cv_results = _cross_validated_predictions(
         X_cal=X_cal,
         Y_cal=Y_cal,
         model_type=model_type_norm,
         n_components=final_n_components,
+        pls_scale=pls_scale,
         ridge_alpha=final_alpha,
         lasso_alpha=final_lasso_alpha,
         n_neighbors=final_neighbors,
@@ -797,6 +892,9 @@ def first_order_calibration(
 
     model_payload = {
         'model_type': model_type_norm,
+        'pls_scale': pls_scale if model_type_norm == 'pls' else None,
+        'was_scaled': bool(was_scaled) if was_scaled is not None else None,
+        'autoscale_fallback_applied': bool(scaling_fallback_applied),
         'local_method': local_method_norm if model_type_norm == 'local' else None,
         'local_distance': local_distance_norm if model_type_norm == 'local' else None,
         'idw_power': float(final_idw_power) if model_type_norm == 'local' and local_method_norm == 'idw' else None,

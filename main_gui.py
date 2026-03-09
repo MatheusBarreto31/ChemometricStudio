@@ -449,6 +449,102 @@ class ChemometricsGUI:
             return normalized_type == 'scatter' and has_z_axis
         return False
 
+    def _get_rendered_dataset_visibility_entries(self, instance_alias: str, section_id: Tuple[int, int]) -> List[Dict[str, str]]:
+        """Return dataset entries used by visibility controls when a section has multiple datasets."""
+        entries_by_key: Dict[str, str] = {}
+
+        analysis_info = self.analysis_data.get(instance_alias, {})
+        pages = analysis_info.get('pages', []) if isinstance(analysis_info, dict) else []
+        page_idx, section_idx = section_id
+        section_cfg: Dict[str, Any] = {}
+        if 0 <= page_idx < len(pages):
+            page = pages[page_idx]
+            sections = page.get('sections', []) if isinstance(page, dict) else []
+            if 0 <= section_idx < len(sections):
+                section = sections[section_idx]
+                cfg = section.get('config', {}) if isinstance(section, dict) else {}
+                if isinstance(cfg, dict):
+                    section_cfg = cfg
+
+        datasets_cfg = section_cfg.get('datasets') if isinstance(section_cfg.get('datasets'), list) else []
+        for idx, dataset_cfg in enumerate(datasets_cfg):
+            if not isinstance(dataset_cfg, dict):
+                continue
+            key = f'cfg:{idx}'
+            label = str(dataset_cfg.get('label', f'Dataset {idx + 1}')).strip() or f'Dataset {idx + 1}'
+            entries_by_key[key] = label
+
+        metadata = analysis_info.get('graph_data_metadata', {}).get(section_id, {}) if isinstance(analysis_info, dict) else {}
+        extracted = metadata.get('extracted_datasets') if isinstance(metadata, dict) else None
+        if isinstance(extracted, list):
+            for idx, dataset in enumerate(extracted):
+                if not isinstance(dataset, dict):
+                    continue
+                key = str(dataset.get('visibility_key', f'idx:{idx}')).strip() or f'idx:{idx}'
+                label = str(dataset.get('label', f'Dataset {idx + 1}')).strip() or f'Dataset {idx + 1}'
+                if key not in entries_by_key:
+                    entries_by_key[key] = label
+
+        entries = [{'key': key, 'label': label} for key, label in entries_by_key.items()]
+        return entries if len(entries) > 1 else []
+
+    def _apply_dataset_visibility_filter(self, config: dict, extracted_datasets: Optional[List[dict]]) -> Optional[List[dict]]:
+        """Filter extracted datasets with config['dataset_visibility'] while ensuring at least one remains."""
+        if not isinstance(extracted_datasets, list) or len(extracted_datasets) <= 1:
+            return extracted_datasets
+
+        visibility_cfg = config.get('dataset_visibility') if isinstance(config, dict) else None
+        if not isinstance(visibility_cfg, dict):
+            return extracted_datasets
+
+        filtered: List[dict] = []
+        for idx, dataset in enumerate(extracted_datasets):
+            if not isinstance(dataset, dict):
+                continue
+            visibility_key = str(dataset.get('visibility_key', f'idx:{idx}')).strip() or f'idx:{idx}'
+            if bool(visibility_cfg.get(visibility_key, True)):
+                filtered.append(dataset)
+
+        return filtered if filtered else extracted_datasets
+
+    def _assign_dataset_style_slots(self, extracted_datasets: Optional[List[dict]]) -> Optional[List[dict]]:
+        """Assign stable style slots from active datasets before UI visibility filtering."""
+        if not isinstance(extracted_datasets, list) or not extracted_datasets:
+            return extracted_datasets
+
+        total_datasets = len(extracted_datasets)
+        total_lines = 0
+        per_dataset_line_counts: List[int] = []
+
+        for dataset in extracted_datasets:
+            if not isinstance(dataset, dict):
+                per_dataset_line_counts.append(0)
+                continue
+
+            y_data = dataset.get('y_data')
+            line_count = 1
+            try:
+                y_arr = np.asarray(y_data)
+                if y_arr.ndim > 1:
+                    line_count = int(max(1, y_arr.shape[0]))
+            except Exception:
+                line_count = 1
+
+            per_dataset_line_counts.append(line_count)
+            total_lines += line_count
+
+        running_line_start = 0
+        for idx, dataset in enumerate(extracted_datasets):
+            if not isinstance(dataset, dict):
+                continue
+            dataset['style_slot'] = idx
+            dataset['style_total_datasets'] = total_datasets
+            dataset['style_line_start'] = running_line_start
+            dataset['style_total_lines'] = max(1, total_lines)
+            running_line_start += per_dataset_line_counts[idx]
+
+        return extracted_datasets
+
     def _update_graph_axis_config_option(self, instance_alias: str, section_id: Tuple[int, int],
                                          axis_key: str, option_key: str, option_value: Any,
                                          popup_refresh_callback: Optional[Callable[[], None]] = None,
@@ -2346,6 +2442,76 @@ class ChemometricsGUI:
                     menu=class_colormaps_menu
                 )
                 item_count += 1
+
+        rendered_dataset_entries = self._get_rendered_dataset_visibility_entries(instance_alias, section_id)
+        if rendered_dataset_entries:
+            visibility_menu = tk.Menu(menu, tearoff=0)
+            visibility_cfg = config.get('dataset_visibility', {}) if isinstance(config.get('dataset_visibility', {}), dict) else {}
+            visibility_state: Dict[str, bool] = {
+                str(entry.get('key', '')): bool(visibility_cfg.get(str(entry.get('key', '')), True))
+                for entry in rendered_dataset_entries
+            }
+
+            label_counts: Dict[str, int] = {}
+            for entry in rendered_dataset_entries:
+                label = str(entry.get('label', 'Dataset')).strip() or 'Dataset'
+                label_counts[label] = label_counts.get(label, 0) + 1
+
+            duplicate_seen: Dict[str, int] = {}
+
+            def _persist_dataset_visibility_state() -> None:
+                self._update_graph_section_config_option(
+                    instance_alias,
+                    section_id,
+                    'dataset_visibility',
+                    dict(visibility_state),
+                    popup_refresh_callback=popup_refresh_callback,
+                    refresh_analysis=True
+                )
+
+            def _set_dataset_visibility(vis_key: str, var_obj: tk.BooleanVar) -> None:
+                visible_count = sum(1 for is_visible in visibility_state.values() if is_visible)
+                requested_visible = bool(var_obj.get())
+                currently_visible = bool(visibility_state.get(vis_key, True))
+
+                if not requested_visible and currently_visible and visible_count <= 1:
+                    var_obj.set(True)
+                    self._show_fading_message(
+                        self.language_manager.translate(
+                            'ui.messages.dataset_visibility_keep_one',
+                            'At least one dataset must remain visible.'
+                        )
+                    )
+                    return
+
+                visibility_state[vis_key] = requested_visible
+                _persist_dataset_visibility_state()
+
+            for entry in rendered_dataset_entries:
+                vis_key = str(entry.get('key', ''))
+                base_label = str(entry.get('label', 'Dataset')).strip() or 'Dataset'
+                duplicate_seen[base_label] = duplicate_seen.get(base_label, 0) + 1
+                display_label = (
+                    f"{base_label} ({duplicate_seen[base_label]})"
+                    if label_counts.get(base_label, 0) > 1
+                    else base_label
+                )
+
+                vis_var = tk.BooleanVar(value=bool(visibility_state.get(vis_key, True)))
+                _keep_var_ref(vis_var)
+                visibility_menu.add_checkbutton(
+                    label=display_label,
+                    variable=vis_var,
+                    onvalue=True,
+                    offvalue=False,
+                    command=lambda k=vis_key, v=vis_var: _set_dataset_visibility(k, v)
+                )
+
+            menu.add_cascade(
+                label=self.language_manager.translate('menu.graph_context.dataset_visibility', 'Dataset Visibility'),
+                menu=visibility_menu
+            )
+            item_count += 1
 
         axis_type_values = ('linear', 'log10', 'log2', 'ln')
         axis_scale_label = self.language_manager.translate('menu.graph_context.axis_scale', 'Axis Scale')
@@ -4805,8 +4971,11 @@ class ChemometricsGUI:
                     self._update_field_visibility(a, vw, ch)
                 entry.bind("<FocusOut>", on_entry_focus_out)
                 
-                # Binding for KeyRelease: update visibility (value will be saved on FocusOut)
-                entry.bind("<KeyRelease>", lambda e, a=instance_alias, vw=visible_widgets, ch=category_headers: self._update_field_visibility(a, vw, ch))
+                # Persist while typing so switching methodology items does not drop unsaved text.
+                def on_entry_key_release(event, n=name, e_widget=entry, a=instance_alias, vw=visible_widgets, ch=category_headers):
+                    self._save_widget_value(a, n, e_widget.get())
+                    self._update_field_visibility(a, vw, ch)
+                entry.bind("<KeyRelease>", on_entry_key_release)
 
                 if name in locked_params:
                     entry.configure(state="disabled")
@@ -6429,15 +6598,18 @@ class ChemometricsGUI:
             FUNCTION_SPECS
         )
 
-    def _position_paned_sash(self, paned):
-        """Position the PanedWindow sash to the middle."""
+    def _position_paned_sash(self, paned, orient=tk.HORIZONTAL):
+        """Position the first PanedWindow sash to the middle for its orientation."""
         try:
             # Force window to update first
             paned.update_idletasks()
-            # Get the current paned window width
-            parent_width = paned.winfo_width()
-            if parent_width > 1:  # Only set if window has been rendered
-                sash_pos = parent_width // 2
+            if orient == tk.VERTICAL:
+                parent_size = paned.winfo_height()
+            else:
+                parent_size = paned.winfo_width()
+
+            if parent_size > 1:  # Only set if window has been rendered
+                sash_pos = parent_size // 2
                 paned.sashpos(0, sash_pos)
         except Exception as e:
             pass  # Silently fail if sash positioning isn't available
@@ -7794,13 +7966,18 @@ class ChemometricsGUI:
             containers.append(container)
         
         elif layout_type == 'ns':  # North-South (2 sections: top, bottom)
-            top_frame = _create_section_container(parent)
-            top_frame.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+            paned = ttk.PanedWindow(parent, orient=tk.VERTICAL)
+            paned.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+
+            top_frame = _create_section_container(paned)
+            paned.add(top_frame, weight=1)
             containers.append(top_frame)
-            
-            bottom_frame = _create_section_container(parent)
-            bottom_frame.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+
+            bottom_frame = _create_section_container(paned)
+            paned.add(bottom_frame, weight=1)
             containers.append(bottom_frame)
+
+            parent.after_idle(lambda: self._position_paned_sash(paned, orient=tk.VERTICAL))
         
         elif layout_type == 'ew':  # East-West (2 sections: left, right)
             paned = ttk.PanedWindow(parent, orient=tk.HORIZONTAL)
@@ -8488,6 +8665,7 @@ class ChemometricsGUI:
                         'x_data': ds_x_data,
                         'y_data': ds_y_data,
                         'label': dataset_label,
+                        'visibility_key': f'cfg:{dataset_idx}',
                         'x_axis': ds_x_axis,  # Preserve axis config for label extraction
                         'y_axis': ds_y_axis   # Preserve axis config for label extraction
                     }
@@ -8528,6 +8706,7 @@ class ChemometricsGUI:
                             'x_data': x_data,
                             'y_data': y_data,
                             'label': 'Main Dataset',
+                            'visibility_key': 'main_class_dataset',
                             'class_data': main_class_data
                         }
                         # Scatter uses marker for dataset identity; line uses linestyle
@@ -8551,6 +8730,9 @@ class ChemometricsGUI:
                         x_data = None
                         y_data = None
                         z_data = None
+
+            extracted_datasets = self._assign_dataset_style_slots(extracted_datasets)
+            extracted_datasets = self._apply_dataset_visibility_filter(config, extracted_datasets)
             
             # Extract sample labels for tooltip display from individual datasets
             sample_labels = None
@@ -11561,6 +11743,7 @@ Count:
                         'x_data': ds_x_data,
                         'y_data': ds_y_data,
                         'label': dataset_label,
+                        'visibility_key': f'cfg:{dataset_idx}',
                         'x_axis': ds_x_axis,  # Preserve axis config for label extraction
                         'y_axis': ds_y_axis   # Preserve axis config for label extraction
                     }
@@ -11601,6 +11784,7 @@ Count:
                             'x_data': x_data,
                             'y_data': y_data,
                             'label': 'Main Dataset',
+                            'visibility_key': 'main_class_dataset',
                             'class_data': main_class_data
                         }
                         # Scatter uses marker for dataset identity; line uses linestyle
@@ -11624,6 +11808,9 @@ Count:
                         x_data = None
                         y_data = None
                         z_data = None
+
+            extracted_datasets = self._assign_dataset_style_slots(extracted_datasets)
+            extracted_datasets = self._apply_dataset_visibility_filter(config, extracted_datasets)
             
             # Extract sample labels for tooltip display from individual datasets
             sample_labels = None
@@ -12267,7 +12454,12 @@ Count:
         structure_list_frame = ttk.Frame(structure_frame)
         structure_list_frame.pack(fill=tk.BOTH, expand=True)
 
-        self.report_structure_listbox = tk.Listbox(structure_list_frame, height=12, selectmode=tk.SINGLE)
+        self.report_structure_listbox = tk.Listbox(
+            structure_list_frame,
+            height=12,
+            selectmode=tk.SINGLE,
+            exportselection=False
+        )
         self.report_structure_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.report_structure_listbox.bind("<<ListboxSelect>>", self._on_report_structure_select)
 

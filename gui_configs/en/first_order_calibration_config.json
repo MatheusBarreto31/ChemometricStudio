@@ -27,7 +27,8 @@
     "adaptive_alpha_range": "Adaptive Alpha Optimization Range",
     "radius_threshold_range": "Radius Threshold Optimization Range",
     "kernel_bandwidth_range": "Kernel Bandwidth Optimization Range",
-    "cv_config": "CV Configuration"
+    "cv_config": "CV Configuration",
+    "was_scaled": "Input Was Scaled"
   },
   "output_aliases": {
     "y_cal_pred": "Calibration Predictions",
@@ -42,7 +43,16 @@
     "optimization_results": "Optimization Results"
   },
   "short_description": "Unified first-order calibration with OLS, PLS, PCR, Ridge, Lasso, and Local Regression",
-  "long_description": "Builds first-order calibration models for quantitative prediction with optional parameter optimization. Supports OLS, PLS, PCR, Ridge, Lasso, and Local Regression (KNN, IDW, Adaptive Threshold, Radius, Kernel), computes calibration/CV/validation statistics, supports multiple local distance metrics, and exposes optimization curves for model tuning.",
+  "long_description": "Builds first-order calibration models for quantitative prediction with optional parameter optimization. Supports OLS, PLS, PCR, Ridge, Lasso, and Local Regression (KNN, IDW, Adaptive Threshold, Radius, Kernel), computes calibration/CV/validation statistics, supports multiple local distance metrics, and exposes optimization curves for model tuning. Note: PLS and PCR always apply internal mean-centering of predictors (X); PLS also mean-centers responses (Y). For Ridge and Lasso, scaled predictors are recommended; if the routed flag 'was_scaled' is missing or false, this function auto-applies autoscaling as a fallback and emits a warning.",
+  "execution_report_specs": {
+    "messages": {
+      "first_order_calibration_default_loocv": "No enabled CV configuration was found during optimization. Defaulted to LOOCV for parameter selection."
+    },
+    "warnings": {
+      "first_order_calibration_autoscale_fallback": "The selected model requires scaled predictors for stable performance. Input flag 'was_scaled' was missing or false, so data was autoscaled as a fallback."
+    },
+    "errors": {}
+  },
   "setup": {
     "categories": [
       "Model Parameters",
@@ -59,24 +69,24 @@
         "type": "str",
         "default": "pls",
         "values": [
+          "lasso",
+          "local",
           "ols",
           "pls",
           "pcr",
-          "ridge",
-          "lasso",
-          "local"
+          "ridge"
         ],
         "value_aliases": [
+          "Lasso Regression",
+          "Local Regression",
           "Ordinary Least Squares",
           "Partial Least Squares",
           "Principal Component Regression",
-          "Ridge Regression",
-          "Lasso Regression",
-          "Local Regression"
+          "Ridge Regression"
         ],
         "required": true,
         "input_type": "user",
-        "tooltip": "Calibration method: OLS, PLS, PCR, Ridge, Lasso, or Local Regression"
+        "tooltip": "Calibration method: OLS, PLS, PCR, Lasso, Local, or Ridge Regression. Note: PLS and PCR always mean-center X internally; PLS also mean-centers Y."
       },
       {
         "name": "local_method",
@@ -401,6 +411,19 @@
           "input_type": "user"
         },
         "tooltip": "Routed from CV Configuration function"
+      },
+      {
+        "name": "was_scaled",
+        "label": "Input Was Scaled",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "type": "bool",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        },
+        "tooltip": "Optional routed flag from Center & Scale. If false or missing with Ridge/Lasso, autoscaling fallback is applied with a warning."
       },
       {
         "name": "X_cal",

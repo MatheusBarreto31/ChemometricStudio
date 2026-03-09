@@ -10,14 +10,15 @@
   },
   "output_aliases": {
     "X_cal": "X Cal (Processed)",
-    "X_val": "X Val (Processed)"
+    "X_val": "X Val (Processed)",
+    "was_scaled": "Scaling Applied"
   },
   "output_synonyms": {
     "X_cal": ["X", "X_train"],
     "X_val": ["X_test", "X_validation"]
   },
-  "short_description": "Applies center/scaling preprocessing to spectroscopic data",
-  "long_description": "Preprocessing step that applies one selectable centering/scaling method to improve model performance. Essential preparation for multivariate calibration methods.\n\nAvailable Methods:\n- None: pass-through (no scaling)\n- Center: subtracts calibration means\n- Autoscale: mean-centers and divides by calibration standard deviation (unit variance)\n- Frobenius Normalization: divides by calibration Frobenius norm\n- Range Scaling [0,1]: min-max scaling using calibration min/max\n- Range Scaling [-1,1]: min-max scaling mapped to [-1,1]\n- Variance Scaling: mean-centers and divides by calibration variance\n\nImportant:\n- Autoscale already includes centering\n- Validation/test data are always transformed using calibration/training statistics (never its own statistics)\n\nMultiway Data:\n- Works with 2D, 3D, and higher dimensional data\n- Axis-based statistics are computed along the sample axis used by this function",
+  "short_description": "Applies center/scaling preprocessing to spectroscopic data and reports whether scaling was applied",
+  "long_description": "Preprocessing step that applies one selectable centering/scaling method to improve model performance. Essential preparation for multivariate calibration methods.\n\nAvailable Methods:\n- None: pass-through (no scaling)\n- Center: subtracts calibration means\n- Autoscale: mean-centers and divides by calibration standard deviation (unit variance)\n- Robust Scaling: median-centers and divides by calibration interquartile range (IQR)\n- Frobenius Normalization: divides by calibration Frobenius norm\n- Range Scaling [0,1]: min-max scaling using calibration min/max\n- Range Scaling [-1,1]: min-max scaling mapped to [-1,1]\n- Variance Scaling: mean-centers and divides by calibration variance\n\nImportant:\n- Autoscale already includes centering\n- Validation/test data are always transformed using calibration/training statistics (never its own statistics)\n\nMultiway Data:\n- Works with 2D, 3D, and higher dimensional data\n- Axis-based statistics are computed along the sample axis used by this function",
   "setup": {
     "categories": ["Scaling Options", "Data Inputs", "Multiway Configuration"],
     "layout": [
@@ -26,8 +27,8 @@
         "label": "Scaling Method",
         "category": "Scaling Options",
         "widget": "combobox",
-        "values": ["none", "center", "autoscale", "frobenius", "range_0_1", "range_-1_1", "variance"],
-        "value_aliases": ["None", "Center", "Autoscale", "Frobenius Normalization", "Range Scaling [0,1]", "Range Scaling [-1,1]", "Variance Scaling"],
+        "values": ["none", "center", "autoscale", "robust", "frobenius", "range_0_1", "range_-1_1", "variance"],
+        "value_aliases": ["None", "Center", "Autoscale", "Robust Scaling", "Frobenius Normalization", "Range Scaling [0,1]", "Range Scaling [-1,1]", "Variance Scaling"],
         "default": "center",
         "required": true,
         "input_type": "user",

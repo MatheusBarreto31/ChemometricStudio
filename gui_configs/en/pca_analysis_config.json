@@ -334,21 +334,6 @@
                 },
                 {
                   "x_axis": {
-                    "data_source": "model_scores_cv",
-                    "axis_type": "linear",
-                    "axis_labels": "pc_labels"
-                  },
-                  "y_axis": {
-                    "data_source": "model_scores_cv",
-                    "axis_type": "linear",
-                    "axis_labels": "pc_labels"
-                  },
-                  "class_labels": "class_data_cal",
-                  "point_labels_source": "smp_cal",
-                  "label": "CV Calibration"
-                },
-                {
-                  "x_axis": {
                     "data_source": "val_scores",
                     "axis_type": "linear",
                     "axis_labels": "pc_labels"
@@ -361,6 +346,21 @@
                   "class_labels": "class_data_val",
                   "point_labels_source": "smp_val",
                   "label": "Validation"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "model_scores_cv",
+                    "axis_type": "linear",
+                    "axis_labels": "pc_labels"
+                  },
+                  "y_axis": {
+                    "data_source": "model_scores_cv",
+                    "axis_type": "linear",
+                    "axis_labels": "pc_labels"
+                  },
+                  "class_labels": "class_data_cal",
+                  "point_labels_source": "smp_cal",
+                  "label": "Cross-Validation"
                 }
               ],
               "data_slicing": [

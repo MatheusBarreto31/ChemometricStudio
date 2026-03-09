@@ -333,7 +333,7 @@ def center_and_scale(
     X_val: Optional[np.ndarray] = None,
     scaling_method: str = "center",
     nway_flag: Optional[int] = None
-) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+) -> Tuple[np.ndarray, Optional[np.ndarray], bool]:
     """
     Apply center/scaling preprocessing using calibration-derived statistics.
     
@@ -347,6 +347,7 @@ def center_and_scale(
                    - 'none': no scaling
                    - 'center': mean centering only
                    - 'autoscale': mean centering + division by std
+                   - 'robust': median centering + division by interquartile range (IQR)
                    - 'frobenius': divide by Frobenius norm of X_cal
                    - 'range_0_1': min-max scale to [0, 1]
                    - 'range_-1_1': min-max scale to [-1, 1]
@@ -354,7 +355,9 @@ def center_and_scale(
         nway_flag: Number of ways (if None, auto-determined from X_cal)
         
     Returns:
-        Centered/normalized X_cal, or (X_cal, X_val) if X_val provided
+        (Centered/normalized X_cal, X_val or None, was_scaled).
+        was_scaled is True only when variance/scale normalization was applied;
+        it is False for 'none' and 'center'.
         
     Examples:
         # 2D data: (samples, wavelengths) - center on wavelengths
@@ -370,13 +373,18 @@ def center_and_scale(
 
 
     method = str(scaling_method).strip().lower()
+    was_scaled = method not in ("none", "center")
     
     axis = 0
     
     eps = 1e-10
     mean = np.mean(X_cal, axis=axis, keepdims=True)
+    median = np.median(X_cal, axis=axis, keepdims=True)
     std = np.std(X_cal, axis=axis, keepdims=True)
     variance = np.var(X_cal, axis=axis, keepdims=True)
+    q75 = np.percentile(X_cal, 75, axis=axis, keepdims=True)
+    q25 = np.percentile(X_cal, 25, axis=axis, keepdims=True)
+    iqr = q75 - q25
     min_val = np.min(X_cal, axis=axis, keepdims=True)
     max_val = np.max(X_cal, axis=axis, keepdims=True)
     range_val = max_val - min_val
@@ -389,6 +397,8 @@ def center_and_scale(
             return arr - mean
         if method == "autoscale":
             return (arr - mean) / (std + eps)
+        if method == "robust":
+            return (arr - median) / (iqr + eps)
         if method == "frobenius":
             return arr / (fro_norm + eps)
         if method == "range_0_1":
@@ -403,6 +413,5 @@ def center_and_scale(
 
     if X_val is not None:
         X_val = _apply(X_val.copy())
-        return X_cal, X_val
-    
-    return X_cal
+
+    return X_cal, X_val, was_scaled

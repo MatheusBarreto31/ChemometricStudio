@@ -10,7 +10,8 @@
   },
   "output_aliases": {
     "X_cal": "X Cal (Processado)",
-    "X_val": "X Val (Processado)"
+    "X_val": "X Val (Processado)",
+    "was_scaled": "Escalonamento Aplicado"
   },
   "output_synonyms": {
     "X_cal": [
@@ -23,15 +24,15 @@
     ]
   },
   "short_description": "Aplica pré-processamento de centralização/escalonamento em dados espectroscópicos",
-  "long_description": "Etapa de pré-processamento que aplica um único método selecionável de centralização/escalonamento para melhorar o desempenho do modelo. Preparação essencial para métodos de calibração multivariada.\n\nMétodos Disponíveis:\n- Nenhum: sem escalonamento\n- Centralizar: subtrai as médias de calibração\n- Autoscale: centraliza na média e divide pelo desvio padrão de calibração (variância unitária)\n- Normalização de Frobenius: divide pela norma de Frobenius da calibração\n- Escalonamento por Faixa [0,1]: min-max usando mínimo/máximo da calibração\n- Escalonamento por Faixa [-1,1]: min-max mapeado para [-1,1]\n- Escalonamento por Variância: centraliza na média e divide pela variância de calibração\n\nImportante:\n- Autoscale já inclui centralização\n- Dados de validação/teste sempre usam estatísticas da calibração/treino (nunca estatísticas próprias)\n\nDados Multidimensionais:\n- Funciona com dados 2D, 3D e de dimensões superiores\n- Estatísticas dependentes de eixo são calculadas ao longo do eixo de amostras usado por esta função",
+  "long_description": "Etapa de pré-processamento que aplica um único método selecionável de centralização/escalonamento para melhorar o desempenho do modelo. Preparação essencial para métodos de calibração multivariada.\n\nMétodos Disponíveis:\n- Nenhum: sem escalonamento\n- Centralizar: subtrai as médias de calibração\n- Autoscale: centraliza na média e divide pelo desvio padrão de calibração (variância unitária)\n- Escalonamento Robusto: centraliza pela mediana e divide pela faixa interquartil (IQR) da calibração\n- Normalização de Frobenius: divide pela norma de Frobenius da calibração\n- Escalonamento por Faixa [0,1]: min-max usando mínimo/máximo da calibração\n- Escalonamento por Faixa [-1,1]: min-max mapeado para [-1,1]\n- Escalonamento por Variância: centraliza na média e divide pela variância de calibração\n\nImportante:\n- Autoscale já inclui centralização\n- Dados de validação/teste sempre usam estatísticas da calibração/treino (nunca estatísticas próprias)\n\nDados Multidimensionais:\n- Funciona com dados 2D, 3D e de dimensões superiores\n- Estatísticas dependentes de eixo são calculadas ao longo do eixo de amostras usado por esta função",
   "setup": {
     "layout": [
       {
         "name": "scaling_method",
         "label": "Método de Escalonamento",
         "widget": "combobox",
-        "values": ["none", "center", "autoscale", "frobenius", "range_0_1", "range_-1_1", "variance"],
-        "value_aliases": ["Nenhum", "Centralizar", "Autoscale", "Normalização de Frobenius", "Escalonamento por Faixa [0,1]", "Escalonamento por Faixa [-1,1]", "Escalonamento por Variância"],
+        "values": ["none", "center", "autoscale", "robust", "frobenius", "range_0_1", "range_-1_1", "variance"],
+        "value_aliases": ["Nenhum", "Centralizar", "Autoscale", "Escalonamento Robusto", "Normalização de Frobenius", "Escalonamento por Faixa [0,1]", "Escalonamento por Faixa [-1,1]", "Escalonamento por Variância"],
         "default": "center",
         "required": true,
         "input_type": "user",
