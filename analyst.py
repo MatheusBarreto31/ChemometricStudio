@@ -1,6 +1,8 @@
 from typing import Optional, Callable, Dict, Any, List, Tuple
 from time import perf_counter
 from execution_reporting import execution_report_context, set_last_execution_report
+from pathlib import Path
+from addon_manager import load_combined_function_specs, normalize_required_addons
 
 def analyst_main(
     stop_at_function_idx: Optional[int] = None,
@@ -22,6 +24,7 @@ def analyst_main(
     from collections import Counter
     import copy
     import importlib
+    import importlib.util
     import inspect
     import json
     import os
@@ -34,13 +37,78 @@ def analyst_main(
     with open('model.json', 'r', encoding='utf-8') as f:
         model_data = json.load(f)
     
-    # Load function specs from external JSON file
-    with open('function_specs.json', 'r', encoding='utf-8') as f:
-        specs_data = json.load(f)
+    workspace_root = os.path.dirname(os.path.abspath(__file__))
+
+    # Load merged specs (core + available add-ons)
+    combined_specs_payload = load_combined_function_specs(Path(workspace_root), language='en')
+    specs_data = combined_specs_payload['specs']
+    addon_registry = combined_specs_payload.get('addon_registry', {})
+
+    required_addons = normalize_required_addons(model_data.get('metadata', {}).get('required_addons', []))
+    available_addons = set(addon_registry.get('available_addons', {}).keys())
+    missing_addons = [addon_id for addon_id in required_addons if addon_id not in available_addons]
+    if missing_addons:
+        raise RuntimeError(
+            "Model requires missing add-ons: " + ", ".join(missing_addons)
+        )
+
+    available_aliases = set(specs_data.get('gui_listing', {}).keys())
+    model_aliases = {
+        str(entry.get('base_alias', ''))
+        for entry in model_data.get('functions', [])
+        if isinstance(entry, dict)
+    }
+    missing_aliases = sorted(alias for alias in model_aliases if alias and alias not in available_aliases)
+    if missing_aliases:
+        raise RuntimeError(
+            "Model references unavailable functions: " + ", ".join(missing_aliases)
+        )
     
     return_specs = specs_data['return_specs']
     input_specs = specs_data['input_specs']
-    workspace_root = os.path.dirname(os.path.abspath(__file__))
+
+    def _load_addon_attr(addon_id: str, module_name: str, attr_name: str):
+        """Load an add-on attribute from the add-on's own chemometrics tree without global namespace clashes."""
+        addon_meta = addon_registry.get('available_addons', {}).get(addon_id, {})
+        addon_root = addon_meta.get('root_path')
+        if not addon_root:
+            raise ModuleNotFoundError(f"Add-on '{addon_id}' is not available")
+
+        if not module_name.startswith('chemometrics'):
+            module = importlib.import_module(module_name)
+            return getattr(module, attr_name)
+
+        suffix = module_name[len('chemometrics'):].lstrip('.')
+        suffix_parts = suffix.split('.') if suffix else []
+        base_path = Path(addon_root) / 'chemometrics'
+
+        module_file = base_path.joinpath(*suffix_parts).with_suffix('.py') if suffix_parts else (base_path / '__init__.py')
+        if not module_file.exists():
+            module_file = base_path.joinpath(*suffix_parts) / '__init__.py' if suffix_parts else (base_path / '__init__.py')
+        if not module_file.exists():
+            raise ModuleNotFoundError(
+                f"Module '{module_name}' for add-on '{addon_id}' was not found"
+            )
+
+        safe_addon = addon_id.replace('-', '_').replace(' ', '_')
+        safe_suffix = '__'.join(suffix_parts) if suffix_parts else 'root'
+        synthetic_name = f"_cmstudio_addons.{safe_addon}.{safe_suffix}"
+
+        if synthetic_name in globals():
+            module = globals()[synthetic_name]
+        else:
+            spec = importlib.util.spec_from_file_location(synthetic_name, str(module_file))
+            if spec is None or spec.loader is None:
+                raise ImportError(f"Cannot create import spec for '{module_file}'")
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            globals()[synthetic_name] = module
+
+        if not hasattr(module, attr_name):
+            raise AttributeError(
+                f"Module '{module_name}' in add-on '{addon_id}' does not define '{attr_name}'"
+            )
+        return getattr(module, attr_name)
 
     def _resolve_gui_config_path(config_path: str) -> Optional[str]:
         """Resolve GUI config path with an English fallback for analyst-mode execution."""
@@ -186,8 +254,12 @@ def analyst_main(
             continue
         if func in import_map:
             module_name, attr_name = import_map[func]
-            module = importlib.import_module(module_name)
-            globals()[func] = getattr(module, attr_name)
+            addon_id = addon_registry.get('function_to_addon', {}).get(func)
+            if addon_id:
+                globals()[func] = _load_addon_attr(addon_id, module_name, attr_name)
+            else:
+                module = importlib.import_module(module_name)
+                globals()[func] = getattr(module, attr_name)
     lazy_loading_elapsed_seconds = perf_counter() - lazy_loading_start_time
 
     executed_steps = 1

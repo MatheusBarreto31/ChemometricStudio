@@ -19,6 +19,30 @@ import tkinter as tk
 from tkinter import ttk
 
 
+def _as_bool(value: Any, default: bool = False) -> bool:
+    """Normalize mixed-type truthy config values to bool."""
+    if value is None:
+        return default
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {'1', 'true', 'yes', 'on'}:
+            return True
+        if normalized in {'0', 'false', 'no', 'off'}:
+            return False
+    return bool(value)
+
+
+def _effective_flip_xy(graph_type: str, config: dict) -> bool:
+    """Resolve effective flip_xy value with graph-specific defaults."""
+    if not isinstance(config, dict):
+        return str(graph_type).strip().lower() == 'heatmap'
+
+    if 'flip_xy' not in config:
+        return str(graph_type).strip().lower() == 'heatmap'
+
+    return _as_bool(config.get('flip_xy'), default=False)
+
+
 def _normalize_axis_type(axis_config: dict) -> str:
     """Return normalized axis type from config, defaulting to linear."""
     axis_type = str(axis_config.get('axis_type', 'linear')).strip().lower()
@@ -104,6 +128,34 @@ def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarr
     
     # Make a copy of config to avoid modifying the original (which persists between runs)
     config = config.copy()
+
+    # flip_xy defaults to True for heatmap and False otherwise when not configured.
+    flip_xy_effective = _effective_flip_xy(graph_type, config)
+    config['_flip_xy_effective'] = flip_xy_effective
+    if flip_xy_effective:
+        x_data, y_data = y_data, x_data
+
+        x_axis_cfg = config.get('x_axis', {})
+        y_axis_cfg = config.get('y_axis', {})
+        config['x_axis'] = y_axis_cfg.copy() if isinstance(y_axis_cfg, dict) else y_axis_cfg
+        config['y_axis'] = x_axis_cfg.copy() if isinstance(x_axis_cfg, dict) else x_axis_cfg
+
+        if isinstance(datasets, list):
+            flipped_datasets: List[Dict[str, Any]] = []
+            for dataset in datasets:
+                if not isinstance(dataset, dict):
+                    flipped_datasets.append(dataset)
+                    continue
+                flipped_dataset = dataset.copy()
+                flipped_dataset['x_data'] = dataset.get('y_data')
+                flipped_dataset['y_data'] = dataset.get('x_data')
+                ds_x_axis = dataset.get('x_axis')
+                ds_y_axis = dataset.get('y_axis')
+                if ds_x_axis is not None or ds_y_axis is not None:
+                    flipped_dataset['x_axis'] = ds_y_axis
+                    flipped_dataset['y_axis'] = ds_x_axis
+                flipped_datasets.append(flipped_dataset)
+            datasets = flipped_datasets
     
     # Set default colormap in config if not already set (allows JSON configs to override)
     if 'cmap' not in config:
@@ -1710,7 +1762,9 @@ def _render_heatmap(fig, ax, x_data: Optional[np.ndarray], y_data: Optional[np.n
             X, Y = np.meshgrid(x_data, y_data)
             # Use pcolormesh for proper axis mapping
             cmap = config.get('cmap', 'viridis')
-            im = ax.pcolormesh(X, Y, z_data.T, cmap=cmap, shading='nearest')
+            flip_xy_effective = _as_bool(config.get('_flip_xy_effective'), default=False)
+            heatmap_values = z_data if flip_xy_effective else z_data.T
+            im = ax.pcolormesh(X, Y, heatmap_values, cmap=cmap, shading='nearest')
             fig.colorbar(im, ax=ax)
             ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
             ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))

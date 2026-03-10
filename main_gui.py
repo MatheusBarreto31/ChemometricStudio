@@ -26,6 +26,7 @@ import tempfile
 import threading
 import time
 import numpy as np
+from addon_manager import load_combined_function_specs, normalize_required_addons
 
 # Import language manager
 from language_manager import get_language_manager, _
@@ -33,10 +34,11 @@ from language_manager import get_language_manager, _
 # Import settings manager
 from settings import get_settings_manager
 
-# Load function specs
+# Load function specs (core + optional add-ons)
 SPECS_PATH = Path(__file__).parent / "function_specs.json"
-with open(SPECS_PATH, encoding='utf-8') as f:
-    FUNCTION_SPECS = json.load(f)
+_combined_specs_payload = load_combined_function_specs(Path(__file__).parent, language="en")
+FUNCTION_SPECS = _combined_specs_payload["specs"]
+ADDON_REGISTRY = _combined_specs_payload["addon_registry"]
 
 BASE_DIR = Path(__file__).parent
 GRAPHICS_DIR = BASE_DIR / "Graphics"
@@ -439,6 +441,8 @@ class ChemometricsGUI:
             return normalized_type == '3d_surf'
         if option_key == 'contour_filled':
             return normalized_type == 'contour'
+        if option_key == 'flip_xy':
+            return normalized_type in {'scatter', 'line', 'bar', 'histogram', 'heatmap', '3d_surf', 'contour'}
         if option_key in {'x_axis_type', 'y_axis_type'}:
             return normalized_type in {'line', 'scatter', 'heatmap', 'contour', '3d_surf', 'bar', 'histogram'}
         if option_key == 'z_axis_type':
@@ -1263,6 +1267,31 @@ class ChemometricsGUI:
         _add_toggle('show_labels', 'menu.graph_context.labels', 'Labels')
         _add_toggle('confidence_ellipses', 'menu.graph_context.ellipses', 'Ellipses')
         _add_toggle('use_wireframe', 'menu.graph_context.use_wireframe', 'Wireframe')
+
+        if self._is_graph_option_supported(graph_type, 'flip_xy', config):
+            flip_default = normalized_graph_type == 'heatmap'
+            flip_current = _normalize_bool_setting(config.get('flip_xy'), flip_default)
+            flip_var = tk.BooleanVar(value=flip_current)
+            _keep_var_ref(flip_var)
+
+            def _set_flip_xy() -> None:
+                self._update_graph_section_config_option(
+                    instance_alias,
+                    section_id,
+                    'flip_xy',
+                    bool(flip_var.get()),
+                    popup_refresh_callback=popup_refresh_callback,
+                    refresh_analysis=True
+                )
+
+            menu.add_checkbutton(
+                label=self.language_manager.translate('menu.graph_context.flip_xy', 'Flip X/Y Axes'),
+                variable=flip_var,
+                onvalue=True,
+                offvalue=False,
+                command=_set_flip_xy
+            )
+            item_count += 1
 
         if self._is_graph_option_supported(graph_type, 'contour_filled', config):
             current_contour_type = str(config.get('contour_type', 'contourf')).strip().lower()
@@ -2889,11 +2918,28 @@ class ChemometricsGUI:
     def _show_fading_success(self, message: str, duration_ms: Optional[int] = None):
         """Show a success-style fading notification."""
         self._show_fading_notice(message, level="success", duration_ms=duration_ms)
+
+    def _refresh_function_specs(self):
+        """Reload merged function specs from core + available add-ons."""
+        global FUNCTION_SPECS, ADDON_REGISTRY
+        payload = load_combined_function_specs(
+            Path(__file__).parent,
+            language=self.language_manager.get_language()
+        )
+        FUNCTION_SPECS = payload.get("specs", {})
+        ADDON_REGISTRY = payload.get("addon_registry", {})
+        self.addon_registry = ADDON_REGISTRY
+
+        for warning in self.addon_registry.get("warnings", []):
+            print(f"Add-on warning: {warning}")
     
     def _load_gui_configs(self):
         """Load function-specific GUI configuration files with language support."""
+        self._refresh_function_specs()
         gui_listing = FUNCTION_SPECS.get("gui_listing", {})
         current_language = get_language_manager().get_language()
+        function_to_addon = self.addon_registry.get("function_to_addon", {})
+        self.gui_configs = {}
         
         for func_alias, func_info in gui_listing.items():
             config_file = func_info.get("config_path")
@@ -2901,6 +2947,22 @@ class ChemometricsGUI:
                 # Parse the config file path
                 config_path = Path(config_file)
                 config_name = config_path.name
+
+                if config_path.is_absolute() and config_path.exists():
+                    try:
+                        with open(config_path, encoding='utf-8') as f:
+                            self.gui_configs[func_alias] = json.load(f)
+                        addon_id = function_to_addon.get(func_alias)
+                        if addon_id:
+                            original_category = str(self.gui_configs[func_alias].get("category", "")).strip()
+                            addon_category = f"Add-ons\\{addon_id}"
+                            self.gui_configs[func_alias]["category"] = (
+                                f"{addon_category}\\{original_category}" if original_category else addon_category
+                            )
+                        continue
+                    except json.JSONDecodeError as e:
+                        print(f"ERROR: Invalid JSON in {config_path}: {e}")
+                        raise
                 
                 # Try language-specific folder first (gui_configs/[language]/[config_name])
                 lang_folder = Path(__file__).parent / "gui_configs" / current_language
@@ -2941,6 +3003,14 @@ class ChemometricsGUI:
                         raise
                 else:
                     print(f"Warning: Config file not found: {config_file}")
+
+            addon_id = function_to_addon.get(func_alias)
+            if addon_id and func_alias in self.gui_configs:
+                original_category = str(self.gui_configs[func_alias].get("category", "")).strip()
+                addon_category = f"Add-ons\\{addon_id}"
+                self.gui_configs[func_alias]["category"] = (
+                    f"{addon_category}\\{original_category}" if original_category else addon_category
+                )
     
     def _load_theme(self):
         """Attempt to load Sun-Valley theme if available."""
@@ -5282,6 +5352,12 @@ class ChemometricsGUI:
                         values_list = [w.get() for w in widgets]
                         self._save_widget_value(a, n, values_list)
                     file_entry.bind("<FocusOut>", on_file_focus_out)
+
+                    # Persist while typing so switching methodology items does not drop unsaved text.
+                    def on_file_key_release(event, widgets=file_widgets, n=name, a=instance_alias):
+                        values_list = [w.get() for w in widgets]
+                        self._save_widget_value(a, n, values_list)
+                    file_entry.bind("<KeyRelease>", on_file_key_release)
                     
                     # Browse button for this entry
                     def browse_single(idx, f_widget, widgets=file_widgets, n=name, a=instance_alias, lbl=label_text):
@@ -5343,6 +5419,12 @@ class ChemometricsGUI:
                         values_list = [w.get() for w in widgets]
                         self._save_widget_value(a, n, values_list)
                     entry.bind("<FocusOut>", on_entry_focus_out)
+
+                    # Persist while typing so switching methodology items does not drop unsaved text.
+                    def on_entry_key_release(event, widgets=entry_widgets, n=name, a=instance_alias):
+                        values_list = [w.get() for w in widgets]
+                        self._save_widget_value(a, n, values_list)
+                    entry.bind("<KeyRelease>", on_entry_key_release)
                 
                 # Save initial values
                 initial_values = [w.get() for w in entry_widgets]
@@ -5480,6 +5562,18 @@ class ChemometricsGUI:
                         values_list = [w["files"] for w in widgets]
                         self._save_widget_value(a, n, values_list)
                     file_entry.bind("<FocusOut>", on_sample_focus_out)
+
+                    # Persist while typing so switching methodology items does not drop unsaved text.
+                    def on_sample_key_release(event, idx=i, f_widget=file_entry, widgets=sample_widgets, n=name, a=instance_alias):
+                        text = f_widget.get()
+                        if text.strip():
+                            parsed_files = [f.strip() for f in text.split(';') if f.strip()]
+                            widgets[idx]["files"] = parsed_files
+                        else:
+                            widgets[idx]["files"] = []
+                        values_list = [w["files"] for w in widgets]
+                        self._save_widget_value(a, n, values_list)
+                    file_entry.bind("<KeyRelease>", on_sample_key_release)
                 
                 # Save initial values
                 initial_values = [w["files"] for w in sample_widgets]
@@ -6247,6 +6341,12 @@ class ChemometricsGUI:
                 values_list = [w.get() for w in widgets]
                 self._save_widget_value(a, n, values_list)
             file_entry.bind("<FocusOut>", on_file_focus_out)
+
+            # Persist while typing so switching methodology items does not drop unsaved text.
+            def on_file_key_release(event, widgets=file_widgets, n=field_name, a=func_alias):
+                values_list = [w.get() for w in widgets]
+                self._save_widget_value(a, n, values_list)
+            file_entry.bind("<KeyRelease>", on_file_key_release)
             
             # Browse button for this entry
             def browse_single(idx, f_widget, widgets=file_widgets, n=field_name, a=func_alias, lbl=label_text):
@@ -6296,6 +6396,12 @@ class ChemometricsGUI:
                 values_list = [w.get() for w in widgets]
                 self._save_widget_value(a, n, values_list)
             entry.bind("<FocusOut>", on_entry_focus_out)
+
+            # Persist while typing so switching methodology items does not drop unsaved text.
+            def on_entry_key_release(event, widgets=entry_widgets, n=field_name, a=func_alias):
+                values_list = [w.get() for w in widgets]
+                self._save_widget_value(a, n, values_list)
+            entry.bind("<KeyRelease>", on_entry_key_release)
         
         # Save initial values
         initial_values = [w.get() for w in entry_widgets]
@@ -6393,6 +6499,18 @@ class ChemometricsGUI:
                 values_list = [w["files"] for w in widgets]
                 self._save_widget_value(a, n, values_list)
             file_entry.bind("<FocusOut>", on_sample_focus_out)
+
+            # Persist while typing so switching methodology items does not drop unsaved text.
+            def on_sample_key_release(event, idx=i, f_widget=file_entry, widgets=sample_widgets, n=field_name, a=func_alias):
+                text = f_widget.get()
+                if text.strip():
+                    parsed_files = [f.strip() for f in text.split(';') if f.strip()]
+                    widgets[idx]["files"] = parsed_files
+                else:
+                    widgets[idx]["files"] = []
+                values_list = [w["files"] for w in widgets]
+                self._save_widget_value(a, n, values_list)
+            file_entry.bind("<KeyRelease>", on_sample_key_release)
         
         # Save initial values
         initial_values = [w["files"] for w in sample_widgets]
@@ -8085,6 +8203,11 @@ class ChemometricsGUI:
         execution_results = self.analysis_data[instance_alias].get('execution_results', {})
         inputs = execution_results.get('inputs', {})
         actual_value = inputs.get(parameter)
+
+        if operator == 'exists':
+            return parameter in inputs and actual_value is not None
+        if operator == 'not_exists':
+            return parameter not in inputs or actual_value is None
         
         if actual_value is None:
             # If parameter not found in inputs, default to showing the page
@@ -14036,11 +14159,10 @@ Count:
         """Generate model.json from current configuration."""
         try:
             from datetime import datetime
-            
-            # Load function specs to get parameter types
-            specs_path = Path(__file__).parent / "function_specs.json"
-            with open(specs_path, 'r', encoding='utf-8') as f:
-                specs_data = json.load(f)
+
+            # Refresh merged specs before persisting model data.
+            self._refresh_function_specs()
+            specs_data = FUNCTION_SPECS
             parameter_types = specs_data.get("parameter_types", {})
             
             # First pass: build parameters for each function, including inherited parameters
@@ -14177,11 +14299,28 @@ Count:
                         })
             
             # Build complete model JSON
+            function_to_addon = self.addon_registry.get("function_to_addon", {})
+            available_addons = self.addon_registry.get("available_addons", {})
+            required_addon_ids = sorted({
+                function_to_addon.get(base_alias)
+                for base_alias in self.function_base_aliases
+                if function_to_addon.get(base_alias)
+            })
+
+            required_addons = [
+                {
+                    "id": addon_id,
+                    "name": available_addons.get(addon_id, {}).get("name", addon_id)
+                }
+                for addon_id in required_addon_ids
+            ]
+
             model_data = {
                 "metadata": {
                     "version": "1.0",
                     "created": datetime.now().isoformat(),
-                    "description": "Chemometric Studio Model Configuration"
+                    "description": "Chemometric Studio Model Configuration",
+                    "required_addons": required_addons
                 },
                 "functions": functions_array,
                 "routing": routing_array
@@ -14775,6 +14914,29 @@ Count:
         except Exception as e:
             self._show_fading_error(
                 self.language_manager.translate("ui.messages.load_model_json_failed", "Failed to load model.json:") + f" {e}"
+            )
+            return
+
+        metadata = model_data.get("metadata", {}) if isinstance(model_data, dict) else {}
+        required_addons = normalize_required_addons(metadata.get("required_addons", []))
+        available_addons = set(self.addon_registry.get("available_addons", {}).keys())
+        missing_addons = [addon_id for addon_id in required_addons if addon_id not in available_addons]
+        if missing_addons:
+            self._show_fading_error(
+                "Cannot load model. Missing required add-ons: " + ", ".join(missing_addons)
+            )
+            return
+
+        available_functions = set(FUNCTION_SPECS.get("gui_listing", {}).keys())
+        model_base_aliases = [
+            str(entry.get("base_alias", ""))
+            for entry in model_data.get("functions", [])
+            if isinstance(entry, dict)
+        ]
+        missing_functions = sorted({alias for alias in model_base_aliases if alias and alias not in available_functions})
+        if missing_functions:
+            self._show_fading_error(
+                "Cannot load model. Unknown or unavailable functions: " + ", ".join(missing_functions)
             )
             return
         
