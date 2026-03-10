@@ -98,6 +98,7 @@
         "category": "Model Parameters",
         "widget": "combobox",
         "values": ["svd", "random", "custom"],
+        "value_aliases": ["SVD", "Random", "Custom"],
         "default": "svd",
         "required": true,
         "input_type": "user"
@@ -167,6 +168,7 @@
         "category": "Model Parameters",
         "widget": "combobox",
         "values": ["em", "em_adaptive", "weighted_ao_admm"],
+        "value_aliases": ["EM", "EM Adaptive", "Weighted AO-ADMM"],
         "default": "em",
         "required": false,
         "input_type": "user",
@@ -424,6 +426,7 @@
         "widget": "combobox_list",
         "count_source": "nway_flag",
         "values": ["none", "reference", "initial", "fixed"],
+        "value_aliases": ["None", "Reference", "Initial", "Fixed"],
         "default": "none",
         "required": false,
         "input_type": "user",
