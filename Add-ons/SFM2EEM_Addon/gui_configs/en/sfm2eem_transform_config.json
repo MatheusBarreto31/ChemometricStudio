@@ -21,8 +21,8 @@
     "axis_t_info": "Axis Text Info (Updated)",
     "dim_labels": "Dimension Labels (Updated)"
   },
-  "short_description": "Converts each synchronous matrix in a tensor using the SFM2EEM algorithm.",
-  "long_description": "Applies the MATLAB SFM2EEM conversion to each internal matrix in calibration and optional validation tensors. The function only supports second-order data (nway_flag=2 and 3D tensors shaped [samples, axis1, axis2]).\n\nUser-facing parameters:\n- S_dl: offset step\n- S_exc: excitation step\n- Transpose: if enabled, transposes each matrix before conversion\n\nAxis behavior:\n- Assumes first non-sample axis is excitation and second is offset\n- Replaces the offset axis values using the conversion sequence and initial offset",
+  "short_description": "Converts each synchronous fluorescence matrix in a tensor using the SFM2EEM algorithm.",
+  "long_description": "Applies the SFM2EEM conversion to each internal matrix in the calibration and validation tensors, converting synchronous fluorescence matrices (SFMs) to excitation-emission matrices (EEMs). The function only supports second-order data (nway_flag=2 and 3D tensors shaped [samples, axis1, axis2]).\n\nUser-facing parameters:\n- S_dl: offset step\n- S_exc: excitation step\n- Transpose: if enabled, transposes each matrix before conversion\n\nAxis behavior:\n- Assumes first non-sample axis is excitation and second is offset\n- Replaces the offset axis values using the conversion sequence and initial offset",
   "setup": {
     "categories": [
       "Conversion Parameters",
