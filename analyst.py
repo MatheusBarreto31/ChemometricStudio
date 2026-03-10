@@ -803,6 +803,8 @@ def analyst_main(
                 return_keys = return_specs[base_alias]
                 if isinstance(result, (list, tuple)):
                     function_outputs = dict(zip(return_keys, result))
+                elif isinstance(result, dict):
+                    function_outputs = {return_keys[0]: result} if return_keys else {}
                 else:
                     function_outputs = {return_keys[0]: result} if return_keys else {}
                 current_outputs[instance_alias] = function_outputs

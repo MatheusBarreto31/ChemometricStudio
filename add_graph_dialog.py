@@ -520,13 +520,26 @@ class AddGraphDialog:
             variable=force_integer_var
         )
         force_integer_cb.grid(row=4, column=0, columnspan=2, sticky=tk.W, pady=2)
+
+        # Reverse axis direction
+        reverse_axis_var = tk.BooleanVar(value=False)
+        setattr(self, f'{axis_key}_reverse_axis_var', reverse_axis_var)
+        reverse_axis_cb = ttk.Checkbutton(
+            frame,
+            text=self._t(
+                "ui.labels.reverse_axis",
+                "Reverse axis"
+            ),
+            variable=reverse_axis_var
+        )
+        reverse_axis_cb.grid(row=5, column=0, columnspan=2, sticky=tk.W, pady=2)
         
         # Data shape info
         info_var = tk.StringVar(value=self._t("ui.messages.select_data_source", "Select a data source"))
         setattr(self, f'{axis_key}_info_var', info_var)
         
         info_label = ttk.Label(frame, textvariable=info_var, foreground="gray", font=("Arial", 8))
-        info_label.grid(row=5, column=0, columnspan=2, sticky=tk.W, pady=2)
+        info_label.grid(row=6, column=0, columnspan=2, sticky=tk.W, pady=2)
         
         frame.columnconfigure(1, weight=1)
     
@@ -709,6 +722,12 @@ class AddGraphDialog:
             text=self._t("ui.labels.force_integer_ticks", "Force integer ticks"),
             variable=x_force_integer_var
         ).pack(anchor=tk.W, pady=(5, 0))
+        x_reverse_axis_var = tk.BooleanVar(value=existing_config.get('x_axis', {}).get('reverse_axis', False) if existing_config else False)
+        ttk.Checkbutton(
+            x_frame,
+            text=self._t("ui.labels.reverse_axis", "Reverse axis"),
+            variable=x_reverse_axis_var
+        ).pack(anchor=tk.W, pady=(2, 0))
         
         # Y-axis config
         y_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.y_axis_configuration", "Y-Axis Configuration"), padding=10)
@@ -739,6 +758,12 @@ class AddGraphDialog:
             text=self._t("ui.labels.force_integer_ticks", "Force integer ticks"),
             variable=y_force_integer_var
         ).pack(anchor=tk.W, pady=(5, 0))
+        y_reverse_axis_var = tk.BooleanVar(value=existing_config.get('y_axis', {}).get('reverse_axis', False) if existing_config else False)
+        ttk.Checkbutton(
+            y_frame,
+            text=self._t("ui.labels.reverse_axis", "Reverse axis"),
+            variable=y_reverse_axis_var
+        ).pack(anchor=tk.W, pady=(2, 0))
         
         # Z-axis config (optional)
         z_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.z_axis_configuration_optional_3d", "Z-Axis Configuration (Optional, for 3D)"), padding=10)
@@ -769,6 +794,12 @@ class AddGraphDialog:
             text=self._t("ui.labels.force_integer_ticks", "Force integer ticks"),
             variable=z_force_integer_var
         ).pack(anchor=tk.W, pady=(5, 0))
+        z_reverse_axis_var = tk.BooleanVar(value=existing_config.get('z_axis', {}).get('reverse_axis', False) if existing_config else False)
+        ttk.Checkbutton(
+            z_frame,
+            text=self._t("ui.labels.reverse_axis", "Reverse axis"),
+            variable=z_reverse_axis_var
+        ).pack(anchor=tk.W, pady=(2, 0))
 
         def _refresh_dataset_nested_keys(source_var: tk.StringVar, nested_combo: ttk.Combobox):
             source = source_var.get().strip()
@@ -830,6 +861,8 @@ class AddGraphDialog:
                     x_axis['axis_type'] = x_axis_type_var.get()
                 if x_force_integer_var.get():
                     x_axis['force_integer'] = True
+                if x_reverse_axis_var.get():
+                    x_axis['reverse_axis'] = True
                 ds_config['x_axis'] = x_axis
             
             # Y-axis
@@ -841,6 +874,8 @@ class AddGraphDialog:
                     y_axis['axis_type'] = y_axis_type_var.get()
                 if y_force_integer_var.get():
                     y_axis['force_integer'] = True
+                if y_reverse_axis_var.get():
+                    y_axis['reverse_axis'] = True
                 ds_config['y_axis'] = y_axis
             
             # Z-axis
@@ -852,6 +887,8 @@ class AddGraphDialog:
                     z_axis['axis_type'] = z_axis_type_var.get()
                 if z_force_integer_var.get():
                     z_axis['force_integer'] = True
+                if z_reverse_axis_var.get():
+                    z_axis['reverse_axis'] = True
                 ds_config['z_axis'] = z_axis
             
             # Class labels
@@ -1148,6 +1185,8 @@ class AddGraphDialog:
 
             if getattr(self, 'x_force_integer_var', None) and self.x_force_integer_var.get():
                 x_config['force_integer'] = True
+            if getattr(self, 'x_reverse_axis_var', None) and self.x_reverse_axis_var.get():
+                x_config['reverse_axis'] = True
             
             config['x_axis'] = x_config
         
@@ -1171,6 +1210,8 @@ class AddGraphDialog:
 
             if getattr(self, 'y_force_integer_var', None) and self.y_force_integer_var.get():
                 y_config['force_integer'] = True
+            if getattr(self, 'y_reverse_axis_var', None) and self.y_reverse_axis_var.get():
+                y_config['reverse_axis'] = True
             
             config['y_axis'] = y_config
         
@@ -1194,6 +1235,8 @@ class AddGraphDialog:
 
             if getattr(self, 'z_force_integer_var', None) and self.z_force_integer_var.get():
                 z_config['force_integer'] = True
+            if getattr(self, 'z_reverse_axis_var', None) and self.z_reverse_axis_var.get():
+                z_config['reverse_axis'] = True
             
             config['z_axis'] = z_config
         

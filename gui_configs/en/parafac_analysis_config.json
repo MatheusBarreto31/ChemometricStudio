@@ -11,14 +11,27 @@
     "nway_flag": "Data Order",
     "mode_centering": "Mode Centering",
     "mode_normalization": "Mode Normalization",
-    "mode_restrictions": "Mode Restrictions",
-    "tensorly_constraints": "TensorLy Constraints",
+    "constraint_non_negative": "Non-negative Constraint",
+    "constraint_l1_reg": "L1 Regularization Constraint",
+    "constraint_l2_reg": "L2 Regularization Constraint",
+    "constraint_l2_square_reg": "L2 Squared Regularization Constraint",
+    "constraint_unimodality": "Unimodality Constraint",
+    "constraint_normalize": "Normalize Constraint",
+    "constraint_simplex": "Simplex Constraint",
+    "constraint_normalized_sparsity": "Normalized Sparsity Constraint",
+    "constraint_soft_sparsity": "Soft Sparsity Constraint",
+    "constraint_smoothness": "Smoothness Constraint",
+    "constraint_monotonicity": "Monotonicity Constraint",
+    "constraint_hard_sparsity": "Hard Sparsity Constraint",
+    "unconstrained_sparsity": "Sparsity (Unconstrained Only)",
+    "unconstrained_linesearch": "Linesearch (Unconstrained Only)",
+    "unconstrained_orthogonalise": "Orthogonalise (Unconstrained Only)",
     "init_method": "Initialization",
     "random_multi_start": "Random Multi-Start",
+    "random_multi_start_runs": "Random Multi-Start Runs",
     "max_iter": "Max Iterations",
     "tol": "Tolerance",
     "random_state": "Random Seed",
-    "allow_missing": "Allow NaN",
     "missing_constrained_solver": "Missing+Constraint Solver",
     "profile_paths": "Profile Files",
     "profile_usage": "Profile Usage",
@@ -31,6 +44,15 @@
   },
   "output_aliases": {
     "scores_mode_a": "Scores (Mode A)",
+    "val_scores_mode_a": "Validation Scores (Mode A)",
+    "scores_mode_a_heatmap": "Scores (Mode A Heatmap Matrix)",
+    "mode_a_sample_axis": "Mode A Sample Axis",
+    "mode_a_component_axis": "Mode A Component Axis",
+    "sweep_F": "Sweep Components (F)",
+    "sweep_sfit": "Sweep sfit",
+    "sweep_core_consistency": "Sweep Core Consistency",
+    "sweep_explained_variance": "Sweep Explained Variance",
+    "sweep_n_iter": "Sweep Iterations",
     "factors": "Factors",
     "weights": "Weights",
     "instrumental_profiles": "Instrumental Profiles",
@@ -53,6 +75,8 @@
       "Model Parameters",
       "Data Inputs",
       "Per-Mode Options",
+      "Constraints",
+      "Unconstrained Model Options",
       "Profiles",
       "Calibration",
       "Cross-Validation"
@@ -102,6 +126,21 @@
         "tooltip": "When enabled, run multiple random initializations and keep the best fit."
       },
       {
+        "name": "random_multi_start_runs",
+        "label": "Random Multi-Start Runs",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "5",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "init_method": "random",
+          "random_multi_start": true
+        },
+        "tooltip": "Number of random starts when multi-start is enabled. Minimum is 1."
+      },
+      {
         "name": "tol",
         "label": "Tolerance",
         "category": "Model Parameters",
@@ -123,15 +162,6 @@
         "tooltip": "Optional integer seed. Leave blank for different random results on each run."
       },
       {
-        "name": "allow_missing",
-        "label": "Allow Missing Values (NaN)",
-        "category": "Model Parameters",
-        "widget": "checkbutton",
-        "default": true,
-        "required": false,
-        "input_type": "user"
-      },
-      {
         "name": "missing_constrained_solver",
         "label": "Missing+Constraint Solver",
         "category": "Model Parameters",
@@ -140,9 +170,6 @@
         "default": "em",
         "required": false,
         "input_type": "user",
-        "visible_if": {
-          "allow_missing": true
-        },
         "tooltip": "Used only when both missing values and TensorLy constraints are active."
       },
       {
@@ -172,78 +199,246 @@
         "name": "mode_centering",
         "label": "Mode Centering",
         "category": "Per-Mode Options",
-        "widget": "entry",
-        "type": "str",
-        "default": "false,false,false",
+        "widget": "checkbutton_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_label_prefix": "Mode",
+        "default": false,
         "required": false,
         "input_type": "user",
-        "tooltip": "Comma list per mode including sample mode. Example: true,false,false"
+        "tooltip": "Enable centering for selected modes. One checkbutton per mode, including sample mode."
       },
       {
         "name": "mode_normalization",
         "label": "Mode Normalization",
         "category": "Per-Mode Options",
-        "widget": "entry",
-        "type": "str",
-        "default": "false,false,false",
+        "widget": "checkbutton_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_label_prefix": "Mode",
+        "default": false,
         "required": false,
         "input_type": "user",
-        "tooltip": "Comma list per mode including sample mode. Example: false,true,true"
+        "tooltip": "Enable normalization for selected modes. One checkbutton per mode, including sample mode."
       },
       {
-        "name": "mode_restrictions",
-        "label": "Mode Restrictions",
-        "category": "Per-Mode Options",
-        "widget": "entry",
-        "type": "str",
-        "default": "none,none,none",
+        "name": "constraint_non_negative",
+        "label": "Non-negative",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_label_prefix": "Mode",
+        "default": false,
         "required": false,
         "input_type": "user",
-        "tooltip": "Comma list per mode: none, non_negative, fixed"
+        "tooltip": "Applies non-negativity to selected modes. One checkbutton per mode, including sample mode."
       },
       {
-        "name": "tensorly_constraints",
-        "label": "TensorLy Constraints (JSON)",
-        "category": "Per-Mode Options",
-        "widget": "entry",
-        "type": "str",
-        "default": "",
+        "name": "constraint_l1_reg",
+        "label": "L1 Regularization",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_label_prefix": "Mode",
+        "default": false,
         "required": false,
         "input_type": "user",
-        "tooltip": "JSON dict for constrained_parafac, e.g. {\"non_negative\":[true,true,true],\"smoothness\":[null,1.0,1.0]}"
+        "tooltip": "Applies L1 regularization to selected modes (fixed strength)."
+      },
+      {
+        "name": "constraint_l2_reg",
+        "label": "L2 Regularization",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_label_prefix": "Mode",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Applies L2 regularization to selected modes (fixed strength)."
+      },
+      {
+        "name": "constraint_l2_square_reg",
+        "label": "L2 Squared Regularization",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_label_prefix": "Mode",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Applies squared L2 regularization to selected modes (fixed strength)."
+      },
+      {
+        "name": "constraint_unimodality",
+        "label": "Unimodality",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_label_prefix": "Mode",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Enforces unimodal factors for selected modes."
+      },
+      {
+        "name": "constraint_normalize",
+        "label": "Normalize",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_label_prefix": "Mode",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Enables TensorLy normalize constraint for selected modes."
+      },
+      {
+        "name": "constraint_simplex",
+        "label": "Simplex",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_label_prefix": "Mode",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Applies simplex constraint to selected modes (fixed strength)."
+      },
+      {
+        "name": "constraint_normalized_sparsity",
+        "label": "Normalized Sparsity",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_label_prefix": "Mode",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Applies normalized sparsity to selected modes (fixed strength)."
+      },
+      {
+        "name": "constraint_soft_sparsity",
+        "label": "Soft Sparsity",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_label_prefix": "Mode",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Applies soft sparsity to selected modes (fixed strength)."
+      },
+      {
+        "name": "constraint_smoothness",
+        "label": "Smoothness",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_label_prefix": "Mode",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Applies smoothness constraint to selected modes (fixed strength)."
+      },
+      {
+        "name": "constraint_monotonicity",
+        "label": "Monotonicity",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_label_prefix": "Mode",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Enforces monotonic factors for selected modes."
+      },
+      {
+        "name": "constraint_hard_sparsity",
+        "label": "Hard Sparsity",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_label_prefix": "Mode",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Applies hard sparsity to selected modes (fixed strength)."
+      },
+      {
+        "name": "unconstrained_sparsity",
+        "label": "Sparsity",
+        "category": "Unconstrained Model Options",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Unconstrained PARAFAC only. Global model-level option (not per-mode). Ignored when any mode constraints are enabled."
+      },
+      {
+        "name": "unconstrained_linesearch",
+        "label": "Linesearch",
+        "category": "Unconstrained Model Options",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Unconstrained PARAFAC only. Global model-level option (not per-mode). Ignored when any mode constraints are enabled."
+      },
+      {
+        "name": "unconstrained_orthogonalise",
+        "label": "Orthogonalise",
+        "category": "Unconstrained Model Options",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Unconstrained PARAFAC only. Global model-level option (not per-mode). Ignored when any mode constraints are enabled."
       },
       {
         "name": "profile_paths",
         "label": "Profile Files",
         "category": "Profiles",
-        "widget": "entry",
-        "type": "str",
-        "default": "",
+        "widget": "file_selector_list",
+        "count_source": "nway_flag",
         "required": false,
         "input_type": "user",
-        "tooltip": "Comma list of profile file paths (one per mode)."
+        "tooltip": "List of profile files (one per data mode, based on Data Order)."
       },
       {
         "name": "profile_usage",
         "label": "Profile Usage",
         "category": "Profiles",
-        "widget": "entry",
-        "type": "str",
-        "default": "none,none,none",
+        "widget": "combobox_list",
+        "count_source": "nway_flag",
+        "values": ["none", "reference", "initial", "fixed"],
+        "default": "none",
         "required": false,
         "input_type": "user",
-        "tooltip": "Comma list per mode: none, reference, initial, fixed"
+        "tooltip": "Usage mode per profile input: none, reference, initial, or fixed."
       },
       {
         "name": "component_y_mapping",
         "label": "Component to Y Mapping",
         "category": "Calibration",
-        "widget": "entry",
-        "type": "str",
+        "widget": "entry_list",
+        "count_source": "n_components",
         "default": "",
         "required": false,
         "input_type": "user",
-        "tooltip": "Format: 1:1,2:2 (component:y_column, 1-based)."
+        "tooltip": "One entry per component: Y column index (1-based). Empty entry excludes that component. If all are empty, all valid component-to-Y combinations are evaluated automatically."
       },
       {
         "name": "X_cal",
@@ -251,6 +446,9 @@
         "category": "Data Inputs",
         "widget": "data_input",
         "required": true,
+        "visible_if": {
+          "input_type": "user"
+        },
         "input_type": "routed"
       },
       {
@@ -259,6 +457,9 @@
         "category": "Data Inputs",
         "widget": "data_input",
         "required": false,
+        "visible_if": {
+          "input_type": "user"
+        },
         "input_type": "routed"
       },
       {
@@ -267,6 +468,9 @@
         "category": "Data Inputs",
         "widget": "data_input",
         "required": false,
+        "visible_if": {
+          "input_type": "user"
+        },
         "input_type": "routed"
       },
       {
@@ -275,6 +479,9 @@
         "category": "Data Inputs",
         "widget": "data_input",
         "required": false,
+        "visible_if": {
+          "input_type": "user"
+        },
         "input_type": "routed"
       },
       {
@@ -283,7 +490,10 @@
         "category": "Data Inputs",
         "widget": "data_input",
         "required": false,
-        "input_type": "routed"
+        "visible_if": {
+          "input_type": "user"
+        },
+        "input_type": "inherited"
       },
       {
         "name": "axis_n_info",
@@ -291,6 +501,9 @@
         "category": "Data Inputs",
         "widget": "data_input",
         "required": false,
+        "visible_if": {
+          "input_type": "user"
+        },
         "input_type": "routed"
       },
       {
@@ -299,6 +512,9 @@
         "category": "Data Inputs",
         "widget": "data_input",
         "required": false,
+        "visible_if": {
+          "input_type": "user"
+        },
         "input_type": "routed"
       },
       {
@@ -307,6 +523,9 @@
         "category": "Cross-Validation",
         "widget": "data_input",
         "required": false,
+        "visible_if": {
+          "input_type": "user"
+        },
         "input_type": "routed"
       }
     ]
@@ -336,36 +555,164 @@
         ]
       },
       {
+        "title": "Sweep Scree",
+        "layout": "fd",
+        "condition": {
+          "parameter": "sweep_mode",
+          "operator": "==",
+          "value": "True"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "marker": "o",
+              "x_axis": {
+                "data_source": "sweep_F",
+                "force_integer": true,
+                "label": "F"
+              },
+              "y_axis": {
+                "data_source": "sweep_sfit",
+                "label": "sfit"
+              },
+              "title": "Sweep: sfit vs F",
+              "show_origin": false
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "marker": "o",
+              "x_axis": {
+                "data_source": "sweep_F",
+                "force_integer": true,
+                "label": "F"
+              },
+              "y_axis": {
+                "data_source": "sweep_core_consistency",
+                "label": "Core Consistency"
+              },
+              "title": "Sweep: Core Consistency vs F",
+              "show_origin": false
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "marker": "o",
+              "x_axis": {
+                "data_source": "sweep_F",
+                "force_integer": true,
+                "label": "F"
+              },
+              "y_axis": {
+                "data_source": "sweep_explained_variance",
+                "label": "Explained Variance (%)"
+              },
+              "title": "Sweep: Explained Variance vs F",
+              "show_origin": false
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "marker": "o",
+              "x_axis": {
+                "data_source": "sweep_F",
+                "force_integer": true,
+                "label": "F"
+              },
+              "y_axis": {
+                "data_source": "sweep_n_iter",
+                "label": "Iterations"
+              },
+              "title": "Sweep: Iterations vs F",
+              "show_origin": false
+            }
+          }
+        ]
+      },
+      {
         "title": "Mode A Scores",
-        "layout": "fp",
+        "layout": "ew",
         "sections": [
           {
             "type": "graph",
             "config": {
               "graph_type": "scatter",
-              "x_axis": {
-                "data_source": "scores_mode_a",
-                "axis_type": "linear"
-              },
-              "y_axis": {
-                "data_source": "scores_mode_a",
-                "axis_type": "linear"
-              },
-              "title": "Mode A Scores",
+              "title": "Mode A Scores vs Y Reference",
+              "show_origin": true,
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "Y_cal",
+                    "axis_type": "linear",
+                    "label": "Y Reference"
+                  },
+                  "y_axis": {
+                    "data_source": "scores_mode_a",
+                    "axis_type": "linear",
+                    "label": "Mode A Score"
+                  },
+                  "label": "Calibration"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "Y_val",
+                    "axis_type": "linear",
+                    "label": "Y Reference"
+                  },
+                  "y_axis": {
+                    "data_source": "val_scores_mode_a",
+                    "axis_type": "linear",
+                    "label": "Mode A Score"
+                  },
+                  "label": "Validation"
+                }
+              ],
               "data_slicing": [
                 {
-                  "name": "Component-X",
+                  "name": "Y Column",
                   "dimension": 1,
                   "axis": "x",
+                  "default": 0,
                   "show_navigation_menu": true
                 },
                 {
-                  "name": "Component-Y",
+                  "name": "Component",
                   "dimension": 1,
                   "axis": "y",
+                  "default": 0,
                   "show_navigation_menu": true
                 }
               ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "x_axis": {
+                "data_source": "mode_a_component_axis",
+                "force_integer": true,
+                "label": "Component"
+              },
+              "y_axis": {
+                "data_source": "mode_a_sample_axis",
+                "force_integer": true,
+                "reverse_axis": true,
+                "label": "Sample"
+              },
+              "z_axis": {
+                "data_source": "scores_mode_a_heatmap",
+                "label": "Mode A Score"
+              },
+              "title": "Mode A Scores Heatmap (Samples x Components)"
             }
           }
         ]
@@ -381,6 +728,18 @@
               "aux_axis": {
                 "data_source": "axis_n_info",
                 "labels": "dim_labels"
+              },
+              "x_axis": {
+                "data_source": "axis_n_info",
+                "index": 1,
+                "label": "dim_labels",
+                "l_index": 1
+              },
+              "y_axis": {
+                "data_source": "axis_n_info",
+                "index": 2,
+                "label": "dim_labels",
+                "l_index": 2
               },
               "z_axis": {
                 "data_source": "instrumental_profiles",

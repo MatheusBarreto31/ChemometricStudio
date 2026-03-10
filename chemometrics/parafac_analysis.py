@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 import inspect
-import json
+import itertools
 import os
 
 import numpy as np
@@ -116,23 +116,6 @@ def _normalize_bool_list(values: Any, count: int) -> List[bool]:
     return out
 
 
-def _normalize_str_list(values: Any, count: int, default: str = "none") -> List[str]:
-    if isinstance(values, list):
-        raw = values
-    elif isinstance(values, str):
-        raw = [v.strip() for v in values.split(",")]
-    else:
-        raw = []
-
-    out: List[str] = []
-    for v in raw[:count]:
-        text = str(v).strip().lower()
-        out.append(text if text else default)
-    if len(out) < count:
-        out.extend([default] * (count - len(out)))
-    return out
-
-
 def _coerce_scalar_token(token: Any) -> Any:
     if isinstance(token, (bool, int, float)) or token is None:
         return token
@@ -150,75 +133,57 @@ def _coerce_scalar_token(token: Any) -> Any:
         return text
 
 
-def _normalize_tensorly_constraints(values: Any, n_modes: int) -> Dict[str, Any]:
-    if values is None:
-        return {}
+def _build_tensorly_constraints(
+    n_modes: int,
+    constraint_non_negative: Any = None,
+    constraint_l1_reg: Any = None,
+    constraint_l2_reg: Any = None,
+    constraint_l2_square_reg: Any = None,
+    constraint_unimodality: Any = None,
+    constraint_normalize: Any = None,
+    constraint_simplex: Any = None,
+    constraint_normalized_sparsity: Any = None,
+    constraint_soft_sparsity: Any = None,
+    constraint_smoothness: Any = None,
+    constraint_monotonicity: Any = None,
+    constraint_hard_sparsity: Any = None,
+) -> Dict[str, Any]:
+    mode_flags: Dict[str, List[bool]] = {
+        "non_negative": _normalize_bool_list(constraint_non_negative, n_modes),
+        "l1_reg": _normalize_bool_list(constraint_l1_reg, n_modes),
+        "l2_reg": _normalize_bool_list(constraint_l2_reg, n_modes),
+        "l2_square_reg": _normalize_bool_list(constraint_l2_square_reg, n_modes),
+        "unimodality": _normalize_bool_list(constraint_unimodality, n_modes),
+        "normalize": _normalize_bool_list(constraint_normalize, n_modes),
+        "simplex": _normalize_bool_list(constraint_simplex, n_modes),
+        "normalized_sparsity": _normalize_bool_list(constraint_normalized_sparsity, n_modes),
+        "soft_sparsity": _normalize_bool_list(constraint_soft_sparsity, n_modes),
+        "smoothness": _normalize_bool_list(constraint_smoothness, n_modes),
+        "monotonicity": _normalize_bool_list(constraint_monotonicity, n_modes),
+        "hard_sparsity": _normalize_bool_list(constraint_hard_sparsity, n_modes),
+    }
 
-    raw: Dict[str, Any]
-    if isinstance(values, dict):
-        raw = values
-    elif isinstance(values, str):
-        text = values.strip()
-        if not text:
-            return {}
-        try:
-            parsed = json.loads(text)
-            raw = parsed if isinstance(parsed, dict) else {}
-        except Exception:
-            return {}
-    else:
-        return {}
+    mode_defaults: Dict[str, Any] = {
+        "non_negative": True,
+        "l1_reg": 1.0,
+        "l2_reg": 1.0,
+        "l2_square_reg": 1.0,
+        "unimodality": True,
+        "normalize": True,
+        "simplex": 1.0,
+        "normalized_sparsity": 0.5,
+        "soft_sparsity": 1.0,
+        "smoothness": 1.0,
+        "monotonicity": True,
+        "hard_sparsity": 1,
+    }
 
     out: Dict[str, Any] = {}
-    valid_keys = {
-        "non_negative",
-        "l1_reg",
-        "l2_reg",
-        "l2_square_reg",
-        "unimodality",
-        "normalize",
-        "simplex",
-        "normalized_sparsity",
-        "soft_sparsity",
-        "smoothness",
-        "monotonicity",
-        "hard_sparsity",
-        "sparsity",
-        "linesearch",
-        "orthogonalise",
-    }
-
-    modewise_keys = {
-        "non_negative",
-        "l1_reg",
-        "l2_reg",
-        "l2_square_reg",
-        "unimodality",
-        "normalize",
-        "simplex",
-        "normalized_sparsity",
-        "soft_sparsity",
-        "smoothness",
-        "monotonicity",
-        "hard_sparsity",
-    }
-
-    for key, value in raw.items():
-        k = str(key).strip()
-        if k not in valid_keys:
+    for key, flags in mode_flags.items():
+        if not any(bool(v) for v in flags):
             continue
-        if k in modewise_keys:
-            if isinstance(value, list):
-                vec = [_coerce_scalar_token(v) for v in value[:n_modes]]
-                if len(vec) < n_modes:
-                    vec.extend([None] * (n_modes - len(vec)))
-                out[k] = vec
-            else:
-                scalar = _coerce_scalar_token(value)
-                out[k] = [scalar] * n_modes
-        else:
-            out[k] = _coerce_scalar_token(value)
-
+        enabled_value = mode_defaults[key]
+        out[key] = [enabled_value if bool(flag) else None for flag in flags]
     return out
 
 
@@ -323,17 +288,6 @@ def _modewise_preprocess(
     return np.asarray(Xp, dtype=float), mode_stats
 
 
-def _apply_mode_restrictions(factors: List[np.ndarray], restrictions: Sequence[str]) -> List[np.ndarray]:
-    fixed: List[np.ndarray] = []
-    for idx, factor in enumerate(factors):
-        mode_rule = restrictions[idx] if idx < len(restrictions) else "none"
-        f = np.asarray(factor, dtype=float)
-        if mode_rule in {"non_negative", "nonnegative", "nn"}:
-            f = np.maximum(f, 0.0)
-        fixed.append(f)
-    return fixed
-
-
 def _component_reconstruction_tensor(weights: np.ndarray, factors: Sequence[np.ndarray]) -> np.ndarray:
     full_shape = tuple(f.shape[0] for f in factors)
     r = len(weights)
@@ -414,9 +368,138 @@ def _parse_mapping(mapping_text: str) -> Dict[int, int]:
     return mapping
 
 
+def _normalize_str_sequence(values: Any) -> List[str]:
+    if values is None:
+        return []
+    if isinstance(values, list):
+        return [str(v).strip() for v in values]
+    text = str(values).strip()
+    if not text:
+        return []
+    return [v.strip() for v in text.replace(";", ",").split(",")]
+
+
+def _expand_profile_mode_settings(
+    profile_paths: Any,
+    profile_usage: Any,
+    n_modes: int,
+) -> Tuple[List[str], List[str]]:
+    paths_raw = _normalize_str_sequence(profile_paths)
+    usage_raw = [u.lower() for u in _normalize_str_sequence(profile_usage)]
+
+    # New UI provides one value per non-sample mode (nway_flag); legacy models may
+    # still provide one per full tensor mode (including sample mode at index 0).
+    if len(paths_raw) == max(0, n_modes - 1):
+        paths = [""] + paths_raw
+    else:
+        paths = list(paths_raw)
+
+    if len(usage_raw) == max(0, n_modes - 1):
+        usage = ["none"] + usage_raw
+    else:
+        usage = list(usage_raw)
+
+    if len(paths) < n_modes:
+        paths.extend([""] * (n_modes - len(paths)))
+    if len(usage) < n_modes:
+        usage.extend(["none"] * (n_modes - len(usage)))
+
+    return paths[:n_modes], usage[:n_modes]
+
+
+def _coerce_mapping_target_index(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if ":" in text:
+        _, right = text.split(":", 1)
+        text = right.strip()
+    try:
+        idx = int(float(text)) - 1
+    except Exception:
+        return None
+    return idx if idx >= 0 else None
+
+
+def _parse_component_mapping_input(
+    mapping_input: Any,
+    n_components: int,
+) -> Tuple[Dict[int, int], bool, bool]:
+    """Return (mapping, explicit_input_present, all_entries_empty)."""
+    if mapping_input is None:
+        return {}, False, False
+
+    if isinstance(mapping_input, dict):
+        out: Dict[int, int] = {}
+        for k, v in mapping_input.items():
+            try:
+                comp_idx = int(float(k)) - 1
+            except Exception:
+                continue
+            y_idx = _coerce_mapping_target_index(v)
+            if comp_idx >= 0 and comp_idx < n_components and y_idx is not None:
+                out[comp_idx] = y_idx
+        return out, True, len(out) == 0
+
+    if isinstance(mapping_input, list):
+        out: Dict[int, int] = {}
+        non_empty_seen = False
+        for comp_idx, raw in enumerate(mapping_input[:n_components]):
+            text = "" if raw is None else str(raw).strip()
+            if text:
+                non_empty_seen = True
+            y_idx = _coerce_mapping_target_index(raw)
+            if y_idx is not None:
+                out[comp_idx] = y_idx
+        return out, True, not non_empty_seen
+
+    text_input = str(mapping_input).strip()
+    if not text_input:
+        return {}, False, False
+    out = _parse_mapping(text_input)
+    return out, True, len(out) == 0
+
+
 def _auto_mapping(scores_a: np.ndarray, Y: np.ndarray) -> Dict[int, int]:
     n_comp = scores_a.shape[1]
     n_y = Y.shape[1]
+    if n_comp <= 0 or n_y <= 0:
+        return {}
+
+    # Exhaustive all-combinations search for small problems.
+    max_pairs = min(n_comp, n_y)
+    if max_pairs <= 8:
+        best_mapping: Dict[int, int] = {}
+        best_score = (-np.inf, -np.inf, -np.inf)
+
+        for k in range(1, max_pairs + 1):
+            for comp_subset in itertools.combinations(range(n_comp), k):
+                for y_subset in itertools.combinations(range(n_y), k):
+                    for y_perm in itertools.permutations(y_subset):
+                        candidate = {int(c): int(y) for c, y in zip(comp_subset, y_perm)}
+                        r2_vals: List[float] = []
+                        rmse_vals: List[float] = []
+                        for c, y in candidate.items():
+                            fit = _fit_linear_1d(scores_a[:, c], Y[:, y])
+                            r2_vals.append(_safe_float(fit.get("metrics", {}).get("R2"), default=-np.inf))
+                            rmse_vals.append(_safe_float(fit.get("metrics", {}).get("RMSEP"), default=np.inf))
+                        if not r2_vals:
+                            continue
+                        score = (
+                            float(np.mean(r2_vals)),
+                            float(k),
+                            -float(np.mean(rmse_vals)),
+                        )
+                        if score > best_score:
+                            best_score = score
+                            best_mapping = candidate
+
+        if best_mapping:
+            return best_mapping
+
+    # Fallback greedy assignment for larger dimensionality.
     pairs: List[Tuple[float, int, int]] = []
 
     for c in range(n_comp):
@@ -785,11 +868,14 @@ def _single_fit_once(
     random_state: Optional[int],
     mode_centering: Sequence[bool],
     mode_normalization: Sequence[bool],
-    mode_restrictions: Sequence[str],
     profile_paths: Sequence[str],
     profile_usage: Sequence[str],
     tensorly_constraints: Optional[Dict[str, Any]],
+    unconstrained_sparsity: bool,
+    unconstrained_linesearch: bool,
+    unconstrained_orthogonalise: bool,
     missing_constrained_solver: str,
+    component_y_mapping: Any,
 ) -> Dict[str, Any]:
     X_raw = np.asarray(X_cal, dtype=float)
     if nway_flag is not None and X_raw.ndim != int(nway_flag) + 1:
@@ -847,15 +933,14 @@ def _single_fit_once(
     has_missing = bool(np.isnan(X_proc).any())
     use_constrained = bool(HAS_CONSTRAINED_PARAFAC and constraints)
 
-    # Backward-compatible mode_restrictions are mapped to TensorLy non_negative/fixed modes.
-    if any(r in {"non_negative", "nonnegative", "nn"} for r in mode_restrictions):
-        nn_vec = constraints.get("non_negative")
-        if not isinstance(nn_vec, list) or len(nn_vec) != n_modes:
-            nn_vec = [False] * n_modes
-        for midx, rule in enumerate(mode_restrictions):
-            if str(rule).strip().lower() in {"non_negative", "nonnegative", "nn"}:
-                nn_vec[midx] = True
-        constraints["non_negative"] = nn_vec
+    if use_constrained and (bool(unconstrained_sparsity) or bool(unconstrained_linesearch) or bool(unconstrained_orthogonalise)):
+        emit_execution_message(
+            code="parafac_unconstrained_options_ignored",
+            text=(
+                "sparsity, linesearch, and orthogonalise are unconstrained PARAFAC options and were ignored "
+                "because mode constraints are active."
+            ),
+        )
 
     solver_mode = _normalize_missing_constrained_solver(missing_constrained_solver)
     if has_missing and use_constrained:
@@ -921,12 +1006,12 @@ def _single_fit_once(
     else:
         kwargs_unconstrained: Dict[str, Any] = dict(base_kwargs)
         kwargs_unconstrained["tol"] = float(tol)
-        kwargs_unconstrained["normalize_factors"] = bool(constraints.get("normalize_factors", False))
+        kwargs_unconstrained["normalize_factors"] = False
         kwargs_unconstrained["mask"] = mask
-        kwargs_unconstrained["sparsity"] = constraints.get("sparsity")
-        kwargs_unconstrained["l2_reg"] = _safe_float(constraints.get("l2_reg", 0.0))
-        kwargs_unconstrained["linesearch"] = bool(constraints.get("linesearch", False))
-        kwargs_unconstrained["orthogonalise"] = bool(constraints.get("orthogonalise", False))
+        kwargs_unconstrained["sparsity"] = 1.0 if bool(unconstrained_sparsity) else None
+        kwargs_unconstrained["l2_reg"] = 0.0
+        kwargs_unconstrained["linesearch"] = bool(unconstrained_linesearch)
+        kwargs_unconstrained["orthogonalise"] = bool(unconstrained_orthogonalise)
 
         parafac_result = parafac(X_filled, **kwargs_unconstrained)
 
@@ -936,7 +1021,7 @@ def _single_fit_once(
     else:
         weights, factors = parafac_result
         errors = []
-    factors = _apply_mode_restrictions(list(factors), mode_restrictions)
+    factors = list(factors)
 
     reconstructed = cp_to_tensor((weights, factors))
     residual = np.asarray(X_filled - reconstructed, dtype=float)
@@ -957,11 +1042,24 @@ def _single_fit_once(
     Yv = _as_2d_y(Y_val)
 
     calibration_models: List[Dict[str, Any]] = []
-    component_y_mapping = {}
+    selected_component_y_mapping: Dict[int, int] = {}
+    auto_mapping_used = False
 
     if Yc is not None and Yc.shape[0] == scores_a.shape[0]:
-        component_y_mapping = _auto_mapping(scores_a, Yc)
-        for comp_idx, y_idx in component_y_mapping.items():
+        parsed_map, explicit_map, all_empty_map = _parse_component_mapping_input(
+            component_y_mapping,
+            n_components=int(scores_a.shape[1]),
+        )
+
+        if explicit_map and not all_empty_map:
+            for comp_idx, y_idx in parsed_map.items():
+                if 0 <= comp_idx < scores_a.shape[1] and 0 <= y_idx < Yc.shape[1]:
+                    selected_component_y_mapping[int(comp_idx)] = int(y_idx)
+        else:
+            selected_component_y_mapping = _auto_mapping(scores_a, Yc)
+            auto_mapping_used = True
+
+        for comp_idx, y_idx in selected_component_y_mapping.items():
             fit_cal = _fit_linear_1d(scores_a[:, comp_idx], Yc[:, y_idx])
             entry = {
                 "component": int(comp_idx + 1),
@@ -1025,7 +1123,8 @@ def _single_fit_once(
         "residual": residual,
         "instrumental_profiles": inst_profiles,
         "metrics": metrics,
-        "component_y_mapping": {str(k + 1): int(v + 1) for k, v in component_y_mapping.items()},
+        "component_y_mapping": {str(k + 1): int(v + 1) for k, v in selected_component_y_mapping.items()},
+        "auto_mapping_used": bool(auto_mapping_used),
         "calibration_models": calibration_models,
         "reference_angles": reference_angles,
         "mode_stats": mode_stats,
@@ -1046,16 +1145,20 @@ def _single_fit(
     random_state: Optional[int],
     mode_centering: Sequence[bool],
     mode_normalization: Sequence[bool],
-    mode_restrictions: Sequence[str],
     profile_paths: Sequence[str],
     profile_usage: Sequence[str],
     tensorly_constraints: Optional[Dict[str, Any]],
+    unconstrained_sparsity: bool,
+    unconstrained_linesearch: bool,
+    unconstrained_orthogonalise: bool,
     missing_constrained_solver: str,
+    component_y_mapping: Any,
     random_multi_start: bool,
+    random_multi_start_runs: int,
 ) -> Dict[str, Any]:
     init_name = str(init_method).strip().lower()
     use_multi = bool(random_multi_start and init_name == "random")
-    n_starts = 5 if use_multi else 1
+    n_starts = int(max(1, random_multi_start_runs)) if use_multi else 1
 
     if use_multi:
         seed_stream = np.random.default_rng(random_state)
@@ -1065,6 +1168,7 @@ def _single_fit(
 
     best_result: Optional[Dict[str, Any]] = None
     best_sfit = np.inf
+    start_results: List[Dict[str, Any]] = []
 
     for seed in start_seeds:
         fit_result = _single_fit_once(
@@ -1080,16 +1184,20 @@ def _single_fit(
             random_state=seed,
             mode_centering=mode_centering,
             mode_normalization=mode_normalization,
-            mode_restrictions=mode_restrictions,
             profile_paths=profile_paths,
             profile_usage=profile_usage,
             tensorly_constraints=tensorly_constraints,
+            unconstrained_sparsity=unconstrained_sparsity,
+            unconstrained_linesearch=unconstrained_linesearch,
+            unconstrained_orthogonalise=unconstrained_orthogonalise,
             missing_constrained_solver=missing_constrained_solver,
+            component_y_mapping=component_y_mapping,
         )
         sfit = _safe_float(
             fit_result.get("metrics", {}).get("calibration", {}).get("sfit"),
             default=np.inf,
         )
+        start_results.append({"seed": None if seed is None else int(seed), "sfit": float(sfit)})
         if sfit < best_sfit:
             best_sfit = sfit
             best_result = fit_result
@@ -1100,6 +1208,7 @@ def _single_fit(
     best_result.setdefault("metrics", {}).setdefault("calibration", {})
     best_result["metrics"]["calibration"]["multi_start_used"] = bool(use_multi)
     best_result["metrics"]["calibration"]["multi_start_runs"] = int(n_starts)
+    best_result["metrics"]["calibration"]["multi_start_results"] = start_results
     return best_result
 
 
@@ -1156,9 +1265,16 @@ def _build_text_report(
         lines.append("Sweep results:")
         for item in sweep_results:
             lines.append(
-                f"- k={item.get('n_components')} | sfit={_safe_float(item.get('sfit')):.6g} | "
+                f"- F={item.get('n_components')} | sfit={_safe_float(item.get('sfit')):.6g} | "
                 f"core={_safe_float(item.get('core_consistency')):.4f} | EV={_safe_float(item.get('explained_variance')):.4f}%"
             )
+
+    if bool(cal.get("multi_start_used", False)):
+        lines.append("")
+        lines.append(f"Random multi-start: {int(_safe_float(cal.get('multi_start_runs'), 1))} runs")
+        for i, item in enumerate(cal.get("multi_start_results", []) or [], start=1):
+            seed_text = "None" if item.get("seed") is None else str(item.get("seed"))
+            lines.append(f"- Start {i}: seed={seed_text}, sfit={_safe_float(item.get('sfit')):.6g}")
 
     return "\n".join(lines)
 
@@ -1172,20 +1288,34 @@ def parafac_analysis(
     nway_flag: Optional[int] = None,
     mode_centering: Optional[Any] = None,
     mode_normalization: Optional[Any] = None,
-    mode_restrictions: Optional[Any] = None,
-    tensorly_constraints: Optional[Any] = None,
+    constraint_non_negative: Optional[Any] = None,
+    constraint_l1_reg: Optional[Any] = None,
+    constraint_l2_reg: Optional[Any] = None,
+    constraint_l2_square_reg: Optional[Any] = None,
+    constraint_unimodality: Optional[Any] = None,
+    constraint_normalize: Optional[Any] = None,
+    constraint_simplex: Optional[Any] = None,
+    constraint_normalized_sparsity: Optional[Any] = None,
+    constraint_soft_sparsity: Optional[Any] = None,
+    constraint_smoothness: Optional[Any] = None,
+    constraint_monotonicity: Optional[Any] = None,
+    constraint_hard_sparsity: Optional[Any] = None,
+    unconstrained_sparsity: bool = False,
+    unconstrained_linesearch: bool = False,
+    unconstrained_orthogonalise: bool = False,
     init_method: str = "svd",
     max_iter: int = 500,
     tol: float = 1e-7,
     random_state: Optional[Any] = 42,
     random_multi_start: bool = False,
+    random_multi_start_runs: Optional[Any] = 5,
     allow_missing: bool = True,
     missing_constrained_solver: str = "em",
     profile_paths: Optional[Any] = None,
     profile_usage: Optional[Any] = None,
     sweep_mode: bool = False,
     component_range: str = "",
-    component_y_mapping: str = "",
+    component_y_mapping: Any = "",
     cv_config: Optional[Any] = None,
     fold: int = 0,
     axis_n_info: Optional[List[np.ndarray]] = None,
@@ -1206,18 +1336,32 @@ def parafac_analysis(
         raise ValueError("X_cal is required for parafac_analysis")
 
     X_arr = np.asarray(X_cal, dtype=float)
-    if not allow_missing and np.isnan(X_arr).any():
-        raise ValueError("NaN values detected but allow_missing=False.")
 
     n_modes = X_arr.ndim
     center_list = _normalize_bool_list(mode_centering, n_modes)
     norm_list = _normalize_bool_list(mode_normalization, n_modes)
-    restriction_list = _normalize_str_list(mode_restrictions, n_modes, default="none")
-    parsed_constraints = _normalize_tensorly_constraints(tensorly_constraints, n_modes)
+    parsed_constraints = _build_tensorly_constraints(
+        n_modes=n_modes,
+        constraint_non_negative=constraint_non_negative,
+        constraint_l1_reg=constraint_l1_reg,
+        constraint_l2_reg=constraint_l2_reg,
+        constraint_l2_square_reg=constraint_l2_square_reg,
+        constraint_unimodality=constraint_unimodality,
+        constraint_normalize=constraint_normalize,
+        constraint_simplex=constraint_simplex,
+        constraint_normalized_sparsity=constraint_normalized_sparsity,
+        constraint_soft_sparsity=constraint_soft_sparsity,
+        constraint_smoothness=constraint_smoothness,
+        constraint_monotonicity=constraint_monotonicity,
+        constraint_hard_sparsity=constraint_hard_sparsity,
+    )
     seed_value = _safe_optional_int(random_state, default=None)
+    multi_start_runs_value = _safe_optional_int(random_multi_start_runs, default=5)
+    if multi_start_runs_value is None:
+        multi_start_runs_value = 5
+    multi_start_runs_value = int(max(1, multi_start_runs_value))
     solver_mode = _normalize_missing_constrained_solver(missing_constrained_solver)
-    path_list = _normalize_str_list(profile_paths, n_modes, default="")
-    usage_list = _normalize_str_list(profile_usage, n_modes, default="none")
+    path_list, usage_list = _expand_profile_mode_settings(profile_paths, profile_usage, n_modes)
 
     if cv_config is not None and HAS_CV and hasattr(cv_config, "is_enabled") and cv_config.is_enabled():
         if fold == 0 and not _is_cv_fold_call():
@@ -1250,13 +1394,27 @@ def parafac_analysis(
                     nway_flag=nway_flag,
                     mode_centering=center_list,
                     mode_normalization=norm_list,
-                    mode_restrictions=restriction_list,
-                    tensorly_constraints=parsed_constraints,
+                    constraint_non_negative=constraint_non_negative,
+                    constraint_l1_reg=constraint_l1_reg,
+                    constraint_l2_reg=constraint_l2_reg,
+                    constraint_l2_square_reg=constraint_l2_square_reg,
+                    constraint_unimodality=constraint_unimodality,
+                    constraint_normalize=constraint_normalize,
+                    constraint_simplex=constraint_simplex,
+                    constraint_normalized_sparsity=constraint_normalized_sparsity,
+                    constraint_soft_sparsity=constraint_soft_sparsity,
+                    constraint_smoothness=constraint_smoothness,
+                    constraint_monotonicity=constraint_monotonicity,
+                    constraint_hard_sparsity=constraint_hard_sparsity,
+                    unconstrained_sparsity=unconstrained_sparsity,
+                    unconstrained_linesearch=unconstrained_linesearch,
+                    unconstrained_orthogonalise=unconstrained_orthogonalise,
                     init_method=init_method,
                     max_iter=max_iter,
                     tol=tol,
                     random_state=seed_value,
                     random_multi_start=random_multi_start,
+                    random_multi_start_runs=multi_start_runs_value,
                     allow_missing=allow_missing,
                     missing_constrained_solver=solver_mode,
                     profile_paths=path_list,
@@ -1313,13 +1471,27 @@ def parafac_analysis(
                 nway_flag=nway_flag,
                 mode_centering=center_list,
                 mode_normalization=norm_list,
-                mode_restrictions=restriction_list,
-                tensorly_constraints=parsed_constraints,
+                constraint_non_negative=constraint_non_negative,
+                constraint_l1_reg=constraint_l1_reg,
+                constraint_l2_reg=constraint_l2_reg,
+                constraint_l2_square_reg=constraint_l2_square_reg,
+                constraint_unimodality=constraint_unimodality,
+                constraint_normalize=constraint_normalize,
+                constraint_simplex=constraint_simplex,
+                constraint_normalized_sparsity=constraint_normalized_sparsity,
+                constraint_soft_sparsity=constraint_soft_sparsity,
+                constraint_smoothness=constraint_smoothness,
+                constraint_monotonicity=constraint_monotonicity,
+                constraint_hard_sparsity=constraint_hard_sparsity,
+                unconstrained_sparsity=unconstrained_sparsity,
+                unconstrained_linesearch=unconstrained_linesearch,
+                unconstrained_orthogonalise=unconstrained_orthogonalise,
                 init_method=init_method,
                 max_iter=max_iter,
                 tol=tol,
                 random_state=seed_value,
                 random_multi_start=random_multi_start,
+                random_multi_start_runs=multi_start_runs_value,
                 allow_missing=allow_missing,
                 missing_constrained_solver=solver_mode,
                 profile_paths=path_list,
@@ -1345,12 +1517,17 @@ def parafac_analysis(
 
     if sweep_mode:
         values = parse_numeric_spec(component_range)
+        if len(values) == 1:
+            try:
+                single_value = int(float(values[0]))
+            except Exception:
+                single_value = 0
+            if single_value >= 2:
+                values = list(range(1, single_value + 1))
         ranks = sorted({int(v) for v in values if _safe_float(v) >= 1})
         if not ranks:
             ranks = [int(n_components)]
 
-        best_sfit = None
-        best_result = None
         for rk in ranks:
             fit = _single_fit(
                 X_cal=X_arr,
@@ -1364,13 +1541,17 @@ def parafac_analysis(
                 tol=tol,
                 random_state=seed_value,
                 random_multi_start=random_multi_start,
+                random_multi_start_runs=multi_start_runs_value,
                 mode_centering=center_list,
                 mode_normalization=norm_list,
-                mode_restrictions=restriction_list,
                 tensorly_constraints=parsed_constraints,
+                unconstrained_sparsity=unconstrained_sparsity,
+                unconstrained_linesearch=unconstrained_linesearch,
+                unconstrained_orthogonalise=unconstrained_orthogonalise,
                 missing_constrained_solver=solver_mode,
                 profile_paths=path_list,
                 profile_usage=usage_list,
+                component_y_mapping=component_y_mapping,
             )
             m = fit["metrics"]["calibration"]
             item = {
@@ -1383,12 +1564,9 @@ def parafac_analysis(
             }
             sweep_results.append(item)
 
-            if best_sfit is None or item["sfit"] < best_sfit:
-                best_sfit = item["sfit"]
-                best_result = fit
-                selected_rank = rk
-
-        result = best_result if best_result is not None else _single_fit(
+        # Sweep is reporting-only: keep final model rank equal to the user-specified n_components.
+        selected_rank = int(n_components)
+        result = _single_fit(
             X_cal=X_arr,
             Y_cal=Y_cal,
             n_components=selected_rank,
@@ -1400,13 +1578,17 @@ def parafac_analysis(
             tol=tol,
             random_state=seed_value,
             random_multi_start=random_multi_start,
+            random_multi_start_runs=multi_start_runs_value,
             mode_centering=center_list,
             mode_normalization=norm_list,
-            mode_restrictions=restriction_list,
             tensorly_constraints=parsed_constraints,
+            unconstrained_sparsity=unconstrained_sparsity,
+            unconstrained_linesearch=unconstrained_linesearch,
+            unconstrained_orthogonalise=unconstrained_orthogonalise,
             missing_constrained_solver=solver_mode,
             profile_paths=path_list,
             profile_usage=usage_list,
+            component_y_mapping=component_y_mapping,
         )
     else:
         result = _single_fit(
@@ -1421,43 +1603,25 @@ def parafac_analysis(
             tol=tol,
             random_state=seed_value,
             random_multi_start=random_multi_start,
+            random_multi_start_runs=multi_start_runs_value,
             mode_centering=center_list,
             mode_normalization=norm_list,
-            mode_restrictions=restriction_list,
             tensorly_constraints=parsed_constraints,
+            unconstrained_sparsity=unconstrained_sparsity,
+            unconstrained_linesearch=unconstrained_linesearch,
+            unconstrained_orthogonalise=unconstrained_orthogonalise,
             missing_constrained_solver=solver_mode,
             profile_paths=path_list,
             profile_usage=usage_list,
+            component_y_mapping=component_y_mapping,
         )
 
-    mapping = _parse_mapping(component_y_mapping)
-    if mapping and Y_cal is not None:
-        # If explicit mapping is given, overwrite auto mapping and refit those calibrations only.
-        Y2 = _as_2d_y(Y_cal)
-        A = np.asarray(result.get("scores_mode_a"), dtype=float)
-        manual_models: List[Dict[str, Any]] = []
-        for c, y in mapping.items():
-            if c >= A.shape[1] or Y2 is None or y >= Y2.shape[1]:
-                continue
-            fit = _fit_linear_1d(A[:, c], Y2[:, y])
-            manual_models.append(
-                {
-                    "component": int(c + 1),
-                    "y_column": int(y + 1),
-                    "intercept": fit["intercept"],
-                    "slope": fit["slope"],
-                    "calibration": fit["metrics"],
-                }
-            )
-        result["calibration_models"] = manual_models
-        result["metrics"]["calibration_models"] = manual_models
-        result["component_y_mapping"] = {str(k + 1): int(v + 1) for k, v in mapping.items()}
-    elif Y_cal is not None and result.get("component_y_mapping"):
+    if Y_cal is not None and bool(result.get("auto_mapping_used", False)):
         emit_execution_warning(
             code="parafac_auto_mapping",
             text=(
-                "No component-to-Y mapping was provided. PARAFAC auto-mapped components to Y columns "
-                "using highest absolute correlation."
+                "No explicit component-to-Y mapping was provided (or all entries were empty). "
+                "PARAFAC evaluated valid component-to-Y combinations and selected the best mapping."
             ),
         )
 
@@ -1470,6 +1634,15 @@ def parafac_analysis(
 
     output = {
         "scores_mode_a": result.get("scores_mode_a"),
+        "val_scores_mode_a": result.get("val_scores_mode_a"),
+        "scores_mode_a_heatmap": None,
+        "mode_a_sample_axis": None,
+        "mode_a_component_axis": None,
+        "sweep_F": None,
+        "sweep_sfit": None,
+        "sweep_core_consistency": None,
+        "sweep_explained_variance": None,
+        "sweep_n_iter": None,
         "factors": result.get("factors"),
         "weights": result.get("weights"),
         "instrumental_profiles": result.get("instrumental_profiles"),
@@ -1489,4 +1662,61 @@ def parafac_analysis(
         "y_cv_pred": result.get("y_cv_pred"),
     }
 
+    scores_mode_a = result.get("scores_mode_a")
+    if isinstance(scores_mode_a, np.ndarray) and scores_mode_a.ndim == 2:
+        output["scores_mode_a_heatmap"] = np.asarray(scores_mode_a, dtype=float).T
+        output["mode_a_sample_axis"] = np.arange(1, int(scores_mode_a.shape[0]) + 1, dtype=float)
+        output["mode_a_component_axis"] = np.arange(1, int(scores_mode_a.shape[1]) + 1, dtype=float)
+
+    if sweep_results:
+        sweep_items = [item for item in sweep_results if isinstance(item, dict)]
+        if sweep_items:
+            output["sweep_F"] = np.asarray([_safe_float(item.get("n_components")) for item in sweep_items], dtype=float)
+            output["sweep_sfit"] = np.asarray([_safe_float(item.get("sfit")) for item in sweep_items], dtype=float)
+            output["sweep_core_consistency"] = np.asarray([_safe_float(item.get("core_consistency")) for item in sweep_items], dtype=float)
+            output["sweep_explained_variance"] = np.asarray([_safe_float(item.get("explained_variance")) for item in sweep_items], dtype=float)
+            output["sweep_n_iter"] = np.asarray([_safe_float(item.get("n_iter")) for item in sweep_items], dtype=float)
+
     return output
+
+
+_PARAFAC_RETURN_ORDER: Tuple[str, ...] = (
+    "scores_mode_a",
+    "val_scores_mode_a",
+    "scores_mode_a_heatmap",
+    "mode_a_sample_axis",
+    "mode_a_component_axis",
+    "sweep_F",
+    "sweep_sfit",
+    "sweep_core_consistency",
+    "sweep_explained_variance",
+    "sweep_n_iter",
+    "factors",
+    "weights",
+    "instrumental_profiles",
+    "reconstructed",
+    "residual",
+    "metrics",
+    "calibration_models",
+    "component_y_mapping",
+    "reference_angles",
+    "parafac_report",
+    "sweep_results",
+    "selected_n_components",
+    "axis_n_info",
+    "dim_labels",
+    "nway_flag",
+    "cv_results",
+    "y_cv_pred",
+)
+
+
+def parafac_analysis_standard(*args: Any, **kwargs: Any) -> Tuple[Any, ...]:
+    """Adapter for app execution pipeline: return outputs as ordered tuple.
+
+    The core parafac_analysis API keeps its dict return for direct module users.
+    """
+    result = parafac_analysis(*args, **kwargs)
+    if not isinstance(result, dict):
+        return (result,)
+    return tuple(result.get(key) for key in _PARAFAC_RETURN_ORDER)

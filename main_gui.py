@@ -444,9 +444,13 @@ class ChemometricsGUI:
         if option_key == 'z_axis_type':
             return normalized_type in {'scatter', '3d_surf'} and has_z_axis
         if option_key in {'x_force_integer', 'y_force_integer'}:
-            return normalized_type in {'line', 'scatter'}
+            return normalized_type in {'line', 'scatter', 'heatmap'}
         if option_key == 'z_force_integer':
             return normalized_type == 'scatter' and has_z_axis
+        if option_key in {'x_reverse_axis', 'y_reverse_axis'}:
+            return normalized_type in {'line', 'scatter', 'heatmap', 'contour', '3d_surf', 'bar', 'histogram'}
+        if option_key == 'z_reverse_axis':
+            return normalized_type in {'scatter', '3d_surf'} and has_z_axis
         return False
 
     def _get_rendered_dataset_visibility_entries(self, instance_alias: str, section_id: Tuple[int, int]) -> List[Dict[str, str]]:
@@ -2526,15 +2530,16 @@ class ChemometricsGUI:
         axis_root_count = 0
 
         axis_specs = [
-            ('x_axis', 'x_axis_type', 'x_force_integer', 'menu.graph_context.axis_x', 'X Axis'),
-            ('y_axis', 'y_axis_type', 'y_force_integer', 'menu.graph_context.axis_y', 'Y Axis'),
-            ('z_axis', 'z_axis_type', 'z_force_integer', 'menu.graph_context.axis_z', 'Z Axis')
+            ('x_axis', 'x_axis_type', 'x_force_integer', 'x_reverse_axis', 'menu.graph_context.axis_x', 'X Axis'),
+            ('y_axis', 'y_axis_type', 'y_force_integer', 'y_reverse_axis', 'menu.graph_context.axis_y', 'Y Axis'),
+            ('z_axis', 'z_axis_type', 'z_force_integer', 'z_reverse_axis', 'menu.graph_context.axis_z', 'Z Axis')
         ]
 
-        for axis_key, axis_type_option, axis_force_option, axis_label_key, axis_fallback in axis_specs:
+        for axis_key, axis_type_option, axis_force_option, axis_reverse_option, axis_label_key, axis_fallback in axis_specs:
             has_axis_type = self._is_graph_option_supported(graph_type, axis_type_option, config)
             has_force_integer = self._is_graph_option_supported(graph_type, axis_force_option, config)
-            if not has_axis_type and not has_force_integer:
+            has_reverse_axis = self._is_graph_option_supported(graph_type, axis_reverse_option, config)
+            if not has_axis_type and not has_force_integer and not has_reverse_axis:
                 continue
 
             axis_menu = tk.Menu(axis_root_menu, tearoff=0)
@@ -2589,6 +2594,29 @@ class ChemometricsGUI:
                     onvalue=True,
                     offvalue=False,
                     command=_set_force_integer
+                )
+
+            if has_reverse_axis:
+                reverse_var = tk.BooleanVar(value=bool(axis_cfg.get('reverse_axis', False)))
+                _keep_var_ref(reverse_var)
+
+                def _set_reverse_axis(_axis_key=axis_key, _reverse_var=reverse_var) -> None:
+                    self._update_graph_axis_config_option(
+                        instance_alias,
+                        section_id,
+                        _axis_key,
+                        'reverse_axis',
+                        bool(_reverse_var.get()),
+                        popup_refresh_callback=popup_refresh_callback,
+                        refresh_analysis=True
+                    )
+
+                axis_menu.add_checkbutton(
+                    label=self.language_manager.translate('menu.graph_context.reverse_axis', 'Reverse Axis'),
+                    variable=reverse_var,
+                    onvalue=True,
+                    offvalue=False,
+                    command=_set_reverse_axis
                 )
 
             axis_root_menu.add_cascade(
@@ -4870,6 +4898,9 @@ class ChemometricsGUI:
         # Initialize function config if needed (use instance_alias as key)
         if instance_alias not in self.function_configs:
             self.function_configs[instance_alias] = {}
+
+        # Keep inherited setup inputs synchronized with nearest upstream values.
+        self._sync_upstream_linked_inputs(instance_alias)
         
         func_config = self.function_configs[instance_alias]
         locked_params = self._get_swept_param_locks_for_index(self.selected_function_idx)
@@ -5156,7 +5187,8 @@ class ChemometricsGUI:
             elif widget_type == "combobox_list":
                 # Dynamic list of comboboxes based on count_source parameter
                 count_source = widget_spec.get("count_source", "nway_flag")
-                count = int(func_config.get(count_source, 1))
+                count_offset = int(widget_spec.get("count_offset", 0) or 0)
+                count = max(1, self._resolve_dynamic_count_source(func_config, str(count_source)) + count_offset)
                 values = widget_spec.get("values", [])
                 value_aliases = widget_spec.get("value_aliases", values)
                 default_value = widget_spec.get("default", values[0] if values else "")
@@ -5220,7 +5252,8 @@ class ChemometricsGUI:
             elif widget_type == "file_selector_list":
                 # Dynamic list of file selectors based on count_source parameter
                 count_source = widget_spec.get("count_source", "nway_flag")
-                count = int(func_config.get(count_source, 1))
+                count_offset = int(widget_spec.get("count_offset", 0) or 0)
+                count = max(1, self._resolve_dynamic_count_source(func_config, str(count_source)) + count_offset)
                 
                 # Container frame for all file selectors
                 list_frame = ttk.Frame(input_container)
@@ -5277,7 +5310,8 @@ class ChemometricsGUI:
             elif widget_type == "entry_list":
                 # Dynamic list of entry fields based on count_source parameter
                 count_source = widget_spec.get("count_source", "nway_flag")
-                count = int(func_config.get(count_source, 1))
+                count_offset = int(widget_spec.get("count_offset", 0) or 0)
+                count = max(1, self._resolve_dynamic_count_source(func_config, str(count_source)) + count_offset)
                 default_value = widget_spec.get("default", "")
                 
                 # Container frame for all entries
@@ -5318,11 +5352,71 @@ class ChemometricsGUI:
                 widget_data["list_frame"] = list_frame
                 widget_data["count_source"] = count_source
                 widget_data["is_dynamic_list"] = True
+
+            elif widget_type == "checkbutton_list":
+                # Dynamic horizontal list of checkbuttons based on count_source parameter.
+                count_source = widget_spec.get("count_source", "nway_flag")
+                count_offset = int(widget_spec.get("count_offset", 0) or 0)
+                count = max(1, self._resolve_dynamic_count_source(func_config, str(count_source)) + count_offset)
+                default_value = bool(widget_spec.get("default", False))
+                item_labels = widget_spec.get("item_labels", [])
+                item_label_prefix = widget_spec.get("item_label_prefix", "")
+
+                list_frame = ttk.Frame(input_container)
+                list_frame.pack(anchor=tk.W, padx=20, pady=(0, 5), fill=tk.X)
+
+                raw_values = func_config.get(name, [])
+                if isinstance(raw_values, str):
+                    raw_parts = [segment.strip() for segment in raw_values.replace(';', ',').split(',') if segment.strip()]
+                    current_values = [part.lower() in ("1", "true", "yes", "on") for part in raw_parts]
+                elif isinstance(raw_values, list):
+                    current_values = [bool(v) for v in raw_values]
+                else:
+                    current_values = []
+
+                check_vars = []
+                check_widgets = []
+
+                def on_checkbutton_list_change(*_args, vars_ref=check_vars, a=instance_alias, n=name):
+                    self._save_widget_value(a, n, [var.get() for var in vars_ref])
+
+                for i in range(count):
+                    initial_value = current_values[i] if i < len(current_values) else default_value
+                    var = tk.BooleanVar(value=initial_value)
+
+                    if i < len(item_labels):
+                        item_text = str(item_labels[i])
+                    elif item_label_prefix:
+                        item_text = f"{item_label_prefix} {i + 1}"
+                    else:
+                        item_text = f"[{i + 1}]"
+
+                    check = ttk.Checkbutton(list_frame, text=item_text, variable=var)
+                    check.pack(side=tk.LEFT, padx=(0, 10), pady=(0, 2))
+                    var.trace_add("write", on_checkbutton_list_change)
+
+                    check_vars.append(var)
+                    check_widgets.append(check)
+
+                if name in locked_params:
+                    for check in check_widgets:
+                        check.configure(state="disabled")
+                    lock_label = ttk.Label(input_container, text="Swept by loop", font=("Arial", 8, "italic"))
+                    lock_label.pack(anchor=tk.W, padx=20, pady=(0, 2))
+
+                # Save initial values
+                self._save_widget_value(instance_alias, name, [var.get() for var in check_vars])
+
+                widget_data["widget"] = check_vars
+                widget_data["list_frame"] = list_frame
+                widget_data["count_source"] = count_source
+                widget_data["is_dynamic_list"] = True
             
             elif widget_type == "sample_paths_list":
                 # Dynamic list of multi-file selectors - each sample can have multiple files
                 count_source = widget_spec.get("count_source", "num_samples")
-                count = int(func_config.get(count_source, 1))
+                count_offset = int(widget_spec.get("count_offset", 0) or 0)
+                count = max(1, self._resolve_dynamic_count_source(func_config, str(count_source)) + count_offset)
                 
                 # Container frame for all sample entries
                 list_frame = ttk.Frame(input_container)
@@ -5725,6 +5819,85 @@ class ChemometricsGUI:
         if func_alias not in self.function_configs:
             self.function_configs[func_alias] = {}
         self.function_configs[func_alias][param_name] = value
+
+        # Immediately propagate values used by downstream inherited setup fields.
+        self._propagate_linked_input_value(func_alias, param_name, value)
+
+    def _sync_upstream_linked_inputs(self, target_instance_alias: str):
+        """Sync inherited setup inputs from nearest upstream provider."""
+        if target_instance_alias not in self.methodology_list:
+            return
+
+        target_idx = self.methodology_list.index(target_instance_alias)
+        base_alias = self.function_base_aliases[target_idx]
+        layout = self.gui_configs.get(base_alias, {}).get("setup", {}).get("layout", [])
+        if not layout:
+            return
+
+        target_config = self.function_configs.setdefault(target_instance_alias, {})
+
+        for field_info in layout:
+            field_name = field_info.get("name")
+            if not field_name:
+                continue
+
+            input_type = field_info.get("input_type", "user")
+            if input_type != "inherited":
+                continue
+
+            source_idx = self._find_nearest_upstream_provider_index(target_idx, field_name)
+            if source_idx is None:
+                continue
+
+            source_alias = self.methodology_list[source_idx]
+            source_value = self.function_configs.get(source_alias, {}).get(field_name)
+            if source_value is None:
+                continue
+
+            target_config[field_name] = source_value
+
+    def _propagate_linked_input_value(self, source_instance_alias: str, param_name: str, value: Any):
+        """Propagate a changed parameter to downstream inherited fields when applicable."""
+        if source_instance_alias not in self.methodology_list:
+            return
+
+        source_idx = self.methodology_list.index(source_instance_alias)
+
+        for dst_idx in range(source_idx + 1, len(self.methodology_list)):
+            dst_alias = self.methodology_list[dst_idx]
+            dst_base_alias = self.function_base_aliases[dst_idx]
+            dst_layout = self.gui_configs.get(dst_base_alias, {}).get("setup", {}).get("layout", [])
+
+            receives_param = False
+            for field_info in dst_layout:
+                if field_info.get("name") != param_name:
+                    continue
+                if field_info.get("input_type", "user") == "inherited":
+                    receives_param = True
+                    break
+
+            if not receives_param:
+                continue
+
+            provider_idx = self._find_nearest_upstream_provider_index(dst_idx, param_name)
+            if provider_idx != source_idx:
+                continue
+
+            self.function_configs.setdefault(dst_alias, {})[param_name] = value
+
+    def _find_nearest_upstream_provider_index(self, target_idx: int, param_name: str) -> Optional[int]:
+        """Return nearest upstream function index that explicitly provides param_name in setup."""
+        for prev_idx in range(target_idx - 1, -1, -1):
+            prev_base_alias = self.function_base_aliases[prev_idx]
+            prev_layout = self.gui_configs.get(prev_base_alias, {}).get("setup", {}).get("layout", [])
+
+            for prev_field_info in prev_layout:
+                if prev_field_info.get("name") != param_name:
+                    continue
+                if prev_field_info.get("input_type", "user") != "inherited":
+                    return prev_idx
+
+        return None
     
     def _show_help_popup(self, title: str, short_desc: str, long_desc: str):
         """Show a popup window with function help information."""
@@ -5870,7 +6043,7 @@ class ChemometricsGUI:
                     cat_header.grid_remove()  # Hide but keep grid position
     
     def _update_dynamic_list_widgets(self, func_alias: str, visible_widgets: Dict, func_config: Dict):
-        """Rebuild dynamic list widgets (combobox_list, file_selector_list) when their count source changes."""
+        """Rebuild dynamic list widgets when their count source changes."""
         for field_name, widget_data in visible_widgets.items():
             if not widget_data.get("is_dynamic_list"):
                 continue
@@ -5880,7 +6053,9 @@ class ChemometricsGUI:
                 continue
             
             # Get current count from config
-            new_count = int(func_config.get(count_source, 1))
+            widget_spec = widget_data.get("widget_spec", {})
+            count_offset = int(widget_spec.get("count_offset", 0) or 0)
+            new_count = max(1, self._resolve_dynamic_count_source(func_config, str(count_source)) + count_offset)
             
             # Get current widget count
             current_widgets = widget_data.get("widget", [])
@@ -5926,9 +6101,70 @@ class ChemometricsGUI:
             elif widget_type == "entry_list":
                 self._rebuild_entry_list(func_alias, field_name, widget_data, widget_spec,
                                         list_frame, new_count, current_values, visible_widgets)
+            elif widget_type == "checkbutton_list":
+                self._rebuild_checkbutton_list(func_alias, field_name, widget_data, widget_spec,
+                                              list_frame, new_count, current_values, visible_widgets)
             elif widget_type == "sample_paths_list":
                 self._rebuild_sample_paths_list(func_alias, field_name, widget_data, widget_spec,
                                                list_frame, new_count, current_values, visible_widgets)
+
+    def _resolve_dynamic_count_source(self, func_config: Dict[str, Any], count_source: str) -> int:
+        """Resolve dynamic list count from a source key or simple +/- integer expression."""
+        def _coerce_count(value: Any) -> Optional[int]:
+            try:
+                return int(float(value))
+            except Exception:
+                return None
+
+        def _infer_nway_flag() -> Optional[int]:
+            x_data = func_config.get("X_cal")
+            x_ndim = getattr(x_data, "ndim", None)
+            if isinstance(x_ndim, int) and x_ndim >= 1:
+                return int(max(0, x_ndim - 1))
+
+            axis_info = func_config.get("axis_n_info")
+            if isinstance(axis_info, (list, tuple)) and len(axis_info) > 0:
+                return int(len(axis_info))
+
+            return None
+
+        def _resolve_key_value(key: str) -> int:
+            raw = func_config.get(key, None)
+            parsed = _coerce_count(raw)
+            if parsed is not None:
+                return int(parsed)
+            if key == "nway_flag":
+                inferred = _infer_nway_flag()
+                if inferred is not None:
+                    return int(inferred)
+            return 1
+
+        expr = str(count_source or "").strip()
+        if not expr:
+            return 1
+
+        direct_value = _coerce_count(func_config.get(expr, None))
+        if direct_value is not None:
+            return max(1, int(direct_value))
+
+        import re
+
+        # Supported patterns: "field+1", "field - 2", and numeric literals.
+        match = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)\s*([+-])\s*(\d+)", expr)
+        if match:
+            key, op, delta_text = match.groups()
+            base = _resolve_key_value(key)
+            delta = int(delta_text)
+            value = base + delta if op == "+" else base - delta
+            return max(1, int(value))
+
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", expr):
+            return max(1, _resolve_key_value(expr))
+
+        try:
+            return max(1, int(float(expr)))
+        except Exception:
+            return 1
     
     def _rebuild_combobox_list(self, func_alias: str, field_name: str, widget_data: Dict, 
                                 widget_spec: Dict, list_frame, count: int, current_values: list,
@@ -6067,6 +6303,42 @@ class ChemometricsGUI:
         
         # Update widget_data
         widget_data["widget"] = entry_widgets
+
+    def _rebuild_checkbutton_list(self, func_alias: str, field_name: str, widget_data: Dict,
+                                  widget_spec: Dict, list_frame, count: int, current_values: list,
+                                  visible_widgets: Dict):
+        """Rebuild a checkbutton_list widget with new count."""
+        default_value = bool(widget_spec.get("default", False))
+        item_labels = widget_spec.get("item_labels", [])
+        item_label_prefix = widget_spec.get("item_label_prefix", "")
+
+        bool_values = [bool(v) for v in current_values] if isinstance(current_values, list) else []
+        check_vars = []
+
+        def on_checkbutton_list_change(*_args, vars_ref=check_vars, a=func_alias, n=field_name):
+            self._save_widget_value(a, n, [var.get() for var in vars_ref])
+
+        for i in range(count):
+            initial_value = bool_values[i] if i < len(bool_values) else default_value
+            var = tk.BooleanVar(value=initial_value)
+
+            if i < len(item_labels):
+                item_text = str(item_labels[i])
+            elif item_label_prefix:
+                item_text = f"{item_label_prefix} {i + 1}"
+            else:
+                item_text = f"[{i + 1}]"
+
+            check = ttk.Checkbutton(list_frame, text=item_text, variable=var)
+            check.pack(side=tk.LEFT, padx=(0, 10), pady=(0, 2))
+            var.trace_add("write", on_checkbutton_list_change)
+            check_vars.append(var)
+
+        # Save initial values
+        self._save_widget_value(func_alias, field_name, [var.get() for var in check_vars])
+
+        # Update widget_data
+        widget_data["widget"] = check_vars
 
     def _rebuild_sample_paths_list(self, func_alias: str, field_name: str, widget_data: Dict,
                                     widget_spec: Dict, list_frame, count: int, current_values: list,

@@ -17,7 +17,7 @@
     "univariate_calibration": ["y_cal_pred", "y_val_pred", "models", "metrics", "cv_results"],
     "first_order_calibration": ["y_cal_pred", "y_val_pred", "y_cv_pred", "y_cal_true", "y_val_true", "model", "selected_parameter_name", "selected_parameter_value", "metrics", "cv_results", "optimization_results"],
     "pca_analysis": ["model_scores", "model_loadings", "val_scores", "model_scores_cv", "model_loadings_cv", "metrics", "cv_results", "data_shape", "data_shape_val", "axis_n_info", "pc_labels", "class_data_cal", "class_data_val", "smp_cal", "smp_val"],
-    "parafac_analysis": ["scores_mode_a", "factors", "weights", "instrumental_profiles", "reconstructed", "residual", "metrics", "calibration_models", "component_y_mapping", "reference_angles", "parafac_report", "sweep_results", "selected_n_components", "axis_n_info", "dim_labels", "nway_flag", "cv_results", "y_cv_pred"]
+    "parafac_analysis": ["scores_mode_a", "val_scores_mode_a", "scores_mode_a_heatmap", "mode_a_sample_axis", "mode_a_component_axis", "sweep_F", "sweep_sfit", "sweep_core_consistency", "sweep_explained_variance", "sweep_n_iter", "factors", "weights", "instrumental_profiles", "reconstructed", "residual", "metrics", "calibration_models", "component_y_mapping", "reference_angles", "parafac_report", "sweep_results", "selected_n_components", "axis_n_info", "dim_labels", "nway_flag", "cv_results", "y_cv_pred"]
   },
   "input_specs": {
     "workflow_loop_start": [
@@ -65,7 +65,7 @@
     "univariate_calibration": ["X_cal", "Y_cal", "X_val", "Y_val", "degree", "intercept", "cv_config"],
     "first_order_calibration": ["X_cal", "Y_cal", "X_val", "Y_val", "model_type", "n_components", "ridge_alpha", "lasso_alpha", "elastic_net_alpha", "elastic_net_l1_ratio", "random_forest_n_estimators", "svr_c", "svr_epsilon", "svr_gamma", "svr_kernel", "gradient_boosting_n_estimators", "gradient_boosting_learning_rate", "gradient_boosting_max_depth", "gradient_boosting_min_samples_leaf", "hist_gradient_boosting_n_estimators", "hist_gradient_boosting_learning_rate", "hist_gradient_boosting_max_depth", "hist_gradient_boosting_min_samples_leaf", "gaussian_process_alpha", "gaussian_process_length_scale", "gaussian_process_constant_value", "gaussian_process_n_restarts_optimizer", "kernel_pls_gamma", "kernel_pls_n_features", "local_method", "local_distance", "n_neighbors", "idw_power", "adaptive_alpha", "radius_threshold", "kernel_bandwidth", "optimize_parameters", "n_components_range", "ridge_alpha_range", "lasso_alpha_range", "elastic_net_alpha_range", "random_forest_n_estimators_range", "svr_c_range", "gradient_boosting_n_estimators_range", "hist_gradient_boosting_n_estimators_range", "gaussian_process_alpha_range", "n_neighbors_range", "idw_power_range", "adaptive_alpha_range", "radius_threshold_range", "kernel_bandwidth_range", "parameter_range", "cv_config", "was_scaled"],
     "pca_analysis": ["X_cal", "X_val", "n_components", "cv_config", "axis_n_info", "axis_nature", "class_data_cal", "class_data_val", "smp_cal", "smp_val"],
-    "parafac_analysis": ["X_cal", "Y_cal", "X_val", "Y_val", "n_components", "nway_flag", "mode_centering", "mode_normalization", "mode_restrictions", "tensorly_constraints", "init_method", "max_iter", "tol", "random_state", "random_multi_start", "allow_missing", "missing_constrained_solver", "profile_paths", "profile_usage", "sweep_mode", "component_range", "component_y_mapping", "cv_config", "axis_n_info", "dim_labels"]
+    "parafac_analysis": ["X_cal", "Y_cal", "X_val", "Y_val", "n_components", "nway_flag", "mode_centering", "mode_normalization", "constraint_non_negative", "constraint_l1_reg", "constraint_l2_reg", "constraint_l2_square_reg", "constraint_unimodality", "constraint_normalize", "constraint_simplex", "constraint_normalized_sparsity", "constraint_soft_sparsity", "constraint_smoothness", "constraint_monotonicity", "constraint_hard_sparsity", "unconstrained_sparsity", "unconstrained_linesearch", "unconstrained_orthogonalise", "init_method", "max_iter", "tol", "random_state", "random_multi_start", "random_multi_start_runs", "allow_missing", "missing_constrained_solver", "profile_paths", "profile_usage", "sweep_mode", "component_range", "component_y_mapping", "cv_config", "axis_n_info", "dim_labels"]
   },
   "import_map": {
     "workflow_loop_start": ["builtins", "print"],
@@ -85,7 +85,7 @@
     "univariate_calibration": ["chemometrics.univ_calibration", "univariate_calibration"],
     "first_order_calibration": ["chemometrics.first_order_calibration", "first_order_calibration"],
     "pca_analysis": ["chemometrics.pca_analysis", "pca_analysis"],
-    "parafac_analysis": ["chemometrics.parafac_analysis", "parafac_analysis"]
+    "parafac_analysis": ["chemometrics.parafac_analysis", "parafac_analysis_standard"]
   },
   "gui_listing": {
     "workflow_loop_start": {
@@ -361,13 +361,27 @@
       "nway_flag": "int",
       "mode_centering": "list",
       "mode_normalization": "list",
-      "mode_restrictions": "list",
-      "tensorly_constraints": "dict",
+      "constraint_non_negative": "list",
+      "constraint_l1_reg": "list",
+      "constraint_l2_reg": "list",
+      "constraint_l2_square_reg": "list",
+      "constraint_unimodality": "list",
+      "constraint_normalize": "list",
+      "constraint_simplex": "list",
+      "constraint_normalized_sparsity": "list",
+      "constraint_soft_sparsity": "list",
+      "constraint_smoothness": "list",
+      "constraint_monotonicity": "list",
+      "constraint_hard_sparsity": "list",
+      "unconstrained_sparsity": "bool",
+      "unconstrained_linesearch": "bool",
+      "unconstrained_orthogonalise": "bool",
       "init_method": "str",
       "max_iter": "int",
       "tol": "float",
       "random_state": "str",
       "random_multi_start": "bool",
+      "random_multi_start_runs": "int",
       "allow_missing": "bool",
       "missing_constrained_solver": "str",
       "profile_paths": "list",

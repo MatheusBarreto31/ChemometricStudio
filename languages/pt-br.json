@@ -127,6 +127,7 @@
       "nested_key": "Chave Aninhada:",
       "axis_label": "Rótulo do Eixo:",
       "axis_type": "Tipo de Eixo:",
+      "reverse_axis": "Inverter eixo",
       "multi_dataset_plots": "Gráficos Multi-Dataset",
       "datasets": "Datasets",
       "preview": "Pré-visualização",
@@ -506,7 +507,8 @@
       "axis_scale_log10": "Log10",
       "axis_scale_log2": "Log2",
       "axis_scale_ln": "Ln",
-      "force_integer_ticks": "Forçar Ticks Inteiros"
+      "force_integer_ticks": "Forçar Ticks Inteiros",
+      "reverse_axis": "Inverter Eixo"
     },
     "help": "Ajuda",
     "user_manual": "Manual do Usuário",

@@ -143,10 +143,14 @@ def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarr
 
     _apply_axis_scale_options(ax, config, use_3d=use_3d)
 
-    # Optional display and tick options for line/scatter axes
+    # Optional display and tick options for supported graph axes
     if graph_type in ('line', 'scatter'):
         _apply_graph_display_options(ax, config, use_3d=use_3d)
         _apply_axis_tick_options(ax, config, use_3d=use_3d)
+    elif graph_type == 'heatmap':
+        _apply_axis_tick_options(ax, config, use_3d=False)
+
+    _apply_axis_direction_options(ax, config, use_3d=use_3d)
     
     # constrained_layout handles margins automatically - no manual adjustment needed
     # This ensures tight bounds that adapt to any section geometry without clipping
@@ -227,6 +231,26 @@ def _apply_axis_tick_options(ax, config: dict, use_3d: bool = False) -> None:
 
     if use_3d and z_axis_cfg.get('force_integer', False) and hasattr(ax, 'zaxis'):
         ax.zaxis.set_major_locator(MaxNLocator(integer=True))
+
+
+def _apply_axis_direction_options(ax, config: dict, use_3d: bool = False) -> None:
+    """Apply optional axis direction options from config.
+
+    Supported per-axis options:
+        - reverse_axis: bool (if true, invert axis direction)
+    """
+    x_axis_cfg = config.get('x_axis', {})
+    y_axis_cfg = config.get('y_axis', {})
+    z_axis_cfg = config.get('z_axis', {})
+
+    if x_axis_cfg.get('reverse_axis', False) and hasattr(ax, 'invert_xaxis'):
+        ax.invert_xaxis()
+
+    if y_axis_cfg.get('reverse_axis', False) and hasattr(ax, 'invert_yaxis'):
+        ax.invert_yaxis()
+
+    if use_3d and z_axis_cfg.get('reverse_axis', False) and hasattr(ax, 'invert_zaxis'):
+        ax.invert_zaxis()
 
 
 def _apply_graph_display_options(ax, config: dict, use_3d: bool = False) -> None:
