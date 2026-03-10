@@ -1,6 +1,6 @@
 [project]
 name = "Chemometric Studio"
-version = "0.1.18 alpha"
+version = "0.1.19 alpha"
 description = "Chemometric Studio — Your open lab for chemometric analysis"
 readme = "README.md"
 license = { text = "Apache-2.0" }

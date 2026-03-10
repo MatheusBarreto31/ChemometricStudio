@@ -33,6 +33,7 @@
     "tol": "Tolerance",
     "random_state": "Random Seed",
     "missing_constrained_solver": "Missing+Constraint Solver",
+    "orient_mostly_negative_pairs": "Orient Mostly-Negative Mode Pairs",
     "profile_paths": "Profile Files",
     "profile_usage": "Profile Usage",
     "sweep_mode": "Sweep Mode",
@@ -173,6 +174,16 @@
         "required": false,
         "input_type": "user",
         "tooltip": "Used only when both missing values and TensorLy constraints are active."
+      },
+      {
+        "name": "orient_mostly_negative_pairs",
+        "label": "Orient Mostly-Negative Mode Pairs",
+        "category": "Model Parameters",
+        "widget": "checkbutton",
+        "default": true,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "If enabled, components are sign-oriented by flipping pairs of mostly-negative mode vectors before score extraction. This improves interpretability without changing the fitted tensor."
       },
       {
         "name": "sweep_mode",

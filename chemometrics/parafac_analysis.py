@@ -82,6 +82,19 @@ def _safe_optional_int(value: Any, default: Optional[int] = None) -> Optional[in
         return default
 
 
+def _safe_bool(value: Any, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return bool(default)
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "y", "on"}:
+        return True
+    if text in {"0", "false", "no", "n", "off"}:
+        return False
+    return bool(default)
+
+
 def _normalize_missing_constrained_solver(value: Any) -> str:
     mode = str(value).strip().lower() if value is not None else "em"
     allowed = {"em", "em_adaptive", "weighted_ao_admm"}
@@ -309,6 +322,50 @@ def _instrumental_profiles(weights: np.ndarray, factors: Sequence[np.ndarray]) -
     if len(factors) <= 1:
         return None
     return _component_reconstruction_tensor(weights, factors[1:])
+
+
+def _mean_component_value(values: np.ndarray) -> float:
+    vec = np.asarray(values, dtype=float).reshape(-1)
+    finite = np.isfinite(vec)
+    n = int(np.count_nonzero(finite))
+    if n <= 0:
+        return 0.0
+    return float(np.mean(vec[finite]))
+
+
+def _orient_signs_by_negative_pairs(
+    factors: Sequence[np.ndarray],
+) -> Tuple[List[np.ndarray], List[Dict[str, Any]]]:
+    """Flip component signs in mode-pairs when both vectors have negative mean.
+
+    Flipping two modes within the same component preserves the represented tensor.
+    """
+    factor_list = [np.asarray(f, dtype=float).copy() for f in factors]
+    if len(factor_list) < 2:
+        return factor_list, []
+
+    rank = int(min(f.shape[1] for f in factor_list))
+    flips: List[Dict[str, Any]] = []
+
+    for comp_idx in range(rank):
+        mostly_negative_modes = [
+            mode_idx
+            for mode_idx, factor in enumerate(factor_list)
+            if _mean_component_value(factor[:, comp_idx]) < 0.0
+        ]
+        while len(mostly_negative_modes) >= 2:
+            first_mode = int(mostly_negative_modes.pop(0))
+            second_mode = int(mostly_negative_modes.pop(0))
+            factor_list[first_mode][:, comp_idx] *= -1.0
+            factor_list[second_mode][:, comp_idx] *= -1.0
+            flips.append(
+                {
+                    "component": int(comp_idx + 1),
+                    "modes": [first_mode, second_mode],
+                }
+            )
+
+    return factor_list, flips
 
 
 def _core_consistency(X: np.ndarray, weights: np.ndarray, factors: Sequence[np.ndarray]) -> float:
@@ -857,6 +914,7 @@ def _single_fit_once(
     unconstrained_orthogonalise: bool,
     missing_constrained_solver: str,
     component_y_mapping: Any,
+    orient_mostly_negative_pairs: bool,
     emit_missing_solver_notice: bool = True,
 ) -> Dict[str, Any]:
     X_raw = np.asarray(X_cal, dtype=float)
@@ -1005,6 +1063,10 @@ def _single_fit_once(
         errors = []
     factors = list(factors)
 
+    sign_flip_pairs: List[Dict[str, Any]] = []
+    if bool(orient_mostly_negative_pairs):
+        factors, sign_flip_pairs = _orient_signs_by_negative_pairs(factors)
+
     reconstructed = cp_to_tensor((weights, factors))
     residual = np.asarray(X_filled - reconstructed, dtype=float)
     observed = np.asarray(mask, dtype=bool)
@@ -1108,6 +1170,9 @@ def _single_fit_once(
             "n_iter": int(len(errors)) if errors is not None else 0,
             "used_constrained_parafac": bool(use_constrained),
             "missing_constrained_solver": solver_mode if (has_missing and use_constrained) else "n/a",
+            "orient_mostly_negative_pairs": bool(orient_mostly_negative_pairs),
+            "sign_pair_flips": sign_flip_pairs,
+            "sign_pair_flip_count": int(len(sign_flip_pairs)),
         },
         "calibration_models": calibration_models,
         "reference_angles": reference_angles,
@@ -1151,6 +1216,7 @@ def _single_fit(
     unconstrained_orthogonalise: bool,
     missing_constrained_solver: str,
     component_y_mapping: Any,
+    orient_mostly_negative_pairs: bool,
     random_multi_start: bool,
     random_multi_start_runs: int,
     emit_missing_solver_notice: bool = True,
@@ -1191,6 +1257,7 @@ def _single_fit(
             unconstrained_orthogonalise=unconstrained_orthogonalise,
             missing_constrained_solver=missing_constrained_solver,
             component_y_mapping=component_y_mapping,
+            orient_mostly_negative_pairs=orient_mostly_negative_pairs,
             emit_missing_solver_notice=emit_missing_solver_notice,
         )
         sfit = _safe_float(
@@ -1317,6 +1384,7 @@ def parafac_analysis(
     missing_constrained_solver: str = "em",
     profile_paths: Optional[Any] = None,
     profile_usage: Optional[Any] = None,
+    orient_mostly_negative_pairs: Any = True,
     sweep_mode: bool = False,
     component_range: str = "",
     component_y_mapping: Any = "",
@@ -1365,6 +1433,7 @@ def parafac_analysis(
         multi_start_runs_value = 5
     multi_start_runs_value = int(max(1, multi_start_runs_value))
     solver_mode = _normalize_missing_constrained_solver(missing_constrained_solver)
+    orient_negative_pairs_flag = _safe_bool(orient_mostly_negative_pairs, default=True)
     path_list, usage_list = _expand_profile_mode_settings(profile_paths, profile_usage, n_modes)
 
     if cv_config is not None and HAS_CV and hasattr(cv_config, "is_enabled") and cv_config.is_enabled():
@@ -1421,6 +1490,7 @@ def parafac_analysis(
                     random_multi_start_runs=multi_start_runs_value,
                     allow_missing=allow_missing,
                     missing_constrained_solver=solver_mode,
+                    orient_mostly_negative_pairs=orient_negative_pairs_flag,
                     profile_paths=path_list,
                     profile_usage=usage_list,
                     sweep_mode=False,
@@ -1498,6 +1568,7 @@ def parafac_analysis(
                 random_multi_start_runs=multi_start_runs_value,
                 allow_missing=allow_missing,
                 missing_constrained_solver=solver_mode,
+                orient_mostly_negative_pairs=orient_negative_pairs_flag,
                 profile_paths=path_list,
                 profile_usage=usage_list,
                 sweep_mode=sweep_mode,
@@ -1553,6 +1624,7 @@ def parafac_analysis(
                 unconstrained_linesearch=unconstrained_linesearch,
                 unconstrained_orthogonalise=unconstrained_orthogonalise,
                 missing_constrained_solver=solver_mode,
+                orient_mostly_negative_pairs=orient_negative_pairs_flag,
                 profile_paths=path_list,
                 profile_usage=usage_list,
                 component_y_mapping=component_y_mapping,
@@ -1591,6 +1663,7 @@ def parafac_analysis(
             unconstrained_linesearch=unconstrained_linesearch,
             unconstrained_orthogonalise=unconstrained_orthogonalise,
             missing_constrained_solver=solver_mode,
+            orient_mostly_negative_pairs=orient_negative_pairs_flag,
             profile_paths=path_list,
             profile_usage=usage_list,
             component_y_mapping=component_y_mapping,
@@ -1617,6 +1690,7 @@ def parafac_analysis(
             unconstrained_linesearch=unconstrained_linesearch,
             unconstrained_orthogonalise=unconstrained_orthogonalise,
             missing_constrained_solver=solver_mode,
+            orient_mostly_negative_pairs=orient_negative_pairs_flag,
             profile_paths=path_list,
             profile_usage=usage_list,
             component_y_mapping=component_y_mapping,
