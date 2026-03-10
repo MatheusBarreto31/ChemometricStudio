@@ -350,6 +350,8 @@
       "results_loaded_analysis": "Resultados carregados para análise.",
       "run_model_failed": "Falha ao executar modelo:",
       "load_model_json_failed": "Falha ao carregar model.json:",
+      "model_version_newer_warning": "Este modelo foi criado com uma versao mais nova do programa ({model_version}) do que a sua versao atual ({current_version}). Alguns recursos podem nao carregar corretamente.",
+      "model_version_older_warning": "Este modelo foi criado com uma versao mais antiga do programa ({model_version}) do que a sua versao atual ({current_version}). Ele sera atualizado quando voce salvá-lo novamente.",
       "no_data_run_first": "Nenhum dado disponível. Execute 'Run Model' ou 'Run to here' primeiro.",
       "no_empty_sections": "Nenhuma seção vazia disponível. Adicione uma nova página ou remova seções existentes primeiro.",
       "provide_column_name_source": "Forneça o nome da coluna e a fonte de entrada/saída",

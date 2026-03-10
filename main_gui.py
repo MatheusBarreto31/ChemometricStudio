@@ -105,6 +105,51 @@ def _get_application_version(default: str = "0.0") -> str:
     return default
 
 
+def _version_compare_key(version: str) -> Tuple[List[int], int]:
+    """Build a lightweight comparison key for version strings.
+
+    Returns (numeric_parts, stage_rank) where stage_rank is 0 for stable
+    releases and -1 for pre-release labels such as "alpha"/"beta".
+    """
+    text = str(version or "").strip().lower()
+    if text.startswith("v"):
+        text = text[1:].strip()
+
+    # Split first numeric block from optional textual suffix.
+    match = re.match(r"^(\d+(?:\.\d+)*)\s*(.*)$", text)
+    if not match:
+        numbers = [int(part) for part in re.findall(r"\d+", text)]
+        if not numbers:
+            numbers = [0]
+        return numbers, -1
+
+    numbers = [int(part) for part in match.group(1).split(".")]
+    suffix = match.group(2).strip()
+    stage_rank = -1 if suffix else 0
+    return numbers, stage_rank
+
+
+def _compare_versions(left: str, right: str) -> int:
+    """Compare version strings; returns -1, 0, or 1."""
+    left_nums, left_stage = _version_compare_key(left)
+    right_nums, right_stage = _version_compare_key(right)
+
+    max_len = max(len(left_nums), len(right_nums))
+    left_padded = left_nums + [0] * (max_len - len(left_nums))
+    right_padded = right_nums + [0] * (max_len - len(right_nums))
+
+    if left_padded < right_padded:
+        return -1
+    if left_padded > right_padded:
+        return 1
+
+    if left_stage < right_stage:
+        return -1
+    if left_stage > right_stage:
+        return 1
+    return 0
+
+
 def _normalize_bool_setting(value: Any, default: bool = False) -> bool:
     """Normalize persisted bool-like values."""
     if isinstance(value, bool):
@@ -301,6 +346,11 @@ class ChemometricsGUI:
             "warning": 2800,
             "error": 3400
         }
+        self.notification_toasts: List[tk.Toplevel] = []
+        self.notification_stack_spacing = 8
+        self.notification_stack_margin_top = 58
+        self.notification_stack_margin_right = 24
+        self._notification_root_bind_set = False
         self.execution_progress_frame = None
         self.execution_progress_popup = None
         self.execution_progress_status_label = None
@@ -2847,12 +2897,11 @@ class ChemometricsGUI:
         if duration_ms is None:
             duration_ms = self.notification_default_durations.get(level, 2200)
 
-        existing_toast = getattr(self, "_notification_toast", None)
-        if existing_toast is not None and existing_toast.winfo_exists():
-            existing_toast.destroy()
+        if not self._notification_root_bind_set:
+            self.root.bind("<Configure>", self._on_root_configure_notifications, add="+")
+            self._notification_root_bind_set = True
 
         toast = tk.Toplevel(self.root)
-        self._notification_toast = toast
         toast.overrideredirect(True)
         toast.attributes("-topmost", True)
 
@@ -2878,11 +2927,8 @@ class ChemometricsGUI:
         )
         label.pack(fill=tk.BOTH, expand=True)
 
-        self.root.update_idletasks()
-        toast.update_idletasks()
-        x = self.root.winfo_rootx() + self.root.winfo_width() - toast.winfo_reqwidth() - 24
-        y = self.root.winfo_rooty() + 58
-        toast.geometry(f"+{max(0, x)}+{max(0, y)}")
+        self.notification_toasts.append(toast)
+        self._reposition_notification_toasts()
 
         fade_steps = 12
         fade_step_ms = 85
@@ -2891,17 +2937,57 @@ class ChemometricsGUI:
             if not toast.winfo_exists():
                 return
             if step <= 0:
-                toast.destroy()
+                self._remove_notification_toast(toast)
                 return
             try:
                 toast.attributes("-alpha", max(0.0, step / fade_steps))
             except tk.TclError:
-                if step <= 1 and toast.winfo_exists():
-                    toast.destroy()
+                if step <= 1:
+                    self._remove_notification_toast(toast)
                 return
             toast.after(fade_step_ms, lambda: fade_out(step - 1))
 
         toast.after(max(400, duration_ms), fade_out)
+
+    def _on_root_configure_notifications(self, event=None):
+        """Keep toast stack anchored to the root window during moves/resizes."""
+        self._reposition_notification_toasts()
+
+    def _remove_notification_toast(self, toast: tk.Toplevel):
+        """Remove toast from stack and reflow remaining notifications."""
+        try:
+            if toast in self.notification_toasts:
+                self.notification_toasts.remove(toast)
+            if toast.winfo_exists():
+                toast.destroy()
+        except tk.TclError:
+            pass
+        self._reposition_notification_toasts()
+
+    def _reposition_notification_toasts(self):
+        """Layout all active toast notifications in a vertical stack."""
+        active_toasts: List[tk.Toplevel] = []
+        for toast in self.notification_toasts:
+            try:
+                if toast.winfo_exists():
+                    active_toasts.append(toast)
+            except tk.TclError:
+                continue
+        self.notification_toasts = active_toasts
+
+        if not self.notification_toasts:
+            return
+
+        self.root.update_idletasks()
+        y = self.root.winfo_rooty() + self.notification_stack_margin_top
+        for toast in self.notification_toasts:
+            try:
+                toast.update_idletasks()
+                x = self.root.winfo_rootx() + self.root.winfo_width() - toast.winfo_reqwidth() - self.notification_stack_margin_right
+                toast.geometry(f"+{max(0, x)}+{max(0, y)}")
+                y += toast.winfo_reqheight() + self.notification_stack_spacing
+            except tk.TclError:
+                continue
 
     def _show_fading_warning(self, message: str, duration_ms: Optional[int] = None):
         """Backward-compatible warning notification helper."""
@@ -14317,7 +14403,7 @@ Count:
 
             model_data = {
                 "metadata": {
-                    "version": "1.0",
+                    "version": _get_application_version("1.0"),
                     "created": datetime.now().isoformat(),
                     "description": "Chemometric Studio Model Configuration",
                     "required_addons": required_addons
@@ -14918,6 +15004,25 @@ Count:
             return
 
         metadata = model_data.get("metadata", {}) if isinstance(model_data, dict) else {}
+        model_version = str(metadata.get("version", "")).strip()
+        current_version = _get_application_version("0.0")
+        if model_version and current_version:
+            version_cmp = _compare_versions(model_version, current_version)
+            if version_cmp > 0:
+                self._show_fading_warning(
+                    self.language_manager.translate(
+                        "ui.messages.model_version_newer_warning",
+                        "This model was created with a newer program version ({model_version}) than your current version ({current_version}). Some features may not load correctly."
+                    ).format(model_version=model_version, current_version=current_version)
+                )
+            elif version_cmp < 0:
+                self._show_fading_warning(
+                    self.language_manager.translate(
+                        "ui.messages.model_version_older_warning",
+                        "This model was created with an older program version ({model_version}) than your current version ({current_version}). It will be upgraded when you save it again."
+                    ).format(model_version=model_version, current_version=current_version)
+                )
+
         required_addons = normalize_required_addons(metadata.get("required_addons", []))
         available_addons = set(self.addon_registry.get("available_addons", {}).keys())
         missing_addons = [addon_id for addon_id in required_addons if addon_id not in available_addons]

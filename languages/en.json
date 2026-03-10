@@ -350,6 +350,8 @@
       "results_loaded_analysis": "Results loaded for analysis.",
       "run_model_failed": "Failed to run model:",
       "load_model_json_failed": "Failed to load model.json:",
+      "model_version_newer_warning": "This model was created with a newer program version ({model_version}) than your current version ({current_version}). Some features may not load correctly.",
+      "model_version_older_warning": "This model was created with an older program version ({model_version}) than your current version ({current_version}). It will be upgraded when you save it again.",
       "no_data_run_first": "No data available. Please run 'Run Model' or 'Run to here' first.",
       "no_empty_sections": "No empty sections available. Add a new page or remove existing sections first.",
       "provide_column_name_source": "Please provide column name and input/output source",
