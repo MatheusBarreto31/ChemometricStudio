@@ -468,63 +468,24 @@ def _auto_mapping(scores_a: np.ndarray, Y: np.ndarray) -> Dict[int, int]:
     if n_comp <= 0 or n_y <= 0:
         return {}
 
-    # Exhaustive all-combinations search for small problems.
-    max_pairs = min(n_comp, n_y)
-    if max_pairs <= 8:
-        best_mapping: Dict[int, int] = {}
-        best_score = (-np.inf, -np.inf, -np.inf)
-
-        for k in range(1, max_pairs + 1):
-            for comp_subset in itertools.combinations(range(n_comp), k):
-                for y_subset in itertools.combinations(range(n_y), k):
-                    for y_perm in itertools.permutations(y_subset):
-                        candidate = {int(c): int(y) for c, y in zip(comp_subset, y_perm)}
-                        r2_vals: List[float] = []
-                        rmse_vals: List[float] = []
-                        for c, y in candidate.items():
-                            fit = _fit_linear_1d(scores_a[:, c], Y[:, y])
-                            r2_vals.append(_safe_float(fit.get("metrics", {}).get("R2"), default=-np.inf))
-                            rmse_vals.append(_safe_float(fit.get("metrics", {}).get("RMSEP"), default=np.inf))
-                        if not r2_vals:
-                            continue
-                        score = (
-                            float(np.mean(r2_vals)),
-                            float(k),
-                            -float(np.mean(rmse_vals)),
-                        )
-                        if score > best_score:
-                            best_score = score
-                            best_mapping = candidate
-
-        if best_mapping:
-            return best_mapping
-
-    # Fallback greedy assignment for larger dimensionality.
-    pairs: List[Tuple[float, int, int]] = []
-
-    for c in range(n_comp):
-        s = scores_a[:, c]
-        for y in range(n_y):
-            v = Y[:, y]
-            denom = (np.std(s) * np.std(v))
-            corr = 0.0 if denom <= 0 else float(np.corrcoef(s, v)[0, 1])
-            if not np.isfinite(corr):
-                corr = 0.0
-            pairs.append((abs(corr), c, y))
-
-    pairs.sort(reverse=True, key=lambda t: t[0])
-    used_c: set = set()
-    used_y: set = set()
+    # Map each component to its best Y column independently, so all components are reported.
     mapping: Dict[int, int] = {}
+    for c in range(n_comp):
+        best_y: Optional[int] = None
+        best_score = -np.inf
 
-    for _, c, y in pairs:
-        if c in used_c or y in used_y:
-            continue
-        mapping[c] = y
-        used_c.add(c)
-        used_y.add(y)
-        if len(mapping) >= min(n_comp, n_y):
-            break
+        for y in range(n_y):
+            fit = _fit_linear_1d(scores_a[:, c], Y[:, y])
+            r2 = _safe_float(fit.get("metrics", {}).get("R2"), default=-np.inf)
+            n_used = _safe_float(fit.get("metrics", {}).get("n_samples_used"), default=0.0)
+            if (not np.isfinite(r2)) or n_used < 2:
+                continue
+            if r2 > best_score:
+                best_score = float(r2)
+                best_y = int(y)
+
+        if best_y is not None:
+            mapping[int(c)] = int(best_y)
 
     return mapping
 
@@ -532,23 +493,43 @@ def _auto_mapping(scores_a: np.ndarray, Y: np.ndarray) -> Dict[int, int]:
 def _fit_linear_1d(x: np.ndarray, y: np.ndarray) -> Dict[str, Any]:
     xv = np.asarray(x, dtype=float).reshape(-1)
     yv = np.asarray(y, dtype=float).reshape(-1)
-    Xd = np.column_stack([np.ones_like(xv), xv])
-    beta, *_ = np.linalg.lstsq(Xd, yv, rcond=None)
-    yhat = Xd @ beta
+    valid = np.isfinite(xv) & np.isfinite(yv)
+    n_valid = int(np.count_nonzero(valid))
 
-    residuals = yv - yhat
+    yhat_full = np.full_like(yv, np.nan, dtype=float)
+    if n_valid < 2:
+        return {
+            "intercept": float("nan"),
+            "slope": float("nan"),
+            "y_pred": yhat_full,
+            "metrics": {
+                "R2": float("nan"),
+                "RMSEP": float("nan"),
+                "n_samples_used": int(n_valid),
+            },
+        }
+
+    xv_fit = xv[valid]
+    yv_fit = yv[valid]
+    Xd = np.column_stack([np.ones_like(xv_fit), xv_fit])
+    beta, *_ = np.linalg.lstsq(Xd, yv_fit, rcond=None)
+    yhat_fit = Xd @ beta
+    yhat_full[valid] = yhat_fit
+
+    residuals = yv_fit - yhat_fit
     ss_res = float(np.sum(residuals ** 2))
-    ss_tot = float(np.sum((yv - np.mean(yv)) ** 2)) + 1e-12
+    ss_tot = float(np.sum((yv_fit - np.mean(yv_fit)) ** 2)) + 1e-12
     r2 = float(1.0 - ss_res / ss_tot)
     rmsep = float(np.sqrt(np.mean(residuals ** 2)))
 
     return {
         "intercept": float(beta[0]),
         "slope": float(beta[1]),
-        "y_pred": yhat,
+        "y_pred": yhat_full,
         "metrics": {
             "R2": r2,
             "RMSEP": rmsep,
+            "n_samples_used": int(n_valid),
         },
     }
 
@@ -876,6 +857,7 @@ def _single_fit_once(
     unconstrained_orthogonalise: bool,
     missing_constrained_solver: str,
     component_y_mapping: Any,
+    emit_missing_solver_notice: bool = True,
 ) -> Dict[str, Any]:
     X_raw = np.asarray(X_cal, dtype=float)
     if nway_flag is not None and X_raw.ndim != int(nway_flag) + 1:
@@ -943,7 +925,7 @@ def _single_fit_once(
         )
 
     solver_mode = _normalize_missing_constrained_solver(missing_constrained_solver)
-    if has_missing and use_constrained:
+    if has_missing and use_constrained and bool(emit_missing_solver_notice):
         emit_execution_message(
             code="parafac_constraints_missing_solver",
             text=(
@@ -1059,25 +1041,41 @@ def _single_fit_once(
             selected_component_y_mapping = _auto_mapping(scores_a, Yc)
             auto_mapping_used = True
 
-        for comp_idx, y_idx in selected_component_y_mapping.items():
+        for comp_idx in sorted(selected_component_y_mapping.keys()):
+            y_idx = selected_component_y_mapping[comp_idx]
             fit_cal = _fit_linear_1d(scores_a[:, comp_idx], Yc[:, y_idx])
+            cal_metrics = fit_cal.get("metrics", {}) if isinstance(fit_cal, dict) else {}
+            n_used = int(_safe_float(cal_metrics.get("n_samples_used"), default=0.0))
+            intercept = _safe_float(fit_cal.get("intercept"), default=np.nan)
+            slope = _safe_float(fit_cal.get("slope"), default=np.nan)
+            if n_used < 2 or (not np.isfinite(intercept)) or (not np.isfinite(slope)):
+                continue
+
             entry = {
                 "component": int(comp_idx + 1),
                 "y_column": int(y_idx + 1),
-                "intercept": fit_cal["intercept"],
-                "slope": fit_cal["slope"],
-                "calibration": fit_cal["metrics"],
+                "intercept": float(intercept),
+                "slope": float(slope),
+                "calibration": cal_metrics,
             }
 
             if Yv is not None and val_scores_a is not None and Yv.shape[1] > y_idx:
-                y_pred_val = fit_cal["intercept"] + fit_cal["slope"] * val_scores_a[:, comp_idx]
-                val_res = np.asarray(Yv[:, y_idx], dtype=float) - y_pred_val
-                ss_res = float(np.sum(val_res ** 2))
-                ss_tot = float(np.sum((Yv[:, y_idx] - np.mean(Yv[:, y_idx])) ** 2)) + 1e-12
-                entry["validation"] = {
-                    "R2": float(1.0 - ss_res / ss_tot),
-                    "RMSEP": float(np.sqrt(np.mean(val_res ** 2))),
-                }
+                y_val_vec = np.asarray(Yv[:, y_idx], dtype=float).reshape(-1)
+                score_val_vec = np.asarray(val_scores_a[:, comp_idx], dtype=float).reshape(-1)
+                valid_val = np.isfinite(y_val_vec) & np.isfinite(score_val_vec)
+                n_valid_val = int(np.count_nonzero(valid_val))
+
+                if n_valid_val >= 2 and np.isfinite(intercept) and np.isfinite(slope):
+                    y_pred_val = intercept + slope * score_val_vec[valid_val]
+                    y_true_val = y_val_vec[valid_val]
+                    val_res = y_true_val - y_pred_val
+                    ss_res = float(np.sum(val_res ** 2))
+                    ss_tot = float(np.sum((y_true_val - np.mean(y_true_val)) ** 2)) + 1e-12
+                    entry["validation"] = {
+                        "R2": float(1.0 - ss_res / ss_tot),
+                        "RMSEP": float(np.sqrt(np.mean(val_res ** 2))),
+                        "n_samples_used": int(n_valid_val),
+                    }
 
             calibration_models.append(entry)
 
@@ -1155,6 +1153,7 @@ def _single_fit(
     component_y_mapping: Any,
     random_multi_start: bool,
     random_multi_start_runs: int,
+    emit_missing_solver_notice: bool = True,
 ) -> Dict[str, Any]:
     init_name = str(init_method).strip().lower()
     use_multi = bool(random_multi_start and init_name == "random")
@@ -1192,6 +1191,7 @@ def _single_fit(
             unconstrained_orthogonalise=unconstrained_orthogonalise,
             missing_constrained_solver=missing_constrained_solver,
             component_y_mapping=component_y_mapping,
+            emit_missing_solver_notice=emit_missing_solver_notice,
         )
         sfit = _safe_float(
             fit_result.get("metrics", {}).get("calibration", {}).get("sfit"),
@@ -1243,7 +1243,11 @@ def _build_text_report(
     models = metrics.get("calibration_models", []) if isinstance(metrics, dict) else []
     if models:
         lines.append("Calibration statistics:")
-        for m in models:
+        ordered_models = sorted(
+            [m for m in models if isinstance(m, dict)],
+            key=lambda item: int(_safe_float(item.get("component"), default=np.inf)),
+        )
+        for m in ordered_models:
             comp = m.get("component")
             ycol = m.get("y_column")
             cm = m.get("calibration", {})
@@ -1552,6 +1556,7 @@ def parafac_analysis(
                 profile_paths=path_list,
                 profile_usage=usage_list,
                 component_y_mapping=component_y_mapping,
+                emit_missing_solver_notice=not bool(sweep_mode),
             )
             m = fit["metrics"]["calibration"]
             item = {
@@ -1589,6 +1594,7 @@ def parafac_analysis(
             profile_paths=path_list,
             profile_usage=usage_list,
             component_y_mapping=component_y_mapping,
+            emit_missing_solver_notice=not bool(sweep_mode),
         )
     else:
         result = _single_fit(
@@ -1614,6 +1620,7 @@ def parafac_analysis(
             profile_paths=path_list,
             profile_usage=usage_list,
             component_y_mapping=component_y_mapping,
+            emit_missing_solver_notice=True,
         )
 
     if Y_cal is not None and bool(result.get("auto_mapping_used", False)):

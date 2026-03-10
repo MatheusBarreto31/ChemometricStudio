@@ -414,11 +414,42 @@ def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "
             smp_labels = _load_labels(smp_path)
 
     # Load Y data
-    # Prefer extraction result; fall back to y_path when y_from_x is not active
+    # Prefer extraction result; fall back to y_path when y_from_x is not active.
+    # Y files can use a different separator than X files, so we detect/retry for Y.
     if use_extraction and y_from_x:
         Y = extracted_Y
     else:
-        Y = _load_y_data(y_path, separator, 0) if y_path else None
+        Y = None
+        if y_path:
+            y_separator = separator
+
+            # When separator is auto-detected from X, detect independently for Y.
+            if _is_auto_detect_value(d_specs_separator):
+                y_sep_choice = _detect_separator([y_path])
+                y_separator = separator_map.get(y_sep_choice, y_separator)
+
+            Y = _load_y_data(y_path, y_separator, 0)
+
+            # If parsing produced no finite numeric values, retry once using Y-specific detection.
+            # This covers mixed workflows where X and Y files use different delimiters.
+            if Y is not None:
+                try:
+                    y_arr = np.asarray(Y, dtype=float)
+                    has_finite = bool(np.isfinite(y_arr).any())
+                except Exception:
+                    has_finite = False
+
+                if not has_finite:
+                    y_sep_choice = _detect_separator([y_path])
+                    y_separator_retry = separator_map.get(y_sep_choice, y_separator)
+                    if y_separator_retry != y_separator:
+                        Y_retry = _load_y_data(y_path, y_separator_retry, 0)
+                        try:
+                            y_retry_arr = np.asarray(Y_retry, dtype=float)
+                            if bool(np.isfinite(y_retry_arr).any()):
+                                Y = Y_retry
+                        except Exception:
+                            pass
 
     # Load classification data
     # Prefer extraction result; fall back to cdata_path when class_from_x is not active
