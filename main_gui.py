@@ -11337,6 +11337,233 @@ Count:
         
         except Exception as e:
             print(f"Error creating section popup button: {str(e)}")
+
+    def _normalize_navigation_id(self, nav_item: dict) -> Optional[str]:
+        """Return normalized nav_id for a navigation item, or None when not configured."""
+        if not isinstance(nav_item, dict):
+            return None
+        nav_id = nav_item.get('nav_id')
+        if nav_id is None:
+            return None
+        nav_id = str(nav_id).strip()
+        return nav_id if nav_id else None
+
+    def _get_graph_navigation_data_array(self, outputs: dict, config: dict) -> Optional[np.ndarray]:
+        """Resolve the ndarray used to determine navigation bounds for graph slicing."""
+        data_source = None
+        nested_key = None
+        graph_type = config.get('graph_type', '')
+
+        if 'aux_axis' in config:
+            data_source = config.get('z_axis', {}).get('data_source')
+            nested_key = config.get('z_axis', {}).get('nested_key')
+        elif graph_type in ('heatmap', 'contour', '3d_surf'):
+            data_source = config.get('z_axis', {}).get('data_source')
+            nested_key = config.get('z_axis', {}).get('nested_key')
+        elif 'datasets' in config:
+            datasets_cfg = config.get('datasets', [])
+            for ds_cfg in datasets_cfg:
+                ds_y_source = ds_cfg.get('y_axis', {}).get('data_source')
+                if ds_y_source and ds_y_source in outputs:
+                    data_source = ds_y_source
+                    nested_key = ds_cfg.get('y_axis', {}).get('nested_key')
+                    break
+                ds_x_source = ds_cfg.get('x_axis', {}).get('data_source')
+                if ds_x_source and ds_x_source in outputs:
+                    data_source = ds_x_source
+                    nested_key = ds_cfg.get('x_axis', {}).get('nested_key')
+                    break
+        else:
+            axis_config = config.get('y_axis', {}) or config.get('x_axis', {})
+            data_source = axis_config.get('data_source')
+            nested_key = axis_config.get('nested_key')
+
+        if not data_source:
+            return None
+
+        data = self._get_data_from_source(outputs, data_source, nested_key)
+        if isinstance(data, np.ndarray):
+            return data
+
+        try:
+            return np.array(data)
+        except (ValueError, TypeError):
+            return None
+
+    def _get_graph_nav_item_index(self, slice_state: dict, config: dict, nav_item: dict, max_index: int) -> int:
+        """Get current index for a graph navigation item, clamped to valid bounds."""
+        dimension = nav_item.get('dimension', 0)
+        target_axis = nav_item.get('axis')
+
+        if target_axis:
+            axis_indices_dict = slice_state.get('axis_indices', {}).get(target_axis, {})
+            default_col = nav_item.get('default', None)
+            if default_col is None:
+                default_col = config.get(f'{target_axis}_axis', {}).get(
+                    'default_column',
+                    0 if target_axis == 'x' else 1 if target_axis == 'y' else 2
+                )
+            current_index = axis_indices_dict.get(dimension, default_col)
+        else:
+            indices = slice_state.get('indices', {})
+            default_idx = nav_item.get('default', 0)
+            current_index = indices.get(dimension, default_idx)
+
+        try:
+            current_index = int(current_index)
+        except (TypeError, ValueError):
+            current_index = 0
+
+        if current_index < 0:
+            return 0
+        if current_index > max_index:
+            return max_index
+        return current_index
+
+    def _set_graph_nav_item_index(self, slice_state: dict, nav_item: dict, new_index: int) -> None:
+        """Set index for a graph navigation item in the appropriate state bucket."""
+        dimension = nav_item.get('dimension', 0)
+        target_axis = nav_item.get('axis')
+
+        if target_axis:
+            if 'axis_indices' not in slice_state:
+                slice_state['axis_indices'] = {}
+            if target_axis not in slice_state['axis_indices']:
+                slice_state['axis_indices'][target_axis] = {}
+            slice_state['axis_indices'][target_axis][dimension] = new_index
+        else:
+            indices = slice_state.get('indices', {})
+            indices[dimension] = new_index
+            slice_state['indices'] = indices
+
+    def _update_graph_nav_widgets(self, instance_alias: str, section_id: tuple, nav_item: dict,
+                                  new_index: int, max_index: int, outputs: dict) -> None:
+        """Refresh navigation index and variable-label widgets for a graph nav item."""
+        dimension = nav_item.get('dimension', 0)
+        target_axis = nav_item.get('axis')
+
+        if hasattr(self, '_nav_labels'):
+            stale_nav_keys = []
+            for key, label_pair in list(self._nav_labels.items()):
+                if len(key) != 5:
+                    continue
+                key_instance, key_section, key_dimension, key_axis_name, key_target_axis = key
+                if key_instance != instance_alias or key_section != section_id:
+                    continue
+                if key_dimension != dimension or key_target_axis != target_axis:
+                    continue
+                try:
+                    index_label, full_label = label_pair
+                    if not index_label.winfo_exists() or not full_label.winfo_exists():
+                        stale_nav_keys.append(key)
+                        continue
+                    index_label.config(text=str(new_index + 1))
+                    full_label.config(text=f"{key_axis_name}: {new_index + 1}/{max_index + 1}")
+                except Exception:
+                    stale_nav_keys.append(key)
+
+            for stale_key in stale_nav_keys:
+                self._nav_labels.pop(stale_key, None)
+
+        if hasattr(self, '_var_labels'):
+            stale_var_keys = []
+            for key, var_tuple in list(self._var_labels.items()):
+                if len(key) != 5:
+                    continue
+                key_instance, key_section, key_dimension, _axis_name, key_target_axis = key
+                if key_instance != instance_alias or key_section != section_id:
+                    continue
+                if key_dimension != dimension or key_target_axis != target_axis:
+                    continue
+                try:
+                    var_label, var_labels_config, dim = var_tuple
+                    if not var_label.winfo_exists():
+                        stale_var_keys.append(key)
+                        continue
+                    var_label_text = self._get_variable_label(outputs, var_labels_config, dim, new_index)
+                    if var_label_text:
+                        var_label.config(text=f"[{var_label_text}]")
+                    else:
+                        var_label.config(text="")
+                except Exception:
+                    stale_var_keys.append(key)
+
+            for stale_key in stale_var_keys:
+                self._var_labels.pop(stale_key, None)
+
+    def _sync_graph_nav_group(self, instance_alias: str, source_section_id: tuple,
+                              source_nav_item: dict, new_index: int,
+                              expected_max_index: int) -> List[tuple]:
+        """Sync nav items with the same nav_id when all members share identical range."""
+        nav_id = self._normalize_navigation_id(source_nav_item)
+        if not nav_id:
+            return []
+
+        analysis_info = self.analysis_data.get(instance_alias, {})
+        graph_slices = analysis_info.get('graph_slices', {})
+        if not isinstance(graph_slices, dict) or not graph_slices:
+            return []
+
+        execution_results = analysis_info.get('execution_results', {})
+        outputs = self._get_execution_data_sources(execution_results, instance_alias)
+
+        candidates = []
+        for section_id, section_state in graph_slices.items():
+            if not isinstance(section_state, dict):
+                continue
+            config = section_state.get('config', {})
+            nav_axes = config.get('data_slicing', []) if isinstance(config, dict) else []
+            if not isinstance(nav_axes, list):
+                continue
+
+            data = self._get_graph_navigation_data_array(outputs, config)
+            if data is None or not isinstance(data, np.ndarray):
+                continue
+
+            for nav_item in nav_axes:
+                if not isinstance(nav_item, dict):
+                    continue
+                if self._normalize_navigation_id(nav_item) != nav_id:
+                    continue
+
+                dim_value = nav_item.get('dimension')
+                if dim_value is None:
+                    continue
+                try:
+                    dimension = int(dim_value)
+                except (TypeError, ValueError):
+                    continue
+                if dimension < 0 or dimension >= len(data.shape):
+                    continue
+
+                max_index = data.shape[dimension] - 1
+                candidates.append((section_id, section_state, config, nav_item, max_index))
+
+        if len(candidates) <= 1:
+            return []
+
+        ranges = {entry[4] for entry in candidates}
+        if len(ranges) != 1 or expected_max_index not in ranges:
+            return []
+
+        changed_sections = set()
+        for section_id, section_state, config, nav_item, max_index in candidates:
+            current_index = self._get_graph_nav_item_index(section_state, config, nav_item, max_index)
+            if current_index != new_index:
+                self._set_graph_nav_item_index(section_state, nav_item, new_index)
+                changed_sections.add(section_id)
+
+            self._update_graph_nav_widgets(
+                instance_alias,
+                section_id,
+                nav_item,
+                new_index,
+                max_index,
+                outputs
+            )
+
+        changed_sections.discard(source_section_id)
+        return list(changed_sections)
     
     def _create_navigation_controls(self, parent_frame: ttk.Frame, instance_alias: str, 
                                    section_id: tuple, outputs: dict, config: dict, 
@@ -11352,51 +11579,10 @@ Count:
             if not nav_axes:
                 return
             
-            # Get the data to determine shape/bounds
-            # For aux_axis configs, use z_axis as it points to actual data (e.g., X_cal)
-            # aux_axis points to axis vectors (e.g., axis_n_info) which is a list
-            # For 3D graph types (heatmap, contour, 3d_surf), use z_axis as it contains the actual data
-            data_source = None
-            nested_key = None  # Initialize to None for all code paths
-            graph_type = config.get('graph_type', '')
-            if 'aux_axis' in config:
-                # Use z_axis to get the actual data array
-                data_source = config.get('z_axis', {}).get('data_source')
-                nested_key = config.get('z_axis', {}).get('nested_key')
-            elif graph_type in ('heatmap', 'contour', '3d_surf'):
-                # For 3D visualization types, z_axis contains the actual multi-dimensional data
-                data_source = config.get('z_axis', {}).get('data_source')
-                nested_key = config.get('z_axis', {}).get('nested_key')
-            elif 'datasets' in config:
-                # Multi-dataset scatter plots: use first available dataset's data source
-                datasets_cfg = config.get('datasets', [])
-                for ds_cfg in datasets_cfg:
-                    ds_y_source = ds_cfg.get('y_axis', {}).get('data_source')
-                    if ds_y_source and ds_y_source in outputs:
-                        data_source = ds_y_source
-                        nested_key = ds_cfg.get('y_axis', {}).get('nested_key')
-                        break
-                    ds_x_source = ds_cfg.get('x_axis', {}).get('data_source')
-                    if ds_x_source and ds_x_source in outputs:
-                        data_source = ds_x_source
-                        nested_key = ds_cfg.get('x_axis', {}).get('nested_key')
-                        break
-            else:
-                # Traditional configs - use y_axis or x_axis
-                axis_config = config.get('y_axis', {}) or config.get('x_axis', {})
-                data_source = axis_config.get('data_source')
-                nested_key = axis_config.get('nested_key')
-            
-            if not data_source:
+            # Get the data array used to determine navigation bounds.
+            data = self._get_graph_navigation_data_array(outputs, config)
+            if data is None or not isinstance(data, np.ndarray):
                 return
-            
-            # Use helper to support nested dictionary access
-            data = self._get_data_from_source(outputs, data_source, nested_key)
-            if not isinstance(data, np.ndarray):
-                try:
-                    data = np.array(data)
-                except (ValueError, TypeError):
-                    return
             
             # Initialize axis indices if not present (each axis has its own indices dict)
             if 'axis_indices' not in slice_state:
@@ -11608,6 +11794,7 @@ Count:
                     axis_name = nav_item.get('name', 'Axis')
                     dimension = nav_item.get('dimension', 0)
                     target_axis = nav_item.get('axis')  # 'x', 'y', 'z', or None for slicing
+                    nav_id = self._normalize_navigation_id(nav_item)
                     # Check if this item should show navigation (default to False - must be explicitly enabled)
                     show_nav = nav_item.get('show_navigation_menu', False)
                 else:
@@ -11615,6 +11802,7 @@ Count:
                     axis_name = nav_item
                     dimension = nav_axes.index(nav_item)  # Position in the list
                     target_axis = None
+                    nav_id = None
                     show_nav = True  # Show by default for old format
                 
                 # Skip this item if navigation menu is disabled
@@ -11662,8 +11850,8 @@ Count:
                     axis_frame,
                     text="<",
                     width=3,
-                    command=lambda an=axis_name, d=dimension, ax=target_axis, m=max_index: self._on_navigate_slice(
-                        instance_alias, section_id, -1, d, an, m, ax
+                    command=lambda an=axis_name, d=dimension, ax=target_axis, m=max_index, nid=nav_id: self._on_navigate_slice(
+                        instance_alias, section_id, -1, d, an, m, ax, nid
                     )
                 )
                 prev_btn.pack(side=tk.LEFT, padx=1)
@@ -11677,8 +11865,8 @@ Count:
                     axis_frame,
                     text=">",
                     width=3,
-                    command=lambda an=axis_name, d=dimension, ax=target_axis, m=max_index: self._on_navigate_slice(
-                        instance_alias, section_id, 1, d, an, m, ax
+                    command=lambda an=axis_name, d=dimension, ax=target_axis, m=max_index, nid=nav_id: self._on_navigate_slice(
+                        instance_alias, section_id, 1, d, an, m, ax, nid
                     )
                 )
                 next_btn.pack(side=tk.LEFT, padx=1)
@@ -11707,11 +11895,13 @@ Count:
             print(f"Error creating navigation controls: {str(e)}")
     
     def _on_navigate_slice(self, instance_alias: str, section_id: tuple, direction: int,
-                          dimension: int, axis_name: str, max_index: int, target_axis: str = None) -> None:
+                          dimension: int, axis_name: str, max_index: int,
+                          target_axis: str = None, nav_id: Optional[str] = None) -> None:
         """Handle navigation button click to change slice index or axis selection.
         
         Args:
             target_axis: 'x', 'y', 'z' for axis selection, or None for dimension slicing
+            nav_id: Optional navigation group id for synchronized controls
         """
         try:
             if instance_alias not in self.analysis_data:
@@ -11747,44 +11937,42 @@ Count:
             
             # Update state only if index changed
             if new_index != current_index:
-                if target_axis:
-                    # Update axis's indices dict for this dimension
-                    if 'axis_indices' not in current_state:
-                        current_state['axis_indices'] = {}
-                    if target_axis not in current_state['axis_indices']:
-                        current_state['axis_indices'][target_axis] = {}
-                    current_state['axis_indices'][target_axis][dimension] = new_index
-                else:
-                    # Update dimension slicing indices dict
-                    indices = current_state.get('indices', {})
-                    indices[dimension] = new_index
-                    current_state['indices'] = indices
-                
-                # Update label display if it exists - show 1-based for user
-                if hasattr(self, '_nav_labels'):
-                    # Use the same unique key as when storing
-                    key = (instance_alias, section_id, dimension, axis_name, target_axis)
-                    if key in self._nav_labels:
-                        index_label, full_label = self._nav_labels[key]
-                        index_label.config(text=str(new_index + 1))
-                        full_label.config(text=f"{axis_name}: {new_index + 1}/{max_index + 1}")
-                
-                # Update variable label if it exists
-                if hasattr(self, '_var_labels'):
-                    var_key = (instance_alias, section_id, dimension, axis_name, target_axis)
-                    if var_key in self._var_labels:
-                        var_label, var_labels_config, dim = self._var_labels[var_key]
-                        # Get outputs to resolve variable label
-                        exec_results = self.analysis_data[instance_alias].get('execution_results', {})
-                        outputs = self._get_execution_data_sources(exec_results, instance_alias)
-                        var_label_text = self._get_variable_label(outputs, var_labels_config, dim, new_index)
-                        if var_label_text:
-                            var_label.config(text=f"[{var_label_text}]")
-                        else:
-                            var_label.config(text="")
-                
-                # Refresh the graph with new slice/axis
-                self._update_graph_with_slice(instance_alias, section_id, dimension)
+                source_nav_item = {
+                    'name': axis_name,
+                    'dimension': dimension,
+                    'axis': target_axis,
+                    'nav_id': nav_id
+                }
+
+                self._set_graph_nav_item_index(current_state, source_nav_item, new_index)
+
+                exec_results = self.analysis_data[instance_alias].get('execution_results', {})
+                outputs = self._get_execution_data_sources(exec_results, instance_alias)
+
+                self._update_graph_nav_widgets(
+                    instance_alias,
+                    section_id,
+                    source_nav_item,
+                    new_index,
+                    max_index,
+                    outputs
+                )
+
+                synced_sections = self._sync_graph_nav_group(
+                    instance_alias,
+                    section_id,
+                    source_nav_item,
+                    new_index,
+                    max_index
+                )
+
+                sections_to_refresh = [section_id] + synced_sections
+                seen_sections = set()
+                for sid in sections_to_refresh:
+                    if sid in seen_sections:
+                        continue
+                    seen_sections.add(sid)
+                    self._update_graph_with_slice(instance_alias, sid, dimension)
         
         except Exception as e:
             print(f"Error navigating slice: {str(e)}")

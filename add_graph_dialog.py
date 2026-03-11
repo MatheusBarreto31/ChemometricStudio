@@ -1039,6 +1039,13 @@ class AddGraphDialog:
             
             default_entry = ttk.Entry(axis_frame, textvariable=default_var, width=8)
             default_entry.pack(side=tk.LEFT, padx=2)
+
+            # Optional synchronization group id for linked navigation controls
+            ttk.Label(axis_frame, text=self._t("ui.labels.nav_id", "Nav ID:")).pack(side=tk.LEFT, padx=(10, 2))
+            nav_id_var = tk.StringVar(value="")
+            setattr(self, f'{axis_key}_nav_id_var', nav_id_var)
+            nav_id_entry = ttk.Entry(axis_frame, textvariable=nav_id_var, width=14)
+            nav_id_entry.pack(side=tk.LEFT, padx=2)
         
         ttk.Label(slice_frame, text=self._t("ui.messages.tip_dim_samples", "Tip: Dim 0=samples, 1=first variable dimension (e.g., PCs)"), 
                  font=("Arial", 8), foreground="gray", wraplength=400).pack(anchor=tk.W, pady=(5, 0))
@@ -1272,14 +1279,19 @@ class AddGraphDialog:
                 try:
                     dimension = int(getattr(self, f'{axis_key}_nav_dim_var').get())
                     default = int(getattr(self, f'{axis_key}_nav_default_var').get())
+                    nav_id = getattr(self, f'{axis_key}_nav_id_var').get().strip()
                     
-                    data_slicing.append({
+                    nav_entry = {
                         'name': axis_label,
                         'dimension': dimension,
                         'axis': axis_key,
                         'default': default,
                         'show_navigation_menu': True
-                    })
+                    }
+                    if nav_id:
+                        nav_entry['nav_id'] = nav_id
+
+                    data_slicing.append(nav_entry)
                 except (ValueError, AttributeError):
                     pass  # Skip if dimension or default is not a valid integer
         

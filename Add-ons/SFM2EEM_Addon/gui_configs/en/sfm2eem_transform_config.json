@@ -191,6 +191,7 @@
                   "name": "Sample",
                   "dimension": 0,
                   "default": 0,
+                  "nav_id": "sample_nav_calibration",
                   "axis": "z",
                   "show_navigation_menu": true
                 }
@@ -232,6 +233,7 @@
                   "name": "Sample",
                   "dimension": 0,
                   "default": 0,
+                  "nav_id": "sample_nav_calibration",
                   "axis": "z",
                   "show_navigation_menu": true
                 }
@@ -284,6 +286,7 @@
                   "name": "Sample",
                   "dimension": 0,
                   "default": 0,
+                  "nav_id": "sample_nav_validation",
                   "axis": "z",
                   "show_navigation_menu": true
                 }
@@ -325,6 +328,7 @@
                   "name": "Sample",
                   "dimension": 0,
                   "default": 0,
+                  "nav_id": "sample_nav_validation",
                   "axis": "z",
                   "show_navigation_menu": true
                 }
