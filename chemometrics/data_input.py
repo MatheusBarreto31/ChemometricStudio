@@ -188,6 +188,50 @@ def _is_monotonic_numeric_column(values: np.ndarray) -> bool:
     return bool(np.all(diffs >= 0) or np.all(diffs <= 0))
 
 
+def _columns_equal_with_nans(a: np.ndarray, b: np.ndarray, atol: float = 1e-8) -> bool:
+    """Return True when two numeric columns are equal within tolerance, treating NaNs as equal."""
+    if a is None or b is None:
+        return False
+    try:
+        arr_a = np.asarray(a, dtype=float).reshape(-1)
+        arr_b = np.asarray(b, dtype=float).reshape(-1)
+    except Exception:
+        return False
+    if arr_a.shape != arr_b.shape:
+        return False
+    return bool(np.allclose(arr_a, arr_b, atol=atol, equal_nan=True))
+
+
+def _looks_like_xy_matrix(arr: np.ndarray) -> bool:
+    """Identify XY-matrix layout: odd columns are repeated X axis, even columns are Y values."""
+    if arr is None or arr.ndim != 2:
+        return False
+
+    # Ignore columns that are entirely non-numeric/empty (e.g., trailing delimiters in CSV exports).
+    try:
+        numeric_arr = np.asarray(arr, dtype=float)
+    except Exception:
+        return False
+    finite_col_mask = np.any(np.isfinite(numeric_arr), axis=0)
+    if not np.any(finite_col_mask):
+        return False
+    numeric_arr = numeric_arr[:, finite_col_mask]
+
+    rows, cols = numeric_arr.shape
+    if rows < 2 or cols < 4 or cols % 2 != 0:
+        return False
+
+    x_cols = numeric_arr[:, 0::2]
+    if x_cols.shape[1] < 2:
+        return False
+
+    first_x = x_cols[:, 0]
+    if not all(_columns_equal_with_nans(first_x, x_cols[:, idx]) for idx in range(1, x_cols.shape[1])):
+        return False
+
+    return _is_monotonic_numeric_column(first_x)
+
+
 def _infer_data_type(data_paths: List[str], separator: Optional[str], num_headlines: int, nway_flag: int) -> str:
     """Infer a suitable data type based on first data file shape/content."""
     if not data_paths:
@@ -226,7 +270,7 @@ def _infer_data_type(data_paths: List[str], separator: Optional[str], num_headli
     if nway_flag > 1 and cols == 3 and first_col_monotonic and _is_monotonic_numeric_column(arr[:, 1]):
         return "xyz_vector"
 
-    if nway_flag == 2 and cols >= 4 and cols % 2 == 0 and first_col_monotonic:
+    if nway_flag == 2 and _looks_like_xy_matrix(arr):
         return "xy_matrix"
 
     return "x_matrix"
