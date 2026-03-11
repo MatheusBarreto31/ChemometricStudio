@@ -1,5 +1,6 @@
 
 from typing import Tuple, Optional, List, Dict, Any, Set
+from collections import Counter
 import numpy as np
 import os
 import csv
@@ -9,7 +10,7 @@ import re
 from chemometrics.input_parsing import parse_numeric_spec
 
 
-def _load_file(path: str, separator: Optional[str], num_headlines: int) -> np.ndarray:
+def _load_file(path: str, separator: Optional[str], num_headlines: int, num_header_columns: int = 0) -> np.ndarray:
     """Load data from file, supporting text and Excel formats.
     
     Handles empty cells and formatting issues gracefully.
@@ -17,6 +18,8 @@ def _load_file(path: str, separator: Optional[str], num_headlines: int) -> np.nd
     if path.lower().endswith(('.xlsx', '.xls')):
         # Load Excel file
         df = pd.read_excel(path, header=None, skiprows=num_headlines)
+        if num_header_columns > 0:
+            df = df.iloc[:, num_header_columns:]
         return df.values
     else:
         # Load text file - use pandas for more robust CSV handling
@@ -33,9 +36,12 @@ def _load_file(path: str, separator: Optional[str], num_headlines: int) -> np.nd
                 sep = separator
             
             # Use pandas to read, which handles edge cases better
-            df = pd.read_csv(path, sep=sep, header=None, skiprows=num_headlines, 
+            df = pd.read_csv(path, sep=sep, header=None, skiprows=num_headlines,
                            engine='python', na_values=['', ' '], 
                            skip_blank_lines=True)
+
+            if num_header_columns > 0:
+                df = df.iloc[:, num_header_columns:]
             
             # Convert to numeric, replacing any remaining non-numeric values
             df = df.apply(pd.to_numeric, errors='coerce')
@@ -45,7 +51,13 @@ def _load_file(path: str, separator: Optional[str], num_headlines: int) -> np.nd
         except Exception as e:
             # Fallback to numpy loadtxt
             print(f"Warning: pandas read failed, falling back to numpy: {e}")
-            return np.loadtxt(path, delimiter=separator, skiprows=num_headlines)
+            arr = np.loadtxt(path, delimiter=separator, skiprows=num_headlines)
+            if num_header_columns > 0:
+                if np.asarray(arr).ndim == 1:
+                    arr = np.asarray(arr)[num_header_columns:]
+                else:
+                    arr = np.asarray(arr)[:, num_header_columns:]
+            return arr
 
 
 def _is_auto_detect_value(value: Any) -> bool:
@@ -173,6 +185,127 @@ def _detect_header_rows(path: str, separator: Optional[str]) -> int:
     return 0
 
 
+def _detect_header_columns(path: str, separator: Optional[str], num_headlines: int) -> int:
+    """Detect number of leading non-numeric columns in data rows."""
+    candidates: List[int] = []
+
+    if path.lower().endswith((".xlsx", ".xls")):
+        try:
+            df = pd.read_excel(path, header=None, skiprows=num_headlines, nrows=80)
+        except Exception:
+            return 0
+
+        for _, row in df.iterrows():
+            tokens = [str(v).strip() for v in row.tolist()]
+            while tokens and tokens[-1] == "":
+                tokens.pop()
+            if not tokens:
+                continue
+
+            first_numeric_idx = next((i for i, tok in enumerate(tokens) if _is_numeric_token(tok)), None)
+            if first_numeric_idx is None:
+                continue
+            candidates.append(int(first_numeric_idx))
+            if len(candidates) >= 30:
+                break
+    else:
+        split_pattern = None
+        if separator is None:
+            split_pattern = r'\s+'
+
+        try:
+            with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+                for idx, line in enumerate(f):
+                    if idx < num_headlines:
+                        continue
+                    stripped = line.strip()
+                    if not stripped:
+                        continue
+
+                    if split_pattern is not None:
+                        tokens = [tok for tok in re.split(split_pattern, stripped) if tok]
+                    elif separator == '\t':
+                        tokens = [tok.strip() for tok in stripped.split('\t')]
+                    elif separator == ',':
+                        tokens = [tok.strip() for tok in stripped.split(',')]
+                    else:
+                        tokens = [tok.strip() for tok in stripped.split()]
+
+                    while tokens and tokens[-1] == "":
+                        tokens.pop()
+                    if not tokens:
+                        continue
+
+                    first_numeric_idx = next((i for i, tok in enumerate(tokens) if _is_numeric_token(tok)), None)
+                    if first_numeric_idx is None:
+                        continue
+
+                    candidates.append(int(first_numeric_idx))
+                    if len(candidates) >= 30:
+                        break
+        except Exception:
+            return 0
+
+    if not candidates:
+        return 0
+
+    return Counter(candidates).most_common(1)[0][0]
+
+
+def _parse_delimited_labels(text: Any) -> List[str]:
+    """Parse labels separated by comma, tab, or spaces."""
+    if text is None:
+        return []
+    tokens = [token.strip() for token in re.split(r'[\t,\s]+', str(text).strip()) if token.strip()]
+    return tokens
+
+
+def _load_y_labels_from_file(y_path: str, separator: Optional[str], num_headlines: int = 0, num_header_columns: int = 0) -> List[str]:
+    """Read first Y-data row as labels (comma/tab/space separated)."""
+    if not y_path:
+        return []
+
+    if y_path.lower().endswith(('.xlsx', '.xls')):
+        try:
+            df = pd.read_excel(y_path, header=None, skiprows=num_headlines, nrows=1, dtype=str)
+            if df.empty:
+                return []
+            tokens = [str(v).strip() for v in df.iloc[0].tolist()]
+            if num_header_columns > 0:
+                tokens = tokens[num_header_columns:]
+            return [tok for tok in tokens if tok]
+        except Exception:
+            return []
+
+    try:
+        with open(y_path, 'r', encoding='utf-8', errors='ignore') as f:
+            data_lines = f.readlines()[num_headlines:]
+    except Exception:
+        return []
+
+    for line in data_lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        if separator is None:
+            tokens = re.split(r'\s+', stripped)
+        elif separator == '\t':
+            tokens = stripped.split('\t')
+        elif separator == ',':
+            tokens = stripped.split(',')
+        else:
+            # Fallback for unexpected separators: still support comma/tab/space tokens.
+            tokens = re.split(r'[\t,\s]+', stripped)
+
+        tokens = [token.strip() for token in tokens]
+        if num_header_columns > 0:
+            tokens = tokens[num_header_columns:]
+        return [tok for tok in tokens if tok]
+
+    return []
+
+
 def _is_monotonic_numeric_column(values: np.ndarray) -> bool:
     """Return True when numeric column is monotonic increasing/decreasing."""
     if values is None:
@@ -232,13 +365,13 @@ def _looks_like_xy_matrix(arr: np.ndarray) -> bool:
     return _is_monotonic_numeric_column(first_x)
 
 
-def _infer_data_type(data_paths: List[str], separator: Optional[str], num_headlines: int, nway_flag: int) -> str:
+def _infer_data_type(data_paths: List[str], separator: Optional[str], num_headlines: int, num_header_columns: int, nway_flag: int) -> str:
     """Infer a suitable data type based on first data file shape/content."""
     if not data_paths:
         return "x_matrix"
 
     try:
-        data = _load_file(data_paths[0], separator, num_headlines)
+        data = _load_file(data_paths[0], separator, num_headlines, num_header_columns)
     except Exception:
         return "x_matrix"
 
@@ -276,16 +409,17 @@ def _infer_data_type(data_paths: List[str], separator: Optional[str], num_headli
     return "x_matrix"
 
 
-def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "", d_specs_type: str = "Auto detect", d_specs_dimensions: Optional[List[str]] = None,
+def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "", d_specs_headcolumns: str = "", d_specs_type: str = "Auto detect", d_specs_dimensions: Optional[List[str]] = None,
               data_path: Optional[List[str]] = None, nway_flag: int = 1, y_path: Optional[str] = None,
               var_path: Optional[List[str]] = None, smp_path: Optional[str] = None,
               transpose: bool = False, axis_info: Optional[List[str]] = None, reshape_order: str = 'F',
               dim_labels: Optional[List[str]] = None, axis_nature: Optional[List[str]] = None, scale_type: Optional[List[str]] = None,
               multi_file_per_sample: bool = False, num_samples: Optional[int] = None,
               y_from_x: bool = False, class_from_x: bool = False, smp_from_x: bool = False,
+              y_labels: str = "", y_labels_from_file: bool = False,
               y_columns: str = "", class_columns: str = "", smp_column: str = "",
               cdata_path: Optional[str] = None,
-              source_metadata_overrides: Optional[Dict[str, Dict[str, Any]]] = None) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[List[List[str]]], List[str], Optional[List[np.ndarray]], List[str], List[str], Optional[List[Any]], Dict[str, Dict[str, Any]]]:
+              source_metadata_overrides: Optional[Dict[str, Dict[str, Any]]] = None) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[List[List[str]]], List[str], Optional[List[np.ndarray]], List[str], List[str], Optional[List[Any]], List[str], Dict[str, Dict[str, Any]]]:
     """
     Load and organize chemometrics data.
 
@@ -294,6 +428,7 @@ def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "
     Args:
         d_specs_separator: Separator type ('comma', 'tabs', 'spaces') or auto-detect token
         d_specs_headlines: Number of header rows to skip, or empty/auto-detect token
+        d_specs_headcolumns: Number of leading header columns to skip, or empty/auto-detect token
         d_specs_type: Data type ('x_vector', 'xy_vector', 'x_matrix', etc.) or auto-detect token
         d_specs_dimensions: List of dimensions for reshaping (or comma-separated string)
         data_path: List of paths to X data files (text or Excel, defaults to None)
@@ -312,6 +447,8 @@ def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "
         y_from_x: If True, extract Y data from the X file using y_columns (only for x_matrix, nway_flag=1)
         class_from_x: If True, extract class labels from the X file using class_columns (only for x_matrix, nway_flag=1)
         smp_from_x: If True, extract sample labels from a single column in the X file (only for x_matrix, nway_flag=1)
+        y_labels: Optional manual Y-column labels (comma/tab/space separated)
+        y_labels_from_file: If True, read Y-column labels from first row of y_path and skip that row in Y data
         y_columns: Column spec string for Y extraction (1-based; supports ranges like '1:4', '1-4', '2:2:6')
         class_columns: Column spec string for class label extraction (same format as y_columns)
         smp_column: Single column number (1-based integer) whose string values become sample labels
@@ -327,6 +464,7 @@ def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "
         axis_nature: List describing axis nature for each dimension
         dim_labels: List of dimension labels
         class_data_cal: List of class labels (or list of class-label rows for multi-layer files) or None
+        y_labels: List of resolved Y labels used for Y columns
         cal_metadata: Dict with per-sample metadata extracted from source files
     """
     normalized_data_paths = _normalize_data_path(data_path)
@@ -344,8 +482,14 @@ def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "
     else:
         num_headlines = int(d_specs_headlines)
 
+    if _is_auto_detect_value(d_specs_headcolumns):
+        num_headcolumns = _detect_header_columns(normalized_data_paths[0], separator, num_headlines) if normalized_data_paths else 0
+    else:
+        num_headcolumns = int(d_specs_headcolumns)
+    num_headcolumns = max(0, num_headcolumns)
+
     if _is_auto_detect_value(d_specs_type):
-        data_type = _infer_data_type(normalized_data_paths, separator, num_headlines, nway_flag)
+        data_type = _infer_data_type(normalized_data_paths, separator, num_headlines, num_headcolumns, nway_flag)
     else:
         data_type = d_specs_type
     
@@ -393,6 +537,7 @@ def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "
     extracted_Y: Optional[np.ndarray] = None
     extracted_class: Optional[List[Any]] = None
     extracted_smp: Optional[List[str]] = None
+    resolved_y_labels: List[str] = _parse_delimited_labels(y_labels)
 
     # Determine whether to use column-extraction mode (y_from_x / class_from_x / smp_from_x)
     use_extraction = (
@@ -414,7 +559,7 @@ def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "
         sample_paths = [file_list[i * files_per_sample:(i + 1) * files_per_sample] 
                         for i in range(num_samples)]
         
-        X = _load_x_multifile_per_sample(sample_paths, separator, num_headlines, data_type, 
+        X = _load_x_multifile_per_sample(sample_paths, separator, num_headlines, num_headcolumns, data_type,
                                          dimensions, nway_flag, transpose, reshape_order)
         row_counts = []
         # Generate sample labels from sample indices if no smp_path provided
@@ -435,7 +580,7 @@ def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "
                 smp_col_idx = None
 
         X, extracted_Y, extracted_class, extracted_smp, row_counts = _load_x_matrix_with_extraction(
-            normalized_data_paths, separator, num_headlines, transpose,
+            normalized_data_paths, separator, num_headlines, num_headcolumns, transpose,
             y_col_indices, class_col_indices, smp_col_idx
         )
         # Load sample labels: extracted column wins, then explicit file, then auto-generated
@@ -447,7 +592,7 @@ def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "
             smp_labels = _generate_row_labels(normalized_data_paths, row_counts)
     else:
         # Standard loading mode
-        X, row_counts = _load_x_data(normalized_data_paths, separator, num_headlines, data_type, dimensions, transpose, nway_flag, reshape_order)
+        X, row_counts = _load_x_data(normalized_data_paths, separator, num_headlines, num_headcolumns, data_type, dimensions, transpose, nway_flag, reshape_order)
         # Load sample labels
         if smp_path is None:
             if nway_flag == 1 and data_type == "x_matrix":
@@ -466,13 +611,17 @@ def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "
         Y = None
         if y_path:
             y_separator = separator
+            y_num_headlines = 1 if bool(y_labels_from_file) else 0
 
             # When separator is auto-detected from X, detect independently for Y.
             if _is_auto_detect_value(d_specs_separator):
                 y_sep_choice = _detect_separator([y_path])
                 y_separator = separator_map.get(y_sep_choice, y_separator)
 
-            Y = _load_y_data(y_path, y_separator, 0)
+            if bool(y_labels_from_file):
+                resolved_y_labels = _load_y_labels_from_file(y_path, y_separator, 0, 0)
+
+            Y = _load_y_data(y_path, y_separator, y_num_headlines, 0)
 
             # If parsing produced no finite numeric values, retry once using Y-specific detection.
             # This covers mixed workflows where X and Y files use different delimiters.
@@ -487,7 +636,9 @@ def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "
                     y_sep_choice = _detect_separator([y_path])
                     y_separator_retry = separator_map.get(y_sep_choice, y_separator)
                     if y_separator_retry != y_separator:
-                        Y_retry = _load_y_data(y_path, y_separator_retry, 0)
+                        if bool(y_labels_from_file):
+                            resolved_y_labels = _load_y_labels_from_file(y_path, y_separator_retry, 0, 0)
+                        Y_retry = _load_y_data(y_path, y_separator_retry, y_num_headlines, 0)
                         try:
                             y_retry_arr = np.asarray(Y_retry, dtype=float)
                             if bool(np.isfinite(y_retry_arr).any()):
@@ -501,6 +652,11 @@ def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "
         class_data = extracted_class
     else:
         class_data = _load_class_data(cdata_path) if cdata_path else None
+
+    if Y is not None and not resolved_y_labels:
+        y_arr = np.asarray(Y)
+        y_cols = int(y_arr.shape[1]) if y_arr.ndim > 1 else 1
+        resolved_y_labels = [f"Y{i + 1}" for i in range(y_cols)]
 
     # Override smp_labels with extracted values when smp_from_x is active and extraction ran
     # (already handled above in the elif use_extraction branch, but guard here in case of future
@@ -533,7 +689,13 @@ def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "
         source_metadata_overrides=source_metadata_overrides
     )
 
-    return X, Y, axis_t_info, smp_labels, axis_n_info, axis_nature_list, processed_dim_labels, class_data, cal_metadata
+    if Y is not None and resolved_y_labels:
+        y_labels_copy = resolved_y_labels.copy()
+        for entry in cal_metadata.values():
+            if isinstance(entry, dict):
+                entry["y_labels"] = y_labels_copy
+
+    return X, Y, axis_t_info, smp_labels, axis_n_info, axis_nature_list, processed_dim_labels, class_data, resolved_y_labels, cal_metadata
 
 
 def _normalize_axis_nature(axis_nature: Optional[List[str]], nway_flag: int) -> List[str]:
@@ -564,25 +726,25 @@ def _normalize_axis_nature(axis_nature: Optional[List[str]], nway_flag: int) -> 
     return normalized_values
 
 
-def _load_x_data(data_path: List[str], separator: Optional[str], num_headlines: int,
+def _load_x_data(data_path: List[str], separator: Optional[str], num_headlines: int, num_header_columns: int,
                  data_type: str, dimensions: Optional[str], transpose: bool, nway_flag: int, reshape_order: str = 'F') -> Tuple[np.ndarray, List[int]]:
     """Load and organize X data based on nway_flag and data_type."""
     # global nway_flag
 
     if nway_flag == 1:
-        return _load_x_1way(data_path, separator, num_headlines, data_type, transpose)
+        return _load_x_1way(data_path, separator, num_headlines, num_header_columns, data_type, transpose)
     else:
-        X = _load_x_multiway(data_path, separator, num_headlines, data_type, dimensions, nway_flag, transpose, reshape_order)
+        X = _load_x_multiway(data_path, separator, num_headlines, num_header_columns, data_type, dimensions, nway_flag, transpose, reshape_order)
         return X, []  # No row_counts for multiway
 
 
-def _load_x_1way(data_path: List[str], separator: Optional[str], num_headlines: int,
+def _load_x_1way(data_path: List[str], separator: Optional[str], num_headlines: int, num_header_columns: int,
                  data_type: str, transpose: bool) -> Tuple[np.ndarray, List[int]]:
     """Load 1-way X data."""
     samples = []
     row_counts = []
     for path in data_path:
-        data = _load_file(path, separator, num_headlines)
+        data = _load_file(path, separator, num_headlines, num_header_columns)
         if data_type == "x_vector":
             # Single vector, transpose to row
             sample = data.flatten()
@@ -610,7 +772,7 @@ def _load_x_1way(data_path: List[str], separator: Optional[str], num_headlines: 
     return X, row_counts
 
 
-def _load_x_multiway(data_path: List[str], separator: Optional[str], num_headlines: int,
+def _load_x_multiway(data_path: List[str], separator: Optional[str], num_headlines: int, num_header_columns: int,
                      data_type: str, dimensions: Optional[str], nway_flag: int, transpose: Optional[bool], reshape_order: str = 'F') -> np.ndarray:
     """Load multi-way X data.
     
@@ -629,7 +791,7 @@ def _load_x_multiway(data_path: List[str], separator: Optional[str], num_headlin
 
     samples = []
     for path in data_path:
-        data = _load_file(path, separator, num_headlines)
+        data = _load_file(path, separator, num_headlines, num_header_columns)
         if data_type == "x_vector":
             sample = data.flatten()
             # Use specified reshape order (Fortran for MATLAB, C for NumPy default)
@@ -661,7 +823,7 @@ def _load_x_multiway(data_path: List[str], separator: Optional[str], num_headlin
     return X
 
 
-def _load_x_multifile_per_sample(sample_paths: List[List[str]], separator: Optional[str], num_headlines: int,
+def _load_x_multifile_per_sample(sample_paths: List[List[str]], separator: Optional[str], num_headlines: int, num_header_columns: int,
                                   data_type: str, dimensions: Optional[str], nway_flag: int, 
                                   transpose: Optional[bool], reshape_order: str = 'F') -> np.ndarray:
     """Load multi-way X data where each sample consists of multiple files.
@@ -728,7 +890,7 @@ def _load_x_multifile_per_sample(sample_paths: List[List[str]], separator: Optio
         # Load all files for this sample
         file_data_list = []
         for file_path in file_list:
-            raw_data = _load_file(file_path, separator, num_headlines)
+            raw_data = _load_file(file_path, separator, num_headlines, num_header_columns)
             
             # Extract the relevant data based on data_type
             if data_type == "x_vector":
@@ -826,9 +988,9 @@ def _normalize_data_path(data_path) -> List[str]:
         return [str(data_path)]
 
 
-def _load_y_data(y_path: str, separator: Optional[str] = None, num_headlines: int = 0) -> np.ndarray:
+def _load_y_data(y_path: str, separator: Optional[str] = None, num_headlines: int = 0, num_header_columns: int = 0) -> np.ndarray:
     """Load Y data as 2D matrix using specified separator, preserving matrix structure."""
-    data = _load_file(y_path, separator, num_headlines)
+    data = _load_file(y_path, separator, num_headlines, num_header_columns)
     # Keep as 2D if multiple columns, otherwise reshape to column vector
     if data.ndim == 1:
         return data.reshape(-1, 1)
@@ -904,7 +1066,7 @@ def _parse_column_spec(spec: str) -> List[int]:
     return sorted(indices)
 
 
-def _load_file_raw_rows(path: str, separator: Optional[str], num_headlines: int) -> List[List[str]]:
+def _load_file_raw_rows(path: str, separator: Optional[str], num_headlines: int, num_header_columns: int = 0) -> List[List[str]]:
     """Load a file and return every data row as a list of string tokens.
 
     Headline rows are skipped.  Empty lines are ignored.
@@ -920,6 +1082,8 @@ def _load_file_raw_rows(path: str, separator: Optional[str], num_headlines: int)
             # Drop trailing empty tokens
             while tokens and tokens[-1] == '':
                 tokens.pop()
+            if num_header_columns > 0:
+                tokens = tokens[num_header_columns:]
             if tokens:
                 rows.append(tokens)
     else:
@@ -940,6 +1104,8 @@ def _load_file_raw_rows(path: str, separator: Optional[str], num_headlines: int)
             else:
                 tokens = stripped.split(separator)
             tokens = [t.strip() for t in tokens]
+            if num_header_columns > 0:
+                tokens = tokens[num_header_columns:]
             if tokens:
                 rows.append(tokens)
 
@@ -950,6 +1116,7 @@ def _load_x_matrix_with_extraction(
     data_paths: List[str],
     separator: Optional[str],
     num_headlines: int,
+    num_header_columns: int,
     transpose: bool,
     y_col_indices: List[int],
     class_col_indices: List[int],
@@ -989,7 +1156,7 @@ def _load_x_matrix_with_extraction(
     y_only = [c for c in sorted(y_col_indices) if c not in set(class_col_indices)]
 
     for path in data_paths:
-        raw = _load_file_raw_rows(path, separator, num_headlines)
+        raw = _load_file_raw_rows(path, separator, num_headlines, num_header_columns)
         if not raw:
             continue
 

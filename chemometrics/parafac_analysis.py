@@ -110,6 +110,36 @@ def _as_2d_y(y: Optional[np.ndarray]) -> Optional[np.ndarray]:
     return arr
 
 
+def _normalize_y_labels(y_labels: Any) -> List[str]:
+    if y_labels is None:
+        return []
+
+    raw_items: List[Any]
+    if isinstance(y_labels, np.ndarray):
+        raw_items = np.asarray(y_labels).reshape(-1).tolist()
+    elif isinstance(y_labels, (list, tuple)):
+        raw_items = list(y_labels)
+    elif isinstance(y_labels, str):
+        text = y_labels.strip()
+        if not text:
+            return []
+        if "," in text:
+            raw_items = [item.strip() for item in text.split(",")]
+        elif "\t" in text:
+            raw_items = [item.strip() for item in text.split("\t")]
+        else:
+            raw_items = [item.strip() for item in text.split()]
+    else:
+        raw_items = [y_labels]
+
+    out: List[str] = []
+    for item in raw_items:
+        text = str(item).strip()
+        if text:
+            out.append(text)
+    return out
+
+
 def _normalize_bool_list(values: Any, count: int) -> List[bool]:
     if isinstance(values, list):
         raw = values
@@ -983,6 +1013,19 @@ def _single_fit_once(
         )
 
     solver_mode = _normalize_missing_constrained_solver(missing_constrained_solver)
+    if use_constrained and has_missing:
+        solver_label_map = {
+            "em": "EM",
+            "em_adaptive": "EM (Adaptive Inner Iterations)",
+            "weighted_ao_admm": "Weighted AO-ADMM",
+        }
+        solver_label = solver_label_map.get(solver_mode, str(solver_mode))
+        implementation_used = f"Constrained PARAFAC (Missing Data, {solver_label})"
+    elif use_constrained:
+        implementation_used = "Constrained PARAFAC"
+    else:
+        implementation_used = "PARAFAC"
+
     if has_missing and use_constrained and bool(emit_missing_solver_notice):
         emit_execution_message(
             code="parafac_constraints_missing_solver",
@@ -1168,6 +1211,7 @@ def _single_fit_once(
             "sfit": sfit,
             "explained_variance": explained,
             "n_iter": int(len(errors)) if errors is not None else 0,
+            "implementation_used": implementation_used,
             "used_constrained_parafac": bool(use_constrained),
             "missing_constrained_solver": solver_mode if (has_missing and use_constrained) else "n/a",
             "orient_mostly_negative_pairs": bool(orient_mostly_negative_pairs),
@@ -1284,6 +1328,7 @@ def _build_text_report(
     metrics: Dict[str, Any],
     mapping: Dict[str, int],
     sweep_results: Optional[List[Dict[str, Any]]] = None,
+    y_labels: Optional[Sequence[str]] = None,
 ) -> str:
     cal = metrics.get("calibration", {}) if isinstance(metrics, dict) else {}
     lines: List[str] = []
@@ -1295,6 +1340,7 @@ def _build_text_report(
     lines.append(f"sfit: {_safe_float(cal.get('sfit')):.6g}")
     lines.append(f"Explained variance (%): {_safe_float(cal.get('explained_variance')):.4f}")
     lines.append(f"Iterations: {int(_safe_float(cal.get('n_iter')))}")
+    lines.append(f"Implementation: {str(cal.get('implementation_used', 'unknown'))}")
     lines.append("")
 
     angles = metrics.get("reference_angles", []) if isinstance(metrics, dict) else []
@@ -1319,8 +1365,19 @@ def _build_text_report(
             ycol = m.get("y_column")
             cm = m.get("calibration", {})
             vm = m.get("validation", {})
+
+            y_target_text = f"Y column {ycol}"
+            try:
+                y_idx = int(_safe_float(ycol, default=0)) - 1
+            except Exception:
+                y_idx = -1
+            if y_labels is not None and 0 <= y_idx < len(y_labels):
+                label_text = str(y_labels[y_idx]).strip()
+                if label_text:
+                    y_target_text = label_text
+
             lines.append(
-                f"- Component {comp} -> Y column {ycol} | "
+                f"- Component {comp} -> {y_target_text} | "
                 f"Cal R2={_safe_float(cm.get('R2')):.4f}, Cal RMSEP={_safe_float(cm.get('RMSEP')):.6g}"
             )
             if vm:
@@ -1392,12 +1449,15 @@ def parafac_analysis(
     fold: int = 0,
     axis_n_info: Optional[List[np.ndarray]] = None,
     dim_labels: Optional[List[str]] = None,
+    y_labels: Optional[Any] = None,
     **kwargs: Any,
 ) -> Dict[str, Any]:
     """PARAFAC with missing-data handling, sweep mode, calibration, and CV."""
 
     X_cal_test = kwargs.get("X_cal_test")
     Y_cal_test = kwargs.get("Y_cal_test")
+    y_labels_raw = y_labels if y_labels is not None else kwargs.get("y_labels")
+    y_labels_resolved = _normalize_y_labels(y_labels_raw)
 
     if X_cal is None and "X_cal_train" in kwargs:
         X_cal = kwargs["X_cal_train"]
@@ -1499,6 +1559,7 @@ def parafac_analysis(
                     fold=fidx + 1,
                     axis_n_info=axis_n_info,
                     dim_labels=dim_labels,
+                    y_labels=y_labels_resolved,
                 )
 
                 cal_models = fold_result.get("calibration_models", [])
@@ -1578,6 +1639,7 @@ def parafac_analysis(
                 fold=-1,
                 axis_n_info=axis_n_info,
                 dim_labels=dim_labels,
+                y_labels=y_labels_resolved,
             )
 
             full_result["cv_results"] = cv_agg
@@ -1711,6 +1773,7 @@ def parafac_analysis(
         metrics=result.get("metrics", {}),
         mapping={int(k) - 1: int(v) - 1 for k, v in result.get("component_y_mapping", {}).items()},
         sweep_results=sweep_results if sweep_mode else None,
+        y_labels=y_labels_resolved,
     )
 
     output = {

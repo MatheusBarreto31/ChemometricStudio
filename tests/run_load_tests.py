@@ -17,7 +17,7 @@ ok = True
 
 print('Running load_data smoke tests...')
 try:
-    X, Y, axis_t_info, smp_cal, axis_n_info, axis_nature, dim_labels, _, cal_metadata = load_data(
+    X, Y, axis_t_info, smp_cal, axis_n_info, axis_nature, dim_labels, _, _, cal_metadata = load_data(
         d_specs_separator='comma',
         d_specs_headlines='0',
         d_specs_type='x_matrix',

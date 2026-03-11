@@ -12,7 +12,9 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
                           calProportion: Optional[float] = None, random_seed: Optional[int] = None,
                           selection_file: Optional[str] = None,
                           d_specs_separator: Optional[str] = None, d_specs_headlines: Optional[str] = None,
+                          d_specs_headcolumns: Optional[str] = None,
                           d_specs_type: Optional[str] = None, d_specs_dimensions: Optional[str] = None,
+                          y_labels: Optional[str] = None, y_labels_from_file: Optional[bool] = None,
                           data_path: Optional[List[str]] = None,
                           y_path: Optional[str] = None, var_path: Optional[str] = None,
                           smp_path: Optional[str] = None, transpose: bool = False,
@@ -59,11 +61,14 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
         # Check if using new parameters (X_val_path, Y_val_path)
         if X_val_path or Y_val_path:
             # Load from external file paths
-            X_val, Y_val, _, smp_val, _, _, _, class_data_val, val_metadata = load_data(
+            X_val, Y_val, _, smp_val, _, _, _, class_data_val, _, val_metadata = load_data(
                 d_specs_separator=d_specs_separator or "Auto detect",
                 d_specs_headlines=d_specs_headlines if d_specs_headlines is not None else "",
+                d_specs_headcolumns=d_specs_headcolumns if d_specs_headcolumns is not None else "",
                 d_specs_type=d_specs_type or "Auto detect",
                 d_specs_dimensions=d_specs_dimensions or "",
+                y_labels=y_labels or "",
+                y_labels_from_file=bool(y_labels_from_file),
                 data_path=[X_val_path] if X_val_path else [],
                 nway_flag=nway_flag or 1,
                 y_path=Y_val_path,
@@ -78,11 +83,14 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
             # Use data_path parameters for loading external validation
             if data_path is None or nway_flag is None:
                 raise ValueError("Either X_val_path/Y_val_path or data_path/nway_flag required when loading external validation")
-            X_val, Y_val, _, smp_val, _, _, _, class_data_val, val_metadata = load_data(
+            X_val, Y_val, _, smp_val, _, _, _, class_data_val, _, val_metadata = load_data(
                 d_specs_separator=d_specs_separator or "Auto detect",
                 d_specs_headlines=d_specs_headlines if d_specs_headlines is not None else "",
+                d_specs_headcolumns=d_specs_headcolumns if d_specs_headcolumns is not None else "",
                 d_specs_type=d_specs_type or "Auto detect",
                 d_specs_dimensions=d_specs_dimensions or "",
+                y_labels=y_labels or "",
+                y_labels_from_file=bool(y_labels_from_file),
                 data_path=data_path,
                 nway_flag=nway_flag,
                 y_path=y_path,

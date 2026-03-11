@@ -15,8 +15,11 @@
     "selection_file": "Selection File",
     "d_specs_separator": "Data Separator",
     "d_specs_headlines": "Header Rows",
+    "d_specs_headcolumns": "Header Columns",
     "d_specs_type": "Data Type",
     "d_specs_dimensions": "Data Dimensions",
+    "y_labels": "Y Labels",
+    "y_labels_from_file": "Y Labels from File",
     "nway_flag": "Data Dimensionality",
     "cdata_path": "Class Data File"
   },
@@ -232,6 +235,18 @@
         "tooltip": "Inherited from Load Data. Leave empty to auto-detect header rows."
       },
       {
+        "name": "d_specs_headcolumns",
+        "label": "Number of Header Columns",
+        "category": "Data Format",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": true,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Inherited from Load Data. Leave empty to auto-detect leading header columns."
+      },
+      {
         "name": "d_specs_type",
         "label": "Data Type",
         "category": "Data Format",
@@ -253,6 +268,29 @@
         "input_type": "inherited",
         "visible_if": {"input_type": "user"},
         "tooltip": "Automatically inherited from Load Data function"
+      },
+      {
+        "name": "y_labels_from_file",
+        "label": "Y Labels from File",
+        "category": "Data Format",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Inherited from Load Data. Uses first Y-file row as labels and skips it from Y values."
+      },
+      {
+        "name": "y_labels",
+        "label": "Y Labels",
+        "category": "Data Format",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user", "y_labels_from_file": false},
+        "tooltip": "Inherited from Load Data. Manual Y labels separated by comma, tab, or spaces."
       },
       {
         "name": "nway_flag",

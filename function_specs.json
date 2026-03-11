@@ -9,7 +9,7 @@
     "workflow_ensemble_member": [],
     "workflow_ensemble_end": [],
     "cv_configuration": ["cv_config"],
-    "load_data": ["X_cal", "Y_cal", "axis_t_info", "smp_cal", "axis_n_info", "axis_nature", "dim_labels", "class_data_cal", "cal_metadata"],
+    "load_data": ["X_cal", "Y_cal", "axis_t_info", "smp_cal", "axis_n_info", "axis_nature", "dim_labels", "class_data_cal", "y_labels", "cal_metadata"],
     "validation_data_main": ["X_cal", "Y_cal", "X_val", "Y_val", "smp_cal", "smp_val", "class_data_cal", "class_data_val", "cal_metadata", "val_metadata"],
     "baseline_correction": ["X_cal", "X_val", "axis_n_info", "axis_t_info"],
     "smoothing": ["X_cal", "X_val"],
@@ -39,8 +39,8 @@
     "workflow_ensemble_member": [],
     "workflow_ensemble_end": [],
     "cv_configuration": ["use_cv", "cv_strategy", "n_splits", "random_state", "shuffle", "window_size", "n_repeats", "test_size", "stratify_layer"],
-    "load_data": ["d_specs_separator", "d_specs_headlines", "d_specs_type", "d_specs_dimensions", "data_path", "nway_flag", "y_path", "var_path", "smp_path", "transpose", "axis_info", "reshape_order", "multi_file_per_sample", "num_samples", "dim_labels", "axis_nature", "scale_type", "y_from_x", "class_from_x", "smp_from_x", "y_columns", "class_columns", "smp_column", "cdata_path"],
-    "validation_data_main": ["X_cal", "Y_cal", "smp_cal", "class_data_cal", "cal_metadata", "validation_mode", "createVal", "creationMethod", "calProportion", "random_seed", "selection_file", "X_val_path", "Y_val_path", "val_labels_path", "cdata_path", "d_specs_separator", "d_specs_headlines", "d_specs_type", "d_specs_dimensions", "data_path", "y_path", "var_path", "smp_path", "transpose", "nway_flag", "reshape_order"],
+    "load_data": ["d_specs_separator", "d_specs_headlines", "d_specs_headcolumns", "d_specs_type", "d_specs_dimensions", "data_path", "nway_flag", "y_path", "var_path", "smp_path", "transpose", "axis_info", "reshape_order", "multi_file_per_sample", "num_samples", "dim_labels", "axis_nature", "scale_type", "y_from_x", "class_from_x", "smp_from_x", "y_labels", "y_labels_from_file", "y_columns", "class_columns", "smp_column", "cdata_path"],
+    "validation_data_main": ["X_cal", "Y_cal", "smp_cal", "class_data_cal", "cal_metadata", "validation_mode", "createVal", "creationMethod", "calProportion", "random_seed", "selection_file", "X_val_path", "Y_val_path", "val_labels_path", "cdata_path", "d_specs_separator", "d_specs_headlines", "d_specs_headcolumns", "d_specs_type", "d_specs_dimensions", "y_labels", "y_labels_from_file", "data_path", "y_path", "var_path", "smp_path", "transpose", "nway_flag", "reshape_order"],
     "baseline_correction": [
       {"key": "X_cal", "aliases": ["X", "X_train"]},
       "method",
@@ -65,7 +65,7 @@
     "univariate_calibration": ["X_cal", "Y_cal", "X_val", "Y_val", "degree", "intercept", "cv_config"],
     "first_order_calibration": ["X_cal", "Y_cal", "X_val", "Y_val", "model_type", "n_components", "ridge_alpha", "lasso_alpha", "elastic_net_alpha", "elastic_net_l1_ratio", "random_forest_n_estimators", "svr_c", "svr_epsilon", "svr_gamma", "svr_kernel", "gradient_boosting_n_estimators", "gradient_boosting_learning_rate", "gradient_boosting_max_depth", "gradient_boosting_min_samples_leaf", "hist_gradient_boosting_n_estimators", "hist_gradient_boosting_learning_rate", "hist_gradient_boosting_max_depth", "hist_gradient_boosting_min_samples_leaf", "gaussian_process_alpha", "gaussian_process_length_scale", "gaussian_process_constant_value", "gaussian_process_n_restarts_optimizer", "kernel_pls_gamma", "kernel_pls_n_features", "local_method", "local_distance", "n_neighbors", "idw_power", "adaptive_alpha", "radius_threshold", "kernel_bandwidth", "optimize_parameters", "n_components_range", "ridge_alpha_range", "lasso_alpha_range", "elastic_net_alpha_range", "random_forest_n_estimators_range", "svr_c_range", "gradient_boosting_n_estimators_range", "hist_gradient_boosting_n_estimators_range", "gaussian_process_alpha_range", "n_neighbors_range", "idw_power_range", "adaptive_alpha_range", "radius_threshold_range", "kernel_bandwidth_range", "parameter_range", "cv_config", "was_scaled"],
     "pca_analysis": ["X_cal", "X_val", "n_components", "cv_config", "axis_n_info", "axis_nature", "class_data_cal", "class_data_val", "smp_cal", "smp_val"],
-    "parafac_analysis": ["X_cal", "Y_cal", "X_val", "Y_val", "n_components", "nway_flag", "mode_centering", "mode_normalization", "constraint_non_negative", "constraint_l1_reg", "constraint_l2_reg", "constraint_l2_square_reg", "constraint_unimodality", "constraint_normalize", "constraint_simplex", "constraint_normalized_sparsity", "constraint_soft_sparsity", "constraint_smoothness", "constraint_monotonicity", "constraint_hard_sparsity", "unconstrained_sparsity", "unconstrained_linesearch", "unconstrained_orthogonalise", "init_method", "max_iter", "tol", "random_state", "random_multi_start", "random_multi_start_runs", "allow_missing", "missing_constrained_solver", "orient_mostly_negative_pairs", "profile_paths", "profile_usage", "sweep_mode", "component_range", "component_y_mapping", "cv_config", "axis_n_info", "dim_labels"]
+    "parafac_analysis": ["X_cal", "Y_cal", "X_val", "Y_val", "n_components", "nway_flag", "mode_centering", "mode_normalization", "constraint_non_negative", "constraint_l1_reg", "constraint_l2_reg", "constraint_l2_square_reg", "constraint_unimodality", "constraint_normalize", "constraint_simplex", "constraint_normalized_sparsity", "constraint_soft_sparsity", "constraint_smoothness", "constraint_monotonicity", "constraint_hard_sparsity", "unconstrained_sparsity", "unconstrained_linesearch", "unconstrained_orthogonalise", "init_method", "max_iter", "tol", "random_state", "random_multi_start", "random_multi_start_runs", "allow_missing", "missing_constrained_solver", "orient_mostly_negative_pairs", "profile_paths", "profile_usage", "sweep_mode", "component_range", "component_y_mapping", "cv_config", "axis_n_info", "dim_labels", "y_labels"]
   },
   "import_map": {
     "workflow_loop_start": ["builtins", "print"],
@@ -208,6 +208,7 @@
     "load_data": {
       "d_specs_separator": "str",
       "d_specs_headlines": "str",
+      "d_specs_headcolumns": "str",
       "d_specs_type": "str",
       "d_specs_dimensions": "str",
       "data_path": "list",
@@ -224,6 +225,8 @@
       "y_from_x": "bool",
       "class_from_x": "bool",
       "smp_from_x": "bool",
+      "y_labels": "str",
+      "y_labels_from_file": "bool",
       "y_columns": "str",
       "class_columns": "str",
       "smp_column": "str"
@@ -244,8 +247,11 @@
       "val_labels_path": "str",
       "d_specs_separator": "str",
       "d_specs_headlines": "str",
+      "d_specs_headcolumns": "str",
       "d_specs_type": "str",
       "d_specs_dimensions": "str",
+      "y_labels": "str",
+      "y_labels_from_file": "bool",
       "data_path": "list",
       "y_path": "str",
       "var_path": "str",

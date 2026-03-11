@@ -5,6 +5,7 @@
     "input_aliases": {
     "d_specs_separator": "Data Separator",
     "d_specs_headlines": "Header Rows",
+    "d_specs_headcolumns": "Header Columns",
     "d_specs_type": "Data Type",
     "d_specs_dimensions": "Data Dimensions",
     "data_path": "X Data Files",
@@ -12,6 +13,8 @@
     "multi_file_per_sample": "Multiple files per sample",
     "num_samples": "Number of Samples",
     "y_path": "Y Data File",
+    "y_labels": "Y Labels",
+    "y_labels_from_file": "Y Labels from File",
     "var_path": "Axis Labels Files",
     "smp_path": "Sample Labels",
     "dim_labels": "Dimension Names",
@@ -79,7 +82,7 @@
     ]
   },
   "short_description": "Loads spectroscopic and response data from files",
-  "long_description": "This step loads your calibration dataset including spectroscopic data (X), response variables (Y), and optional metadata.\n\nInput Data Components:\n- X Data (Spectra): Main spectroscopic measurements (required)\n- Y Data (Responses): Target/dependent variables (optional)\n- Variable Labels: Wavelengths, frequencies, or variable names (optional)\n- Sample Labels: Sample IDs or identifiers (optional)\n\nData Formats:\n- CSV files with configurable delimiters (comma, tabs, spaces)\n- Matrix format: samples (rows) x variables (columns)\n- Vector formats for specialized data types\n- Support for multiple files via file selection\n\nConfiguration:\n- Use Auto detect for separator and data type when possible\n- Leave Header Rows empty to auto-detect how many non-data lines to skip\n- Choose explicit values only when auto-detection is not appropriate\n- Transpose if needed (samples in columns instead of rows)\n\nThe loaded data becomes input for preprocessing and validation steps.",
+  "long_description": "This step loads your calibration dataset including spectroscopic data (X), response variables (Y), and optional metadata.\n\nInput Data Components:\n- X Data (Spectra): Main spectroscopic measurements (required)\n- Y Data (Responses): Target/dependent variables (optional)\n- Variable Labels: Wavelengths, frequencies, or variable names (optional)\n- Sample Labels: Sample IDs or identifiers (optional)\n\nData Formats:\n- CSV files with configurable delimiters (comma, tabs, spaces)\n- Matrix format: samples (rows) x variables (columns)\n- Vector formats for specialized data types\n- Support for multiple files via file selection\n\nConfiguration:\n- Use Auto detect for separator and data type when possible\n- Leave Header Rows empty to auto-detect how many non-data lines to skip\n- Leave Header Columns empty to auto-detect how many leading non-data columns to skip\n- Choose explicit values only when auto-detection is not appropriate\n- Transpose if needed (samples in columns instead of rows)\n\nThe loaded data becomes input for preprocessing and validation steps.",
   "setup": {
     "categories": [
       "Data Dimensionality",
@@ -121,6 +124,17 @@
         "required": true,
         "input_type": "user",
         "tooltip": "Leave empty to auto-detect header rows. Enter a number only to force a fixed skip count."
+      },
+      {
+        "name": "d_specs_headcolumns",
+        "label": "Number of Header Columns",
+        "category": "File Format",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Leave empty to auto-detect header columns. Enter a number only to force a fixed leading-column skip count."
       },
       {
         "name": "d_specs_type",
@@ -237,6 +251,33 @@
         "tooltip": "Columns of the X file to use as Y data (1-based). Supports single values (3), comma/space lists (1,3,5), ranges (1:4 or 1-4), and stepped ranges (2:2:6).",
         "visible_if": {
           "y_from_x": true
+        }
+      },
+      {
+        "name": "y_labels_from_file",
+        "label": "Y Labels from File",
+        "category": "Data Files",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "If enabled, the first row of the Y file is used as Y-column labels and excluded from Y numeric data.",
+        "visible_if": {
+          "y_from_x": false
+        }
+      },
+      {
+        "name": "y_labels",
+        "label": "Y Labels",
+        "category": "Data Files",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Manual labels for Y columns, separated by comma, tab, or spaces.",
+        "visible_if": {
+          "y_labels_from_file": false
         }
       },
       {

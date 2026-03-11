@@ -5,11 +5,14 @@
   "input_aliases": {
     "d_specs_separator": "Separador de Dados",
     "d_specs_headlines": "Linhas de Cabeçalho",
+    "d_specs_headcolumns": "Colunas de Cabeçalho",
     "d_specs_type": "Tipo de Dados",
     "d_specs_dimensions": "Dimensões dos Dados",
     "data_path": "Arquivos de Dados X",
     "nway_flag": "Dimensionalidade dos Dados",
     "y_path": "Arquivo de Dados Y",
+    "y_labels": "Rótulos de Y",
+    "y_labels_from_file": "Rótulos de Y do Arquivo",
     "var_path": "Arquivos de Rótulos de Eixo",
     "smp_path": "Rótulos de Amostras",
     "transpose": "Transpor",
@@ -69,7 +72,7 @@
     ]
   },
   "short_description": "Carrega dados espectroscópicos e de resposta de arquivos",
-  "long_description": "Esta etapa carrega seu conjunto de dados de calibração, incluindo dados espectroscópicos (X), variáveis de resposta (Y) e metadados opcionais.\n\nComponentes de Dados de Entrada:\n- Dados X (Espectros): Principais medições espectroscópicas (obrigatório)\n- Dados Y (Respostas): Variáveis alvo/dependentes (opcional)\n- Rótulos de Variáveis: Comprimentos de onda, frequências ou nomes de variáveis (opcional)\n- Rótulos de Amostras: IDs de amostra ou identificadores (opcional)\n\nFormatos de Dados:\n- Arquivos CSV com delimitadores configuráveis (vírgula, tabulações, espaços)\n- Formato de matriz: amostras (linhas) x variáveis (colunas)\n- Formatos de vetor para tipos de dados especializados\n- Suporte para múltiplos arquivos via seleção de arquivo\n\nConfiguração:\n- Use Auto detect para separador e tipo de dados sempre que possível\n- Deixe Linhas de Cabeçalho vazio para detectar automaticamente quantas linhas não numéricas ignorar\n- Informe valores fixos apenas quando necessário\n- Transponha se necessário (amostras em colunas em vez de linhas)\n\nOs dados carregados se tornam entrada para etapas de pré-processamento e validação.",
+  "long_description": "Esta etapa carrega seu conjunto de dados de calibração, incluindo dados espectroscópicos (X), variáveis de resposta (Y) e metadados opcionais.\n\nComponentes de Dados de Entrada:\n- Dados X (Espectros): Principais medições espectroscópicas (obrigatório)\n- Dados Y (Respostas): Variáveis alvo/dependentes (opcional)\n- Rótulos de Variáveis: Comprimentos de onda, frequências ou nomes de variáveis (opcional)\n- Rótulos de Amostras: IDs de amostra ou identificadores (opcional)\n\nFormatos de Dados:\n- Arquivos CSV com delimitadores configuráveis (vírgula, tabulações, espaços)\n- Formato de matriz: amostras (linhas) x variáveis (colunas)\n- Formatos de vetor para tipos de dados especializados\n- Suporte para múltiplos arquivos via seleção de arquivo\n\nConfiguração:\n- Use Auto detect para separador e tipo de dados sempre que possível\n- Deixe Linhas de Cabeçalho vazio para detectar automaticamente quantas linhas não numéricas ignorar\n- Deixe Colunas de Cabeçalho vazio para detectar automaticamente quantas colunas iniciais não numéricas ignorar\n- Informe valores fixos apenas quando necessário\n- Transponha se necessário (amostras em colunas em vez de linhas)\n\nOs dados carregados se tornam entrada para etapas de pré-processamento e validação.",
   "setup": {
     "layout": [
       {
@@ -102,6 +105,16 @@
         "required": true,
         "input_type": "user",
         "tooltip": "Deixe vazio para detectar automaticamente as linhas de cabeçalho. Informe número apenas para forçar valor fixo."
+      },
+      {
+        "name": "d_specs_headcolumns",
+        "label": "Número de Colunas de Cabeçalho",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Deixe vazio para detectar automaticamente as colunas de cabeçalho. Informe número apenas para forçar quantas colunas iniciais ignorar."
       },
       {
         "name": "d_specs_type",
@@ -195,6 +208,28 @@
         "input_type": "user",
         "tooltip": "Arquivo de variável(is) de resposta",
         "ispath": true
+      },
+      {
+        "name": "y_labels_from_file",
+        "label": "Rótulos de Y do Arquivo",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Se habilitado, usa a primeira linha do arquivo Y como rótulos das colunas e não a inclui nos valores numéricos de Y."
+      },
+      {
+        "name": "y_labels",
+        "label": "Rótulos de Y",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Rótulos manuais para colunas de Y, separados por vírgula, tabulação ou espaço.",
+        "visible_if": {
+          "y_labels_from_file": false
+        }
       },
       {
         "name": "cdata_path",
