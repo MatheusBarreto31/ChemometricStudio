@@ -8296,18 +8296,52 @@ class ChemometricsGUI:
         if not parameter:
             return True
         
-        # Get the actual value from execution inputs
+        # Resolve condition value from execution data sources.
+        # Conditions may reference either inputs (e.g., nway_flag) or outputs
+        # (e.g., class_data_cal) and can optionally use in./out. prefixes.
         if instance_alias not in self.analysis_data:
             return True
         
         execution_results = self.analysis_data[instance_alias].get('execution_results', {})
         inputs = execution_results.get('inputs', {})
-        actual_value = inputs.get(parameter)
+        outputs = execution_results.get('outputs', {})
+        combined_sources = self._get_execution_data_sources(execution_results, instance_alias)
+
+        actual_value = None
+        if isinstance(combined_sources, dict):
+            if parameter in combined_sources:
+                actual_value = combined_sources.get(parameter)
+            elif isinstance(parameter, str) and not parameter.startswith('in.') and not parameter.startswith('out.'):
+                if f"in.{parameter}" in combined_sources:
+                    actual_value = combined_sources.get(f"in.{parameter}")
+                elif f"out.{parameter}" in combined_sources:
+                    actual_value = combined_sources.get(f"out.{parameter}")
+
+        if actual_value is None:
+            if isinstance(inputs, dict) and parameter in inputs:
+                actual_value = inputs.get(parameter)
+            elif isinstance(outputs, dict) and parameter in outputs:
+                actual_value = outputs.get(parameter)
 
         if operator == 'exists':
-            return parameter in inputs and actual_value is not None
+            if isinstance(combined_sources, dict):
+                if parameter in combined_sources:
+                    return combined_sources.get(parameter) is not None
+                if isinstance(parameter, str) and not parameter.startswith('in.') and not parameter.startswith('out.'):
+                    in_key = f"in.{parameter}"
+                    out_key = f"out.{parameter}"
+                    if in_key in combined_sources:
+                        return combined_sources.get(in_key) is not None
+                    if out_key in combined_sources:
+                        return combined_sources.get(out_key) is not None
+            in_exists = isinstance(inputs, dict) and parameter in inputs and inputs.get(parameter) is not None
+            out_exists = isinstance(outputs, dict) and parameter in outputs and outputs.get(parameter) is not None
+            return in_exists or out_exists
         if operator == 'not_exists':
-            return parameter not in inputs or actual_value is None
+            return not self._evaluate_condition(
+                instance_alias,
+                {'parameter': parameter, 'operator': 'exists', 'value': expected_value}
+            )
         
         if actual_value is None:
             # If parameter not found in inputs, default to showing the page
