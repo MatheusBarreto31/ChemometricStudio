@@ -30,7 +30,8 @@
     "axis_nature": "Natureza do Eixo",
     "dim_labels": "Rótulos de Dimensões",
     "class_data_cal": "Dados de Classificação",
-    "cal_metadata": "Metadados de Amostras"
+    "cal_metadata": "Metadados de Amostras",
+    "correlation_matrix": "Matriz de Correlação"
   },
   "output_synonyms": {
     "X_cal": [
@@ -461,6 +462,41 @@
             },
             "short_description": "Mostra um relatório textual compacto sobre dimensões e contagens dos dados carregados.",
             "long_description": "Esta seção fornece um resumo textual em tempo de execução incluindo número de amostras carregadas, dimensionalidade, tamanho total, formato e disponibilidade de rótulos/alvos."
+          }
+        ]
+      },
+      {
+        "title": "Matriz de Correlação",
+        "layout": "ed",
+        "condition": {
+          "parameter": "nway_flag",
+          "operator": "==",
+          "value": "1"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "flip_xy": false,
+              "x_axis": {
+                "data_source": "axis_t_info",
+                "index": 1,
+                "label": "Variáveis"
+              },
+              "y_axis": {
+                "data_source": "axis_t_info",
+                "index": 1,
+                "label": "Variáveis"
+              },
+              "z_axis": {
+                "data_source": "correlation_matrix",
+                "label": "Correlação"
+              },
+              "title": "Matriz de Correlação de Pearson"
+            },
+            "short_description": "Exibe a matriz de correlação de Pearson como um mapa térmico.",
+            "long_description": "Esta seção visualiza os coeficientes de correlação de Pearson entre todos os pares de variáveis como um mapa térmico. Vermelho indica correlação positiva, azul indica correlação negativa, e branco indica nenhuma correlação."
           }
         ]
       }

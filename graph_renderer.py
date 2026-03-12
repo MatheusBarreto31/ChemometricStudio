@@ -35,10 +35,10 @@ def _as_bool(value: Any, default: bool = False) -> bool:
 def _effective_flip_xy(graph_type: str, config: dict) -> bool:
     """Resolve effective flip_xy value with graph-specific defaults."""
     if not isinstance(config, dict):
-        return str(graph_type).strip().lower() == 'heatmap'
+        return False
 
     if 'flip_xy' not in config:
-        return str(graph_type).strip().lower() == 'heatmap'
+        return False
 
     return _as_bool(config.get('flip_xy'), default=False)
 
@@ -70,7 +70,9 @@ def _apply_axis_scale_options(ax, config: dict, use_3d: bool = False) -> None:
     def _apply_scale(axis_obj, set_scale_func, axis_cfg: dict) -> None:
         axis_type = _normalize_axis_type(axis_cfg)
         if axis_type == 'linear':
-            set_scale_func('linear')
+            # Keep matplotlib defaults for linear axes so existing custom
+            # locators/formatters (e.g., categorical heatmap tick labels)
+            # are not reset.
             return
 
         if axis_type == 'log10':
@@ -129,11 +131,14 @@ def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarr
     # Make a copy of config to avoid modifying the original (which persists between runs)
     config = config.copy()
 
-    # flip_xy defaults to True for heatmap and False otherwise when not configured.
+    # flip_xy defaults to False when not configured.
     flip_xy_effective = _effective_flip_xy(graph_type, config)
     config['_flip_xy_effective'] = flip_xy_effective
     if flip_xy_effective:
         x_data, y_data = y_data, x_data
+
+        if graph_type == 'heatmap' and isinstance(z_data, np.ndarray) and z_data.ndim == 2:
+            z_data = z_data.T
 
         x_axis_cfg = config.get('x_axis', {})
         y_axis_cfg = config.get('y_axis', {})
@@ -1758,16 +1763,125 @@ def _render_heatmap(fig, ax, x_data: Optional[np.ndarray], y_data: Optional[np.n
     """Render a heatmap."""
     if x_data is not None and y_data is not None and z_data is not None:
         if isinstance(x_data, np.ndarray) and isinstance(y_data, np.ndarray) and isinstance(z_data, np.ndarray):
-            # Create mesh grids from x and y data
-            X, Y = np.meshgrid(x_data, y_data)
-            # Use pcolormesh for proper axis mapping
+            def _prepare_axis(values: np.ndarray, expected_len: int, axis_name: str) -> Tuple[np.ndarray, Optional[List[str]], bool]:
+                """Return numeric axis coordinates, optional labels, and optional fixed-tick hint."""
+                arr = np.asarray(values, dtype=object).reshape(-1)
+
+                if expected_len > 0:
+                    if arr.size == 0:
+                        raise ValueError(
+                            f"Heatmap axis length mismatch: {axis_name} has 0 values, expected {expected_len}."
+                        )
+                    elif arr.size != expected_len:
+                        raise ValueError(
+                            f"Heatmap axis length mismatch: {axis_name} has {arr.size} values, expected {expected_len}."
+                        )
+
+                # Numeric axis (including numeric strings)
+                try:
+                    numeric_axis = np.asarray(arr, dtype=float)
+                    if expected_len > 0 and numeric_axis.size != expected_len:
+                        numeric_axis = np.arange(expected_len, dtype=float)
+                    # Guard against non-increasing coordinates (e.g., padded duplicates),
+                    # which can collapse edge cells in pcolormesh.
+                    if numeric_axis.size > 1:
+                        diffs = np.diff(numeric_axis)
+                        if not np.all(np.isfinite(diffs)) or np.any(diffs <= 0):
+                            fallback_len = expected_len if expected_len > 0 else numeric_axis.size
+                            numeric_axis = np.arange(fallback_len, dtype=float)
+                    return numeric_axis, None, False
+                except Exception:
+                    pass
+
+                # Treat fallback auto-generated labels (V1, V2, ...) as numeric-like.
+                # This avoids classifying them as free-text categorical labels.
+                normalized_labels = [str(v).strip() for v in arr.tolist()]
+                auto_label_indices: List[float] = []
+                for label in normalized_labels:
+                    if len(label) >= 2 and label[0] in ('V', 'v') and label[1:].isdigit():
+                        auto_label_indices.append(float(int(label[1:])))
+                    else:
+                        auto_label_indices = []
+                        break
+                if auto_label_indices and len(auto_label_indices) == len(normalized_labels):
+                    # Numeric-like auto labels should behave like numeric axes.
+                    # Do not force one tick per variable; allow Matplotlib to pick
+                    # readable tick spacing for large matrices.
+                    return np.asarray(auto_label_indices, dtype=float), None, False
+
+                # Categorical/text axis -> map to integer coordinates and keep labels
+                labels = [str(v) for v in arr.tolist()]
+                coords = np.arange(len(labels), dtype=float)
+                return coords, labels, False
+
+            n_rows, n_cols = z_data.shape[0], z_data.shape[1]
+            x_coords, x_labels, x_force_ticks = _prepare_axis(x_data, n_cols, 'x-axis')
+            y_coords, y_labels, y_force_ticks = _prepare_axis(y_data, n_rows, 'y-axis')
+
+            # Use 1D-axis pcolormesh for robust handling of center-style coordinates.
             cmap = config.get('cmap', 'viridis')
-            flip_xy_effective = _as_bool(config.get('_flip_xy_effective'), default=False)
-            heatmap_values = z_data if flip_xy_effective else z_data.T
-            im = ax.pcolormesh(X, Y, heatmap_values, cmap=cmap, shading='nearest')
+            im = ax.pcolormesh(x_coords, y_coords, z_data, cmap=cmap, shading='auto')
             fig.colorbar(im, ax=ax)
             ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
             ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+
+            if x_labels is not None:
+                ax.set_xticks(x_coords)
+                ax.set_xticklabels(x_labels)
+                for tick_label in ax.get_xticklabels():
+                    tick_label.set_rotation(45)
+                    tick_label.set_horizontalalignment('right')
+                    tick_label.set_rotation_mode('anchor')
+            elif x_force_ticks:
+                ax.set_xticks(x_coords)
+
+            if y_labels is not None:
+                ax.set_yticks(y_coords)
+                ax.set_yticklabels(y_labels)
+            elif y_force_ticks:
+                ax.set_yticks(y_coords)
+
+            if bool(config.get('annotate_heatmap', False)):
+                clim = im.get_clim()
+                try:
+                    contrast_norm = mcolors.Normalize(vmin=float(clim[0]), vmax=float(clim[1]), clip=True)
+                except Exception:
+                    contrast_norm = None
+
+                def _annotation_text_color(value: float) -> str:
+                    """Choose annotation color from colormap luminance for contrast."""
+                    if contrast_norm is None:
+                        return 'black'
+
+                    try:
+                        normalized = float(contrast_norm(value))
+                    except Exception:
+                        return 'black'
+
+                    if not np.isfinite(normalized):
+                        return 'black'
+
+                    try:
+                        r, g, b, _ = im.cmap(normalized)
+                    except Exception:
+                        return 'black'
+
+                    luminance = (0.2126 * float(r)) + (0.7152 * float(g)) + (0.0722 * float(b))
+                    return 'white' if luminance < 0.5 else 'black'
+
+                for row_idx in range(n_rows):
+                    for col_idx in range(n_cols):
+                        value = z_data[row_idx, col_idx]
+                        if not np.isfinite(value):
+                            continue
+                        ax.text(
+                            x_coords[col_idx],
+                            y_coords[row_idx],
+                            f"{value:.3g}",
+                            ha='center',
+                            va='center',
+                            color=_annotation_text_color(float(value))
+                        )
 
 
 def _render_3d_surface(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],
@@ -1942,7 +2056,12 @@ def _setup_scatter_tooltips(canvas: FigureCanvasTkAgg, fig: Figure) -> None:
             canvas.draw_idle()
             return
 
-        point_key = (id(scatter), ind)
+        try:
+            point_index = int(ind)
+        except Exception:
+            # Fallback for rare non-scalar indices returned by backend events
+            point_index = str(np.asarray(ind).reshape(-1).tolist())
+        point_key = (id(scatter), point_index)
         if point_key == tooltip_state['hover_key']:
             return
 
@@ -1956,7 +2075,7 @@ def _setup_scatter_tooltips(canvas: FigureCanvasTkAgg, fig: Figure) -> None:
             canvas.draw_idle()
             return
 
-        hover_annotation = _make_annotation(scatter, ind, is_pinned=False)
+        hover_annotation = _make_annotation(scatter, point_index, is_pinned=False)
         tooltip_state['hover_annotation'] = hover_annotation
         tooltip_state['hover_key'] = point_key
         canvas.draw_idle()
@@ -1973,7 +2092,11 @@ def _setup_scatter_tooltips(canvas: FigureCanvasTkAgg, fig: Figure) -> None:
         if scatter is None or ind is None:
             return
 
-        point_key = (id(scatter), ind)
+        try:
+            point_index = int(ind)
+        except Exception:
+            point_index = str(np.asarray(ind).reshape(-1).tolist())
+        point_key = (id(scatter), point_index)
         pinned_annotations = tooltip_state['pinned_annotations']
 
         # Toggle off if this point is already pinned
@@ -1991,7 +2114,7 @@ def _setup_scatter_tooltips(canvas: FigureCanvasTkAgg, fig: Figure) -> None:
             tooltip_state['hover_annotation'].remove()
             tooltip_state['hover_annotation'] = None
 
-        pinned_annotation = _make_annotation(scatter, ind, is_pinned=True)
+        pinned_annotation = _make_annotation(scatter, point_index, is_pinned=True)
         if pinned_annotation is not None:
             pinned_annotations[point_key] = pinned_annotation
         canvas.draw_idle()

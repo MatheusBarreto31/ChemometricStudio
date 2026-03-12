@@ -988,6 +988,13 @@ class AddGraphDialog:
             variable=self.show_labels_var
         ).pack(anchor=tk.W, pady=2)
 
+        self.annotate_heatmap_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            display_frame,
+            text=self._t("ui.labels.annotate_heatmap", "Annotate heatmap cells"),
+            variable=self.annotate_heatmap_var
+        ).pack(anchor=tk.W, pady=2)
+
         # Confidence ellipse options (scatter)
         conf_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.confidence_ellipses_scatter", "Confidence Ellipses (scatter)"), padding=10)
         conf_frame.pack(fill=tk.X, padx=5, pady=5)
@@ -1264,6 +1271,9 @@ class AddGraphDialog:
             config['show_origin'] = True
         if getattr(self, 'show_labels_var', None) and self.show_labels_var.get():
             config['show_labels'] = True
+        if self.graph_type_var.get() == 'heatmap':
+            annotate_var = getattr(self, 'annotate_heatmap_var', None)
+            config['annotate_heatmap'] = bool(annotate_var.get()) if annotate_var is not None else False
         if getattr(self, 'confidence_ellipses_var', None) and self.confidence_ellipses_var.get():
             config['confidence_ellipses'] = True
             confidence_level = self.confidence_level_var.get().strip() if getattr(self, 'confidence_level_var', None) else ''

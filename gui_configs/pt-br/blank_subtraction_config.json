@@ -1,0 +1,159 @@
+{
+  "display_name": "Subtracao de Branco",
+  "category": "2.Pré-Processamento",
+  "data_type": "all",
+  "input_aliases": {
+    "X_cal": "X Calibracao",
+    "X_val": "X Validacao",
+    "blank_path": "Arquivo de Branco",
+    "d_specs_separator": "Separador de Dados",
+    "d_specs_headlines": "Linhas de Cabecalho",
+    "d_specs_headcolumns": "Colunas de Cabecalho",
+    "d_specs_type": "Tipo de Dados",
+    "d_specs_dimensions": "Dimensoes dos Dados",
+    "nway_flag": "Dimensionalidade dos Dados",
+    "transpose": "Transpor",
+    "reshape_order": "Ordem de Reshape"
+  },
+  "output_aliases": {
+    "X_cal": "X Cal (Corrigido por Branco)",
+    "X_val": "X Val (Corrigido por Branco)"
+  },
+  "output_synonyms": {
+    "X_cal": ["X", "X_train"],
+    "X_val": ["X_test", "X_validation"]
+  },
+  "short_description": "Subtrai um arquivo de branco dos dados X de calibracao e validacao",
+  "long_description": "Esta etapa de pré-processamento carrega um arquivo de branco/referencia e o subtrai dos conjuntos X de calibracao e validacao. O arquivo de branco usa as mesmas configuracoes herdadas do Carregar Dados (separador, cabecalhos, tipo de dado, dimensoes, transposicao e ordem de reshape).\n\nComportamento:\n- O branco e carregado com as configuracoes herdadas de Carregar Dados\n- Se houver varios brancos, usa a media como referencia\n- A mesma referencia de branco e subtraida de X calibracao e X validacao\n- A saida preserva a dimensionalidade original",
+  "setup": {
+    "categories": ["Arquivo de Branco", "Entradas de Dados", "Formato de Dados"],
+    "layout": [
+      {
+        "name": "blank_path",
+        "label": "Arquivo de Branco",
+        "category": "Arquivo de Branco",
+        "widget": "file_selector",
+        "multiple": false,
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Arquivo contendo o sinal de branco/referencia para subtracao",
+        "ispath": true
+      },
+      {
+        "name": "X_cal",
+        "label": "Dados X Calibracao",
+        "category": "Entradas de Dados",
+        "widget": "data_input",
+        "required": true,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Roteado da saida da funcao anterior"
+      },
+      {
+        "name": "X_val",
+        "label": "Dados X Validacao",
+        "category": "Entradas de Dados",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Roteado da saida da funcao anterior"
+      },
+      {
+        "name": "d_specs_separator",
+        "label": "Separador de Dados",
+        "category": "Formato de Dados",
+        "widget": "combobox",
+        "values": ["Auto detect", "comma", "tabs", "spaces"],
+        "default": "Auto detect",
+        "required": true,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Herdado de Carregar Dados. Padrao: Auto detect."
+      },
+      {
+        "name": "d_specs_headlines",
+        "label": "Numero de Linhas de Cabecalho",
+        "category": "Formato de Dados",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": true,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Herdado de Carregar Dados. Deixe vazio para detectar automaticamente."
+      },
+      {
+        "name": "d_specs_headcolumns",
+        "label": "Numero de Colunas de Cabecalho",
+        "category": "Formato de Dados",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": true,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Herdado de Carregar Dados. Deixe vazio para detectar automaticamente."
+      },
+      {
+        "name": "d_specs_type",
+        "label": "Tipo de Dados",
+        "category": "Formato de Dados",
+        "widget": "combobox",
+        "values": ["Auto detect", "x_vector", "xy_vector", "xyz_vector", "x_matrix", "xy_matrix"],
+        "default": "Auto detect",
+        "required": true,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Herdado de Carregar Dados. Padrao: Auto detect."
+      },
+      {
+        "name": "d_specs_dimensions",
+        "label": "Dimensoes dos Dados",
+        "category": "Formato de Dados",
+        "widget": "entry_list",
+        "count_source": "nway_flag",
+        "default": "",
+        "required": false,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Herdado de Carregar Dados. Tamanho para cada eixo."
+      },
+      {
+        "name": "nway_flag",
+        "label": "Dimensionalidade dos Dados",
+        "category": "Formato de Dados",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": true,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Herdado automaticamente de Carregar Dados"
+      },
+      {
+        "name": "transpose",
+        "label": "Transpor",
+        "category": "Formato de Dados",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Herdado da configuracao de transposicao de Carregar Dados"
+      },
+      {
+        "name": "reshape_order",
+        "label": "Ordem de Reshape",
+        "category": "Formato de Dados",
+        "widget": "combobox",
+        "values": ["F", "C"],
+        "default": "F",
+        "required": false,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Herdado de Carregar Dados. F = Fortran/MATLAB, C = C/Python"
+      }
+    ]
+  }
+}

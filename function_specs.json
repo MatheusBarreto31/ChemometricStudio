@@ -9,11 +9,12 @@
     "workflow_ensemble_member": [],
     "workflow_ensemble_end": [],
     "cv_configuration": ["cv_config"],
-    "load_data": ["X_cal", "Y_cal", "axis_t_info", "smp_cal", "axis_n_info", "axis_nature", "dim_labels", "class_data_cal", "y_labels", "cal_metadata"],
+    "load_data": ["X_cal", "Y_cal", "axis_t_info", "smp_cal", "axis_n_info", "axis_nature", "dim_labels", "class_data_cal", "y_labels", "cal_metadata", "correlation_matrix"],
     "validation_data_main": ["X_cal", "Y_cal", "X_val", "Y_val", "smp_cal", "smp_val", "class_data_cal", "class_data_val", "cal_metadata", "val_metadata"],
     "baseline_correction": ["X_cal", "X_val", "axis_n_info", "axis_t_info"],
     "smoothing": ["X_cal", "X_val"],
     "center_and_scale": ["X_cal", "X_val", "was_scaled"],
+    "blank_subtraction": ["X_cal", "X_val"],
     "univariate_calibration": ["y_cal_pred", "y_val_pred", "models", "metrics", "cv_results"],
     "first_order_calibration": ["y_cal_pred", "y_val_pred", "y_cv_pred", "y_cal_true", "y_val_true", "model", "selected_parameter_name", "selected_parameter_value", "metrics", "cv_results", "optimization_results"],
     "pca_analysis": ["model_scores", "model_loadings", "val_scores", "model_scores_cv", "model_loadings_cv", "metrics", "cv_results", "data_shape", "data_shape_val", "axis_n_info", "pc_labels", "class_data_cal", "class_data_val", "smp_cal", "smp_val"],
@@ -62,6 +63,7 @@
       "polyorder"
     ],
     "center_and_scale": ["X_cal", "X_val", "scaling_method", "nway_flag"],
+    "blank_subtraction": ["X_cal", "X_val", "blank_path", "d_specs_separator", "d_specs_headlines", "d_specs_headcolumns", "d_specs_type", "d_specs_dimensions", "nway_flag", "transpose", "reshape_order"],
     "univariate_calibration": ["X_cal", "Y_cal", "X_val", "Y_val", "degree", "intercept", "cv_config"],
     "first_order_calibration": ["X_cal", "Y_cal", "X_val", "Y_val", "model_type", "n_components", "ridge_alpha", "lasso_alpha", "elastic_net_alpha", "elastic_net_l1_ratio", "random_forest_n_estimators", "svr_c", "svr_epsilon", "svr_gamma", "svr_kernel", "gradient_boosting_n_estimators", "gradient_boosting_learning_rate", "gradient_boosting_max_depth", "gradient_boosting_min_samples_leaf", "hist_gradient_boosting_n_estimators", "hist_gradient_boosting_learning_rate", "hist_gradient_boosting_max_depth", "hist_gradient_boosting_min_samples_leaf", "gaussian_process_alpha", "gaussian_process_length_scale", "gaussian_process_constant_value", "gaussian_process_n_restarts_optimizer", "kernel_pls_gamma", "kernel_pls_n_features", "local_method", "local_distance", "n_neighbors", "idw_power", "adaptive_alpha", "radius_threshold", "kernel_bandwidth", "optimize_parameters", "n_components_range", "ridge_alpha_range", "lasso_alpha_range", "elastic_net_alpha_range", "random_forest_n_estimators_range", "svr_c_range", "gradient_boosting_n_estimators_range", "hist_gradient_boosting_n_estimators_range", "gaussian_process_alpha_range", "n_neighbors_range", "idw_power_range", "adaptive_alpha_range", "radius_threshold_range", "kernel_bandwidth_range", "parameter_range", "cv_config", "was_scaled"],
     "pca_analysis": ["X_cal", "X_val", "n_components", "cv_config", "axis_n_info", "axis_nature", "class_data_cal", "class_data_val", "smp_cal", "smp_val"],
@@ -82,6 +84,7 @@
     "baseline_correction": ["chemometrics.data_processing", "baseline_correction"],
     "smoothing": ["chemometrics.data_processing", "smoothing"],
     "center_and_scale": ["chemometrics.data_processing", "center_and_scale"],
+    "blank_subtraction": ["chemometrics.data_processing", "blank_subtraction"],
     "univariate_calibration": ["chemometrics.univ_calibration", "univariate_calibration"],
     "first_order_calibration": ["chemometrics.first_order_calibration", "first_order_calibration"],
     "pca_analysis": ["chemometrics.pca_analysis", "pca_analysis"],
@@ -129,6 +132,9 @@
     },
     "center_and_scale": {
       "config_path": "gui_configs/center_normalize_config.json"
+    },
+    "blank_subtraction": {
+      "config_path": "gui_configs/blank_subtraction_config.json"
     },
     "univariate_calibration": {
       "config_path": "gui_configs/univariate_calibration_config.json"
@@ -285,6 +291,19 @@
       "X_val": "ndarray",
       "scaling_method": "str",
       "nway_flag": "int"
+    },
+    "blank_subtraction": {
+      "X_cal": "ndarray",
+      "X_val": "ndarray",
+      "blank_path": "str",
+      "d_specs_separator": "str",
+      "d_specs_headlines": "str",
+      "d_specs_headcolumns": "str",
+      "d_specs_type": "str",
+      "d_specs_dimensions": "str",
+      "nway_flag": "int",
+      "transpose": "bool",
+      "reshape_order": "str"
     },
     "univariate_calibration": {
       "X_cal": "ndarray",

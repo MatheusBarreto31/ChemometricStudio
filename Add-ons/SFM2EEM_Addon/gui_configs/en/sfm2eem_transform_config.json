@@ -165,15 +165,15 @@
               "graph_type": "heatmap",
               "x_axis": {
                 "data_source": "in.axis_n_info",
-                "index": 1,
-                "label": "in.dim_labels",
-                "l_index": 1
-              },
-              "y_axis": {
-                "data_source": "in.axis_n_info",
                 "index": 2,
                 "label": "in.dim_labels",
                 "l_index": 2
+              },
+              "y_axis": {
+                "data_source": "in.axis_n_info",
+                "index": 1,
+                "label": "in.dim_labels",
+                "l_index": 1
               },
               "aux_axis": {
                 "data_source": "in.axis_n_info",
@@ -207,15 +207,15 @@
               "graph_type": "heatmap",
               "x_axis": {
                 "data_source": "out.axis_n_info",
-                "index": 1,
-                "label": "out.dim_labels",
-                "l_index": 1
-              },
-              "y_axis": {
-                "data_source": "out.axis_n_info",
                 "index": 2,
                 "label": "out.dim_labels",
                 "l_index": 2
+              },
+              "y_axis": {
+                "data_source": "out.axis_n_info",
+                "index": 1,
+                "label": "out.dim_labels",
+                "l_index": 1
               },
               "aux_axis": {
                 "data_source": "out.axis_n_info",
@@ -260,15 +260,15 @@
               "graph_type": "heatmap",
               "x_axis": {
                 "data_source": "in.axis_n_info",
-                "index": 1,
-                "label": "in.dim_labels",
-                "l_index": 1
-              },
-              "y_axis": {
-                "data_source": "in.axis_n_info",
                 "index": 2,
                 "label": "in.dim_labels",
                 "l_index": 2
+              },
+              "y_axis": {
+                "data_source": "in.axis_n_info",
+                "index": 1,
+                "label": "in.dim_labels",
+                "l_index": 1
               },
               "aux_axis": {
                 "data_source": "in.axis_n_info",
@@ -302,15 +302,15 @@
               "graph_type": "heatmap",
               "x_axis": {
                 "data_source": "out.axis_n_info",
-                "index": 1,
-                "label": "out.dim_labels",
-                "l_index": 1
-              },
-              "y_axis": {
-                "data_source": "out.axis_n_info",
                 "index": 2,
                 "label": "out.dim_labels",
                 "l_index": 2
+              },
+              "y_axis": {
+                "data_source": "out.axis_n_info",
+                "index": 1,
+                "label": "out.dim_labels",
+                "l_index": 1
               },
               "aux_axis": {
                 "data_source": "out.axis_n_info",

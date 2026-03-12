@@ -493,6 +493,8 @@ class ChemometricsGUI:
             return normalized_type == 'contour'
         if option_key == 'flip_xy':
             return normalized_type in {'scatter', 'line', 'bar', 'histogram', 'heatmap', '3d_surf', 'contour'}
+        if option_key == 'annotate_heatmap':
+            return normalized_type == 'heatmap'
         if option_key in {'x_axis_type', 'y_axis_type'}:
             return normalized_type in {'line', 'scatter', 'heatmap', 'contour', '3d_surf', 'bar', 'histogram'}
         if option_key == 'z_axis_type':
@@ -1317,9 +1319,10 @@ class ChemometricsGUI:
         _add_toggle('show_labels', 'menu.graph_context.labels', 'Labels')
         _add_toggle('confidence_ellipses', 'menu.graph_context.ellipses', 'Ellipses')
         _add_toggle('use_wireframe', 'menu.graph_context.use_wireframe', 'Wireframe')
+        _add_toggle('annotate_heatmap', 'menu.graph_context.annotate_heatmap', 'Annotate Heatmap')
 
         if self._is_graph_option_supported(graph_type, 'flip_xy', config):
-            flip_default = normalized_graph_type == 'heatmap'
+            flip_default = False
             flip_current = _normalize_bool_setting(config.get('flip_xy'), flip_default)
             flip_var = tk.BooleanVar(value=flip_current)
             _keep_var_ref(flip_var)
@@ -2608,13 +2611,24 @@ class ChemometricsGUI:
         axis_root_menu = tk.Menu(menu, tearoff=0)
         axis_root_count = 0
 
+        flip_for_axis_menu = False
+        if self._is_graph_option_supported(graph_type, 'flip_xy', config):
+            flip_for_axis_menu = _normalize_bool_setting(config.get('flip_xy'), False)
+
         axis_specs = [
-            ('x_axis', 'x_axis_type', 'x_force_integer', 'x_reverse_axis', 'menu.graph_context.axis_x', 'X Axis'),
-            ('y_axis', 'y_axis_type', 'y_force_integer', 'y_reverse_axis', 'menu.graph_context.axis_y', 'Y Axis'),
-            ('z_axis', 'z_axis_type', 'z_force_integer', 'z_reverse_axis', 'menu.graph_context.axis_z', 'Z Axis')
+            ('x_axis', 'x_axis', 'x_axis_type', 'x_force_integer', 'x_reverse_axis', 'menu.graph_context.axis_x', 'X Axis'),
+            ('y_axis', 'y_axis', 'y_axis_type', 'y_force_integer', 'y_reverse_axis', 'menu.graph_context.axis_y', 'Y Axis'),
+            ('z_axis', 'z_axis', 'z_axis_type', 'z_force_integer', 'z_reverse_axis', 'menu.graph_context.axis_z', 'Z Axis')
         ]
 
-        for axis_key, axis_type_option, axis_force_option, axis_reverse_option, axis_label_key, axis_fallback in axis_specs:
+        if flip_for_axis_menu:
+            axis_specs = [
+                ('x_axis', 'y_axis', 'x_axis_type', 'x_force_integer', 'x_reverse_axis', 'menu.graph_context.axis_x', 'X Axis'),
+                ('y_axis', 'x_axis', 'y_axis_type', 'y_force_integer', 'y_reverse_axis', 'menu.graph_context.axis_y', 'Y Axis'),
+                ('z_axis', 'z_axis', 'z_axis_type', 'z_force_integer', 'z_reverse_axis', 'menu.graph_context.axis_z', 'Z Axis')
+            ]
+
+        for _display_axis_key, actual_axis_key, axis_type_option, axis_force_option, axis_reverse_option, axis_label_key, axis_fallback in axis_specs:
             has_axis_type = self._is_graph_option_supported(graph_type, axis_type_option, config)
             has_force_integer = self._is_graph_option_supported(graph_type, axis_force_option, config)
             has_reverse_axis = self._is_graph_option_supported(graph_type, axis_reverse_option, config)
@@ -2622,7 +2636,7 @@ class ChemometricsGUI:
                 continue
 
             axis_menu = tk.Menu(axis_root_menu, tearoff=0)
-            axis_cfg = config.get(axis_key, {}) if isinstance(config.get(axis_key), dict) else {}
+            axis_cfg = config.get(actual_axis_key, {}) if isinstance(config.get(actual_axis_key), dict) else {}
 
             if has_axis_type:
                 scale_menu = tk.Menu(axis_menu, tearoff=0)
@@ -2631,7 +2645,7 @@ class ChemometricsGUI:
                     axis_type_var.set('linear')
                 _keep_var_ref(axis_type_var)
 
-                def _set_axis_type(value: str, _axis_key=axis_key) -> None:
+                def _set_axis_type(value: str, _axis_key=actual_axis_key) -> None:
                     self._update_graph_axis_config_option(
                         instance_alias,
                         section_id,
@@ -2656,7 +2670,7 @@ class ChemometricsGUI:
                 force_var = tk.BooleanVar(value=bool(axis_cfg.get('force_integer', False)))
                 _keep_var_ref(force_var)
 
-                def _set_force_integer(_axis_key=axis_key, _force_var=force_var) -> None:
+                def _set_force_integer(_axis_key=actual_axis_key, _force_var=force_var) -> None:
                     self._update_graph_axis_config_option(
                         instance_alias,
                         section_id,
@@ -2679,7 +2693,7 @@ class ChemometricsGUI:
                 reverse_var = tk.BooleanVar(value=bool(axis_cfg.get('reverse_axis', False)))
                 _keep_var_ref(reverse_var)
 
-                def _set_reverse_axis(_axis_key=axis_key, _reverse_var=reverse_var) -> None:
+                def _set_reverse_axis(_axis_key=actual_axis_key, _reverse_var=reverse_var) -> None:
                     self._update_graph_axis_config_option(
                         instance_alias,
                         section_id,
@@ -8968,18 +8982,19 @@ class ChemometricsGUI:
                     # labels is a direct array
                     labels = labels_config
                 
-                # x-axis uses first dimension in active combination
+                # Heatmap matrices are row-major: first active dim -> rows (y),
+                # second active dim -> columns (x).
                 x_axis_config = None
-                if len(md_active_dims) > 0:
-                    dim_idx = md_active_dims[0]
+                if len(md_active_dims) > 1:
+                    dim_idx = md_active_dims[1]
                     x_label = labels[dim_idx] if dim_idx < len(labels) else f"Axis {dim_idx}"
                     x_axis_config = existing_x_axis.copy()
                     x_axis_config.update({'data_source': data_source, 'index': dim_idx, 'label': x_label})
                 
-                # y-axis uses second dimension in active combination
+                # First active dim maps to heatmap row axis (y).
                 y_axis_config = None
-                if len(md_active_dims) > 1:
-                    dim_idx = md_active_dims[1]
+                if len(md_active_dims) > 0:
+                    dim_idx = md_active_dims[0]
                     y_label = labels[dim_idx] if dim_idx < len(labels) else f"Axis {dim_idx}"
                     y_axis_config = existing_y_axis.copy()
                     y_axis_config.update({'data_source': data_source, 'index': dim_idx, 'label': y_label})
@@ -11019,17 +11034,18 @@ Count:
                             axis_data_full = self._get_data_from_source(outputs, data_source) if data_source else None
                             if axis_data_full is not None:
                                 if isinstance(axis_data_full, list):
-                                    # x-axis uses first dimension in active combination
-                                    if len(md_active_dims) > 0:
-                                        dim_idx = md_active_dims[0]
+                                    # Heatmap matrices are row-major: first active dim -> rows (y),
+                                    # second active dim -> columns (x).
+                                    if len(md_active_dims) > 1:
+                                        dim_idx = md_active_dims[1]
                                         if dim_idx < len(axis_data_full):
                                             x_data = np.array(axis_data_full[dim_idx])
                                             x_label = labels[dim_idx] if dim_idx < len(labels) else f"Axis {dim_idx}"
                                             x_axis_config = {'label': x_label}
                                     
-                                    # y-axis uses second dimension in active combination
-                                    if len(md_active_dims) > 1:
-                                        dim_idx = md_active_dims[1]
+                                    # First active dim maps to heatmap row axis (y).
+                                    if len(md_active_dims) > 0:
+                                        dim_idx = md_active_dims[0]
                                         if dim_idx < len(axis_data_full):
                                             y_data = np.array(axis_data_full[dim_idx])
                                             y_label = labels[dim_idx] if dim_idx < len(labels) else f"Axis {dim_idx}"
@@ -12222,18 +12238,19 @@ Count:
                     # labels is a direct array
                     labels = labels_config
                 
-                # x-axis uses first dimension in active combination
+                # Heatmap matrices are row-major: first active dim -> rows (y),
+                # second active dim -> columns (x).
                 x_axis_config = None
-                if len(md_active_dims) > 0:
-                    dim_idx = md_active_dims[0]
+                if len(md_active_dims) > 1:
+                    dim_idx = md_active_dims[1]
                     x_label = labels[dim_idx] if dim_idx < len(labels) else f"Axis {dim_idx}"
                     x_axis_config = existing_x_axis.copy()
                     x_axis_config.update({'data_source': data_source, 'index': dim_idx, 'label': x_label})
                 
-                # y-axis uses second dimension in active combination
+                # First active dim maps to heatmap row axis (y).
                 y_axis_config = None
-                if len(md_active_dims) > 1:
-                    dim_idx = md_active_dims[1]
+                if len(md_active_dims) > 0:
+                    dim_idx = md_active_dims[0]
                     y_label = labels[dim_idx] if dim_idx < len(labels) else f"Axis {dim_idx}"
                     y_axis_config = existing_y_axis.copy()
                     y_axis_config.update({'data_source': data_source, 'index': dim_idx, 'label': y_label})

@@ -4,6 +4,7 @@ from typing import Tuple, Optional, Union, List
 import numpy as np
 from scipy.signal import savgol_filter
 from scipy.ndimage import uniform_filter1d
+from chemometrics.data_input import load_data
 
 
 def _determine_dimensionality(X: np.ndarray) -> int:
@@ -415,3 +416,97 @@ def center_and_scale(
         X_val = _apply(X_val.copy())
 
     return X_cal, X_val, was_scaled
+
+
+def blank_subtraction(
+    X_cal: np.ndarray,
+    X_val: Optional[np.ndarray] = None,
+    blank_path: Optional[str] = None,
+    d_specs_separator: str = "Auto detect",
+    d_specs_headlines: str = "",
+    d_specs_headcolumns: str = "",
+    d_specs_type: str = "Auto detect",
+    d_specs_dimensions: Optional[Union[str, List[str]]] = None,
+    nway_flag: Optional[int] = None,
+    transpose: bool = False,
+    reshape_order: str = "F"
+) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+    """
+    Subtract a loaded blank/reference file from calibration and validation data.
+
+    The blank file is loaded using the same data-format parameters as load_data.
+    If the loaded blank has a sample axis, the mean blank profile is used.
+
+    Args:
+        X_cal: Calibration X data
+        X_val: Optional validation X data
+        blank_path: Path to blank/reference X file
+        d_specs_separator: File separator option inherited from load_data
+        d_specs_headlines: Header row setting inherited from load_data
+        d_specs_headcolumns: Header column setting inherited from load_data
+        d_specs_type: Data type option inherited from load_data
+        d_specs_dimensions: Optional shape/dimension info inherited from load_data
+        nway_flag: Data dimensionality flag inherited from load_data
+        transpose: Whether to transpose blank data during loading
+        reshape_order: Reshape order used when loading blank data
+
+    Returns:
+        Tuple (X_cal_subtracted, X_val_subtracted)
+    """
+    if not blank_path:
+        raise ValueError("blank_path is required for blank subtraction")
+
+    if nway_flag is None:
+        inferred_nway = max(1, int(X_cal.ndim) - 1)
+    else:
+        inferred_nway = int(nway_flag)
+
+    blank_X, _, _, _, _, _, _, _, _, _, _ = load_data(
+        d_specs_separator=d_specs_separator,
+        d_specs_headlines=d_specs_headlines,
+        d_specs_headcolumns=d_specs_headcolumns,
+        d_specs_type=d_specs_type,
+        d_specs_dimensions=d_specs_dimensions,
+        data_path=[blank_path],
+        nway_flag=inferred_nway,
+        transpose=transpose,
+        reshape_order=reshape_order
+    )
+
+    blank_arr = np.asarray(blank_X, dtype=float)
+    X_cal_arr = np.asarray(X_cal, dtype=float)
+
+    if blank_arr.ndim == X_cal_arr.ndim:
+        if blank_arr.shape[1:] != X_cal_arr.shape[1:]:
+            raise ValueError(
+                "Blank data dimensions do not match X_cal feature dimensions: "
+                f"blank shape {blank_arr.shape}, X_cal shape {X_cal_arr.shape}"
+            )
+        blank_reference = np.mean(blank_arr, axis=0)
+    elif blank_arr.ndim == X_cal_arr.ndim - 1:
+        if blank_arr.shape != X_cal_arr.shape[1:]:
+            raise ValueError(
+                "Blank data shape does not match X_cal feature dimensions: "
+                f"blank shape {blank_arr.shape}, expected {X_cal_arr.shape[1:]}"
+            )
+        blank_reference = blank_arr
+    else:
+        raise ValueError(
+            "Blank data dimensionality is incompatible with X_cal: "
+            f"blank ndim={blank_arr.ndim}, X_cal ndim={X_cal_arr.ndim}"
+        )
+
+    X_cal_out = X_cal_arr - blank_reference
+
+    if X_val is None:
+        return X_cal_out, None
+
+    X_val_arr = np.asarray(X_val, dtype=float)
+    if X_val_arr.shape[1:] != X_cal_arr.shape[1:]:
+        raise ValueError(
+            "X_val feature dimensions must match X_cal for blank subtraction: "
+            f"X_cal shape {X_cal_arr.shape}, X_val shape {X_val_arr.shape}"
+        )
+
+    X_val_out = X_val_arr - blank_reference
+    return X_cal_out, X_val_out

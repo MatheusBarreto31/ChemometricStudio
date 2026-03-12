@@ -682,6 +682,37 @@ def _initial_cp_factors(
     return factors
 
 
+def _constraint_enabled_for_mode(constraint_value: Any, mode: int) -> bool:
+    if constraint_value is None:
+        return False
+    if isinstance(constraint_value, dict):
+        return bool(constraint_value.get(int(mode), False))
+    if isinstance(constraint_value, (list, tuple)):
+        if 0 <= int(mode) < len(constraint_value):
+            return bool(constraint_value[int(mode)])
+        return False
+    return bool(constraint_value)
+
+
+def _stabilize_non_negative_init(
+    factors: List[np.ndarray],
+    non_negative_constraint: Any,
+    eps: float = 1e-12,
+) -> List[np.ndarray]:
+    """Make constrained non-negative initial factors feasible without dead columns."""
+    stabilized: List[np.ndarray] = []
+    for mode, factor in enumerate(factors):
+        arr = np.asarray(factor, dtype=float).copy()
+        if _constraint_enabled_for_mode(non_negative_constraint, mode):
+            arr = np.abs(arr)
+            col_norms = np.linalg.norm(arr, axis=0)
+            zero_cols = col_norms <= float(eps)
+            if np.any(zero_cols):
+                arr[:, zero_cols] = float(eps)
+        stabilized.append(arr)
+    return stabilized
+
+
 def _weighted_constrained_ao_admm_missing(
     X_proc: np.ndarray,
     mask: np.ndarray,
@@ -701,6 +732,7 @@ def _weighted_constrained_ao_admm_missing(
     fill_value = float(np.nanmean(X_obs)) if np.isfinite(np.nanmean(X_obs)) else 0.0
     X_filled = np.where(observed, X_obs, fill_value)
     factors = _initial_cp_factors(X_filled, int(rank), init, random_state)
+    factors = _stabilize_non_negative_init(factors, cleaned_constraints.get("non_negative"))
     weights = np.ones(int(rank), dtype=float)
 
     n_modes = X_obs.ndim
@@ -1329,6 +1361,7 @@ def _build_text_report(
     mapping: Dict[str, int],
     sweep_results: Optional[List[Dict[str, Any]]] = None,
     y_labels: Optional[Sequence[str]] = None,
+    auto_mapping_used: bool = False,
 ) -> str:
     cal = metrics.get("calibration", {}) if isinstance(metrics, dict) else {}
     lines: List[str] = []
@@ -1355,7 +1388,10 @@ def _build_text_report(
 
     models = metrics.get("calibration_models", []) if isinstance(metrics, dict) else []
     if models:
-        lines.append("Calibration statistics:")
+        if bool(auto_mapping_used):
+            lines.append("Calibration statistics (paired by maximum likelihood):")
+        else:
+            lines.append("Calibration statistics:")
         ordered_models = sorted(
             [m for m in models if isinstance(m, dict)],
             key=lambda item: int(_safe_float(item.get("component"), default=np.inf)),
@@ -1774,6 +1810,7 @@ def parafac_analysis(
         mapping={int(k) - 1: int(v) - 1 for k, v in result.get("component_y_mapping", {}).items()},
         sweep_results=sweep_results if sweep_mode else None,
         y_labels=y_labels_resolved,
+        auto_mapping_used=bool(result.get("auto_mapping_used", False)),
     )
 
     output = {

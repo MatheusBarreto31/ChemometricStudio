@@ -711,12 +711,13 @@
             "type": "graph",
             "config": {
               "graph_type": "heatmap",
-              "x_axis": {
+              "flip_xy": true,
+              "y_axis": {
                 "data_source": "mode_a_component_axis",
                 "force_integer": true,
                 "label": "Component"
               },
-              "y_axis": {
+              "x_axis": {
                 "data_source": "mode_a_sample_axis",
                 "force_integer": true,
                 "reverse_axis": true,
@@ -745,15 +746,15 @@
               },
               "x_axis": {
                 "data_source": "axis_n_info",
-                "index": 1,
-                "label": "dim_labels",
-                "l_index": 1
-              },
-              "y_axis": {
-                "data_source": "axis_n_info",
                 "index": 2,
                 "label": "dim_labels",
                 "l_index": 2
+              },
+              "y_axis": {
+                "data_source": "axis_n_info",
+                "index": 1,
+                "label": "dim_labels",
+                "l_index": 1
               },
               "z_axis": {
                 "data_source": "instrumental_profiles",

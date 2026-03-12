@@ -409,6 +409,31 @@ def _infer_data_type(data_paths: List[str], separator: Optional[str], num_headli
     return "x_matrix"
 
 
+def _calculate_correlation_matrix(X: np.ndarray) -> np.ndarray:
+    """Calculate Pearson correlation matrix for first-order (2D) data.
+    
+    Args:
+        X: 2D array of shape (n_samples, n_variables)
+        
+    Returns:
+        Correlation matrix of shape (n_variables, n_variables)
+    """
+    if X.ndim != 2:
+        raise ValueError(f"Expected 2D array, got shape {X.shape}")
+    
+    # Handle cases where X has NaN or is not numeric
+    X_clean = np.asarray(X, dtype=float)
+    
+    # Calculate correlation matrix
+    corr_matrix = np.corrcoef(X_clean.T)
+    
+    # If single variable, corrcoef returns scalar; convert to 2D array
+    if corr_matrix.ndim == 0:
+        corr_matrix = np.array([[corr_matrix]])
+    
+    return corr_matrix
+
+
 def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "", d_specs_headcolumns: str = "", d_specs_type: str = "Auto detect", d_specs_dimensions: Optional[List[str]] = None,
               data_path: Optional[List[str]] = None, nway_flag: int = 1, y_path: Optional[str] = None,
               var_path: Optional[List[str]] = None, smp_path: Optional[str] = None,
@@ -419,7 +444,7 @@ def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "
               y_labels: str = "", y_labels_from_file: bool = False,
               y_columns: str = "", class_columns: str = "", smp_column: str = "",
               cdata_path: Optional[str] = None,
-              source_metadata_overrides: Optional[Dict[str, Dict[str, Any]]] = None) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[List[List[str]]], List[str], Optional[List[np.ndarray]], List[str], List[str], Optional[List[Any]], List[str], Dict[str, Dict[str, Any]]]:
+              source_metadata_overrides: Optional[Dict[str, Dict[str, Any]]] = None) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[List[List[str]]], List[str], Optional[List[np.ndarray]], List[str], List[str], Optional[List[Any]], List[str], Dict[str, Dict[str, Any]], Optional[np.ndarray]]:
     """
     Load and organize chemometrics data.
 
@@ -466,6 +491,7 @@ def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "
         class_data_cal: List of class labels (or list of class-label rows for multi-layer files) or None
         y_labels: List of resolved Y labels used for Y columns
         cal_metadata: Dict with per-sample metadata extracted from source files
+        correlation_matrix: Correlation matrix (nway_flag==1) or None (2D array of shape (n_variables, n_variables))
     """
     normalized_data_paths = _normalize_data_path(data_path)
 
@@ -695,7 +721,16 @@ def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "
             if isinstance(entry, dict):
                 entry["y_labels"] = y_labels_copy
 
-    return X, Y, axis_t_info, smp_labels, axis_n_info, axis_nature_list, processed_dim_labels, class_data, resolved_y_labels, cal_metadata
+    # Calculate correlation matrix for first-order data
+    correlation_matrix = None
+    if nway_flag == 1 and X is not None:
+        try:
+            correlation_matrix = _calculate_correlation_matrix(X)
+        except Exception as e:
+            print(f"Warning: Could not calculate correlation matrix: {e}")
+            correlation_matrix = None
+
+    return X, Y, axis_t_info, smp_labels, axis_n_info, axis_nature_list, processed_dim_labels, class_data, resolved_y_labels, cal_metadata, correlation_matrix
 
 
 def _normalize_axis_nature(axis_nature: Optional[List[str]], nway_flag: int) -> List[str]:

@@ -40,7 +40,8 @@
     "axis_nature": "Axis Nature",
     "dim_labels": "Axis Titles",
     "class_data_cal": "Classification Data",
-    "cal_metadata": "Sample Metadata"
+    "cal_metadata": "Sample Metadata",
+    "correlation_matrix": "Correlation Matrix"
   },
   "output_synonyms": {
     "X_cal": [
@@ -79,6 +80,11 @@
     "cal_metadata": [
       "metadata",
       "train_metadata"
+    ],
+    "correlation_matrix": [
+      "pearson_correlation",
+      "correlation",
+      "corr_matrix"
     ]
   },
   "short_description": "Loads spectroscopic and response data from files",
@@ -767,6 +773,11 @@
       {
         "title": "Data Overview (Class)",
         "layout": "ew",
+        "condition": {
+          "parameter": "class_data_cal",
+          "operator": "exists",
+          "value": true
+        },
         "sections": [
           {
             "type": "graph",
@@ -891,6 +902,42 @@
             },
             "short_description": "Displays a compact text report about loaded data dimensions and counts.",
             "long_description": "This section provides a runtime text summary including number of loaded samples, dimensionality, overall size, shape, and availability of labels/targets."
+          }
+        ]
+      },
+      {
+        "title": "Correlation Matrix",
+        "layout": "fp",
+        "condition": {
+          "parameter": "nway_flag",
+          "operator": "==",
+          "value": "1"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "flip_xy": false,
+              "x_axis": {
+                "data_source": "axis_t_info",
+                "index": 1,
+                "label": "Variables"
+              },
+              "y_axis": {
+                "data_source": "axis_t_info",
+                "index": 1,
+                "reverse_axis": true,
+                "label": "Variables"
+              },
+              "z_axis": {
+                "data_source": "correlation_matrix",
+                "label": "Correlation"
+              },
+              "title": "Pearson Correlation Matrix"
+            },
+            "short_description": "Displays Pearson correlation matrix as a heatmap.",
+            "long_description": "This section visualizes the Pearson correlation coefficients between all variable pairs as a heatmap. Red indicates positive correlation, blue indicates negative correlation, and white indicates no correlation."
           }
         ]
       }
