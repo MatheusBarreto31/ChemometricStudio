@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PCA Analysis - Functions - Chemometric Studio User Manual</title>
+  <link rel="stylesheet" href="assets/css/manual.css">
+</head>
+<body data-manual-page="functions" data-manual-group="qa-functions">
+  <div data-manual-header></div>
+
+  <main class="layout">
+    <aside class="manual-sidebar" data-manual-sidebar data-reveal></aside>
+
+    <div class="content-column">
+      <section class="panel" data-reveal>
+        <h1>PCA Analysis</h1>
+        <p><a href="functions-category-analysis.html">Exploratory Analysis</a></p>
+      </section>
+
+      <section class="function-card" data-reveal>
+        <h2 class="function-title">PCA Analysis</h2>
+        <span class="function-category">Analysis</span>
+        <p><strong>Purpose:</strong> Perform principal component analysis for dimensionality reduction and exploratory interpretation.</p>
+
+        <div class="io-section">
+          <div class="io-title">Inputs:</div>
+          <ul class="io-list"><li><strong>X_cal</strong>, <strong>X_val</strong></li></ul>
+        </div>
+
+        <div class="io-section">
+          <div class="io-title">Outputs:</div>
+          <ul class="io-list">
+            <li><strong>model_scores</strong>, <strong>val_scores</strong></li>
+            <li><strong>model_loadings</strong></li>
+            <li><strong>metrics</strong>, <strong>cv_results</strong></li>
+          </ul>
+        </div>
+
+        <div class="io-section">
+          <div class="io-title">Key Parameters:</div>
+          <div class="param-group"><div class="param-name">n_components</div><div class="param-desc">Number of principal components</div></div>
+        </div>
+
+        <div class="use-case">
+          <div class="use-case-title">When to Use:</div>
+          <ul>
+            <li>To inspect sample structure and outliers</li>
+            <li>To reduce dimensionality for visualization</li>
+            <li>To evaluate variance patterns before predictive modeling</li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer data-manual-footer></footer>
+
+  <script src="assets/js/manual-common.js"></script>
+  <script src="assets/js/manual-shell.js"></script>
+  <script src="assets/js/manual.js"></script>
+</body>
+</html>

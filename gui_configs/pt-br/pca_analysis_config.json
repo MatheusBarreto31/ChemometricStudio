@@ -1,6 +1,6 @@
 {
   "display_name": "Análise PCA",
-  "category": "4.Redução de Dimensionalidade",
+  "category": "4.Análise Exploratória",
   "data_type": "firstorder",
   "input_aliases": {
     "X_cal": "X Calibração",

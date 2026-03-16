@@ -7,6 +7,7 @@
   const pageKey = document.body.getAttribute("data-manual-page") || "home";
   const currentGroup = document.body.getAttribute("data-manual-group") || "qa-home";
   const currentHash = window.location.hash || "";
+  const currentPage = (window.location.pathname.split("/").pop() || "index.html").toLowerCase();
 
   const headerHost = document.querySelector("[data-manual-header]");
   const sidebarHost = document.querySelector("[data-manual-sidebar]");
@@ -39,8 +40,11 @@
             let active = "";
             if (item.key === pageKey) {
               const hashIndex = item.href.indexOf("#");
+              const itemPage = (hashIndex >= 0 ? item.href.slice(0, hashIndex) : item.href).toLowerCase();
               const itemHash = hashIndex >= 0 ? item.href.slice(hashIndex) : "";
-              if ((itemHash && itemHash === currentHash) || (!itemHash && !currentHash)) {
+              const pageMatches = itemPage === currentPage;
+              const hashMatches = (itemHash && itemHash === currentHash) || (!itemHash && !currentHash);
+              if (pageMatches && hashMatches) {
                 active = " class=\"active\"";
               }
             }

@@ -16,34 +16,53 @@
       <section class="grid" id="setup-tab" data-reveal>
         <article class="panel">
           <h1>Setup Tab</h1>
-          <p>The Setup tab is where you build and configure the methodology pipeline.</p>
-          <h2>Checklist</h2>
+          <p>The Setup tab is where you build the methodology pipeline by selecting and configuring functions.</p>
+          <h2>Basic Workflow</h2>
           <ol class="step-list">
-            <li>Browse function categories in the left panel.</li>
-            <li>Add functions to Methodology in execution order.</li>
-            <li>Select each instance and provide required parameters.</li>
-            <li>Save the model periodically using <strong>File -> Save Model</strong>.</li>
+            <li><strong>Add Functions:</strong> Click category names in the left panel to expand available functions.</li>
+            <li><strong>Add to Methodology:</strong> Click on a function to add an instance to your Methodology list (right side).</li>
+            <li><strong>Configure:</strong> Select each instance and fill in its required parameters in the lower panel.</li>
+            <li><strong>Review Execution Order:</strong> Functions execute top-to-bottom in the Methodology list—ensure data flows logically.</li>
+            <li><strong>Save:</strong> Use <strong>File → Save Model</strong> to persist your pipeline as <code>model.json</code>.</li>
           </ol>
         </article>
         <aside class="panel alt">
-          <h2>Best Practice</h2>
-          <p>Configure inputs and preprocessing first. Then add model and validation steps. This makes routing and debugging easier.</p>
+          <h2>Typical Function Order</h2>
+          <ol class="step-list">
+            <li>Load Data (or Validation Data)</li>
+            <li>Preprocessing (Baseline, Smoothing, Center &amp; Scale)</li>
+            <li>Modeling (PLS, PCA, PARAFAC)</li>
+          </ol>
+          <p>Most routing is handled automatically. See <a href="workflow-guide.html#routing-tab">Routing Tab</a> for advanced scenarios.</p>
         </aside>
       </section>
 
       <section class="panel" id="routing-tab" data-reveal>
-        <h2>Routing Tab</h2>
-        <p>Routing defines exactly how data moves between functions.</p>
-        <div class="media-card">
-          <img src="assets/images/workflow-map.svg" alt="Routing map diagram">
-        </div>
+        <h2>Routing Tab (Advanced)</h2>
+        <p><strong>Most users can skip this section.</strong> The system automatically routes function outputs to inputs where parameter names match. Only use the Routing tab if you need to:</p>
+        <ul>
+          <li>Override automatic routing behavior</li>
+          <li>Route outputs to non-obvious inputs</li>
+          <li>Debug complex workflows with many parallel branches</li>
+        </ul>
+
+        <h3>How Routing Works</h3>
+        <p>When you add functions to your methodology, the system automatically connects outputs from one function to inputs of downstream functions based on <strong>parameter names</strong>. For example:</p>
+        <ul>
+          <li>Load Data outputs <strong>X_cal</strong> → Baseline Correction receives <strong>X_cal</strong></li>
+          <li>Baseline Correction outputs <strong>X_cal</strong> → Next function receives <strong>X_cal</strong></li>
+        </ul>
+
+        <h3>When to Use Manual Routing</h3>
         <ol class="step-list">
-          <li>Pick a source function output.</li>
-          <li>Pick the destination function input.</li>
-          <li>Create the route and confirm it appears in the map.</li>
-          <li>Repeat until all required inputs are connected.</li>
+          <li>Identify the function whose output you want to route (source).</li>
+          <li>Identify the function that should receive that output (destination).</li>
+          <li>Select the specific output parameter name.</li>
+          <li>Select the destination function input parameter.</li>
+          <li>Create the route and verify it displays in the routing map.</li>
         </ol>
-        <div class="note">If the model fails quickly, check for missing routes first.</div>
+
+        <div class="note">For typical workflows (sequential data input → preprocessing → modeling), manual routing is <strong>not required</strong>.</div>
       </section>
 
       <section class="panel" id="execution-controls" data-reveal>

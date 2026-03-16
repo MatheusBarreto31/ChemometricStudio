@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ensemble Start Member End - Functions - Chemometric Studio User Manual</title>
+  <link rel="stylesheet" href="assets/css/manual.css">
+</head>
+<body data-manual-page="functions" data-manual-group="qa-functions">
+  <div data-manual-header></div>
+
+  <main class="layout">
+    <aside class="manual-sidebar" data-manual-sidebar data-reveal></aside>
+
+    <div class="content-column">
+      <section class="panel" data-reveal>
+        <h1>Ensemble Start, Member, and End</h1>
+        <p><a href="functions-category-workflow.html">Workflow Control</a></p>
+      </section>
+
+      <section class="function-card" data-reveal>
+        <h2 class="function-title">Ensemble Start, Member, and End</h2>
+        <span class="function-category">Workflow</span>
+        <p><strong>Purpose:</strong> Combine predictions from multiple members using averaging, voting, or stacking.</p>
+
+        <div class="io-section">
+          <div class="io-title">Inputs:</div>
+          <ul class="io-list"><li>Member predictions with aligned sample identifiers</li></ul>
+        </div>
+
+        <div class="io-section">
+          <div class="io-title">Outputs:</div>
+          <ul class="io-list">
+            <li>Aggregated predictions and truth arrays</li>
+            <li><strong>metrics</strong>, <strong>cv_results</strong>, and member metadata</li>
+          </ul>
+        </div>
+
+        <div class="io-section">
+          <div class="io-title">Key Parameters:</div>
+          <div class="param-group"><div class="param-name">ensemble_task_type</div><div class="param-desc">Regression or classification ensemble mode</div></div>
+          <div class="param-group"><div class="param-name">regression_aggregation_method</div><div class="param-desc">Average, weighted, stacking, and similar options</div></div>
+          <div class="param-group"><div class="param-name">classification_aggregation_method</div><div class="param-desc">Voting or stacking options for classes</div></div>
+          <div class="param-group"><div class="param-name">weights</div><div class="param-desc">Optional member weights for weighted aggregation</div></div>
+        </div>
+
+        <div class="use-case">
+          <div class="use-case-title">When to Use:</div>
+          <ul>
+            <li>To improve robustness across model families</li>
+            <li>To combine specialists trained with different preprocessing</li>
+            <li>To test stacking meta-model workflows</li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer data-manual-footer></footer>
+
+  <script src="assets/js/manual-common.js"></script>
+  <script src="assets/js/manual-shell.js"></script>
+  <script src="assets/js/manual.js"></script>
+</body>
+</html>

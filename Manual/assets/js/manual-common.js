@@ -5,6 +5,7 @@ window.MANUAL_COMMON = {
     { key: "home", label: "Home", href: "index.html" },
     { key: "start", label: "Getting Started", href: "getting-started.html" },
     { key: "workflow", label: "Workflow", href: "workflow-guide.html" },
+    { key: "functions", label: "Functions", href: "functions-reference.html" },
     { key: "analysis", label: "Analysis and Reporting", href: "analysis-reporting.html" },
     { key: "support", label: "Settings and Help", href: "settings-support.html" }
   ],
@@ -38,6 +39,19 @@ window.MANUAL_COMMON = {
       ]
     },
     {
+      id: "qa-functions",
+      label: "Functions Reference",
+      items: [
+        { key: "functions", label: "Category Index", href: "functions-reference.html" },
+        { key: "functions", label: "Data Input and Validation", href: "functions-category-data-input.html" },
+        { key: "functions", label: "Preprocessing", href: "functions-category-preprocessing.html" },
+        { key: "functions", label: "Calibration and Modeling", href: "functions-category-calibration.html" },
+        { key: "functions", label: "Exploratory Analysis", href: "functions-category-analysis.html" },
+        { key: "functions", label: "Workflow Control", href: "functions-category-workflow.html" },
+        { key: "functions", label: "Cross-Validation Configuration", href: "functions-category-cv-config.html" }
+      ]
+    },
+    {
       id: "qa-analysis",
       label: "Analysis and Reporting",
       items: [
@@ -58,6 +72,7 @@ window.MANUAL_COMMON = {
   ],
   footerByPage: {
     home: "Manual root: <code>Manual/index.html</code>.",
+    functions: "Functions are organized into category pages, and each function has its own dedicated page.",
     start: "Continue to <a href=\"workflow-guide.html\">Workflow Guide</a>.",
     workflow: "Continue to <a href=\"analysis-reporting.html\">Analysis and Reporting</a>.",
     analysis: "Continue to <a href=\"settings-support.html\">Settings and Support</a>.",

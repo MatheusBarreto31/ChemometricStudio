@@ -239,6 +239,106 @@ pre {
   border: 1px solid var(--border);
 }
 
+.function-card {
+  margin: 1.25rem 0;
+  border-left: 4px solid var(--primary);
+  padding: 1rem;
+  background: #f9f9f9;
+  border-radius: 8px;
+}
+
+.function-title {
+  color: var(--primary-strong);
+  margin-top: 0;
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
+.function-category {
+  display: inline-block;
+  background: var(--primary);
+  color: #ffffff;
+  padding: 0.25rem 0.72rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  margin-bottom: 0.75rem;
+}
+
+.io-section {
+  margin: 1rem 0;
+}
+
+.io-title {
+  font-weight: 600;
+  color: #333333;
+  margin-bottom: 0.5rem;
+  font-size: 0.95rem;
+}
+
+.io-list {
+  margin: 0.5rem 0;
+  padding-left: 1.4rem;
+}
+
+.param-group {
+  margin: 0.8rem 0;
+  padding-left: 0.75rem;
+  border-left: 2px solid #ddd;
+}
+
+.param-name {
+  font-weight: 600;
+  color: #555555;
+}
+
+.param-desc {
+  color: #666666;
+  font-size: 0.92rem;
+  margin-left: 0.15rem;
+}
+
+.use-case {
+  background: #e8f4f8;
+  padding: 0.9rem;
+  border-radius: 8px;
+  margin: 1rem 0;
+}
+
+.use-case-title {
+  font-weight: 600;
+  color: var(--primary-strong);
+  margin-bottom: 0.5rem;
+}
+
+.note-section {
+  background: #fef5e7;
+  padding: 0.9rem;
+  border-left: 4px solid #f39c12;
+  margin: 1rem 0;
+  border-radius: 8px;
+}
+
+.category-links,
+.category-overview-links {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.category-links li,
+.category-overview-links li {
+  margin-bottom: 0.5rem;
+}
+
+.category-links a,
+.category-overview-links a {
+  text-decoration: none;
+}
+
+.category-links a:hover,
+.category-overview-links a:hover {
+  text-decoration: underline;
+}
+
 .animated-badge {
   display: inline-block;
   padding: 0.3rem 0.65rem;

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Load Data - Functions - Chemometric Studio User Manual</title>
+  <link rel="stylesheet" href="assets/css/manual.css">
+</head>
+<body data-manual-page="functions" data-manual-group="qa-functions">
+  <div data-manual-header></div>
+
+  <main class="layout">
+    <aside class="manual-sidebar" data-manual-sidebar data-reveal></aside>
+
+    <div class="content-column">
+      <section class="panel" data-reveal>
+        <h1>Load Data</h1>
+        <p><a href="functions-category-data-input.html">Data Input and Validation</a></p>
+      </section>
+
+      <section class="function-card" data-reveal>
+        <h2 class="function-title">Load Data</h2>
+        <span class="function-category">Data Input</span>
+        <p><strong>Purpose:</strong> Load spectroscopic or multivariate data from files into the pipeline.</p>
+
+        <div class="io-section">
+          <div class="io-title">Outputs:</div>
+          <ul class="io-list">
+            <li><strong>X_cal</strong>: Calibration data matrix</li>
+            <li><strong>Y_cal</strong>: Calibration target values</li>
+            <li><strong>smp_cal</strong>: Calibration sample identifiers</li>
+            <li><strong>class_data_cal</strong>: Class labels when available</li>
+            <li><strong>dim_labels</strong>: Data dimension names</li>
+            <li><strong>axis_n_info</strong>: Numeric axis metadata</li>
+          </ul>
+        </div>
+
+        <div class="io-section">
+          <div class="io-title">Key Parameters:</div>
+          <div class="param-group"><div class="param-name">data_path</div><div class="param-desc">Path(s) to CSV, Excel, or text files</div></div>
+          <div class="param-group"><div class="param-name">d_specs_separator</div><div class="param-desc">Delimiter type or auto-detect</div></div>
+          <div class="param-group"><div class="param-name">d_specs_headlines</div><div class="param-desc">Header rows to skip</div></div>
+          <div class="param-group"><div class="param-name">nway_flag</div><div class="param-desc">Data dimensionality (2D, 3D, 4D)</div></div>
+          <div class="param-group"><div class="param-name">y_path</div><div class="param-desc">Optional response file</div></div>
+          <div class="param-group"><div class="param-name">scale_type</div><div class="param-desc">Initial scaling mode</div></div>
+        </div>
+
+        <div class="use-case">
+          <div class="use-case-title">When to Use:</div>
+          <ul>
+            <li>At the start of almost every workflow</li>
+            <li>When loading 2D or multi-way arrays</li>
+            <li>When importing mixed file formats</li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer data-manual-footer></footer>
+
+  <script src="assets/js/manual-common.js"></script>
+  <script src="assets/js/manual-shell.js"></script>
+  <script src="assets/js/manual.js"></script>
+</body>
+</html>

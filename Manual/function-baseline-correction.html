@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Baseline Correction - Functions - Chemometric Studio User Manual</title>
+  <link rel="stylesheet" href="assets/css/manual.css">
+</head>
+<body data-manual-page="functions" data-manual-group="qa-functions">
+  <div data-manual-header></div>
+
+  <main class="layout">
+    <aside class="manual-sidebar" data-manual-sidebar data-reveal></aside>
+
+    <div class="content-column">
+      <section class="panel" data-reveal>
+        <h1>Baseline Correction</h1>
+        <p><a href="functions-category-preprocessing.html">Preprocessing</a></p>
+      </section>
+
+      <section class="function-card" data-reveal>
+        <h2 class="function-title">Baseline Correction</h2>
+        <span class="function-category">Preprocessing</span>
+        <p><strong>Purpose:</strong> Remove systematic baseline shifts common in spectroscopy.</p>
+
+        <div class="io-section">
+          <div class="io-title">Inputs:</div>
+          <ul class="io-list"><li><strong>X_cal</strong>, <strong>X_val</strong></li></ul>
+        </div>
+
+        <div class="io-section">
+          <div class="io-title">Outputs:</div>
+          <ul class="io-list"><li><strong>X_cal</strong>, <strong>X_val</strong> baseline-corrected</li></ul>
+        </div>
+
+        <div class="io-section">
+          <div class="io-title">Key Parameters:</div>
+          <div class="param-group"><div class="param-name">method</div><div class="param-desc">msc, snv, moving_average, or derivative</div></div>
+          <div class="param-group"><div class="param-name">window_size</div><div class="param-desc">Window size for moving average</div></div>
+          <div class="param-group"><div class="param-name">direction</div><div class="param-desc">Axis for multi-way correction</div></div>
+        </div>
+
+        <div class="use-case">
+          <div class="use-case-title">When to Use:</div>
+          <ul>
+            <li>When spectra show scatter or baseline drift</li>
+            <li>As an early preprocessing step</li>
+            <li>Before smoothing and scaling</li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer data-manual-footer></footer>
+
+  <script src="assets/js/manual-common.js"></script>
+  <script src="assets/js/manual-shell.js"></script>
+  <script src="assets/js/manual.js"></script>
+</body>
+</html>

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Smoothing - Functions - Chemometric Studio User Manual</title>
+  <link rel="stylesheet" href="assets/css/manual.css">
+</head>
+<body data-manual-page="functions" data-manual-group="qa-functions">
+  <div data-manual-header></div>
+
+  <main class="layout">
+    <aside class="manual-sidebar" data-manual-sidebar data-reveal></aside>
+
+    <div class="content-column">
+      <section class="panel" data-reveal>
+        <h1>Smoothing</h1>
+        <p><a href="functions-category-preprocessing.html">Preprocessing</a></p>
+      </section>
+
+      <section class="function-card" data-reveal>
+        <h2 class="function-title">Smoothing</h2>
+        <span class="function-category">Preprocessing</span>
+        <p><strong>Purpose:</strong> Reduce noise with smoothing filters while preserving signal structure.</p>
+
+        <div class="io-section">
+          <div class="io-title">Inputs:</div>
+          <ul class="io-list"><li><strong>X_cal</strong>, <strong>X_val</strong></li></ul>
+        </div>
+
+        <div class="io-section">
+          <div class="io-title">Outputs:</div>
+          <ul class="io-list"><li><strong>X_cal</strong>, <strong>X_val</strong> smoothed</li></ul>
+        </div>
+
+        <div class="io-section">
+          <div class="io-title">Key Parameters:</div>
+          <div class="param-group"><div class="param-name">method</div><div class="param-desc">savitzky_golay or moving_average</div></div>
+          <div class="param-group"><div class="param-name">window_size</div><div class="param-desc">Smoothing window length</div></div>
+          <div class="param-group"><div class="param-name">polyorder</div><div class="param-desc">Polynomial order for Savitzky-Golay</div></div>
+        </div>
+
+        <div class="use-case">
+          <div class="use-case-title">When to Use:</div>
+          <ul>
+            <li>When raw spectra are noisy</li>
+            <li>After baseline correction</li>
+            <li>Before calibration modeling</li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer data-manual-footer></footer>
+
+  <script src="assets/js/manual-common.js"></script>
+  <script src="assets/js/manual-shell.js"></script>
+  <script src="assets/js/manual.js"></script>
+</body>
+</html>

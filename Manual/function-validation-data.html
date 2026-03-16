@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Validation Data - Functions - Chemometric Studio User Manual</title>
+  <link rel="stylesheet" href="assets/css/manual.css">
+</head>
+<body data-manual-page="functions" data-manual-group="qa-functions">
+  <div data-manual-header></div>
+
+  <main class="layout">
+    <aside class="manual-sidebar" data-manual-sidebar data-reveal></aside>
+
+    <div class="content-column">
+      <section class="panel" data-reveal>
+        <h1>Validation Data</h1>
+        <p><a href="functions-category-data-input.html">Data Input and Validation</a></p>
+      </section>
+
+      <section class="function-card" data-reveal>
+        <h2 class="function-title">Validation Data</h2>
+        <span class="function-category">Data Input</span>
+        <p><strong>Purpose:</strong> Create or load a validation set separate from calibration data.</p>
+
+        <div class="io-section">
+          <div class="io-title">Inputs:</div>
+          <ul class="io-list">
+            <li><strong>X_cal</strong>, <strong>Y_cal</strong>, <strong>smp_cal</strong> from previous steps</li>
+          </ul>
+        </div>
+
+        <div class="io-section">
+          <div class="io-title">Outputs:</div>
+          <ul class="io-list">
+            <li><strong>X_val</strong>, <strong>Y_val</strong>: Validation data and targets</li>
+            <li><strong>smp_val</strong>: Validation sample identifiers</li>
+          </ul>
+        </div>
+
+        <div class="io-section">
+          <div class="io-title">Key Parameters:</div>
+          <div class="param-group"><div class="param-name">validation_mode</div><div class="param-desc">Create internally or load from files</div></div>
+          <div class="param-group"><div class="param-name">creationMethod</div><div class="param-desc">Random, stratified, or systematic split</div></div>
+          <div class="param-group"><div class="param-name">calProportion</div><div class="param-desc">Calibration proportion from 0 to 1</div></div>
+        </div>
+
+        <div class="use-case">
+          <div class="use-case-title">When to Use:</div>
+          <ul>
+            <li>When you need independent model validation</li>
+            <li>After loading calibration-only data</li>
+            <li>Before preprocessing and modeling</li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer data-manual-footer></footer>
+
+  <script src="assets/js/manual-common.js"></script>
+  <script src="assets/js/manual-shell.js"></script>
+  <script src="assets/js/manual.js"></script>
+</body>
+</html>
