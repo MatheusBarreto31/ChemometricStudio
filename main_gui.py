@@ -10253,12 +10253,31 @@ class ChemometricsGUI:
             if not nav_axes:
                 return
             
-            # Get the data to determine shape/bounds
+            # Get a representative source array to determine shape/bounds.
+            # Support both single-source tables (data_source) and multi-column tables (columns).
+            data = None
             data_source = config.get('data_source')
-            if not data_source or data_source not in outputs:
+            if data_source and data_source in outputs:
+                data = outputs[data_source]
+            else:
+                columns_cfg = config.get('columns', [])
+                if isinstance(columns_cfg, list):
+                    for col_spec in columns_cfg:
+                        if not isinstance(col_spec, dict):
+                            continue
+                        col_source = col_spec.get('data_source')
+                        col_nested = col_spec.get('nested_key')
+                        if not col_source:
+                            continue
+                        candidate = self._get_data_from_source(outputs, col_source, col_nested)
+                        if candidate is None:
+                            continue
+                        data = candidate
+                        break
+
+            if data is None:
                 return
-            
-            data = outputs[data_source]
+
             if not isinstance(data, np.ndarray):
                 try:
                     data = np.array(data)
@@ -10306,7 +10325,11 @@ class ChemometricsGUI:
                 
                 # Axis label
                 label_text = f"{axis_name}: {current_index + 1}/{max_index + 1}"
-                label = ttk.Label(axis_frame, text=label_text, width=14)
+                show_inline_pairing_hint = not bool(config.get('variable_labels'))
+                pairing_hint = self._get_table_pairing_hint(outputs, config, axis_name, dimension, current_index)
+                if show_inline_pairing_hint and pairing_hint:
+                    label_text = f"{label_text} ({pairing_hint})"
+                label = ttk.Label(axis_frame, text=label_text)
                 label.pack(side=tk.LEFT, padx=3)
                 
                 # Previous button
@@ -10334,6 +10357,18 @@ class ChemometricsGUI:
                     )
                 )
                 next_btn.pack(side=tk.LEFT, padx=1)
+
+                # Variable labels - show current value label after buttons (graph-style)
+                var_labels_config = config.get('variable_labels')
+                if var_labels_config:
+                    var_label_text = self._get_variable_label(outputs, var_labels_config, dimension, current_index)
+                    if var_label_text:
+                        var_label = ttk.Label(axis_frame, text=f"[{var_label_text}]", foreground="gray")
+                        var_label.pack(side=tk.LEFT, padx=5)
+                        if not hasattr(self, '_var_labels'):
+                            self._var_labels = {}
+                        var_label_key = (instance_alias, section_id, dimension, axis_name, None)
+                        self._var_labels[var_label_key] = (var_label, var_labels_config, dimension)
                 
                 # Store reference for updates
                 if not hasattr(self, '_table_nav_labels'):
@@ -10343,6 +10378,53 @@ class ChemometricsGUI:
         
         except Exception as e:
             print(f"Error creating table navigation controls: {str(e)}")
+
+    def _get_table_pairing_hint(self, outputs: dict, config: dict, axis_name: str,
+                                dimension: int, current_index: int) -> str:
+        """Return a concise pairing hint (e.g., C2->Y1) for table slice navigation."""
+        try:
+            if dimension != 1:
+                return ""
+
+            labels_source = config.get('pairing_labels_source', 'parafac_pairing_labels')
+            labels_value = self._get_data_from_source(outputs, labels_source)
+            if isinstance(labels_value, np.ndarray):
+                labels_value = np.asarray(labels_value).reshape(-1).tolist()
+            if isinstance(labels_value, list) and int(current_index) < len(labels_value):
+                label_text = str(labels_value[int(current_index)]).strip()
+                if label_text:
+                    return label_text
+
+            axis_text = str(axis_name or "").lower()
+            if "pair" not in axis_text and "y" not in axis_text:
+                return ""
+
+            mapping_source = config.get('pairing_mapping_source', 'component_y_mapping')
+            mapping_raw = self._get_data_from_source(outputs, mapping_source)
+            if not isinstance(mapping_raw, dict) or not mapping_raw:
+                return ""
+
+            target_y_col = int(current_index) + 1
+            matched_components = []
+            for comp_key, y_col_value in mapping_raw.items():
+                try:
+                    comp_idx = int(comp_key)
+                    y_col = int(y_col_value)
+                except (TypeError, ValueError):
+                    continue
+                if y_col == target_y_col:
+                    matched_components.append(comp_idx)
+
+            if not matched_components:
+                return f"Y{target_y_col} unpaired"
+
+            matched_components = sorted(set(int(c) for c in matched_components))
+            if len(matched_components) == 1:
+                return f"C{matched_components[0]}->Y{target_y_col}"
+            comp_text = ",".join(str(c) for c in matched_components)
+            return f"C[{comp_text}]->Y{target_y_col}"
+        except Exception:
+            return ""
     
     def _on_table_navigate_slice(self, instance_alias: str, section_id: tuple, direction: int,
                                  dimension: int, axis_name: str, max_index: int) -> None:
@@ -10377,13 +10459,84 @@ class ChemometricsGUI:
                 if label_key in self._table_nav_labels:
                     index_label, full_label = self._table_nav_labels[label_key]
                     index_label.config(text=str(new_idx + 1))
-                    full_label.config(text=f"{axis_name}: {new_idx + 1}/{max_index + 1}")
+                    analysis_info = self.analysis_data.get(instance_alias, {})
+                    execution_results = analysis_info.get('execution_results', {})
+                    outputs = self._get_execution_data_sources(execution_results, instance_alias)
+
+                    pages = analysis_info.get('pages', []) if isinstance(analysis_info, dict) else []
+                    page_idx, section_idx = section_id
+                    section_cfg = {}
+                    if 0 <= page_idx < len(pages):
+                        sections = pages[page_idx].get('sections', []) if isinstance(pages[page_idx], dict) else []
+                        if 0 <= section_idx < len(sections) and isinstance(sections[section_idx], dict):
+                            section_cfg = sections[section_idx].get('config', {}) or {}
+
+                    label_text = f"{axis_name}: {new_idx + 1}/{max_index + 1}"
+                    show_inline_pairing_hint = not bool(section_cfg.get('variable_labels'))
+                    pairing_hint = self._get_table_pairing_hint(outputs, section_cfg, axis_name, dimension, new_idx)
+                    if show_inline_pairing_hint and pairing_hint:
+                        label_text = f"{label_text} ({pairing_hint})"
+                    full_label.config(text=label_text)
+
+            if hasattr(self, '_var_labels'):
+                stale_var_keys = []
+                for key, var_tuple in list(self._var_labels.items()):
+                    if len(key) != 5:
+                        continue
+                    key_instance, key_section, key_dimension, _axis_name, key_target_axis = key
+                    if key_instance != instance_alias or key_section != section_id:
+                        continue
+                    if key_dimension != dimension or key_target_axis is not None:
+                        continue
+                    try:
+                        var_label, var_labels_config, dim = var_tuple
+                        if not var_label.winfo_exists():
+                            stale_var_keys.append(key)
+                            continue
+                        var_label_text = self._get_variable_label(outputs, var_labels_config, dim, new_idx)
+                        if var_label_text:
+                            var_label.config(text=f"[{var_label_text}]")
+                        else:
+                            var_label.config(text="")
+                    except Exception:
+                        stale_var_keys.append(key)
+
+                for stale_key in stale_var_keys:
+                    self._var_labels.pop(stale_key, None)
             
             # Refresh table display
             self._refresh_table(instance_alias, section_id)
         
         except Exception as e:
             print(f"Error navigating table slice: {str(e)}")
+
+    def _resolve_table_slice_title(self, outputs: dict, config: dict, indices: dict) -> str:
+        """Resolve a slice-aware subtitle/title token for tables (e.g., selected Y label)."""
+        try:
+            source = config.get('slice_title_source')
+            if not source:
+                return ""
+            values = self._get_data_from_source(outputs, source)
+            if values is None:
+                return ""
+            arr = np.asarray(values).reshape(-1).tolist()
+            if not arr:
+                return ""
+
+            dim = int(config.get('slice_title_dimension', 1))
+            idx = int(indices.get(dim, 0)) if isinstance(indices, dict) else 0
+            if idx < 0 or idx >= len(arr):
+                return ""
+
+            token = str(arr[idx]).strip()
+            if not token:
+                return ""
+            prefix = str(config.get('slice_title_prefix', '')).strip()
+            if prefix:
+                return f"{prefix}: {token}"
+            return token
+        except Exception:
+            return ""
     
     def _render_table_section(self, parent: ttk.Frame, instance_alias: str, section_data: dict, section_idx: int = 0):
         """Render a comprehensive data table with sorting, filtering, and formatting."""
@@ -10409,6 +10562,40 @@ class ChemometricsGUI:
                 return
             
             outputs = self._get_execution_data_sources(execution_results, instance_alias)
+
+            # Initialize table slices state for data slicing support
+            # Use (page, section_idx) tuple as section ID to ensure unique state per page
+            current_page = self.analysis_data[instance_alias].get('current_page', 0)
+            section_id = (current_page, section_idx)
+            if 'table_slices' not in self.analysis_data[instance_alias]:
+                self.analysis_data[instance_alias]['table_slices'] = {}
+
+            slice_state = self.analysis_data[instance_alias]['table_slices']
+            if section_id not in slice_state:
+                # Initialize slices from config or defaults
+                nav_axes = config.get('data_slicing', [])
+
+                # Build indices dict for multi-dimensional slicing
+                indices = {}
+                for nav_item in nav_axes:
+                    if isinstance(nav_item, dict):
+                        dim = nav_item.get('dimension', 0)
+                        indices[dim] = nav_item.get('default', 0)
+                    else:
+                        # Old format: just a string
+                        dim = len(indices)
+                        indices[dim] = 0
+
+                slice_state[section_id] = {
+                    'indices': indices,  # Dict: {dimension: index}
+                    'data_slicing': nav_axes,
+                    'outputs': outputs,
+                    'config': config
+                }
+
+            current_slice = slice_state[section_id]
+            nav_axes = config.get('data_slicing', [])
+            current_indices = current_slice.get('indices', {})
             
             # Initialize col_headers - will be set based on configuration
             col_headers = None
@@ -10434,6 +10621,11 @@ class ChemometricsGUI:
                     # Convert to numpy array if needed
                     if not isinstance(col_data, np.ndarray):
                         col_data = np.array(col_data)
+
+                    # Apply data slicing before flattening so navigation works on
+                    # source dimensions (e.g., Y pairing/component), not table columns.
+                    if nav_axes:
+                        col_data = self._extract_sliced_data(col_data, current_indices)
                     
                     # Ensure 1D
                     col_data = col_data.flatten()
@@ -10483,45 +10675,13 @@ class ChemometricsGUI:
                 # Get col_headers from config if provided
                 col_headers = config.get('column_headers')
             
-            # Initialize table slices state for data slicing support
-            # Use (page, section_idx) tuple as section ID to ensure unique state per page
-            current_page = self.analysis_data[instance_alias].get('current_page', 0)
-            section_id = (current_page, section_idx)
-            if 'table_slices' not in self.analysis_data[instance_alias]:
-                self.analysis_data[instance_alias]['table_slices'] = {}
-            
-            slice_state = self.analysis_data[instance_alias]['table_slices']
-            if section_id not in slice_state:
-                # Initialize slices from config or defaults
-                nav_axes = config.get('data_slicing', [])
-                
-                # Build indices dict for multi-dimensional slicing
-                indices = {}
-                for nav_item in nav_axes:
-                    if isinstance(nav_item, dict):
-                        dim = nav_item.get('dimension', 0)
-                        indices[dim] = nav_item.get('default', 0)
-                    else:
-                        # Old format: just a string
-                        dim = len(indices)
-                        indices[dim] = 0
-                
-                slice_state[section_id] = {
-                    'indices': indices,  # Dict: {dimension: index}
-                    'data_slicing': nav_axes,
-                    'outputs': outputs,
-                    'config': config
-                }
-            
-            current_slice = slice_state[section_id]
-            
             # Extract sliced data if data_slicing is configured
-            nav_axes = config.get('data_slicing', [])
             if nav_axes:
-                indices = current_slice.get('indices', {})
-                data = self._extract_sliced_data(data, indices)
+                # For multi-column tables, slicing was already applied per source column.
+                if not columns_config:
+                    data = self._extract_sliced_data(data, current_indices)
                 # Update slice info in config for display
-                current_index = list(indices.values())[0] if indices else 0
+                current_index = list(current_indices.values())[0] if current_indices else 0
                 config['slice_info'] = {
                     'description': list(nav_axes)[0].get('name', '') if isinstance(list(nav_axes)[0], dict) else list(nav_axes)[0],
                     'index': current_index
@@ -10547,6 +10707,17 @@ class ChemometricsGUI:
             max_rows = config.get('max_rows', 50)
             max_cols = config.get('max_cols', 15)
             row_headers = config.get('row_headers', None)
+            if isinstance(row_headers, str):
+                resolved_row_headers = self._get_data_from_source(outputs, row_headers)
+                if resolved_row_headers is not None:
+                    row_headers = np.asarray(resolved_row_headers).flatten().tolist()
+            elif isinstance(row_headers, dict):
+                rhs_source = row_headers.get('data_source')
+                rhs_nested = row_headers.get('nested_key')
+                if rhs_source:
+                    resolved_row_headers = self._get_data_from_source(outputs, rhs_source, rhs_nested)
+                    if resolved_row_headers is not None:
+                        row_headers = np.asarray(resolved_row_headers).flatten().tolist()
             
             # Initialize table state if needed
             # Note: section_id is already defined above as stable identifier
@@ -10568,7 +10739,11 @@ class ChemometricsGUI:
             
             # Add title only if table_title is provided
             if table_title:
-                title_label = ttk.Label(main_frame, text=table_title, font=('Arial', 10, 'bold'))
+                slice_title = self._resolve_table_slice_title(outputs, config, current_indices)
+                title_text = table_title
+                if slice_title:
+                    title_text = f"{table_title} - {slice_title}"
+                title_label = ttk.Label(main_frame, text=title_text, font=('Arial', 10, 'bold'))
                 title_label.pack(anchor='w', pady=(0, 5))
             
             # Add info bar (shape, stats)
@@ -14281,9 +14456,21 @@ Count:
             rows.append(row_values)
 
         row_labels: List[str] = []
-        if isinstance(row_headers_config, (list, np.ndarray)):
+        if isinstance(row_headers_config, str):
+            resolved_row_headers = self._get_data_from_source(outputs, row_headers_config)
+            if resolved_row_headers is not None:
+                row_labels = [str(v) for v in list(np.asarray(resolved_row_headers).flatten())[:len(rows)]]
+        elif isinstance(row_headers_config, dict):
+            rhs_source = row_headers_config.get('data_source')
+            rhs_nested = row_headers_config.get('nested_key')
+            if rhs_source:
+                resolved_row_headers = self._get_data_from_source(outputs, rhs_source, rhs_nested)
+                if resolved_row_headers is not None:
+                    row_labels = [str(v) for v in list(np.asarray(resolved_row_headers).flatten())[:len(rows)]]
+        elif isinstance(row_headers_config, (list, np.ndarray)):
             row_labels = [str(v) for v in list(row_headers_config)[:len(rows)]]
-        else:
+
+        if not row_labels:
             row_labels = [str(i + 1) for i in range(len(rows))]
 
         return headers, rows, row_labels, row_header_title

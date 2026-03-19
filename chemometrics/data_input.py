@@ -672,6 +672,10 @@ def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "
                         except Exception:
                             pass
 
+    if Y is not None and not bool(y_labels_from_file):
+        expected_y_rows = int(len(smp_labels)) if smp_labels is not None else None
+        Y, dropped_header_row = _drop_leading_nan_header_row(Y, expected_y_rows)
+
     # Load classification data
     # Prefer extraction result; fall back to cdata_path when class_from_x is not active
     if use_extraction and class_from_x:
@@ -1030,6 +1034,39 @@ def _load_y_data(y_path: str, separator: Optional[str] = None, num_headlines: in
     if data.ndim == 1:
         return data.reshape(-1, 1)
     return data
+
+
+def _drop_leading_nan_header_row(
+    Y: Optional[np.ndarray],
+    expected_rows: Optional[int],
+) -> Tuple[Optional[np.ndarray], bool]:
+    """Drop a leading all-NaN row when it likely comes from an unskipped header line."""
+    if Y is None:
+        return None, False
+
+    try:
+        y_arr = np.asarray(Y, dtype=float)
+    except Exception:
+        return Y, False
+
+    if y_arr.ndim == 1:
+        y_arr = y_arr.reshape(-1, 1)
+    if y_arr.shape[0] == 0:
+        return y_arr, False
+
+    first_row_all_nan = bool(np.isnan(y_arr[0]).all())
+    if not first_row_all_nan:
+        return y_arr, False
+
+    if expected_rows is None:
+        return y_arr, False
+
+    # Only auto-drop when there is exactly one extra row, which strongly indicates
+    # a header row was interpreted as data.
+    if int(y_arr.shape[0]) == int(expected_rows) + 1:
+        return np.asarray(y_arr[1:, :], dtype=float), True
+
+    return y_arr, False
 
 
 def _load_class_data(cdata_path: str) -> List[Any]:

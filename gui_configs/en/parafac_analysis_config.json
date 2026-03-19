@@ -569,6 +569,94 @@
         ]
       },
       {
+        "title": "Prediction Tables",
+        "layout": "ew",
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "title": "Calibration Predictions, References, and Error",
+              "row_label": "Sample",
+              "row_headers": "smp_cal",
+              "columns": [
+                {
+                  "data_source": "y_cal_pred_pairs",
+                  "name": "Predicted"
+                },
+                {
+                  "data_source": "y_cv_pred_pairs",
+                  "name": "Predicted (CV)"
+                },
+                {
+                  "data_source": "y_cal_true_pairs",
+                  "name": "Reference"
+                },
+                {
+                  "data_source": "y_cal_error_pairs",
+                  "name": "Error"
+                },
+                {
+                  "data_source": "y_cv_error_pairs",
+                  "name": "Error (CV)"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Pairing",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true
+                }
+              ],
+              "variable_labels": "parafac_pairing_labels_by_dimension",
+              "pairing_labels_source": "parafac_pairing_labels",
+              "slice_title_source": "parafac_pair_y_titles",
+              "slice_title_dimension": 1,
+              "slice_title_prefix": "Y",
+              "decimal_places": 6,
+              "max_rows": 500
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Validation Predictions, References, and Error",
+              "row_label": "Sample",
+              "row_headers": "smp_val",
+              "columns": [
+                {
+                  "data_source": "y_val_pred_pairs",
+                  "name": "Predicted"
+                },
+                {
+                  "data_source": "y_val_true_pairs",
+                  "name": "Reference"
+                },
+                {
+                  "data_source": "y_val_error_pairs",
+                  "name": "Error"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Pairing",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true
+                }
+              ],
+              "variable_labels": "parafac_pairing_labels_by_dimension",
+              "pairing_labels_source": "parafac_pairing_labels",
+              "slice_title_source": "parafac_pair_y_titles",
+              "slice_title_dimension": 1,
+              "slice_title_prefix": "Y",
+              "decimal_places": 6,
+              "max_rows": 500
+            }
+          }
+        ]
+      },
+      {
         "title": "Sweep Scree",
         "layout": "fd",
         "condition": {

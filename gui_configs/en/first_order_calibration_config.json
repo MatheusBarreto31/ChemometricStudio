@@ -979,6 +979,68 @@
         ]
       },
       {
+        "title": "Prediction Tables",
+        "layout": "ew",
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "title": "Calibration Predictions, References, and Error",
+              "row_label": "Sample",
+              "row_headers": "smp_cal",
+              "columns": [
+                {
+                  "data_source": "y_cal_pred",
+                  "name": "Predicted"
+                },
+                {
+                  "data_source": "y_cv_pred",
+                  "name": "Predicted (CV)"
+                },
+                {
+                  "data_source": "y_cal_true",
+                  "name": "Reference"
+                },
+                {
+                  "data_source": "y_cal_error",
+                  "name": "Error"
+                },
+                {
+                  "data_source": "y_cv_error",
+                  "name": "Error (CV)"
+                }
+              ],
+              "decimal_places": 6,
+              "max_rows": 500
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Validation Predictions, References, and Error",
+              "row_label": "Sample",
+              "row_headers": "smp_val",
+              "columns": [
+                {
+                  "data_source": "y_val_pred",
+                  "name": "Predicted"
+                },
+                {
+                  "data_source": "y_val_true",
+                  "name": "Reference"
+                },
+                {
+                  "data_source": "y_val_error",
+                  "name": "Error"
+                }
+              ],
+              "decimal_places": 6,
+              "max_rows": 500
+            }
+          }
+        ]
+      },
+      {
         "title": "Text Report",
         "layout": "fp",
         "sections": [

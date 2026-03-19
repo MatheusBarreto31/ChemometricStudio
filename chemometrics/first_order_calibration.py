@@ -1171,6 +1171,8 @@ def first_order_calibration(
     Y_cal = _ensure_2d(Y_cal)
     X_val = _ensure_2d(X_val)
     Y_val = _ensure_2d(Y_val)
+    if Y_val is not None and np.asarray(Y_val).size == 0:
+        Y_val = None
 
     if X_cal is None or Y_cal is None:
         raise ValueError('X_cal and Y_cal are required.')
@@ -1650,6 +1652,14 @@ def first_order_calibration(
         'validation': metrics_val,
     }
 
+    y_cal_error = np.asarray(Y_cal, dtype=float) - np.asarray(y_cal_pred, dtype=float)
+    y_val_error = None
+    if y_val_pred is not None and Y_val is not None:
+        y_val_error = np.asarray(Y_val, dtype=float) - np.asarray(y_val_pred, dtype=float)
+    y_cv_error = None
+    if y_cv_pred is not None:
+        y_cv_error = np.asarray(Y_cal, dtype=float) - np.asarray(y_cv_pred, dtype=float)
+
     return (
         y_cal_pred,
         y_val_pred,
@@ -1662,4 +1672,7 @@ def first_order_calibration(
         metrics_payload,
         cv_results,
         optimization_results,
+        y_cal_error,
+        y_val_error,
+        y_cv_error,
     )

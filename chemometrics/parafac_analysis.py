@@ -105,6 +105,8 @@ def _as_2d_y(y: Optional[np.ndarray]) -> Optional[np.ndarray]:
     if y is None:
         return None
     arr = np.asarray(y, dtype=float)
+    if arr.size == 0:
+        return None
     if arr.ndim == 1:
         return arr.reshape(-1, 1)
     return arr
@@ -329,6 +331,33 @@ def _modewise_preprocess(
         Xp = tl.fold(unfold, mode, Xp.shape)
 
     return np.asarray(Xp, dtype=float), mode_stats
+
+
+def _apply_modewise_stats(
+    X: np.ndarray,
+    mode_stats: Sequence[Dict[str, np.ndarray]],
+) -> np.ndarray:
+    """Apply previously learned mode-wise preprocessing statistics to new data."""
+    Xp = np.asarray(X, dtype=float).copy()
+    n_modes = Xp.ndim
+
+    for mode in range(n_modes):
+        unfold = tl.unfold(Xp, mode)
+        stats = mode_stats[mode] if mode < len(mode_stats) else {}
+
+        mean = stats.get("mean") if isinstance(stats, dict) else None
+        if mean is not None:
+            unfold = unfold - np.asarray(mean, dtype=float)
+
+        std = stats.get("std") if isinstance(stats, dict) else None
+        if std is not None:
+            std_arr = np.asarray(std, dtype=float)
+            std_arr = np.where((~np.isfinite(std_arr)) | (std_arr <= 0), 1.0, std_arr)
+            unfold = unfold / std_arr
+
+        Xp = tl.fold(unfold, mode, Xp.shape)
+
+    return np.asarray(Xp, dtype=float)
 
 
 def _component_reconstruction_tensor(weights: np.ndarray, factors: Sequence[np.ndarray]) -> np.ndarray:
@@ -980,6 +1009,19 @@ def _single_fit_once(
     emit_missing_solver_notice: bool = True,
 ) -> Dict[str, Any]:
     X_raw = np.asarray(X_cal, dtype=float)
+    X_val_raw = None if X_val is None else np.asarray(X_val, dtype=float)
+    combine_fit_samples = bool(X_val_raw is not None)
+
+    if combine_fit_samples:
+        if X_val_raw.ndim != X_raw.ndim or X_val_raw.shape[1:] != X_raw.shape[1:]:
+            raise ValueError(
+                "X_val must match X_cal dimensionality and non-sample dimensions when "
+                "validation samples are included in PARAFAC fitting."
+            )
+        X_fit_raw = np.concatenate([X_raw, X_val_raw], axis=0)
+    else:
+        X_fit_raw = X_raw
+
     if nway_flag is not None and X_raw.ndim != int(nway_flag) + 1:
         emit_execution_warning(
             code="parafac_nway_mismatch",
@@ -989,7 +1031,7 @@ def _single_fit_once(
             ),
         )
 
-    X_proc, mode_stats = _modewise_preprocess(X_raw, mode_centering, mode_normalization)
+    X_proc, mode_stats = _modewise_preprocess(X_fit_raw, mode_centering, mode_normalization)
     mask = ~np.isnan(X_proc)
     X_filled = np.nan_to_num(X_proc, nan=0.0)
 
@@ -1142,25 +1184,45 @@ def _single_fit_once(
     if bool(orient_mostly_negative_pairs):
         factors, sign_flip_pairs = _orient_signs_by_negative_pairs(factors)
 
-    reconstructed = cp_to_tensor((weights, factors))
-    residual = np.asarray(X_filled - reconstructed, dtype=float)
-    observed = np.asarray(mask, dtype=bool)
+    reconstructed_full = cp_to_tensor((weights, factors))
+
+    n_cal_samples = int(X_raw.shape[0])
+    all_scores_a = np.asarray(factors[0], dtype=float)
+    if combine_fit_samples:
+        scores_a = np.asarray(all_scores_a[:n_cal_samples], dtype=float)
+        val_scores_a = np.asarray(all_scores_a[n_cal_samples:], dtype=float)
+        factors_for_output = [scores_a] + [np.asarray(f, dtype=float) for f in factors[1:]]
+        reconstructed = cp_to_tensor((weights, factors_for_output))
+        residual = np.asarray(X_filled[:n_cal_samples] - reconstructed, dtype=float)
+        observed = np.asarray(mask[:n_cal_samples], dtype=bool)
+        X_metrics = np.asarray(X_filled[:n_cal_samples], dtype=float)
+        core_factors = factors_for_output
+    else:
+        scores_a = all_scores_a
+        factors_for_output = [np.asarray(f, dtype=float) for f in factors]
+        reconstructed = np.asarray(reconstructed_full, dtype=float)
+        residual = np.asarray(X_filled - reconstructed, dtype=float)
+        observed = np.asarray(mask, dtype=bool)
+        X_metrics = np.asarray(X_filled, dtype=float)
+        core_factors = factors_for_output
 
     ssr = float(np.sum((residual[observed]) ** 2))
     n_obs = int(np.count_nonzero(observed))
     sfit = float(np.sqrt(ssr / max(n_obs, 1)))
-    explained = _explained_variance(X_filled, residual, observed)
-    core_cons = _core_consistency(X_filled, np.asarray(weights, dtype=float), factors)
+    explained = _explained_variance(X_metrics, residual, observed)
+    core_cons = _core_consistency(X_metrics, np.asarray(weights, dtype=float), core_factors)
 
-    scores_a = np.asarray(factors[0], dtype=float)
-    val_scores_a = None
-    if X_val is not None:
-        val_scores_a = _project_scores_mode_a(np.asarray(X_val, dtype=float), np.asarray(weights, dtype=float), factors)
+    if (not combine_fit_samples) and X_val is not None:
+        X_val_proc = _apply_modewise_stats(np.asarray(X_val, dtype=float), mode_stats)
+        val_scores_a = _project_scores_mode_a(X_val_proc, np.asarray(weights, dtype=float), factors)
+    elif not combine_fit_samples:
+        val_scores_a = None
 
     Yc = _as_2d_y(Y_cal)
     Yv = _as_2d_y(Y_val)
 
     calibration_models: List[Dict[str, Any]] = []
+    prediction_candidates: List[Dict[str, Any]] = []
     selected_component_y_mapping: Dict[int, int] = {}
     auto_mapping_used = False
 
@@ -1195,6 +1257,15 @@ def _single_fit_once(
                 "slope": float(slope),
                 "calibration": cal_metrics,
             }
+            prediction_candidates.append(
+                {
+                    "component": int(comp_idx),
+                    "y_index": int(y_idx),
+                    "intercept": float(intercept),
+                    "slope": float(slope),
+                    "cal_r2": _safe_float(cal_metrics.get("R2"), default=-np.inf),
+                }
+            )
 
             if Yv is not None and val_scores_a is not None and Yv.shape[1] > y_idx:
                 y_val_vec = np.asarray(Yv[:, y_idx], dtype=float).reshape(-1)
@@ -1216,6 +1287,48 @@ def _single_fit_once(
 
             calibration_models.append(entry)
 
+    y_cal_pred = None
+    y_val_pred = None
+    y_cal_error = None
+    y_val_error = None
+    if Yc is not None and prediction_candidates:
+        y_cal_pred = np.full_like(np.asarray(Yc, dtype=float), np.nan, dtype=float)
+        n_val_samples = int(val_scores_a.shape[0]) if isinstance(val_scores_a, np.ndarray) and val_scores_a.ndim == 2 else 0
+        n_val_pred_cols = int(max((int(candidate["y_index"]) + 1) for candidate in prediction_candidates)) if prediction_candidates else 0
+        candidate_by_pair: Dict[Tuple[int, int], Dict[str, Any]] = {
+            (int(candidate["component"]), int(candidate["y_index"])): candidate for candidate in prediction_candidates
+        }
+        for comp_idx in sorted(selected_component_y_mapping.keys()):
+            y_index = int(selected_component_y_mapping[comp_idx])
+            candidate = candidate_by_pair.get((int(comp_idx), int(y_index)))
+            if not isinstance(candidate, dict):
+                continue
+            comp_idx = int(candidate["component"])
+            if comp_idx >= scores_a.shape[1] or y_index >= y_cal_pred.shape[1]:
+                continue
+            score_vec = np.asarray(scores_a[:, comp_idx], dtype=float).reshape(-1)
+            y_vec = np.asarray(Yc[:, y_index], dtype=float).reshape(-1)
+            valid = np.isfinite(score_vec) & np.isfinite(y_vec) & ~np.isfinite(y_cal_pred[:, y_index])
+            if np.any(valid):
+                y_cal_pred[valid, y_index] = float(candidate["intercept"]) + float(candidate["slope"]) * score_vec[valid]
+
+            if val_scores_a is not None and comp_idx < val_scores_a.shape[1]:
+                if y_val_pred is None and n_val_samples > 0 and n_val_pred_cols > 0:
+                    y_val_pred = np.full((n_val_samples, n_val_pred_cols), np.nan, dtype=float)
+                if y_val_pred is None or y_index >= y_val_pred.shape[1]:
+                    continue
+                score_val_vec = np.asarray(val_scores_a[:, comp_idx], dtype=float).reshape(-1)
+                valid_val = np.isfinite(score_val_vec) & ~np.isfinite(y_val_pred[:, y_index])
+                if Yv is not None and y_index < Yv.shape[1] and Yv.shape[0] == score_val_vec.shape[0]:
+                    y_val_vec = np.asarray(Yv[:, y_index], dtype=float).reshape(-1)
+                    valid_val = valid_val & np.isfinite(y_val_vec)
+                if np.any(valid_val):
+                    y_val_pred[valid_val, y_index] = float(candidate["intercept"]) + float(candidate["slope"]) * score_val_vec[valid_val]
+
+        y_cal_error = np.asarray(Yc, dtype=float) - np.asarray(y_cal_pred, dtype=float)
+        if y_val_pred is not None and Yv is not None:
+            y_val_error = np.asarray(Yv, dtype=float) - np.asarray(y_val_pred, dtype=float)
+
     reference_angles: List[Dict[str, Any]] = []
     for mode_idx in range(n_modes):
         if profile_usage[mode_idx] not in {"reference", "initial", "fixed"}:
@@ -1234,7 +1347,7 @@ def _single_fit_once(
                 }
             )
 
-    inst_profiles = _instrumental_profiles(np.asarray(weights, dtype=float), factors)
+    inst_profiles = _instrumental_profiles(np.asarray(weights, dtype=float), factors_for_output)
 
     metrics = {
         "calibration": {
@@ -1247,6 +1360,9 @@ def _single_fit_once(
             "used_constrained_parafac": bool(use_constrained),
             "missing_constrained_solver": solver_mode if (has_missing and use_constrained) else "n/a",
             "orient_mostly_negative_pairs": bool(orient_mostly_negative_pairs),
+            "fit_combined_samples": bool(combine_fit_samples),
+            "n_samples_fit": int(X_fit_raw.shape[0]),
+            "n_samples_calibration": int(n_cal_samples),
             "sign_pair_flips": sign_flip_pairs,
             "sign_pair_flip_count": int(len(sign_flip_pairs)),
         },
@@ -1256,7 +1372,7 @@ def _single_fit_once(
 
     return {
         "scores_mode_a": scores_a,
-        "factors": [np.asarray(f, dtype=float) for f in factors],
+        "factors": [np.asarray(f, dtype=float) for f in factors_for_output],
         "weights": np.asarray(weights, dtype=float),
         "reconstructed": np.asarray(reconstructed, dtype=float),
         "residual": residual,
@@ -1268,6 +1384,10 @@ def _single_fit_once(
         "reference_angles": reference_angles,
         "mode_stats": mode_stats,
         "val_scores_mode_a": val_scores_a,
+        "y_cal_pred": y_cal_pred,
+        "y_val_pred": y_val_pred,
+        "y_cal_error": y_cal_error,
+        "y_val_error": y_val_error,
     }
 
 
@@ -1441,6 +1561,97 @@ def _build_text_report(
             lines.append(f"- Start {i}: seed={seed_text}, sfit={_safe_float(item.get('sfit')):.6g}")
 
     return "\n".join(lines)
+
+
+def _build_component_pair_prediction_outputs(
+    component_y_mapping: Any,
+    y_labels: Optional[Sequence[str]],
+    y_cal_pred: Any,
+    y_cv_pred: Any,
+    y_cal_true: Any,
+    y_cal_error: Any,
+    y_cv_error: Any,
+    y_val_pred: Any,
+    y_val_true: Any,
+    y_val_error: Any,
+) -> Dict[str, Any]:
+    """Build component-pair-only prediction matrices and labels.
+
+    Output columns are ordered by component index and include only mapped pairs.
+    """
+
+    def _to_2d(value: Any) -> Optional[np.ndarray]:
+        if value is None:
+            return None
+        try:
+            arr = np.asarray(value, dtype=float)
+        except Exception:
+            return None
+        if arr.ndim == 1:
+            arr = arr.reshape(-1, 1)
+        if arr.ndim != 2:
+            return None
+        return arr
+
+    def _extract_pair_matrix(value: Any, y_cols_1based: List[int]) -> Optional[np.ndarray]:
+        arr = _to_2d(value)
+        if arr is None:
+            return None
+        if not y_cols_1based:
+            return None
+        cols: List[np.ndarray] = []
+        for y_col in y_cols_1based:
+            y_idx = int(y_col) - 1
+            if 0 <= y_idx < arr.shape[1]:
+                cols.append(np.asarray(arr[:, y_idx], dtype=float).reshape(-1, 1))
+            else:
+                cols.append(np.full((arr.shape[0], 1), np.nan, dtype=float))
+        return np.column_stack(cols) if cols else None
+
+    mapping_dict = component_y_mapping if isinstance(component_y_mapping, dict) else {}
+    pairs: List[Tuple[int, int]] = []
+    for comp_key, y_col_value in mapping_dict.items():
+        try:
+            comp_1based = int(comp_key)
+            y_col_1based = int(y_col_value)
+        except (TypeError, ValueError):
+            continue
+        if comp_1based < 1 or y_col_1based < 1:
+            continue
+        pairs.append((comp_1based, y_col_1based))
+    pairs = sorted(set(pairs), key=lambda item: item[0])
+
+    pair_components = [int(comp) for comp, _ in pairs]
+    pair_y_columns = [int(y_col) for _, y_col in pairs]
+
+    y_titles: List[str] = []
+    pair_labels: List[str] = []
+    labels_seq = list(y_labels) if y_labels is not None else []
+    for comp_1based, y_col_1based in pairs:
+        y_idx = int(y_col_1based) - 1
+        y_title = f"Y{y_col_1based}"
+        if 0 <= y_idx < len(labels_seq):
+            label_text = str(labels_seq[y_idx]).strip()
+            if label_text:
+                y_title = label_text
+        y_titles.append(y_title)
+        pair_labels.append(f"C{comp_1based} -> {y_title} (Y{y_col_1based})")
+
+    return {
+        "parafac_pair_components": np.asarray(pair_components, dtype=int) if pair_components else np.asarray([], dtype=int),
+        "parafac_pair_y_columns": np.asarray(pair_y_columns, dtype=int) if pair_y_columns else np.asarray([], dtype=int),
+        "parafac_pair_y_titles": y_titles,
+        "parafac_pairing_labels": pair_labels,
+        "parafac_pairing_labels_by_dimension": [[], pair_labels],
+        "y_cal_pred_pairs": _extract_pair_matrix(y_cal_pred, pair_y_columns),
+        "y_cv_pred_pairs": _extract_pair_matrix(y_cv_pred, pair_y_columns),
+        "y_cal_true_pairs": _extract_pair_matrix(y_cal_true, pair_y_columns),
+        "y_cal_error_pairs": _extract_pair_matrix(y_cal_error, pair_y_columns),
+        "y_cv_error_pairs": _extract_pair_matrix(y_cv_error, pair_y_columns),
+        "y_val_pred_pairs": _extract_pair_matrix(y_val_pred, pair_y_columns),
+        "y_val_true_pairs": _extract_pair_matrix(y_val_true, pair_y_columns),
+        "y_val_error_pairs": _extract_pair_matrix(y_val_error, pair_y_columns),
+    }
 
 
 def parafac_analysis(
@@ -1682,6 +1893,7 @@ def parafac_analysis(
             full_result.setdefault("metrics", {})
             full_result["metrics"]["cv"] = cv_agg
             full_result["y_cv_pred"] = ycv_pred
+            full_result["y_cv_error"] = (np.asarray(Y2, dtype=float) - np.asarray(ycv_pred, dtype=float)) if (ycv_pred is not None and Y2 is not None) else None
             return full_result
 
     # Sweep mode
@@ -1841,7 +2053,31 @@ def parafac_analysis(
         "nway_flag": int(nway_flag) if nway_flag is not None else int(max(1, X_arr.ndim - 1)),
         "cv_results": result.get("cv_results"),
         "y_cv_pred": result.get("y_cv_pred"),
+        "y_cal_pred": result.get("y_cal_pred"),
+        "y_val_pred": result.get("y_val_pred"),
+        "y_cal_error": result.get("y_cal_error"),
+        "y_val_error": result.get("y_val_error"),
+        "y_cv_error": result.get("y_cv_error"),
+        "y_cal_true": _as_2d_y(Y_cal),
+        "y_val_true": _as_2d_y(Y_val),
     }
+
+    if output.get("y_cv_error") is None and output.get("y_cv_pred") is not None and output.get("y_cal_true") is not None:
+        output["y_cv_error"] = np.asarray(output["y_cal_true"], dtype=float) - np.asarray(output["y_cv_pred"], dtype=float)
+
+    pair_outputs = _build_component_pair_prediction_outputs(
+        component_y_mapping=output.get("component_y_mapping"),
+        y_labels=y_labels_resolved,
+        y_cal_pred=output.get("y_cal_pred"),
+        y_cv_pred=output.get("y_cv_pred"),
+        y_cal_true=output.get("y_cal_true"),
+        y_cal_error=output.get("y_cal_error"),
+        y_cv_error=output.get("y_cv_error"),
+        y_val_pred=output.get("y_val_pred"),
+        y_val_true=output.get("y_val_true"),
+        y_val_error=output.get("y_val_error"),
+    )
+    output.update(pair_outputs)
 
     scores_mode_a = result.get("scores_mode_a")
     if isinstance(scores_mode_a, np.ndarray) and scores_mode_a.ndim == 2:
@@ -1889,6 +2125,26 @@ _PARAFAC_RETURN_ORDER: Tuple[str, ...] = (
     "nway_flag",
     "cv_results",
     "y_cv_pred",
+    "y_cal_pred",
+    "y_val_pred",
+    "y_cal_error",
+    "y_val_error",
+    "y_cv_error",
+    "y_cal_true",
+    "y_val_true",
+    "parafac_pair_components",
+    "parafac_pair_y_columns",
+    "parafac_pair_y_titles",
+    "parafac_pairing_labels",
+    "parafac_pairing_labels_by_dimension",
+    "y_cal_pred_pairs",
+    "y_cv_pred_pairs",
+    "y_cal_true_pairs",
+    "y_cal_error_pairs",
+    "y_cv_error_pairs",
+    "y_val_pred_pairs",
+    "y_val_true_pairs",
+    "y_val_error_pairs",
 )
 
 
