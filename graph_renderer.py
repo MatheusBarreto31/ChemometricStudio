@@ -208,6 +208,9 @@ def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarr
         _apply_axis_tick_options(ax, config, use_3d=False)
 
     _apply_axis_direction_options(ax, config, use_3d=use_3d)
+
+    if str(graph_type).strip().lower() == 'scatter' and not use_3d:
+        _render_scatter_reference_lines(ax, config)
     
     # constrained_layout handles margins automatically - no manual adjustment needed
     # This ensures tight bounds that adapt to any section geometry without clipping
@@ -323,6 +326,223 @@ def _apply_graph_display_options(ax, config: dict, use_3d: bool = False) -> None
     if config.get('show_origin', False) and not use_3d:
         ax.axhline(0, color='gray', linestyle='--', linewidth=1.0, alpha=0.7)
         ax.axvline(0, color='gray', linestyle='--', linewidth=1.0, alpha=0.7)
+
+
+def _as_line_list(value: Any) -> List[Any]:
+    """Convert scalar or array-like values to a flat Python list."""
+    if value is None:
+        return []
+    if isinstance(value, np.ndarray):
+        arr = np.asarray(value)
+        if arr.ndim == 0:
+            return [arr.item()]
+        return arr.reshape(-1).tolist()
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    return [value]
+
+
+def _pick_indexed(value: Any, index: int, default: Any = None) -> Any:
+    """Pick value[index] for list-like values, otherwise return scalar value."""
+    if isinstance(value, np.ndarray):
+        value = np.asarray(value).reshape(-1).tolist()
+    if isinstance(value, (list, tuple)):
+        if not value:
+            return default
+        if index < len(value):
+            return value[index]
+        return value[-1]
+    if value is None:
+        return default
+    return value
+
+
+def _coerce_float(value: Any) -> Optional[float]:
+    """Convert value to float when possible."""
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except Exception:
+        return None
+
+
+def _normalize_line_orientation(line_cfg: Dict[str, Any]) -> str:
+    """Normalize scatter reference-line orientation token."""
+    token = str(
+        line_cfg.get('orientation', line_cfg.get('type', line_cfg.get('mode', '')))
+    ).strip().lower()
+
+    if token in {'v', 'vertical', 'vline', 'axvline'}:
+        return 'vertical'
+    if token in {'h', 'horizontal', 'hline', 'axhline'}:
+        return 'horizontal'
+    if token in {'segment', 'line', 'between', 'between_points', 'points'}:
+        return 'segment'
+    return ''
+
+
+def _render_scatter_reference_lines(ax, config: dict) -> None:
+    """Render configurable scatter reference lines from resolved config entries."""
+    raw_lines = config.get('scatter_reference_lines', [])
+    if isinstance(raw_lines, dict):
+        raw_lines = [raw_lines]
+    if not isinstance(raw_lines, list) or not raw_lines:
+        return
+
+    for line_cfg in raw_lines:
+        if not isinstance(line_cfg, dict):
+            continue
+
+        orientation = _normalize_line_orientation(line_cfg)
+        if not orientation:
+            continue
+
+        style_color = line_cfg.get('color', line_cfg.get('colour', 'gray'))
+        style_ls = line_cfg.get('linestyle', line_cfg.get('line_style', line_cfg.get('line_type', '--')))
+        style_lw = line_cfg.get('linewidth', line_cfg.get('thickness', line_cfg.get('width', 1.0)))
+        style_alpha = line_cfg.get('alpha', 0.9)
+        labels_cfg = line_cfg.get('labels', line_cfg.get('label'))
+
+        if orientation == 'vertical':
+            values_raw = line_cfg.get('values', line_cfg.get('value', line_cfg.get('x')))
+            values = _as_line_list(values_raw)
+            if not values:
+                continue
+
+            for i, raw_value in enumerate(values):
+                x_pos = _coerce_float(raw_value)
+                if x_pos is None or not np.isfinite(x_pos):
+                    continue
+
+                color = _pick_indexed(style_color, i, 'gray')
+                linestyle = _pick_indexed(style_ls, i, '--')
+                linewidth = _coerce_float(_pick_indexed(style_lw, i, 1.0))
+                alpha = _coerce_float(_pick_indexed(style_alpha, i, 0.9))
+                label = _pick_indexed(labels_cfg, i)
+
+                ax.axvline(
+                    x=x_pos,
+                    color=color,
+                    linestyle=linestyle,
+                    linewidth=linewidth if linewidth is not None else 1.0,
+                    alpha=alpha if alpha is not None else 0.9,
+                    zorder=5,
+                )
+
+                if label is not None and str(label).strip() != '':
+                    y_min, y_max = ax.get_ylim()
+                    y_anchor = y_max if y_max >= y_min else y_min
+                    ax.text(
+                        x_pos,
+                        y_anchor,
+                        str(label),
+                        fontsize=8,
+                        color=color,
+                        alpha=alpha if alpha is not None else 0.9,
+                        va='bottom',
+                        ha='left',
+                    )
+
+        elif orientation == 'horizontal':
+            values_raw = line_cfg.get('values', line_cfg.get('value', line_cfg.get('y')))
+            values = _as_line_list(values_raw)
+            if not values:
+                continue
+
+            for i, raw_value in enumerate(values):
+                y_pos = _coerce_float(raw_value)
+                if y_pos is None or not np.isfinite(y_pos):
+                    continue
+
+                color = _pick_indexed(style_color, i, 'gray')
+                linestyle = _pick_indexed(style_ls, i, '--')
+                linewidth = _coerce_float(_pick_indexed(style_lw, i, 1.0))
+                alpha = _coerce_float(_pick_indexed(style_alpha, i, 0.9))
+                label = _pick_indexed(labels_cfg, i)
+
+                ax.axhline(
+                    y=y_pos,
+                    color=color,
+                    linestyle=linestyle,
+                    linewidth=linewidth if linewidth is not None else 1.0,
+                    alpha=alpha if alpha is not None else 0.9,
+                    zorder=5,
+                )
+
+                if label is not None and str(label).strip() != '':
+                    x_min, x_max = ax.get_xlim()
+                    x_anchor = x_max if x_max >= x_min else x_min
+                    ax.text(
+                        x_anchor,
+                        y_pos,
+                        str(label),
+                        fontsize=8,
+                        color=color,
+                        alpha=alpha if alpha is not None else 0.9,
+                        va='bottom',
+                        ha='right',
+                    )
+
+        else:
+            x1_raw = line_cfg.get('x1', line_cfg.get('x_start'))
+            y1_raw = line_cfg.get('y1', line_cfg.get('y_start'))
+            x2_raw = line_cfg.get('x2', line_cfg.get('x_end'))
+            y2_raw = line_cfg.get('y2', line_cfg.get('y_end'))
+
+            points = line_cfg.get('points')
+            if points is not None and all(v is None for v in (x1_raw, y1_raw, x2_raw, y2_raw)):
+                if isinstance(points, (list, tuple)) and len(points) == 2:
+                    p1, p2 = points[0], points[1]
+                    if isinstance(p1, (list, tuple)) and len(p1) >= 2 and isinstance(p2, (list, tuple)) and len(p2) >= 2:
+                        x1_raw, y1_raw = p1[0], p1[1]
+                        x2_raw, y2_raw = p2[0], p2[1]
+
+            x1_vals = _as_line_list(x1_raw)
+            y1_vals = _as_line_list(y1_raw)
+            x2_vals = _as_line_list(x2_raw)
+            y2_vals = _as_line_list(y2_raw)
+            n_lines = max(len(x1_vals), len(y1_vals), len(x2_vals), len(y2_vals))
+            if n_lines <= 0:
+                continue
+
+            for i in range(n_lines):
+                x1 = _coerce_float(_pick_indexed(x1_vals, i))
+                y1 = _coerce_float(_pick_indexed(y1_vals, i))
+                x2 = _coerce_float(_pick_indexed(x2_vals, i))
+                y2 = _coerce_float(_pick_indexed(y2_vals, i))
+                if any(v is None or not np.isfinite(v) for v in (x1, y1, x2, y2)):
+                    continue
+
+                color = _pick_indexed(style_color, i, 'gray')
+                linestyle = _pick_indexed(style_ls, i, '--')
+                linewidth = _coerce_float(_pick_indexed(style_lw, i, 1.0))
+                alpha = _coerce_float(_pick_indexed(style_alpha, i, 0.9))
+                label = _pick_indexed(labels_cfg, i)
+
+                ax.plot(
+                    [x1, x2],
+                    [y1, y2],
+                    color=color,
+                    linestyle=linestyle,
+                    linewidth=linewidth if linewidth is not None else 1.0,
+                    alpha=alpha if alpha is not None else 0.9,
+                    zorder=5,
+                )
+
+                if label is not None and str(label).strip() != '':
+                    x_mid = (x1 + x2) / 2.0
+                    y_mid = (y1 + y2) / 2.0
+                    ax.text(
+                        x_mid,
+                        y_mid,
+                        str(label),
+                        fontsize=8,
+                        color=color,
+                        alpha=alpha if alpha is not None else 0.9,
+                        va='bottom',
+                        ha='left',
+                    )
 
 
 def _is_confidence_ellipses_enabled(config: dict) -> bool:

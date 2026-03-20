@@ -15,6 +15,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
 import numpy as np
 import copy
+import json
 from pathlib import Path
 import platform
 from typing import Optional, Dict, List, Tuple, Any
@@ -1011,6 +1012,39 @@ class AddGraphDialog:
         ttk.Label(level_row, text=self._t("ui.labels.confidence_level", "Confidence level (%):")).pack(side=tk.LEFT)
         self.confidence_level_var = tk.StringVar(value="95")
         ttk.Entry(level_row, textvariable=self.confidence_level_var, width=10).pack(side=tk.LEFT, padx=(8, 0))
+
+        # Scatter reference lines editor
+        lines_frame = ttk.LabelFrame(
+            scrollable_frame,
+            text=self._t("ui.labels.scatter_reference_lines", "Scatter Reference Lines (JSON)"),
+            padding=10
+        )
+        lines_frame.pack(fill=tk.BOTH, padx=5, pady=5)
+
+        ttk.Label(
+            lines_frame,
+            text=self._t(
+                "ui.messages.scatter_lines_help",
+                "Optional. Define vertical/horizontal/segment lines for 2D scatter using JSON. "
+                "Leave empty to disable."
+            ),
+            wraplength=450,
+            foreground="gray"
+        ).pack(anchor=tk.W)
+
+        self.scatter_lines_text = scrolledtext.ScrolledText(lines_frame, height=8, wrap=tk.WORD)
+        self.scatter_lines_text.pack(fill=tk.BOTH, expand=True, pady=(6, 0))
+
+        ttk.Label(
+            lines_frame,
+            text=self._t(
+                "ui.messages.scatter_lines_example",
+                'Example: [{"orientation":"vertical","values":[0.0,1.0],"labels":["L1","L2"],"line_type":"--","thickness":1.5,"color":"#d62728"}]'
+            ),
+            wraplength=450,
+            foreground="gray",
+            font=("Arial", 8)
+        ).pack(anchor=tk.W, pady=(4, 0))
         
         # Data slicing configuration
         slice_frame = ttk.LabelFrame(scrollable_frame, text=self._t("ui.labels.data_slicing_navigation", "Data Slicing / Navigation"), padding=10)
@@ -1171,6 +1205,35 @@ class AddGraphDialog:
             info_var.set(info)
         else:
             info_var.set(self._t("ui.messages.select_data_source", "Select a data source"))
+
+    def _parse_scatter_lines_json(self) -> Optional[List[Dict[str, Any]]]:
+        """Parse optional scatter reference-lines JSON from advanced tab editor."""
+        editor = getattr(self, 'scatter_lines_text', None)
+        if editor is None:
+            return None
+
+        raw_text = editor.get('1.0', tk.END).strip()
+        if not raw_text:
+            return None
+
+        try:
+            parsed = json.loads(raw_text)
+        except Exception as exc:
+            raise ValueError(f"Invalid Scatter Reference Lines JSON: {exc}") from exc
+
+        if isinstance(parsed, dict):
+            parsed = [parsed]
+
+        if not isinstance(parsed, list):
+            raise ValueError("Scatter Reference Lines JSON must be a list (or a single object).")
+
+        normalized: List[Dict[str, Any]] = []
+        for idx, entry in enumerate(parsed):
+            if not isinstance(entry, dict):
+                raise ValueError(f"Scatter Reference Lines entry #{idx + 1} must be an object.")
+            normalized.append(entry)
+
+        return normalized if normalized else None
     
     def _build_graph_config(self) -> Dict:
         """Build graph configuration dictionary from UI inputs."""
@@ -1279,6 +1342,10 @@ class AddGraphDialog:
             confidence_level = self.confidence_level_var.get().strip() if getattr(self, 'confidence_level_var', None) else ''
             if confidence_level:
                 config['confidence_level'] = confidence_level
+
+        scatter_lines = self._parse_scatter_lines_json()
+        if config.get('graph_type') == 'scatter' and scatter_lines:
+            config['scatter_lines'] = scatter_lines
         
         # Data slicing - build navigation controls
         data_slicing = []
@@ -1595,6 +1662,9 @@ This dialog allows you to add a new graph to an empty section in your analysis.
     - Show point labels (scatter): draw labels directly on each point
      - Confidence ellipses (scatter): draw per-class ellipses (or one global ellipse if no classes)
          * Confidence level (%): defaults to 95 when omitted
+        - Scatter Reference Lines (JSON): define vertical/horizontal/segment overlays for scatter plots
+            * Supports arrays for multiple lines and label arrays
+            * Supports style keys: line_type/linestyle, thickness/linewidth, color/colour
    - Data Slicing/Navigation: Enable navigation controls for multi-dimensional data
      * Enable axis navigation (X/Y/Z) with dimension and default value
      * Dim 0=samples, 1=first variable dimension (e.g., PCs)

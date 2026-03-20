@@ -8806,6 +8806,80 @@ class ChemometricsGUI:
                     pass
         
         return dim_labels
+
+    def _resolve_scatter_line_source_value(self, raw_value: Any, outputs: dict, *, implicit_lookup: bool = False) -> Any:
+        """Resolve scatter-line field values from literals or output sources.
+
+        Supported source forms:
+        - {"var": "name"}
+        - {"data_source": "name", "nested_key": "a.b"}
+        - "name" (only when implicit_lookup=True and key exists in outputs)
+        """
+        if isinstance(raw_value, dict):
+            source_name = raw_value.get('data_source', raw_value.get('var', raw_value.get('source')))
+            nested_key = raw_value.get('nested_key')
+            if isinstance(source_name, str) and source_name:
+                return self._get_data_from_source(outputs, source_name, nested_key)
+            return raw_value
+
+        if implicit_lookup and isinstance(raw_value, str) and raw_value in outputs:
+            return outputs[raw_value]
+
+        return raw_value
+
+    def _resolve_scatter_reference_lines(self, config: dict, outputs: dict) -> List[Dict[str, Any]]:
+        """Resolve scatter reference-line config entries from JSON and outputs.
+
+        Accepted config keys:
+        - scatter_lines
+        - reference_lines
+        - guide_lines
+        """
+        source_candidates = (
+            config.get('scatter_lines'),
+            config.get('reference_lines'),
+            config.get('guide_lines'),
+        )
+
+        raw_entries: List[Any] = []
+        for candidate in source_candidates:
+            if candidate is None:
+                continue
+            if isinstance(candidate, list):
+                raw_entries.extend(candidate)
+            elif isinstance(candidate, dict):
+                raw_entries.append(candidate)
+
+        resolved_entries: List[Dict[str, Any]] = []
+        implicit_lookup_fields = {
+            'value', 'values', 'x', 'y', 'x1', 'y1', 'x2', 'y2',
+            'x_start', 'y_start', 'x_end', 'y_end', 'point1', 'point2', 'points',
+            'label', 'labels', 'linewidth', 'thickness', 'width', 'alpha'
+        }
+
+        for raw_entry in raw_entries:
+            if not isinstance(raw_entry, dict):
+                continue
+
+            resolved_entry: Dict[str, Any] = {}
+            for key, value in raw_entry.items():
+                should_lookup = key in implicit_lookup_fields
+
+                if isinstance(value, list):
+                    resolved_entry[key] = [
+                        self._resolve_scatter_line_source_value(item, outputs, implicit_lookup=should_lookup)
+                        for item in value
+                    ]
+                else:
+                    resolved_entry[key] = self._resolve_scatter_line_source_value(
+                        value,
+                        outputs,
+                        implicit_lookup=should_lookup,
+                    )
+
+            resolved_entries.append(resolved_entry)
+
+        return resolved_entries
     
     def _render_graph_section(self, parent: ttk.Frame, instance_alias: str, section_data: dict,
                               section_idx: int = 0, graph_font_scale_override: Optional[float] = None,
@@ -9341,6 +9415,9 @@ class ChemometricsGUI:
                 render_config['class_edge_cmap_continuous'] = str(config.get('class_edge_cmap_continuous', self.settings_manager.get('colormap', 'viridis')))
                 render_config['class_color_cmap_qualitative'] = str(config.get('class_color_cmap_qualitative', self.settings_manager.get('qualitative_colormap', 'tab10')))
                 render_config['class_edge_cmap_qualitative'] = str(config.get('class_edge_cmap_qualitative', self.settings_manager.get('qualitative_colormap', 'tab10')))
+
+            if normalized_graph_type == 'scatter':
+                render_config['scatter_reference_lines'] = self._resolve_scatter_reference_lines(config, outputs)
             
             # Render graph using graph_renderer module
             graph_renderer = self._get_graph_renderer()
