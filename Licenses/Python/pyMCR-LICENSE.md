@@ -1,23 +1,6 @@
-# Python Third-Party Notices
+pyMCR - NIST Public Domain Notice
 
-This project depends on the following pinned Python packages (from `requirements.txt`).
-
-| Package | Version | Typical License |
-|---|---:|---|
-| numpy | 2.3.5 | BSD-3-Clause |
-| scipy | 1.15.0 | BSD-3-Clause |
-| scikit-learn | 1.5.2 | BSD-3-Clause |
-| matplotlib | 3.10.8 | Matplotlib License (PSF-style/BSD-compatible) |
-| tensorly | 0.9.0 | BSD-3-Clause |
-| pylatex | 1.4.2 | MIT |
-| pandas | 2.3.3 | BSD-3-Clause |
-| pyMCR | 0.5.1 | NIST Public Domain Notice |
-
-These entries summarize the licenses associated with bundled Python dependencies.
-
-## pyMCR Required Notice
-
-Source: pyMCR LICENSE.md (NIST Public Domain Notice)
+Source: https://github.com/usnistgov/pymcr/blob/main/LICENSE.md
 
 This software was developed by employees of the National Institute of Standards
 and Technology (NIST), an agency of the Federal Government. Pursuant to

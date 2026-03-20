@@ -1,0 +1,193 @@
+{
+  "display_name": "MCR-ALS Analysis",
+  "category": "4.Exploratory Analysis",
+  "data_type": "multiway",
+  "input_aliases": {
+    "X_cal": "X Calibration",
+    "Y_cal": "Y Calibration",
+    "X_val": "X Validation",
+    "Y_val": "Y Validation",
+    "n_components": "Components",
+    "max_iter": "Max Iterations",
+    "tol": "Tolerance",
+    "random_state": "Random Seed",
+    "c_regr": "C Regressor",
+    "st_regr": "ST Regressor",
+    "c_nonneg": "C Non-Negativity",
+    "st_nonneg": "ST Non-Negativity",
+    "c_norm": "C Normalization",
+    "sweep_mode": "Sweep Mode",
+    "component_range": "Component Range",
+    "component_y_mapping": "Component-Y Mapping",
+    "cv_config": "CV Configuration",
+    "y_labels": "Y Labels"
+  },
+  "output_aliases": {
+    "scores_mode_a": "Concentration Scores (C)",
+    "val_scores_mode_a": "Validation Concentration Scores",
+    "components": "Spectral Components (ST)",
+    "reconstructed": "Reconstructed Data",
+    "residual": "Residual Data",
+    "metrics": "Metrics",
+    "calibration_models": "Calibration Models",
+    "component_y_mapping": "Component-Y Pairing",
+    "mcr_als_report": "MCR-ALS Report",
+    "cv_results": "CV Results",
+    "y_cv_pred": "CV Predictions"
+  },
+  "short_description": "MCR-ALS (pyMCR) decomposition with optional calibration, sweep, and cross-validation.",
+  "long_description": "Fits MCR-ALS to unfolded calibration data using pyMCR, estimates concentration/spectral profiles, and optionally maps components to Y targets for calibration and validation prediction.",
+  "setup": {
+    "categories": [
+      "Model Parameters",
+      "Constraints",
+      "Calibration",
+      "Cross-Validation"
+    ],
+    "layout": [
+      {
+        "name": "n_components",
+        "label": "Number of Components",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "2",
+        "required": true,
+        "input_type": "user"
+      },
+      {
+        "name": "max_iter",
+        "label": "Maximum Iterations",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "250",
+        "required": true,
+        "input_type": "user"
+      },
+      {
+        "name": "tol",
+        "label": "Tolerance",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1e-8",
+        "required": true,
+        "input_type": "user"
+      },
+      {
+        "name": "random_state",
+        "label": "Random Seed",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "str",
+        "default": "42",
+        "required": false,
+        "input_type": "user"
+      },
+      {
+        "name": "c_regr",
+        "label": "C Regressor",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "values": ["OLS", "NNLS"],
+        "value_aliases": ["OLS", "NNLS"],
+        "default": "OLS",
+        "required": true,
+        "input_type": "user"
+      },
+      {
+        "name": "st_regr",
+        "label": "ST Regressor",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "values": ["OLS", "NNLS"],
+        "value_aliases": ["OLS", "NNLS"],
+        "default": "OLS",
+        "required": true,
+        "input_type": "user"
+      },
+      {
+        "name": "c_nonneg",
+        "label": "Enforce C Non-Negativity",
+        "category": "Constraints",
+        "widget": "checkbutton",
+        "default": true,
+        "required": false,
+        "input_type": "user"
+      },
+      {
+        "name": "st_nonneg",
+        "label": "Enforce ST Non-Negativity",
+        "category": "Constraints",
+        "widget": "checkbutton",
+        "default": true,
+        "required": false,
+        "input_type": "user"
+      },
+      {
+        "name": "c_norm",
+        "label": "Normalize C Rows",
+        "category": "Constraints",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user"
+      },
+      {
+        "name": "sweep_mode",
+        "label": "Sweep Components",
+        "category": "Model Parameters",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user"
+      },
+      {
+        "name": "component_range",
+        "label": "Component Range",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "sweep_mode": true
+        },
+        "tooltip": "Examples: 2:6, 2-8, 2,3,4"
+      },
+      {
+        "name": "component_y_mapping",
+        "label": "Component-Y Mapping",
+        "category": "Calibration",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Optional explicit mapping, e.g. 1:1,2:2. Leave blank for automatic mapping."
+      },
+      {
+        "name": "y_labels",
+        "label": "Y Labels",
+        "category": "Calibration",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "router"
+      },
+      {
+        "name": "cv_config",
+        "label": "Cross-Validation Config",
+        "category": "Cross-Validation",
+        "widget": "entry",
+        "type": "CVConfig",
+        "default": "",
+        "required": false,
+        "input_type": "router"
+      }
+    ]
+  }
+}

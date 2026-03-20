@@ -14,6 +14,7 @@ This folder centralizes those notices.
 - `Fonts/Selawik/NOTICE.txt`: Notice for Microsoft Selawik font distribution under SIL OFL 1.1.
 - `Fonts/Selawik/OFL-1.1.txt`: Bundled SIL Open Font License text.
 - `Python/THIRD-PARTY-NOTICES.md`: Third-party Python dependency notice list for pinned dependencies.
+- `Python/pyMCR-LICENSE.md`: Required NIST public-domain notice/disclaimer text for pyMCR redistribution.
 
 ## Important note
 

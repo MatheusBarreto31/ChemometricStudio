@@ -1,6 +1,6 @@
 [project]
 name = "Chemometric Studio"
-version = "0.1.21 alpha"
+version = "0.1.22 alpha"
 description = "Chemometric Studio — Your open lab for chemometric analysis"
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -13,6 +13,7 @@ dependencies = [
     "tensorly==0.9.0",
     "pylatex==1.4.2",
     "pandas==3.0.1",
+    "pyMCR==0.5.1",
 ]
 
 [tool.poetry.scripts]
