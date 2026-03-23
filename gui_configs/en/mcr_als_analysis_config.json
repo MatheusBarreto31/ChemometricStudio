@@ -8,6 +8,8 @@
     "X_val": "X Validation",
     "Y_val": "Y Validation",
     "n_components": "Components",
+    "nway_flag": "Data Order",
+    "aug_direction": "Augmented Direction",
     "max_iter": "Max Iterations",
     "tol": "Tolerance",
     "random_state": "Random Seed",
@@ -42,7 +44,8 @@
       "Model Parameters",
       "Constraints",
       "Calibration",
-      "Cross-Validation"
+      "Cross-Validation",
+      "Data Inputs"
     ],
     "layout": [
       {
@@ -158,6 +161,23 @@
         "tooltip": "Examples: 2:6, 2-8, 2,3,4"
       },
       {
+        "name": "aug_direction",
+        "label": "Augmented Direction",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "nway_flag": {
+            "operator": ">=",
+            "value": 2
+          }
+        },
+        "tooltip": "Direction index (1-based) used as augmented row axis for multiway MCR-ALS unfolding."
+      },
+      {
         "name": "component_y_mapping",
         "label": "Component-Y Mapping",
         "category": "Calibration",
@@ -187,6 +207,17 @@
         "default": "",
         "required": false,
         "input_type": "router"
+      },
+      {
+        "name": "nway_flag",
+        "label": "Data Order",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "visible_if": {
+          "input_type": "user"
+        },
+        "input_type": "inherited"
       }
     ]
   }

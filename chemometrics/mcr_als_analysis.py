@@ -225,6 +225,172 @@ def _flatten_samples_features(x: np.ndarray) -> Tuple[np.ndarray, Tuple[int, ...
     return arr.reshape(arr.shape[0], -1), tuple(arr.shape)
 
 
+def _parse_row_counts(value: Any, expected_samples: Optional[int]) -> Optional[List[int]]:
+    if value is None:
+        return None
+
+    if isinstance(value, str):
+        tokens = [item.strip() for item in value.replace(";", ",").split(",") if item.strip()]
+        parsed: List[int] = []
+        for token in tokens:
+            try:
+                parsed.append(int(float(token)))
+            except Exception:
+                return None
+        values = parsed
+    elif isinstance(value, (list, tuple, np.ndarray)):
+        values = []
+        for item in list(value):
+            try:
+                values.append(int(float(item)))
+            except Exception:
+                return None
+    else:
+        return None
+
+    if not values or any(v <= 0 for v in values):
+        return None
+    if expected_samples is not None and expected_samples > 0 and len(values) != expected_samples:
+        return None
+    return [int(v) for v in values]
+
+
+def _infer_equal_row_counts(total_rows: int, n_samples: Optional[int]) -> List[int]:
+    if n_samples is None or n_samples <= 0:
+        return [int(total_rows)]
+    if int(total_rows) % int(n_samples) != 0:
+        raise ValueError(
+            "Cannot infer augmented sample row ranges: total rows are not divisible by sample count. "
+            "Provide explicit augmented row counts for this dataset."
+        )
+    rows_per_sample = int(total_rows) // int(n_samples)
+    if rows_per_sample <= 0:
+        raise ValueError("Invalid augmented row count per sample inferred from input matrix.")
+    return [rows_per_sample] * int(n_samples)
+
+
+def _row_ranges_from_counts(row_counts: Sequence[int]) -> List[Tuple[int, int]]:
+    ranges: List[Tuple[int, int]] = []
+    start = 0
+    for count in row_counts:
+        stop = start + int(count)
+        ranges.append((start, stop))
+        start = stop
+    return ranges
+
+
+def _prepare_augmented_fit_matrix(
+    x: np.ndarray,
+    nway_flag: int,
+    aug_direction: int,
+    n_samples_hint: Optional[int],
+    explicit_row_counts: Optional[Sequence[int]] = None,
+) -> Dict[str, Any]:
+    arr = np.asarray(x, dtype=float)
+    if arr.ndim < 2:
+        arr = arr.reshape(-1, 1)
+
+    if int(nway_flag) < 2:
+        raise ValueError("aug_direction requires nway_flag >= 2.")
+
+    if arr.ndim == int(nway_flag) + 1:
+        sample_count = int(arr.shape[0])
+        if n_samples_hint is not None and int(n_samples_hint) != sample_count:
+            raise ValueError("Sample count inferred from Y does not match X sample dimension for augmented fitting.")
+
+        aug_axis = int(aug_direction) - 1
+        if aug_axis < 0 or aug_axis >= arr.ndim - 1:
+            raise ValueError(
+                f"aug_direction={int(aug_direction)} is out of range for nway_flag={int(nway_flag)}. "
+                f"Expected an integer in [1, {int(nway_flag)}]."
+            )
+
+        row_blocks: List[np.ndarray] = []
+        row_counts: List[int] = []
+        for smp_idx in range(sample_count):
+            sample_tensor = np.asarray(arr[smp_idx], dtype=float)
+            sample_tensor = np.moveaxis(sample_tensor, aug_axis, 0)
+            rows = int(sample_tensor.shape[0])
+            row_counts.append(rows)
+            row_blocks.append(sample_tensor.reshape(rows, -1, order="F"))
+
+        D = np.vstack(row_blocks) if row_blocks else np.zeros((0, 0), dtype=float)
+        return {
+            "D": np.asarray(D, dtype=float),
+            "fit_shape": tuple(D.shape),
+            "sample_count": sample_count,
+            "row_counts": row_counts,
+            "row_ranges": _row_ranges_from_counts(row_counts),
+            "is_augmented": True,
+        }
+
+    if arr.ndim != 2:
+        raise ValueError(
+            "Augmented MCR-ALS expects either an unfolded 2D matrix or a tensor with explicit sample axis "
+            "(shape: samples x dim1 x ... x dimN)."
+        )
+
+    explicit = list(explicit_row_counts) if explicit_row_counts is not None else None
+    row_counts = explicit if explicit else _infer_equal_row_counts(int(arr.shape[0]), n_samples_hint)
+    if int(sum(row_counts)) != int(arr.shape[0]):
+        raise ValueError("Explicit augmented row counts do not match the number of matrix rows in X.")
+
+    return {
+        "D": np.asarray(arr, dtype=float),
+        "fit_shape": tuple(arr.shape),
+        "sample_count": int(len(row_counts)),
+        "row_counts": [int(v) for v in row_counts],
+        "row_ranges": _row_ranges_from_counts(row_counts),
+        "is_augmented": True,
+    }
+
+
+def _prepare_fit_matrix(
+    x: np.ndarray,
+    nway_flag: int,
+    aug_direction: Optional[int],
+    n_samples_hint: Optional[int],
+    explicit_row_counts: Optional[Sequence[int]] = None,
+) -> Dict[str, Any]:
+    if aug_direction is not None and int(nway_flag) >= 2:
+        return _prepare_augmented_fit_matrix(
+            x=x,
+            nway_flag=int(nway_flag),
+            aug_direction=int(aug_direction),
+            n_samples_hint=n_samples_hint,
+            explicit_row_counts=explicit_row_counts,
+        )
+
+    D, fit_shape = _flatten_samples_features(np.asarray(x, dtype=float))
+    return {
+        "D": np.asarray(D, dtype=float),
+        "fit_shape": tuple(fit_shape),
+        "sample_count": int(D.shape[0]),
+        "row_counts": [1] * int(D.shape[0]),
+        "row_ranges": [(i, i + 1) for i in range(int(D.shape[0]))],
+        "is_augmented": False,
+    }
+
+
+def _aggregate_scores_auc(C_rows: np.ndarray, row_ranges: Sequence[Tuple[int, int]]) -> np.ndarray:
+    C = np.asarray(C_rows, dtype=float)
+    if C.ndim != 2:
+        C = np.asarray(C, dtype=float).reshape(-1, 1)
+
+    out = np.full((int(len(row_ranges)), int(C.shape[1])), np.nan, dtype=float)
+    for idx, (start, stop) in enumerate(row_ranges):
+        s = int(start)
+        e = int(stop)
+        if e <= s or s < 0 or e > C.shape[0]:
+            continue
+        seg = C[s:e, :]
+        if seg.shape[0] == 1:
+            out[idx, :] = seg[0, :]
+        else:
+            out[idx, :] = np.trapezoid(seg, dx=1.0, axis=0)
+    return out
+
+
 def _build_pair_outputs(
     component_y_mapping: Dict[str, int],
     y_labels: Sequence[str],
@@ -311,6 +477,10 @@ def _single_fit(
     st_nonneg: bool,
     c_norm: bool,
     component_y_mapping: Any,
+    nway_flag: int,
+    aug_direction: Optional[int],
+    aug_row_counts_cal: Optional[Sequence[int]] = None,
+    aug_row_counts_val: Optional[Sequence[int]] = None,
 ) -> Dict[str, Any]:
     if not HAS_PYMCR:
         raise ImportError("pyMCR is required for mcr_als_analysis. Install 'pyMCR'.")
@@ -319,18 +489,47 @@ def _single_fit(
     X_val_raw = None if X_val is None else np.asarray(X_val, dtype=float)
     combine_fit_samples = bool(X_val_raw is not None)
 
-    if combine_fit_samples:
-        if X_val_raw.ndim != X_cal_raw.ndim or X_val_raw.shape[1:] != X_cal_raw.shape[1:]:
-            raise ValueError(
-                "X_val must match X_cal dimensionality and non-sample dimensions when "
-                "validation samples are included in MCR-ALS fitting."
-            )
-        X_fit_raw = np.concatenate([X_cal_raw, X_val_raw], axis=0)
-    else:
-        X_fit_raw = X_cal_raw
+    Yc = _as_2d_y(Y_cal)
+    Yv = _as_2d_y(Y_val)
 
-    D_fit, fit_shape = _flatten_samples_features(X_fit_raw)
-    n_cal_samples = int(X_cal_raw.shape[0])
+    cal_row_counts = _parse_row_counts(aug_row_counts_cal, expected_samples=None)
+    val_row_counts = _parse_row_counts(aug_row_counts_val, expected_samples=None)
+
+    cal_prep = _prepare_fit_matrix(
+        x=X_cal_raw,
+        nway_flag=int(nway_flag),
+        aug_direction=aug_direction,
+        n_samples_hint=None if Yc is None else int(Yc.shape[0]),
+        explicit_row_counts=cal_row_counts,
+    )
+
+    val_prep = None
+    if X_val_raw is not None:
+        val_prep = _prepare_fit_matrix(
+            x=X_val_raw,
+            nway_flag=int(nway_flag),
+            aug_direction=aug_direction,
+            n_samples_hint=None if Yv is None else int(Yv.shape[0]),
+            explicit_row_counts=val_row_counts,
+        )
+
+    if Yc is not None and int(Yc.shape[0]) != int(cal_prep["sample_count"]):
+        raise ValueError("Y_cal sample count does not match X_cal sample structure after unfolding/augmentation.")
+    if Yv is not None and val_prep is not None and int(Yv.shape[0]) != int(val_prep["sample_count"]):
+        raise ValueError("Y_val sample count does not match X_val sample structure after unfolding/augmentation.")
+
+    if combine_fit_samples:
+        if int(val_prep["D"].shape[1]) != int(cal_prep["D"].shape[1]):
+            raise ValueError(
+                "X_val must match X_cal unfolded feature width when validation samples are included in MCR-ALS fitting."
+            )
+        D_fit = np.vstack([np.asarray(cal_prep["D"], dtype=float), np.asarray(val_prep["D"], dtype=float)])
+    else:
+        D_fit = np.asarray(cal_prep["D"], dtype=float)
+
+    fit_shape = tuple(D_fit.shape)
+    n_cal_rows = int(cal_prep["D"].shape[0])
+    n_cal_samples = int(cal_prep["sample_count"])
 
     if np.any(~np.isfinite(D_fit)):
         raise ValueError("MCR-ALS does not support NaN/Inf in X_cal. Please impute or clean the data first.")
@@ -366,35 +565,42 @@ def _single_fit(
     reconstructed_all = np.asarray(mcr.D_, dtype=float)
 
     if combine_fit_samples:
-        C_cal = np.asarray(C_all[:n_cal_samples], dtype=float)
-        C_val = np.asarray(C_all[n_cal_samples:], dtype=float)
-        reconstructed = np.asarray(reconstructed_all[:n_cal_samples], dtype=float)
-        residual = np.asarray(D_fit[:n_cal_samples] - reconstructed, dtype=float)
+        C_cal_rows = np.asarray(C_all[:n_cal_rows], dtype=float)
+        C_val_rows = np.asarray(C_all[n_cal_rows:], dtype=float)
+        reconstructed = np.asarray(reconstructed_all[:n_cal_rows], dtype=float)
+        residual = np.asarray(D_fit[:n_cal_rows] - reconstructed, dtype=float)
     else:
-        C_cal = np.asarray(C_all, dtype=float)
+        C_cal_rows = np.asarray(C_all, dtype=float)
         reconstructed = np.asarray(reconstructed_all, dtype=float)
         residual = np.asarray(D_fit - reconstructed, dtype=float)
         if X_val is not None:
-            D_val, _ = _flatten_samples_features(np.asarray(X_val, dtype=float))
+            D_val = np.asarray(val_prep["D"], dtype=float) if val_prep is not None else np.zeros((0, ST.shape[1]), dtype=float)
             coef, *_ = np.linalg.lstsq(ST.T, D_val.T, rcond=None)
-            C_val = np.asarray(coef.T, dtype=float)
+            C_val_rows = np.asarray(coef.T, dtype=float)
             if c_nonneg:
-                C_val = np.maximum(C_val, 0.0)
+                C_val_rows = np.maximum(C_val_rows, 0.0)
+        else:
+            C_val_rows = None
+
+    if bool(cal_prep.get("is_augmented", False)):
+        C_cal = _aggregate_scores_auc(C_cal_rows, cal_prep.get("row_ranges", []))
+        if C_val_rows is not None and val_prep is not None:
+            C_val = _aggregate_scores_auc(C_val_rows, val_prep.get("row_ranges", []))
         else:
             C_val = None
+    else:
+        C_cal = np.asarray(C_cal_rows, dtype=float)
+        C_val = None if C_val_rows is None else np.asarray(C_val_rows, dtype=float)
 
-    ss_res = float(np.sum((D_fit[:n_cal_samples] - reconstructed) ** 2))
-    mean_ref = float(np.mean(D_fit[:n_cal_samples]))
-    ss_tot = float(np.sum((D_fit[:n_cal_samples] - mean_ref) ** 2)) + 1e-12
+    ss_res = float(np.sum((D_fit[:n_cal_rows] - reconstructed) ** 2))
+    mean_ref = float(np.mean(D_fit[:n_cal_rows]))
+    ss_tot = float(np.sum((D_fit[:n_cal_rows] - mean_ref) ** 2)) + 1e-12
     explained_variance = float(100.0 * (1.0 - ss_res / ss_tot))
     sfit = float(
         100.0 * (
-            1.0 - np.linalg.norm(D_fit[:n_cal_samples] - reconstructed) / (np.linalg.norm(D_fit[:n_cal_samples]) + 1e-12)
+            1.0 - np.linalg.norm(D_fit[:n_cal_rows] - reconstructed) / (np.linalg.norm(D_fit[:n_cal_rows]) + 1e-12)
         )
     )
-
-    Yc = _as_2d_y(Y_cal)
-    Yv = _as_2d_y(Y_val)
 
     mapping: Dict[int, int] = {}
     auto_mapping_used = False
@@ -467,7 +673,7 @@ def _single_fit(
             "c_regr": str(c_regr).upper(),
             "st_regr": str(st_regr).upper(),
             "fit_combined_samples": bool(combine_fit_samples),
-            "n_samples_fit": int(X_fit_raw.shape[0]),
+            "n_samples_fit": int(cal_prep["sample_count"] + (0 if val_prep is None else int(val_prep["sample_count"]))),
             "n_samples_calibration": int(n_cal_samples),
             "constraints": {
                 "c_nonneg": bool(c_nonneg),
@@ -476,6 +682,11 @@ def _single_fit(
             },
             "original_shape": tuple(X_cal_raw.shape),
             "fit_shape": fit_shape,
+            "nway_flag": int(nway_flag),
+            "augmented_direction": None if aug_direction is None else int(aug_direction),
+            "augmented_mode": bool(cal_prep.get("is_augmented", False)),
+            "augmented_row_counts_cal": [int(v) for v in cal_prep.get("row_counts", [])],
+            "augmented_row_counts_val": [] if val_prep is None else [int(v) for v in val_prep.get("row_counts", [])],
         }
     }
 
@@ -567,6 +778,8 @@ def mcr_als_analysis(
     component_y_mapping: Any = "",
     cv_config: Optional[Any] = None,
     y_labels: Optional[Any] = None,
+    nway_flag: Optional[Any] = None,
+    aug_direction: Optional[Any] = None,
     **kwargs: Any,
 ) -> Dict[str, Any]:
     """MCR-ALS with optional component sweep, calibration, and CV support."""
@@ -579,6 +792,18 @@ def mcr_als_analysis(
         raise ValueError("X_cal is required for mcr_als_analysis")
 
     y_labels_resolved = _normalize_y_labels(y_labels if y_labels is not None else kwargs.get("y_labels"))
+    resolved_nway_flag = _safe_int(nway_flag if nway_flag is not None else kwargs.get("nway_flag"), default=1)
+    if resolved_nway_flag < 1:
+        resolved_nway_flag = 1
+
+    resolved_aug_direction: Optional[int] = None
+    aug_raw = aug_direction if aug_direction is not None else kwargs.get("aug_direction")
+    if aug_raw is not None and str(aug_raw).strip() != "":
+        parsed_aug = _safe_int(aug_raw, default=0)
+        if parsed_aug > 0 and resolved_nway_flag >= 2:
+            if parsed_aug > resolved_nway_flag:
+                raise ValueError(f"aug_direction must be between 1 and nway_flag ({resolved_nway_flag}).")
+            resolved_aug_direction = int(parsed_aug)
     seed_value = None
     if random_state is not None and str(random_state).strip() != "":
         try:
@@ -615,6 +840,10 @@ def mcr_als_analysis(
                     component_y_mapping=component_y_mapping,
                     cv_config=None,
                     y_labels=y_labels_resolved,
+                    nway_flag=resolved_nway_flag,
+                    aug_direction=resolved_aug_direction,
+                    aug_row_counts_cal=kwargs.get("aug_row_counts_cal"),
+                    aug_row_counts_val=kwargs.get("aug_row_counts_val"),
                 )
 
                 fold_metrics.append(
@@ -659,6 +888,10 @@ def mcr_als_analysis(
                 component_y_mapping=component_y_mapping,
                 cv_config=None,
                 y_labels=y_labels_resolved,
+                nway_flag=resolved_nway_flag,
+                aug_direction=resolved_aug_direction,
+                aug_row_counts_cal=kwargs.get("aug_row_counts_cal"),
+                aug_row_counts_val=kwargs.get("aug_row_counts_val"),
             )
 
             full_result["cv_results"] = cv_agg
@@ -698,6 +931,9 @@ def mcr_als_analysis(
                     st_nonneg=_safe_bool(st_nonneg, default=True),
                     c_norm=_safe_bool(c_norm, default=False),
                     component_y_mapping=component_y_mapping,
+                    nway_flag=resolved_nway_flag,
+                    aug_direction=resolved_aug_direction,
+                    aug_row_counts_cal=kwargs.get("aug_row_counts_cal"),
                 )
                 cal_m = fit_rk.get("metrics", {}).get("calibration", {})
                 sweep_results.append(
@@ -731,6 +967,10 @@ def mcr_als_analysis(
         st_nonneg=_safe_bool(st_nonneg, default=True),
         c_norm=_safe_bool(c_norm, default=False),
         component_y_mapping=component_y_mapping,
+        nway_flag=resolved_nway_flag,
+        aug_direction=resolved_aug_direction,
+        aug_row_counts_cal=kwargs.get("aug_row_counts_cal"),
+        aug_row_counts_val=kwargs.get("aug_row_counts_val"),
     )
 
     if sweep_results:
