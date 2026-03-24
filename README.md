@@ -11,7 +11,6 @@ As of now it is still in early development, with the vast majority of its intend
 - **Rich Parameter Configuration**: JSON-based function configs with tooltips, help text, and conditional parameter visibility
 - **Multi-format & Multi-dimensional Data Support**: Load CSV, tab-separated, space-separated data with support for N-way arrays
 - **Preprocessing Functions**: Baseline correction, smoothing, center & normalize with multi-dimensional support
-- **Calibration Tools**: Univariate calibration methods with polynomial modeling
 - **Validation Support**: Automatic or manual validation set creation with multiple selection strategies
 - **Advanced Data Handling**: Multi-dimensional slicing, sample-wise operations, and flexible data reshaping
 - **Help System**: Integrated tooltips and detailed help for all functions
@@ -91,7 +90,6 @@ cm-studio/
 │   ├── data_processing.py         # Preprocessing functions
 │   ├── processing.py              # Additional processing utilities
 │   ├── reporting.py               # Report generation
-│   ├── univ_calibration.py        # Univariate calibration methods
 │   └── validation_data_input.py   # Validation set handling
 ├── gui_configs/                    # Function-specific GUI configurations (JSON)
 ├── languages/                      # Internationalization files

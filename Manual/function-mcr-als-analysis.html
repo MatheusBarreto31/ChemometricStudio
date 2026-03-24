@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MCR-ALS Analysis - Functions - Chemometric Studio User Manual</title>
+  <link rel="stylesheet" href="assets/css/manual.css">
+</head>
+<body data-manual-page="functions" data-manual-group="qa-functions">
+  <div data-manual-header></div>
+
+  <main class="layout">
+    <aside class="manual-sidebar" data-manual-sidebar data-reveal></aside>
+
+    <div class="content-column">
+      <section class="panel" data-reveal>
+        <h1>MCR-ALS Analysis</h1>
+        <p><a href="functions-category-analysis.html">Exploratory Analysis</a></p>
+      </section>
+
+      <section class="function-card" data-reveal>
+        <h2 class="function-title">MCR-ALS Analysis</h2>
+        <span class="function-category">Analysis</span>
+        <p><strong>Purpose:</strong> Decompose 2D matrices using Multivariate Curve Resolution-Alternating Least Squares (MCR-ALS) with optional constraints and component sweeps.</p>
+
+        <div class="io-section">
+          <div class="io-title">Inputs:</div>
+          <ul class="io-list">
+            <li><strong>X_cal</strong> (required)</li>
+            <li><strong>Y_cal</strong>, <strong>X_val</strong>, <strong>Y_val</strong> (optional)</li>
+          </ul>
+        </div>
+
+        <div class="io-section">
+          <div class="io-title">Outputs:</div>
+          <ul class="io-list">
+            <li><strong>scores_mode_a</strong>, <strong>val_scores_mode_a</strong> (concentration profiles)</li>
+            <li><strong>components</strong>, <strong>concentrations</strong> (decomposition results)</li>
+            <li><strong>reconstructed</strong>, <strong>residual</strong> (fit quality information)</li>
+            <li><strong>metrics</strong>, <strong>sweep_results</strong>, <strong>cv_results</strong></li>
+            <li><strong>calibration_models</strong>, <strong>y_*</strong> outputs (if Y_cal provided)</li>
+          </ul>
+        </div>
+
+        <div class="io-section">
+          <div class="io-title">Key Parameters:</div>
+          <div class="param-group"><div class="param-name">n_components</div><div class="param-desc">Number of latent components</div></div>
+          <div class="param-group"><div class="param-name">max_iter</div><div class="param-desc">Maximum ALS iterations (default: 250)</div></div>
+          <div class="param-group"><div class="param-name">tol</div><div class="param-desc">Convergence tolerance (default: 1e-8)</div></div>
+          <div class="param-group"><div class="param-name">c_regr, st_regr</div><div class="param-desc">Regression method: OLS or NNLS (non-negative least squares)</div></div>
+          <div class="param-group"><div class="param-name">c_nonneg, st_nonneg</div><div class="param-desc">Toggle non-negativity constraints on concentrations and spectra</div></div>
+          <div class="param-group"><div class="param-name">c_norm</div><div class="param-desc">Apply normalization constraint to concentration profiles</div></div>
+          <div class="param-group"><div class="param-name">sweep_mode</div><div class="param-desc">Enable component range sweep for rank evaluation</div></div>
+          <div class="param-group"><div class="param-name">component_range</div><div class="param-desc">Sweep specification (e.g., 2:6, 2-8, 2,3,4)</div></div>
+          <div class="param-group"><div class="param-name">component_y_mapping</div><div class="param-desc">Manual mapping of components to Y variables (optional)</div></div>
+        </div>
+
+        <div class="use-case">
+          <div class="use-case-title">When to Use:</div>
+          <ul>
+            <li>For 2D matrix decomposition with interpretable components</li>
+            <li>When physical or chemical constraints (non-negativity) should be enforced</li>
+            <li>When evaluating optimal component counts via sweep mode</li>
+            <li>For spectroscopic data analysis where pure component spectra are meaningful</li>
+            <li>When component-to-Y calibration mapping is required</li>
+          </ul>
+        </div>
+
+        <div class="use-case">
+          <div class="use-case-title">Algorithm Notes:</div>
+          <ul>
+            <li>MCR-ALS iteratively updates concentration (C) and spectral (S) matrices until convergence</li>
+            <li>Input multiway data is automatically unfolded to 2D</li>
+            <li>Supports optional cross-validation via existing CV pipeline integration</li>
+            <li>Component-to-Y calibration uses per-component linear regression</li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer data-manual-footer></footer>
+
+  <script src="assets/js/manual-common.js"></script>
+  <script src="assets/js/manual-shell.js"></script>
+  <script src="assets/js/manual.js"></script>
+</body>
+</html>
