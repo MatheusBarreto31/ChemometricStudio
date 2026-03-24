@@ -1452,8 +1452,14 @@ def _render_line(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],
                 cmap_obj = cm.get_cmap(cmap_name)
             except Exception:
                 cmap_obj = cm.get_cmap('tab10')
+            use_sequential_palette = bool(hasattr(cmap_obj, 'colors'))
+            if use_sequential_palette:
+                row_palette = [mcolors.to_rgba(c) for c in list(cmap_obj.colors)]
             for i, row in enumerate(y_data):
-                color = cmap_obj(i / max(1, n_rows - 1))
+                if use_sequential_palette:
+                    color = row_palette[i % len(row_palette)]
+                else:
+                    color = cmap_obj(i / max(1, n_rows - 1))
                 plot_kwargs: Dict[str, Any] = {'color': color, 'label': f'Row {i+1}'}
                 if marker is not None:
                     plot_kwargs['marker'] = marker
@@ -1873,6 +1879,9 @@ def _render_line_multi_dataset(ax, datasets: List[Dict[str, Any]], config: dict,
     else:
         n_datasets = len(datasets)
         cmap_obj = _safe_cmap_line(cmap_name, 'tab10')
+        use_sequential_palette = bool(hasattr(cmap_obj, 'colors'))
+        if use_sequential_palette:
+            color_palette = [mcolors.to_rgba(c) for c in list(cmap_obj.colors)]
 
         total_lines = 0
         for dataset in datasets:
@@ -1924,7 +1933,10 @@ def _render_line_multi_dataset(ax, datasets: List[Dict[str, Any]], config: dict,
                     plot_kwargs['color'] = color
                 else:
                     color_slot = style_line_start + line_idx
-                    plot_kwargs['color'] = cmap_obj(color_slot / max(1, style_total_lines - 1))
+                    if use_sequential_palette:
+                        plot_kwargs['color'] = color_palette[color_slot % len(color_palette)]
+                    else:
+                        plot_kwargs['color'] = cmap_obj(color_slot / max(1, style_total_lines - 1))
 
                 x_line = x_rows[line_idx]
                 if x_line is not None and len(x_line) == len(y_line):
