@@ -723,6 +723,18 @@ def _aggregate_scores_auc(C_rows: np.ndarray, row_ranges: Sequence[Tuple[int, in
     return out
 
 
+def _coerce_axis_vector_for_s(raw_axis: Any, expected_len: int) -> Optional[np.ndarray]:
+    if raw_axis is None:
+        return None
+    try:
+        arr = np.asarray(raw_axis, dtype=float).reshape(-1)
+    except Exception:
+        return None
+    if arr.size != int(expected_len):
+        return None
+    return arr
+
+
 def _build_pair_outputs(
     component_y_mapping: Dict[str, int],
     y_labels: Sequence[str],
@@ -1008,15 +1020,13 @@ def _single_fit(
         C_cal = np.asarray(C_cal_rows, dtype=float)
         C_val = None if C_val_rows is None else np.asarray(C_val_rows, dtype=float)
 
-    ss_res = float(np.sum((D_fit[:n_cal_rows] - reconstructed) ** 2))
+    residual_cal = np.asarray(D_fit[:n_cal_rows] - reconstructed, dtype=float)
+    ss_res = float(np.sum(residual_cal ** 2))
+    n_obs = int(np.isfinite(residual_cal).sum())
     mean_ref = float(np.mean(D_fit[:n_cal_rows]))
     ss_tot = float(np.sum((D_fit[:n_cal_rows] - mean_ref) ** 2)) + 1e-12
     explained_variance = float(100.0 * (1.0 - ss_res / ss_tot))
-    sfit = float(
-        100.0 * (
-            1.0 - np.linalg.norm(D_fit[:n_cal_rows] - reconstructed) / (np.linalg.norm(D_fit[:n_cal_rows]) + 1e-12)
-        )
-    )
+    sfit = float(np.sqrt(ss_res / max(n_obs, 1)))
 
     mapping: Dict[int, int] = {}
     auto_mapping_used = False
@@ -1098,7 +1108,7 @@ def _single_fit(
                 "selected": constraint_summary.get("enabled_flags", {}),
                 "applied_flags": constraint_summary.get("applied_flags", {}),
                 "applied": constraint_summary.get("applied_constraints", {}),
-                "non_negative_mode": {"C": mode_c, "ST": mode_st},
+                "non_negative_mode": {"C": mode_c, "S": mode_st},
             },
             "original_shape": tuple(X_cal_raw.shape),
             "fit_shape": fit_shape,
@@ -1110,29 +1120,96 @@ def _single_fit(
         }
     }
 
+    c_constraints_report = list(constraint_summary.get("applied_constraints", {}).get("C", []))
+    s_constraints_report = list(constraint_summary.get("applied_constraints", {}).get("ST", []))
+
+    if bool(non_negative_selected[0]):
+        if mode_c == "nnls":
+            c_constraints_report.append("Non-negative (NNLS)")
+        elif mode_c == "clip":
+            c_constraints_report.append("Non-negative (Projection)")
+        elif mode_c == "nnls_clip":
+            c_constraints_report.append("Non-negative (NNLS + Projection)")
+
+    if bool(non_negative_selected[1]):
+        if mode_st == "nnls":
+            s_constraints_report.append("Non-negative (NNLS)")
+        elif mode_st == "clip":
+            s_constraints_report.append("Non-negative (Projection)")
+        elif mode_st == "nnls_clip":
+            s_constraints_report.append("Non-negative (NNLS + Projection)")
+
+    c_constraints_report = list(dict.fromkeys(c_constraints_report))
+    s_constraints_report = list(dict.fromkeys(s_constraints_report))
+
     report_lines = [
         "MCR-ALS Report",
-        f"Implementation: MCR-ALS (pyMCR)",
+        "==============",
         f"Components: {int(n_components)}",
-        f"Calibration samples: {int(C_cal.shape[0])}",
-        f"Calibration features (unfolded): {int(D_fit.shape[1])}",
-        f"Fit combined samples: {bool(combine_fit_samples)}",
-        f"C regressor: {str(effective_c_regr).upper()} | ST regressor: {str(effective_st_regr).upper()}",
-        f"Iterations: {int(getattr(mcr, 'n_iter', 0) or 0)}",
-        f"sfit (%): {sfit:.4f}",
+        f"SSR: {ss_res:.6g}",
+        f"sfit: {sfit:.6g}",
         f"Explained variance (%): {explained_variance:.4f}",
-        f"Constraints C: {', '.join(constraint_summary.get('applied_constraints', {}).get('C', [])) or 'None'}",
-        f"Constraints ST: {', '.join(constraint_summary.get('applied_constraints', {}).get('ST', [])) or 'None'}",
+        f"Iterations: {int(getattr(mcr, 'n_iter', 0) or 0)}",
+        "Implementation: MCR-ALS (pyMCR)",
+        f"Calibration samples: {int(C_cal.shape[0])}",
+        f"Validation samples: {0 if C_val is None else int(C_val.shape[0])}",
+        f"Calibration features (unfolded): {int(D_fit.shape[1])}",
+        f"Validation samples included in fitting: {bool(combine_fit_samples)}",
+        f"C regressor: {str(effective_c_regr).upper()} | S regressor: {str(effective_st_regr).upper()}",
+        f"Constraints C: {', '.join(c_constraints_report) or 'None'}",
+        f"Constraints S: {', '.join(s_constraints_report) or 'None'}",
     ]
     if calibration_models:
         report_lines.append("")
-        report_lines.append("Component calibration models:")
+        report_lines.append("Calibration statistics:")
         for item in calibration_models:
             report_lines.append(
                 f"- C{item['component']} -> Y{item['y_column']} | "
-                f"Cal R2={_safe_float(item['calibration'].get('R2'), default=np.nan):.4f}, "
-                f"Cal RMSEP={_safe_float(item['calibration'].get('RMSEP'), default=np.nan):.6g}"
+                f"Calibration R2={_safe_float(item['calibration'].get('R2'), default=np.nan):.4f}, "
+                f"Calibration RMSEP={_safe_float(item['calibration'].get('RMSEP'), default=np.nan):.6g}"
             )
+            vm = item.get("validation", {}) if isinstance(item, dict) else {}
+            if vm:
+                report_lines.append(
+                    f"  Validation R2={_safe_float(vm.get('R2'), default=np.nan):.4f}, "
+                    f"Validation RMSEP={_safe_float(vm.get('RMSEP'), default=np.nan):.6g}"
+                )
+
+    concentrations_unfolded = np.asarray(C_cal_rows, dtype=float).T
+    concentration_row_axis = np.arange(1, int(C_cal_rows.shape[0]) + 1, dtype=float)
+
+    s_axis_vector: Optional[np.ndarray] = None
+    axis_vectors: List[Any] = []
+    if isinstance(axis_n_info, (list, tuple)):
+        axis_vectors = list(axis_n_info)
+
+    non_aug_dims: List[int] = []
+    if int(nway_flag) <= 1:
+        non_aug_dims = [1]
+    else:
+        aug_dim = int(aug_direction) if aug_direction is not None else 1
+        if aug_dim < 1 or aug_dim > int(nway_flag):
+            aug_dim = 1
+        non_aug_dims = [dim for dim in range(1, int(nway_flag) + 1) if dim != aug_dim]
+
+    # Use physical axis values only when S spans a single non-augmented direction.
+    if len(non_aug_dims) == 1:
+        axis_idx = int(non_aug_dims[0]) - 1
+        if 0 <= axis_idx < len(axis_vectors):
+            s_axis_vector = _coerce_axis_vector_for_s(axis_vectors[axis_idx], int(ST.shape[1]))
+    sample_boundary_positions: List[float] = []
+    row_counts_for_boundaries = [int(v) for v in cal_prep.get("row_counts", [])]
+    one_row_per_sample = (
+        len(row_counts_for_boundaries) == int(C_cal_rows.shape[0])
+        and all(int(v) == 1 for v in row_counts_for_boundaries)
+    )
+    if row_counts_for_boundaries and not one_row_per_sample:
+        cursor = 0
+        n_rows = int(C_cal_rows.shape[0])
+        for count in row_counts_for_boundaries[:-1]:
+            cursor += max(0, int(count))
+            if 0 < cursor < n_rows:
+                sample_boundary_positions.append(float(cursor) + 0.5)
 
     output = {
         "scores_mode_a": C_cal,
@@ -1142,9 +1219,14 @@ def _single_fit(
         "mode_a_component_axis": np.arange(1, int(C_cal.shape[1]) + 1, dtype=float),
         "sweep_F": None,
         "sweep_sfit": None,
+        "sweep_n_iter": None,
         "sweep_explained_variance": None,
         "components": ST,
         "concentrations": C_cal,
+        "concentrations_unfolded": concentrations_unfolded,
+        "concentration_row_axis": concentration_row_axis,
+        "s_axis_vector": s_axis_vector,
+        "sample_boundary_positions": np.asarray(sample_boundary_positions, dtype=float),
         "reconstructed": reconstructed,
         "residual": residual,
         "metrics": metrics,
@@ -1325,6 +1407,7 @@ def mcr_als_analysis(
                     y_labels=y_labels_resolved,
                     nway_flag=resolved_nway_flag,
                     aug_direction=resolved_aug_direction,
+                    axis_n_info=kwargs.get("axis_n_info"),
                     aug_row_counts_cal=kwargs.get("aug_row_counts_cal"),
                     aug_row_counts_val=kwargs.get("aug_row_counts_val"),
                 )
@@ -1403,6 +1486,7 @@ def mcr_als_analysis(
                 y_labels=y_labels_resolved,
                 nway_flag=resolved_nway_flag,
                 aug_direction=resolved_aug_direction,
+                axis_n_info=kwargs.get("axis_n_info"),
                 aug_row_counts_cal=kwargs.get("aug_row_counts_cal"),
                 aug_row_counts_val=kwargs.get("aug_row_counts_val"),
             )
@@ -1413,6 +1497,19 @@ def mcr_als_analysis(
             full_result["y_cv_pred"] = ycv_pred
             if ycv_pred is not None and Y2 is not None:
                 full_result["y_cv_error"] = np.asarray(Y2, dtype=float) - np.asarray(ycv_pred, dtype=float)
+
+            report_text = str(full_result.get("mcr_als_report", "") or "")
+            cv_lines: List[str] = []
+            cv_lines.append("")
+            cv_lines.append("Cross-validation summary:")
+            cv_lines.append(f"- Folds: {int(cv_agg.get('n_folds', 0))}")
+            if "sfit_mean" in cv_agg:
+                cv_lines.append(f"- Cross-validation mean sfit: {_safe_float(cv_agg.get('sfit_mean')):.6g}")
+            if "explained_variance_mean" in cv_agg:
+                cv_lines.append(
+                    f"- Cross-validation mean explained variance (%): {_safe_float(cv_agg.get('explained_variance_mean')):.4f}"
+                )
+            full_result["mcr_als_report"] = report_text + "\n".join(cv_lines)
             return full_result
 
     ranks: List[int] = [int(max(1, _safe_int(n_components, default=2)))]
@@ -1476,6 +1573,7 @@ def mcr_als_analysis(
                     component_y_mapping=component_y_mapping,
                     nway_flag=resolved_nway_flag,
                     aug_direction=resolved_aug_direction,
+                    axis_n_info=kwargs.get("axis_n_info"),
                     aug_row_counts_cal=kwargs.get("aug_row_counts_cal"),
                 )
                 cal_m = fit_rk.get("metrics", {}).get("calibration", {})
@@ -1542,6 +1640,7 @@ def mcr_als_analysis(
         component_y_mapping=component_y_mapping,
         nway_flag=resolved_nway_flag,
         aug_direction=resolved_aug_direction,
+        axis_n_info=kwargs.get("axis_n_info"),
         aug_row_counts_cal=kwargs.get("aug_row_counts_cal"),
         aug_row_counts_val=kwargs.get("aug_row_counts_val"),
     )
@@ -1550,10 +1649,20 @@ def mcr_als_analysis(
         result["sweep_results"] = sweep_results
         result["sweep_F"] = np.asarray([_safe_float(item.get("n_components")) for item in sweep_results], dtype=float)
         result["sweep_sfit"] = np.asarray([_safe_float(item.get("sfit")) for item in sweep_results], dtype=float)
+        result["sweep_n_iter"] = np.asarray([_safe_float(item.get("n_iter")) for item in sweep_results], dtype=float)
         result["sweep_explained_variance"] = np.asarray(
             [_safe_float(item.get("explained_variance")) for item in sweep_results],
             dtype=float,
         )
+
+        report_text = str(result.get("mcr_als_report", "") or "")
+        sweep_lines: List[str] = [report_text, "", "Sweep results:"]
+        for item in sweep_results:
+            sweep_lines.append(
+                f"- F={item.get('n_components')} | sfit={_safe_float(item.get('sfit')):.6g} | "
+                f"EV={_safe_float(item.get('explained_variance')):.4f}% | iter={int(_safe_int(item.get('n_iter'), default=0))}"
+            )
+        result["mcr_als_report"] = "\n".join(sweep_lines)
     else:
         result["sweep_results"] = None
 
@@ -1582,9 +1691,14 @@ _MCR_ALS_RETURN_ORDER: Tuple[str, ...] = (
     "mode_a_component_axis",
     "sweep_F",
     "sweep_sfit",
+    "sweep_n_iter",
     "sweep_explained_variance",
     "components",
     "concentrations",
+    "concentrations_unfolded",
+    "concentration_row_axis",
+    "s_axis_vector",
+    "sample_boundary_positions",
     "reconstructed",
     "residual",
     "metrics",

@@ -52,6 +52,10 @@
   "output_aliases": {
     "scores_mode_a": "Concentration Scores (C)",
     "val_scores_mode_a": "Validation Concentration Scores",
+    "concentrations_unfolded": "Unfolded Concentration Profiles",
+    "concentration_row_axis": "Unfolded Row Axis",
+    "s_axis_vector": "S Axis Vector",
+    "sample_boundary_positions": "Sample Boundary Positions",
     "components": "Spectral Components (S)",
     "reconstructed": "Reconstructed Data",
     "residual": "Residual Data",
@@ -60,7 +64,8 @@
     "component_y_mapping": "Component-Y Pairing",
     "mcr_als_report": "MCR-ALS Report",
     "cv_results": "CV Results",
-    "y_cv_pred": "CV Predictions"
+    "y_cv_pred": "CV Predictions",
+    "sweep_n_iter": "Sweep Iterations"
   },
   "short_description": "MCR-ALS (pyMCR) decomposition with optional calibration, sweep, and cross-validation.",
   "long_description": "Fits MCR-ALS to unfolded calibration data using pyMCR, estimates concentration/spectral profiles, and optionally maps components to Y targets for calibration and validation prediction.",
@@ -599,12 +604,12 @@
         "name": "component_y_mapping",
         "label": "Component-Y Mapping",
         "category": "Calibration",
-        "widget": "entry",
-        "type": "str",
+        "widget": "entry_list",
+        "count_source": "n_components",
         "default": "",
         "required": false,
         "input_type": "user",
-        "tooltip": "Optional explicit mapping, e.g. 1:1,2:2. Leave blank for automatic mapping."
+        "tooltip": "One entry per component: Y column index (1-based). Empty entry excludes that component. If all are empty, all valid component-to-Y combinations are evaluated automatically."
       },
       {
         "name": "y_labels",
@@ -642,5 +647,327 @@
         "input_type": "inherited"
       }
     ]
+  },
+  "analysis": {
+    "pages": [
+      {
+        "title": "MCR-ALS Deconvolution Report",
+        "layout": "fp",
+        "sections": [
+          {
+            "type": "text",
+            "config": {
+              "title": "MCR-ALS Text Report",
+              "text_template": "{report_text}",
+              "bindings": [
+                {
+                  "name": "report_text",
+                  "data_source": "mcr_als_report",
+                  "selector": {
+                    "mode": "value"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Prediction Tables",
+        "layout": "ew",
+        "condition": {
+          "parameter": "y_cal_true",
+          "operator": "exists",
+          "value": true
+        },
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "title": "Calibration Predictions, References, and Error",
+              "row_label": "Sample",
+              "row_headers": "smp_cal",
+              "columns": [
+                {
+                  "data_source": "y_cal_pred_pairs",
+                  "name": "Predicted"
+                },
+                {
+                  "data_source": "y_cv_pred_pairs",
+                  "name": "Predicted (CV)"
+                },
+                {
+                  "data_source": "y_cal_true_pairs",
+                  "name": "Reference"
+                },
+                {
+                  "data_source": "y_cal_error_pairs",
+                  "name": "Error"
+                },
+                {
+                  "data_source": "y_cv_error_pairs",
+                  "name": "Error (CV)"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Pairing",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true
+                }
+              ],
+              "variable_labels": "mcr_pairing_labels_by_dimension",
+              "pairing_labels_source": "mcr_pairing_labels",
+              "slice_title_source": "mcr_pair_y_titles",
+              "slice_title_dimension": 1,
+              "slice_title_prefix": "Y",
+              "decimal_places": 6,
+              "max_rows": 500
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Validation Predictions, References, and Error",
+              "row_label": "Sample",
+              "row_headers": "smp_val",
+              "columns": [
+                {
+                  "data_source": "y_val_pred_pairs",
+                  "name": "Predicted"
+                },
+                {
+                  "data_source": "y_val_true_pairs",
+                  "name": "Reference"
+                },
+                {
+                  "data_source": "y_val_error_pairs",
+                  "name": "Error"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Pairing",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true
+                }
+              ],
+              "variable_labels": "mcr_pairing_labels_by_dimension",
+              "pairing_labels_source": "mcr_pairing_labels",
+              "slice_title_source": "mcr_pair_y_titles",
+              "slice_title_dimension": 1,
+              "slice_title_prefix": "Y",
+              "decimal_places": 6,
+              "max_rows": 500
+            }
+          }
+        ]
+      },
+      {
+        "title": "Sweep Scree",
+        "layout": "fd",
+        "condition": {
+          "parameter": "sweep_mode",
+          "operator": "==",
+          "value": "True"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "marker": "o",
+              "x_axis": {
+                "data_source": "sweep_F",
+                "force_integer": true,
+                "label": "F"
+              },
+              "y_axis": {
+                "data_source": "sweep_sfit",
+                "label": "sfit"
+              },
+              "title": "Sweep: sfit vs F",
+              "show_origin": false
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "marker": "o",
+              "x_axis": {
+                "data_source": "sweep_F",
+                "force_integer": true,
+                "label": "F"
+              },
+              "y_axis": {
+                "data_source": "sweep_explained_variance",
+                "label": "Explained Variance (%)"
+              },
+              "title": "Sweep: Explained Variance vs F",
+              "show_origin": false
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "marker": "o",
+              "x_axis": {
+                "data_source": "sweep_F",
+                "force_integer": true,
+                "label": "F"
+              },
+              "y_axis": {
+                "data_source": "sweep_n_iter",
+                "label": "Iterations"
+              },
+              "title": "Sweep: Iterations vs F",
+              "show_origin": false
+            }
+          }
+        ]
+      },
+      {
+        "title": "C and S Profiles",
+        "layout": "ew",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {
+                "data_source": "concentration_row_axis",
+                "force_integer": true,
+                "label": "Unfolded Row Index"
+              },
+              "y_axis": {
+                "data_source": "concentrations_unfolded",
+                "label": "C (a.u.)"
+              },
+              "title": "C Profiles (Unfolded Rows)",
+              "show_origin": false,
+              "reference_lines": [
+                {
+                  "orientation": "vertical",
+                  "values": {
+                    "data_source": "sample_boundary_positions"
+                  },
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.7,
+                  "color": "#666666"
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "condition": {
+              "parameter": "s_axis_vector",
+              "operator": "exists",
+              "value": true
+            },
+            "config": {
+              "graph_type": "line",
+              "x_axis": {
+                "data_source": "s_axis_vector",
+                "label": "Non-augmented Axis"
+              },
+              "y_axis": {
+                "data_source": "components",
+                "label": "S (a.u.)"
+              },
+              "title": "S Profiles",
+              "show_origin": false
+            }
+          },
+          {
+            "type": "graph",
+            "condition": {
+              "parameter": "s_axis_vector",
+              "operator": "not_exists",
+              "value": true
+            },
+            "config": {
+              "graph_type": "line",
+              "x_axis": {
+                "data_source": "row_index",
+                "reference_source": "components",
+                "force_integer": true,
+                "label": "Variable Index"
+              },
+              "y_axis": {
+                "data_source": "components",
+                "label": "Signal"
+              },
+              "title": "S Profiles",
+              "show_origin": false
+            }
+          }
+        ]
+      },
+      {
+        "title": "UAC vs Reference Concentration",
+        "layout": "fp",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "UAC vs Reference Concentration",
+              "show_origin": true,
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "Y_cal",
+                    "axis_type": "linear",
+                    "label": "Reference Concentration"
+                  },
+                  "y_axis": {
+                    "data_source": "scores_mode_a",
+                    "axis_type": "linear",
+                    "label": "UAC"
+                  },
+                  "label": "Calibration"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "Y_val",
+                    "axis_type": "linear",
+                    "label": "Reference Concentration"
+                  },
+                  "y_axis": {
+                    "data_source": "val_scores_mode_a",
+                    "axis_type": "linear",
+                    "label": "UAC"
+                  },
+                  "label": "Validation"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Y Column",
+                  "dimension": 1,
+                  "axis": "x",
+                  "default": 0,
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "Component",
+                  "dimension": 1,
+                  "axis": "y",
+                  "default": 0,
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ],
+    "current_page": 0
   }
 }

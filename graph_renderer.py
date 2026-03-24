@@ -209,7 +209,7 @@ def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarr
 
     _apply_axis_direction_options(ax, config, use_3d=use_3d)
 
-    if str(graph_type).strip().lower() == 'scatter' and not use_3d:
+    if str(graph_type).strip().lower() in {'scatter', 'line'} and not use_3d:
         _render_scatter_reference_lines(ax, config)
     
     # constrained_layout handles margins automatically - no manual adjustment needed

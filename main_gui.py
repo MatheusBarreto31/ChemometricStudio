@@ -9453,7 +9453,7 @@ class ChemometricsGUI:
                 render_config['class_color_cmap_qualitative'] = str(config.get('class_color_cmap_qualitative', self.settings_manager.get('qualitative_colormap', 'tab10')))
                 render_config['class_edge_cmap_qualitative'] = str(config.get('class_edge_cmap_qualitative', self.settings_manager.get('qualitative_colormap', 'tab10')))
 
-            if normalized_graph_type == 'scatter':
+            if normalized_graph_type in {'scatter', 'line'}:
                 render_config['scatter_reference_lines'] = self._resolve_scatter_reference_lines(config, outputs)
             
             # Render graph using graph_renderer module
