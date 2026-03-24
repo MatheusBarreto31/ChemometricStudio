@@ -161,6 +161,38 @@ def _normalize_bool_list(values: Any, count: int) -> List[bool]:
     return out
 
 
+def _normalize_optional_float_list(values: Any, count: int) -> List[Optional[float]]:
+    if isinstance(values, np.ndarray):
+        raw = np.asarray(values).reshape(-1).tolist()
+    elif isinstance(values, (list, tuple)):
+        raw = list(values)
+    elif isinstance(values, str):
+        text = values.strip()
+        raw = [item.strip() for item in text.split(",")] if text else []
+    elif values is None:
+        raw = []
+    else:
+        raw = [values]
+
+    out: List[Optional[float]] = []
+    for item in raw[:count]:
+        if item is None:
+            out.append(None)
+            continue
+        text = str(item).strip()
+        if text == "":
+            out.append(None)
+            continue
+        try:
+            out.append(float(text))
+        except Exception:
+            out.append(None)
+
+    if len(out) < count:
+        out.extend([None] * (count - len(out)))
+    return out
+
+
 def _coerce_scalar_token(token: Any) -> Any:
     if isinstance(token, (bool, int, float)) or token is None:
         return token
@@ -182,16 +214,24 @@ def _build_tensorly_constraints(
     n_modes: int,
     constraint_non_negative: Any = None,
     constraint_l1_reg: Any = None,
+    constraint_l1_reg_strength: Any = None,
     constraint_l2_reg: Any = None,
+    constraint_l2_reg_strength: Any = None,
     constraint_l2_square_reg: Any = None,
+    constraint_l2_square_reg_strength: Any = None,
     constraint_unimodality: Any = None,
     constraint_normalize: Any = None,
     constraint_simplex: Any = None,
+    constraint_simplex_strength: Any = None,
     constraint_normalized_sparsity: Any = None,
+    constraint_normalized_sparsity_strength: Any = None,
     constraint_soft_sparsity: Any = None,
+    constraint_soft_sparsity_strength: Any = None,
     constraint_smoothness: Any = None,
+    constraint_smoothness_strength: Any = None,
     constraint_monotonicity: Any = None,
     constraint_hard_sparsity: Any = None,
+    constraint_hard_sparsity_strength: Any = None,
 ) -> Dict[str, Any]:
     mode_flags: Dict[str, List[bool]] = {
         "non_negative": _normalize_bool_list(constraint_non_negative, n_modes),
@@ -216,11 +256,22 @@ def _build_tensorly_constraints(
         "unimodality": True,
         "normalize": True,
         "simplex": 1.0,
-        "normalized_sparsity": 0.5,
+        "normalized_sparsity": 1.0,
         "soft_sparsity": 1.0,
         "smoothness": 1.0,
         "monotonicity": True,
         "hard_sparsity": 1,
+    }
+
+    mode_strengths: Dict[str, List[Optional[float]]] = {
+        "l1_reg": _normalize_optional_float_list(constraint_l1_reg_strength, n_modes),
+        "l2_reg": _normalize_optional_float_list(constraint_l2_reg_strength, n_modes),
+        "l2_square_reg": _normalize_optional_float_list(constraint_l2_square_reg_strength, n_modes),
+        "simplex": _normalize_optional_float_list(constraint_simplex_strength, n_modes),
+        "normalized_sparsity": _normalize_optional_float_list(constraint_normalized_sparsity_strength, n_modes),
+        "soft_sparsity": _normalize_optional_float_list(constraint_soft_sparsity_strength, n_modes),
+        "smoothness": _normalize_optional_float_list(constraint_smoothness_strength, n_modes),
+        "hard_sparsity": _normalize_optional_float_list(constraint_hard_sparsity_strength, n_modes),
     }
 
     out: Dict[str, Any] = {}
@@ -228,7 +279,24 @@ def _build_tensorly_constraints(
         if not any(bool(v) for v in flags):
             continue
         enabled_value = mode_defaults[key]
-        out[key] = [enabled_value if bool(flag) else None for flag in flags]
+        strengths = mode_strengths.get(key)
+        if strengths is None:
+            out[key] = [enabled_value if bool(flag) else None for flag in flags]
+            continue
+
+        values: List[Any] = []
+        for idx, flag in enumerate(flags):
+            if not bool(flag):
+                values.append(None)
+                continue
+            maybe_strength = strengths[idx] if idx < len(strengths) else None
+            if maybe_strength is None:
+                values.append(enabled_value)
+            elif key == "hard_sparsity":
+                values.append(max(1, int(round(float(maybe_strength)))))
+            else:
+                values.append(float(maybe_strength))
+        out[key] = values
     return out
 
 
@@ -1665,16 +1733,24 @@ def parafac_analysis(
     mode_normalization: Optional[Any] = None,
     constraint_non_negative: Optional[Any] = None,
     constraint_l1_reg: Optional[Any] = None,
+    constraint_l1_reg_strength: Optional[Any] = None,
     constraint_l2_reg: Optional[Any] = None,
+    constraint_l2_reg_strength: Optional[Any] = None,
     constraint_l2_square_reg: Optional[Any] = None,
+    constraint_l2_square_reg_strength: Optional[Any] = None,
     constraint_unimodality: Optional[Any] = None,
     constraint_normalize: Optional[Any] = None,
     constraint_simplex: Optional[Any] = None,
+    constraint_simplex_strength: Optional[Any] = None,
     constraint_normalized_sparsity: Optional[Any] = None,
+    constraint_normalized_sparsity_strength: Optional[Any] = None,
     constraint_soft_sparsity: Optional[Any] = None,
+    constraint_soft_sparsity_strength: Optional[Any] = None,
     constraint_smoothness: Optional[Any] = None,
+    constraint_smoothness_strength: Optional[Any] = None,
     constraint_monotonicity: Optional[Any] = None,
     constraint_hard_sparsity: Optional[Any] = None,
+    constraint_hard_sparsity_strength: Optional[Any] = None,
     unconstrained_sparsity: bool = False,
     unconstrained_linesearch: bool = False,
     unconstrained_orthogonalise: bool = False,
@@ -1723,16 +1799,24 @@ def parafac_analysis(
         n_modes=n_modes,
         constraint_non_negative=constraint_non_negative,
         constraint_l1_reg=constraint_l1_reg,
+        constraint_l1_reg_strength=constraint_l1_reg_strength,
         constraint_l2_reg=constraint_l2_reg,
+        constraint_l2_reg_strength=constraint_l2_reg_strength,
         constraint_l2_square_reg=constraint_l2_square_reg,
+        constraint_l2_square_reg_strength=constraint_l2_square_reg_strength,
         constraint_unimodality=constraint_unimodality,
         constraint_normalize=constraint_normalize,
         constraint_simplex=constraint_simplex,
+        constraint_simplex_strength=constraint_simplex_strength,
         constraint_normalized_sparsity=constraint_normalized_sparsity,
+        constraint_normalized_sparsity_strength=constraint_normalized_sparsity_strength,
         constraint_soft_sparsity=constraint_soft_sparsity,
+        constraint_soft_sparsity_strength=constraint_soft_sparsity_strength,
         constraint_smoothness=constraint_smoothness,
+        constraint_smoothness_strength=constraint_smoothness_strength,
         constraint_monotonicity=constraint_monotonicity,
         constraint_hard_sparsity=constraint_hard_sparsity,
+        constraint_hard_sparsity_strength=constraint_hard_sparsity_strength,
     )
     seed_value = _safe_optional_int(random_state, default=None)
     multi_start_runs_value = _safe_optional_int(random_multi_start_runs, default=5)
@@ -1776,16 +1860,24 @@ def parafac_analysis(
                     mode_normalization=norm_list,
                     constraint_non_negative=constraint_non_negative,
                     constraint_l1_reg=constraint_l1_reg,
+                    constraint_l1_reg_strength=constraint_l1_reg_strength,
                     constraint_l2_reg=constraint_l2_reg,
+                    constraint_l2_reg_strength=constraint_l2_reg_strength,
                     constraint_l2_square_reg=constraint_l2_square_reg,
+                    constraint_l2_square_reg_strength=constraint_l2_square_reg_strength,
                     constraint_unimodality=constraint_unimodality,
                     constraint_normalize=constraint_normalize,
                     constraint_simplex=constraint_simplex,
+                    constraint_simplex_strength=constraint_simplex_strength,
                     constraint_normalized_sparsity=constraint_normalized_sparsity,
+                    constraint_normalized_sparsity_strength=constraint_normalized_sparsity_strength,
                     constraint_soft_sparsity=constraint_soft_sparsity,
+                    constraint_soft_sparsity_strength=constraint_soft_sparsity_strength,
                     constraint_smoothness=constraint_smoothness,
+                    constraint_smoothness_strength=constraint_smoothness_strength,
                     constraint_monotonicity=constraint_monotonicity,
                     constraint_hard_sparsity=constraint_hard_sparsity,
+                    constraint_hard_sparsity_strength=constraint_hard_sparsity_strength,
                     unconstrained_sparsity=unconstrained_sparsity,
                     unconstrained_linesearch=unconstrained_linesearch,
                     unconstrained_orthogonalise=unconstrained_orthogonalise,
@@ -1855,16 +1947,24 @@ def parafac_analysis(
                 mode_normalization=norm_list,
                 constraint_non_negative=constraint_non_negative,
                 constraint_l1_reg=constraint_l1_reg,
+                constraint_l1_reg_strength=constraint_l1_reg_strength,
                 constraint_l2_reg=constraint_l2_reg,
+                constraint_l2_reg_strength=constraint_l2_reg_strength,
                 constraint_l2_square_reg=constraint_l2_square_reg,
+                constraint_l2_square_reg_strength=constraint_l2_square_reg_strength,
                 constraint_unimodality=constraint_unimodality,
                 constraint_normalize=constraint_normalize,
                 constraint_simplex=constraint_simplex,
+                constraint_simplex_strength=constraint_simplex_strength,
                 constraint_normalized_sparsity=constraint_normalized_sparsity,
+                constraint_normalized_sparsity_strength=constraint_normalized_sparsity_strength,
                 constraint_soft_sparsity=constraint_soft_sparsity,
+                constraint_soft_sparsity_strength=constraint_soft_sparsity_strength,
                 constraint_smoothness=constraint_smoothness,
+                constraint_smoothness_strength=constraint_smoothness_strength,
                 constraint_monotonicity=constraint_monotonicity,
                 constraint_hard_sparsity=constraint_hard_sparsity,
+                constraint_hard_sparsity_strength=constraint_hard_sparsity_strength,
                 unconstrained_sparsity=unconstrained_sparsity,
                 unconstrained_linesearch=unconstrained_linesearch,
                 unconstrained_orthogonalise=unconstrained_orthogonalise,

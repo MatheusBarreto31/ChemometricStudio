@@ -5372,6 +5372,7 @@ class ChemometricsGUI:
                 list_frame.pack(anchor=tk.W, padx=20, pady=(0, 5), fill=tk.X)
                 
                 combo_widgets = []
+                combo_item_frames = []
                 current_values = func_config.get(name, [])
                 if isinstance(current_values, str):
                     current_values = [v.strip() for v in current_values.split(',') if v.strip()]
@@ -5379,6 +5380,7 @@ class ChemometricsGUI:
                 for i in range(count):
                     item_frame = ttk.Frame(list_frame)
                     item_frame.pack(anchor=tk.W, pady=(0, 2), fill=tk.X)
+                    combo_item_frames.append(item_frame)
                     
                     item_label = ttk.Label(item_frame, text=f"  [{i+1}]:", width=6)
                     item_label.pack(side=tk.LEFT)
@@ -5415,9 +5417,12 @@ class ChemometricsGUI:
                 self._save_widget_value(instance_alias, name, initial_values)
                 
                 widget_data["widget"] = combo_widgets
+                widget_data["item_frames"] = combo_item_frames
                 widget_data["list_frame"] = list_frame
                 widget_data["count_source"] = count_source
                 widget_data["is_dynamic_list"] = True
+
+                self._apply_dynamic_list_item_visibility(instance_alias, name, widget_data, visible_widgets)
             
             elif widget_type == "file_selector_list":
                 # Dynamic list of file selectors based on count_source parameter
@@ -5430,6 +5435,7 @@ class ChemometricsGUI:
                 list_frame.pack(anchor=tk.W, padx=20, pady=(0, 5), fill=tk.X)
                 
                 file_widgets = []
+                file_item_frames = []
                 current_values = func_config.get(name, [])
                 if isinstance(current_values, str):
                     current_values = [v.strip() for v in current_values.split(';') if v.strip()]
@@ -5437,6 +5443,7 @@ class ChemometricsGUI:
                 for i in range(count):
                     item_frame = ttk.Frame(list_frame)
                     item_frame.pack(anchor=tk.W, pady=(0, 2), fill=tk.X)
+                    file_item_frames.append(item_frame)
                     
                     item_label = ttk.Label(item_frame, text=f"  [{i+1}]:", width=6)
                     item_label.pack(side=tk.LEFT)
@@ -5479,9 +5486,12 @@ class ChemometricsGUI:
                 self._save_widget_value(instance_alias, name, initial_values)
                 
                 widget_data["widget"] = file_widgets
+                widget_data["item_frames"] = file_item_frames
                 widget_data["list_frame"] = list_frame
                 widget_data["count_source"] = count_source
                 widget_data["is_dynamic_list"] = True
+
+                self._apply_dynamic_list_item_visibility(instance_alias, name, widget_data, visible_widgets)
             
             elif widget_type == "entry_list":
                 # Dynamic list of entry fields based on count_source parameter
@@ -5495,6 +5505,7 @@ class ChemometricsGUI:
                 list_frame.pack(anchor=tk.W, padx=20, pady=(0, 5), fill=tk.X)
                 
                 entry_widgets = []
+                entry_item_frames = []
                 current_values = func_config.get(name, [])
                 if isinstance(current_values, str):
                     current_values = [v.strip() for v in current_values.split(';') if v.strip()]
@@ -5502,6 +5513,7 @@ class ChemometricsGUI:
                 for i in range(count):
                     item_frame = ttk.Frame(list_frame)
                     item_frame.pack(anchor=tk.W, pady=(0, 2), fill=tk.X)
+                    entry_item_frames.append(item_frame)
                     
                     item_label = ttk.Label(item_frame, text=f"  [{i+1}]:", width=6)
                     item_label.pack(side=tk.LEFT)
@@ -5531,9 +5543,12 @@ class ChemometricsGUI:
                 self._save_widget_value(instance_alias, name, initial_values)
                 
                 widget_data["widget"] = entry_widgets
+                widget_data["item_frames"] = entry_item_frames
                 widget_data["list_frame"] = list_frame
                 widget_data["count_source"] = count_source
                 widget_data["is_dynamic_list"] = True
+
+                self._apply_dynamic_list_item_visibility(instance_alias, name, widget_data, visible_widgets)
 
             elif widget_type == "checkbutton_list":
                 # Dynamic horizontal list of checkbuttons based on count_source parameter.
@@ -5606,6 +5621,7 @@ class ChemometricsGUI:
                 list_frame.pack(anchor=tk.W, padx=20, pady=(0, 5), fill=tk.X)
                 
                 sample_widgets = []  # List of (entry_widget, files_list) tuples
+                sample_item_frames = []
                 current_values = func_config.get(name, [])
                 if isinstance(current_values, str):
                     # Parse semicolon-separated samples, where each sample has comma-separated files
@@ -5614,6 +5630,7 @@ class ChemometricsGUI:
                 for i in range(count):
                     item_frame = ttk.Frame(list_frame)
                     item_frame.pack(anchor=tk.W, pady=(0, 4), fill=tk.X)
+                    sample_item_frames.append(item_frame)
                     
                     item_label = ttk.Label(item_frame, text=f"  Sample {i+1}:", width=10)
                     item_label.pack(side=tk.LEFT)
@@ -5681,9 +5698,12 @@ class ChemometricsGUI:
                 self._save_widget_value(instance_alias, name, initial_values)
                 
                 widget_data["widget"] = sample_widgets
+                widget_data["item_frames"] = sample_item_frames
                 widget_data["list_frame"] = list_frame
                 widget_data["count_source"] = count_source
                 widget_data["is_dynamic_list"] = True
+
+                self._apply_dynamic_list_item_visibility(instance_alias, name, widget_data, visible_widgets)
         
         # Initial visibility update
         self._update_field_visibility(instance_alias, visible_widgets, category_headers)
@@ -6255,6 +6275,9 @@ class ChemometricsGUI:
             # Show or hide the container using grid with stored parameters
             if should_show:
                 container.grid(**grid_params)  # Re-show with original grid parameters
+                widget_spec = widget_data.get("widget_spec", {})
+                if widget_spec.get("widget") in {"entry_list", "combobox_list", "file_selector_list", "sample_paths_list"}:
+                    self._apply_dynamic_list_item_visibility(func_alias, field_name, widget_data, visible_widgets)
                 # Track that this category has visible content
                 category = widget_data.get("category")
                 if category:
@@ -6338,6 +6361,78 @@ class ChemometricsGUI:
                 self._rebuild_sample_paths_list(func_alias, field_name, widget_data, widget_spec,
                                                list_frame, new_count, current_values, visible_widgets)
 
+    def _apply_dynamic_list_item_visibility(self, func_alias: str, field_name: str, widget_data: Dict,
+                                            visible_widgets: Dict) -> None:
+        """Apply optional per-item visibility rules for dynamic list rows.
+
+        Expected widget_spec format:
+        "item_visible_if": {
+            "field": "constraint_name",
+            "operator": "index_true" | "index_false" | "any_true" | "all_true" | "any_false" | "all_false"
+        }
+        """
+        widget_spec = widget_data.get("widget_spec", {})
+        rule = widget_spec.get("item_visible_if")
+        if not isinstance(rule, dict):
+            return
+
+        source_field = str(rule.get("field", "")).strip()
+        if not source_field:
+            return
+
+        operator = str(rule.get("operator", "index_true")).strip().lower()
+        source_widget_data = visible_widgets.get(source_field, {})
+
+        source_values: List[bool] = []
+        source_widget = source_widget_data.get("widget")
+        source_widget_spec = source_widget_data.get("widget_spec", {})
+        source_widget_type = source_widget_spec.get("widget")
+
+        if source_widget_type == "checkbutton_list" and isinstance(source_widget, list):
+            source_values = [bool(var.get()) for var in source_widget]
+        elif "variable" in source_widget_data:
+            source_values = [bool(source_widget_data["variable"].get())]
+        else:
+            func_config = self.function_configs.get(func_alias, {})
+            raw = func_config.get(source_field)
+            if isinstance(raw, list):
+                source_values = [bool(v) for v in raw]
+            elif raw is not None:
+                source_values = [bool(raw)]
+
+        item_frames = widget_data.get("item_frames", [])
+        if not isinstance(item_frames, list) or not item_frames:
+            return
+
+        show_flags: List[bool] = []
+        for idx, _frame in enumerate(item_frames):
+            if operator == "index_false":
+                show_item = idx < len(source_values) and (not bool(source_values[idx]))
+            elif operator == "any_true":
+                show_item = bool(source_values) and any(source_values)
+            elif operator == "all_true":
+                show_item = bool(source_values) and all(source_values)
+            elif operator == "any_false":
+                show_item = bool(source_values) and any((not v) for v in source_values)
+            elif operator == "all_false":
+                show_item = (not source_values) or all((not v) for v in source_values)
+            else:
+                # Default: index_true
+                show_item = idx < len(source_values) and bool(source_values[idx])
+            show_flags.append(bool(show_item))
+
+        # Repack rows in canonical index order to avoid order drift from pack_forget/pack cycles.
+        for frame in item_frames:
+            frame.pack_forget()
+        for idx, frame in enumerate(item_frames):
+            if idx < len(show_flags) and show_flags[idx]:
+                frame.pack(anchor=tk.W, pady=(0, 2), fill=tk.X)
+
+    def _apply_entry_list_item_visibility(self, func_alias: str, field_name: str, widget_data: Dict,
+                                          visible_widgets: Dict) -> None:
+        """Backward-compatible wrapper for dynamic list item visibility."""
+        self._apply_dynamic_list_item_visibility(func_alias, field_name, widget_data, visible_widgets)
+
     def _resolve_dynamic_count_source(self, func_config: Dict[str, Any], count_source: str) -> int:
         """Resolve dynamic list count from a source key or simple +/- integer expression."""
         def _coerce_count(value: Any) -> Optional[int]:
@@ -6409,10 +6504,12 @@ class ChemometricsGUI:
         value_to_alias = dict(zip(values, value_aliases))
         
         combo_widgets = []
+        combo_item_frames = []
         
         for i in range(count):
             item_frame = ttk.Frame(list_frame)
             item_frame.pack(anchor=tk.W, pady=(0, 2), fill=tk.X)
+            combo_item_frames.append(item_frame)
             
             item_label = ttk.Label(item_frame, text=f"  [{i+1}]:", width=6)
             item_label.pack(side=tk.LEFT)
@@ -6450,6 +6547,9 @@ class ChemometricsGUI:
         
         # Update widget_data
         widget_data["widget"] = combo_widgets
+        widget_data["item_frames"] = combo_item_frames
+
+        self._apply_dynamic_list_item_visibility(func_alias, field_name, widget_data, visible_widgets)
     
     def _rebuild_file_selector_list(self, func_alias: str, field_name: str, widget_data: Dict,
                                      widget_spec: Dict, list_frame, count: int, current_values: list,
@@ -6458,10 +6558,12 @@ class ChemometricsGUI:
         label_text = widget_spec.get("label", field_name)
         
         file_widgets = []
+        file_item_frames = []
         
         for i in range(count):
             item_frame = ttk.Frame(list_frame)
             item_frame.pack(anchor=tk.W, pady=(0, 2), fill=tk.X)
+            file_item_frames.append(item_frame)
             
             item_label = ttk.Label(item_frame, text=f"  [{i+1}]:", width=6)
             item_label.pack(side=tk.LEFT)
@@ -6503,6 +6605,9 @@ class ChemometricsGUI:
         
         # Update widget_data
         widget_data["widget"] = file_widgets
+        widget_data["item_frames"] = file_item_frames
+
+        self._apply_dynamic_list_item_visibility(func_alias, field_name, widget_data, visible_widgets)
 
     def _rebuild_entry_list(self, func_alias: str, field_name: str, widget_data: Dict,
                             widget_spec: Dict, list_frame, count: int, current_values: list,
@@ -6511,10 +6616,12 @@ class ChemometricsGUI:
         default_value = widget_spec.get("default", "")
         
         entry_widgets = []
+        entry_item_frames = []
         
         for i in range(count):
             item_frame = ttk.Frame(list_frame)
             item_frame.pack(anchor=tk.W, pady=(0, 2), fill=tk.X)
+            entry_item_frames.append(item_frame)
             
             item_label = ttk.Label(item_frame, text=f"  [{i+1}]:", width=6)
             item_label.pack(side=tk.LEFT)
@@ -6545,6 +6652,9 @@ class ChemometricsGUI:
         
         # Update widget_data
         widget_data["widget"] = entry_widgets
+        widget_data["item_frames"] = entry_item_frames
+
+        self._apply_dynamic_list_item_visibility(func_alias, field_name, widget_data, visible_widgets)
 
     def _rebuild_checkbutton_list(self, func_alias: str, field_name: str, widget_data: Dict,
                                   widget_spec: Dict, list_frame, count: int, current_values: list,
@@ -6590,10 +6700,12 @@ class ChemometricsGUI:
         label_text = widget_spec.get("label", field_name)
         
         sample_widgets = []
+        sample_item_frames = []
         
         for i in range(count):
             item_frame = ttk.Frame(list_frame)
             item_frame.pack(anchor=tk.W, pady=(0, 4), fill=tk.X)
+            sample_item_frames.append(item_frame)
             
             item_label = ttk.Label(item_frame, text=f"  Sample {i+1}:", width=10)
             item_label.pack(side=tk.LEFT)
@@ -6655,6 +6767,9 @@ class ChemometricsGUI:
         
         # Update widget_data
         widget_data["widget"] = sample_widgets
+        widget_data["item_frames"] = sample_item_frames
+
+        self._apply_dynamic_list_item_visibility(func_alias, field_name, widget_data, visible_widgets)
 
     def _show_routing_tab(self):
         """Show Routing tab with visual connection drawing using canvas."""

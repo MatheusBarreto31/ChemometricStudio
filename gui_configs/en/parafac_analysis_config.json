@@ -13,16 +13,24 @@
     "mode_normalization": "Mode Normalization",
     "constraint_non_negative": "Non-negative Constraint",
     "constraint_l1_reg": "L1 Regularization Constraint",
+    "constraint_l1_reg_strength": "L1 Regularization Strength",
     "constraint_l2_reg": "L2 Regularization Constraint",
+    "constraint_l2_reg_strength": "L2 Regularization Strength",
     "constraint_l2_square_reg": "L2 Squared Regularization Constraint",
+    "constraint_l2_square_reg_strength": "L2 Squared Regularization Strength",
     "constraint_unimodality": "Unimodality Constraint",
     "constraint_normalize": "Normalize Constraint",
     "constraint_simplex": "Simplex Constraint",
+    "constraint_simplex_strength": "Simplex Strength",
     "constraint_normalized_sparsity": "Normalized Sparsity Constraint",
+    "constraint_normalized_sparsity_strength": "Normalized Sparsity Strength",
     "constraint_soft_sparsity": "Soft Sparsity Constraint",
+    "constraint_soft_sparsity_strength": "Soft Sparsity Strength",
     "constraint_smoothness": "Smoothness Constraint",
+    "constraint_smoothness_strength": "Smoothness Strength",
     "constraint_monotonicity": "Monotonicity Constraint",
     "constraint_hard_sparsity": "Hard Sparsity Constraint",
+    "constraint_hard_sparsity_strength": "Hard Sparsity Strength",
     "unconstrained_sparsity": "Sparsity (Unconstrained Only)",
     "unconstrained_linesearch": "Linesearch (Unconstrained Only)",
     "unconstrained_orthogonalise": "Orthogonalise (Unconstrained Only)",
@@ -245,7 +253,7 @@
         "default": false,
         "required": false,
         "input_type": "user",
-        "tooltip": "Applies non-negativity to selected modes. One checkbutton per mode, including sample mode."
+        "tooltip": "Forces selected mode factors to be non-negative (no values below zero)."
       },
       {
         "name": "constraint_normalize",
@@ -258,7 +266,7 @@
         "default": false,
         "required": false,
         "input_type": "user",
-        "tooltip": "Enables TensorLy normalize constraint for selected modes."
+        "tooltip": "Normalizes selected mode factors during updates to reduce scale ambiguity across modes."
       },
       {
         "name": "constraint_unimodality",
@@ -271,7 +279,7 @@
         "default": false,
         "required": false,
         "input_type": "user",
-        "tooltip": "Enforces unimodal factors for selected modes."
+        "tooltip": "Enforces single-peak (single-hump) profiles for selected modes."
       },
       {
         "name": "constraint_monotonicity",
@@ -284,7 +292,7 @@
         "default": false,
         "required": false,
         "input_type": "user",
-        "tooltip": "Enforces monotonic factors for selected modes."
+        "tooltip": "Enforces monotonic profiles (increasing or decreasing) for selected modes."
       },
       {
         "name": "constraint_smoothness",
@@ -297,7 +305,28 @@
         "default": false,
         "required": false,
         "input_type": "user",
-        "tooltip": "Applies smoothness constraint to selected modes (fixed strength)."
+        "tooltip": "Penalizes rapid point-to-point changes to produce smoother selected mode profiles."
+      },
+      {
+        "name": "constraint_smoothness_strength",
+        "label": "Smoothness Strength",
+        "category": "Constraints",
+        "widget": "entry_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_visible_if": {
+          "field": "constraint_smoothness",
+          "operator": "index_true"
+        },
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_smoothness": {
+            "operator": "any_true"
+          }
+        },
+        "tooltip": "Optional per-mode smoothness weight. Leave entries empty to use default 1.0 for enabled modes."
       },
       {
         "name": "constraint_simplex",
@@ -310,7 +339,28 @@
         "default": false,
         "required": false,
         "input_type": "user",
-        "tooltip": "Applies simplex constraint to selected modes (fixed strength)."
+        "tooltip": "Constrains selected mode factors to the simplex (non-negative with fixed sum, e.g., compositional profiles)."
+      },
+      {
+        "name": "constraint_simplex_strength",
+        "label": "Simplex Strength",
+        "category": "Constraints",
+        "widget": "entry_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_visible_if": {
+          "field": "constraint_simplex",
+          "operator": "index_true"
+        },
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_simplex": {
+            "operator": "any_true"
+          }
+        },
+        "tooltip": "Optional per-mode simplex target. Leave entries empty to use default 1.0 for enabled modes."
       },
       {
         "name": "constraint_l1_reg",
@@ -323,7 +373,28 @@
         "default": false,
         "required": false,
         "input_type": "user",
-        "tooltip": "Applies L1 regularization to selected modes (fixed strength)."
+        "tooltip": "Applies L1 penalty (sum of absolute values), promoting element-wise sparsity and exact zeros."
+      },
+      {
+        "name": "constraint_l1_reg_strength",
+        "label": "L1 Regularization Strength",
+        "category": "Constraints",
+        "widget": "entry_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_visible_if": {
+          "field": "constraint_l1_reg",
+          "operator": "index_true"
+        },
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_l1_reg": {
+            "operator": "any_true"
+          }
+        },
+        "tooltip": "Optional per-mode L1 weight. Leave entries empty to use default 1.0 for enabled modes."
       },
       {
         "name": "constraint_l2_reg",
@@ -336,7 +407,28 @@
         "default": false,
         "required": false,
         "input_type": "user",
-        "tooltip": "Applies L2 regularization to selected modes (fixed strength)."
+        "tooltip": "Applies L2 penalty on the norm (not squared), shrinking whole vectors/groups by magnitude."
+      },
+      {
+        "name": "constraint_l2_reg_strength",
+        "label": "L2 Regularization Strength",
+        "category": "Constraints",
+        "widget": "entry_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_visible_if": {
+          "field": "constraint_l2_reg",
+          "operator": "index_true"
+        },
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_l2_reg": {
+            "operator": "any_true"
+          }
+        },
+        "tooltip": "Optional per-mode L2 weight. Leave entries empty to use default 1.0 for enabled modes."
       },
       {
         "name": "constraint_l2_square_reg",
@@ -349,7 +441,28 @@
         "default": false,
         "required": false,
         "input_type": "user",
-        "tooltip": "Applies squared L2 regularization to selected modes (fixed strength)."
+        "tooltip": "Applies squared L2 penalty (ridge/Tikhonov), giving smooth shrinkage that usually does not create exact zeros."
+      },
+      {
+        "name": "constraint_l2_square_reg_strength",
+        "label": "L2 Squared Regularization Strength",
+        "category": "Constraints",
+        "widget": "entry_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_visible_if": {
+          "field": "constraint_l2_square_reg",
+          "operator": "index_true"
+        },
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_l2_square_reg": {
+            "operator": "any_true"
+          }
+        },
+        "tooltip": "Optional per-mode squared-L2 (ridge) weight. Leave entries empty to use default 1.0 for enabled modes."
       },
       {
         "name": "constraint_normalized_sparsity",
@@ -362,7 +475,28 @@
         "default": false,
         "required": false,
         "input_type": "user",
-        "tooltip": "Applies normalized sparsity to selected modes (fixed strength)."
+        "tooltip": "Encourages sparsity with scale normalization, making sparsity pressure less dependent on raw magnitude."
+      },
+      {
+        "name": "constraint_normalized_sparsity_strength",
+        "label": "Normalized Sparsity Strength",
+        "category": "Constraints",
+        "widget": "entry_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_visible_if": {
+          "field": "constraint_normalized_sparsity",
+          "operator": "index_true"
+        },
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_normalized_sparsity": {
+            "operator": "any_true"
+          }
+        },
+        "tooltip": "Optional per-mode normalized-sparsity level. Leave entries empty to use default 1.0 for enabled modes."
       },
       {
         "name": "constraint_soft_sparsity",
@@ -375,7 +509,28 @@
         "default": false,
         "required": false,
         "input_type": "user",
-        "tooltip": "Applies soft sparsity to selected modes (fixed strength)."
+        "tooltip": "Applies a soft sparsity penalty that shrinks many entries toward zero without hard thresholding."
+      },
+      {
+        "name": "constraint_soft_sparsity_strength",
+        "label": "Soft Sparsity Strength",
+        "category": "Constraints",
+        "widget": "entry_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_visible_if": {
+          "field": "constraint_soft_sparsity",
+          "operator": "index_true"
+        },
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_soft_sparsity": {
+            "operator": "any_true"
+          }
+        },
+        "tooltip": "Optional per-mode soft-sparsity weight. Leave entries empty to use default 1.0 for enabled modes."
       },
       {
         "name": "constraint_hard_sparsity",
@@ -388,7 +543,28 @@
         "default": false,
         "required": false,
         "input_type": "user",
-        "tooltip": "Applies hard sparsity to selected modes (fixed strength)."
+        "tooltip": "Applies hard sparsity by keeping only the strongest entries and setting the rest to zero."
+      },
+      {
+        "name": "constraint_hard_sparsity_strength",
+        "label": "Hard Sparsity Strength",
+        "category": "Constraints",
+        "widget": "entry_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_visible_if": {
+          "field": "constraint_hard_sparsity",
+          "operator": "index_true"
+        },
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_hard_sparsity": {
+            "operator": "any_true"
+          }
+        },
+        "tooltip": "Optional per-mode hard-sparsity level (kept entries). Leave entries empty to use default 1 for enabled modes."
       },
       {
         "name": "unconstrained_sparsity",
