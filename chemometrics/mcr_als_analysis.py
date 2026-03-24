@@ -853,6 +853,7 @@ def _single_fit(
     component_y_mapping: Any,
     nway_flag: int,
     aug_direction: Optional[int],
+    axis_n_info: Optional[Any] = None,
     aug_row_counts_cal: Optional[Sequence[int]] = None,
     aug_row_counts_val: Optional[Sequence[int]] = None,
 ) -> Dict[str, Any]:
@@ -1175,8 +1176,12 @@ def _single_fit(
                     f"Validation RMSEP={_safe_float(vm.get('RMSEP'), default=np.nan):.6g}"
                 )
 
-    concentrations_unfolded = np.asarray(C_cal_rows, dtype=float).T
-    concentration_row_axis = np.arange(1, int(C_cal_rows.shape[0]) + 1, dtype=float)
+    c_rows_plot = np.asarray(C_cal_rows, dtype=float)
+    if C_val_rows is not None and np.asarray(C_val_rows).size > 0:
+        c_rows_plot = np.vstack([c_rows_plot, np.asarray(C_val_rows, dtype=float)])
+
+    concentrations_unfolded = np.asarray(c_rows_plot, dtype=float).T
+    concentration_row_axis = np.arange(1, int(c_rows_plot.shape[0]) + 1, dtype=float)
 
     s_axis_vector: Optional[np.ndarray] = None
     axis_vectors: List[Any] = []
@@ -1199,13 +1204,21 @@ def _single_fit(
             s_axis_vector = _coerce_axis_vector_for_s(axis_vectors[axis_idx], int(ST.shape[1]))
     sample_boundary_positions: List[float] = []
     row_counts_for_boundaries = [int(v) for v in cal_prep.get("row_counts", [])]
+    if val_prep is not None:
+        row_counts_for_boundaries.extend([int(v) for v in val_prep.get("row_counts", [])])
+
+    cal_val_boundary_position: Optional[float] = None
+    if C_val_rows is not None and int(C_val_rows.shape[0]) > 0:
+        cal_boundary_idx = int(C_cal_rows.shape[0])
+        if 0 < cal_boundary_idx < int(c_rows_plot.shape[0]):
+            cal_val_boundary_position = float(cal_boundary_idx) + 0.5
     one_row_per_sample = (
         len(row_counts_for_boundaries) == int(C_cal_rows.shape[0])
         and all(int(v) == 1 for v in row_counts_for_boundaries)
     )
     if row_counts_for_boundaries and not one_row_per_sample:
         cursor = 0
-        n_rows = int(C_cal_rows.shape[0])
+        n_rows = int(c_rows_plot.shape[0])
         for count in row_counts_for_boundaries[:-1]:
             cursor += max(0, int(count))
             if 0 < cursor < n_rows:
@@ -1227,6 +1240,7 @@ def _single_fit(
         "concentration_row_axis": concentration_row_axis,
         "s_axis_vector": s_axis_vector,
         "sample_boundary_positions": np.asarray(sample_boundary_positions, dtype=float),
+        "cal_val_boundary_position": cal_val_boundary_position,
         "reconstructed": reconstructed,
         "residual": residual,
         "metrics": metrics,
@@ -1699,6 +1713,7 @@ _MCR_ALS_RETURN_ORDER: Tuple[str, ...] = (
     "concentration_row_axis",
     "s_axis_vector",
     "sample_boundary_positions",
+    "cal_val_boundary_position",
     "reconstructed",
     "residual",
     "metrics",
