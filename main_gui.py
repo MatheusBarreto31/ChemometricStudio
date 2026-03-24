@@ -9302,7 +9302,22 @@ class ChemometricsGUI:
                         y_dimension = dimension
                     elif target_axis == 'z' and dimension is not None:
                         z_dimension = dimension
-            
+
+            # Only apply axis-specific indices that are currently declared in data_slicing.
+            active_axis_dims = {'x': set(), 'y': set(), 'z': set()}
+            for nav_item in nav_axes:
+                if not isinstance(nav_item, dict):
+                    continue
+                target_axis = nav_item.get('axis')
+                if target_axis not in active_axis_dims:
+                    continue
+                dim_val = nav_item.get('dimension')
+                try:
+                    dim_idx = int(dim_val)
+                except (TypeError, ValueError):
+                    continue
+                active_axis_dims[target_axis].add(dim_idx)
+
             # Extract the actual index values from axis_indices
             if 'x' in axis_indices and x_dimension is not None:
                 x_axis_idx = axis_indices['x'].get(x_dimension)
@@ -9331,23 +9346,41 @@ class ChemometricsGUI:
             # Extract y FIRST so __index__ on x-axis can use y_data as reference
             y_indices = base_indices.copy()
             y_indices.update(md_slice_indices)  # Add multi-dimensional slices
-            if 'y' in axis_indices:
-                y_indices.update(axis_indices['y'])
+            if 'y' in axis_indices and isinstance(axis_indices.get('y'), dict):
+                for dim_key, dim_index in axis_indices['y'].items():
+                    try:
+                        dim_int = int(dim_key)
+                    except (TypeError, ValueError):
+                        continue
+                    if dim_int in active_axis_dims['y']:
+                        y_indices[dim_int] = dim_index
             y_data = self._extract_axis_data(outputs, y_axis_config, y_indices)
             
             # Merge axis indices for x (base + md + axis-specific)
             x_indices = base_indices.copy()
             x_indices.update(md_slice_indices)  # Add multi-dimensional slices
-            if 'x' in axis_indices:
-                x_indices.update(axis_indices['x'])
+            if 'x' in axis_indices and isinstance(axis_indices.get('x'), dict):
+                for dim_key, dim_index in axis_indices['x'].items():
+                    try:
+                        dim_int = int(dim_key)
+                    except (TypeError, ValueError):
+                        continue
+                    if dim_int in active_axis_dims['x']:
+                        x_indices[dim_int] = dim_index
             # Pass y_data as reference for row index generation if needed
             x_data = self._extract_axis_data(outputs, x_axis_config, x_indices, ref_data=y_data)
             
             # Merge axis indices for z (base + md + axis-specific)
             z_indices = base_indices.copy()
             z_indices.update(md_slice_indices)  # Add multi-dimensional slices
-            if 'z' in axis_indices:
-                z_indices.update(axis_indices['z'])
+            if 'z' in axis_indices and isinstance(axis_indices.get('z'), dict):
+                for dim_key, dim_index in axis_indices['z'].items():
+                    try:
+                        dim_int = int(dim_key)
+                    except (TypeError, ValueError):
+                        continue
+                    if dim_int in active_axis_dims['z']:
+                        z_indices[dim_int] = dim_index
             # For 4D+ multi-dimensional display, exclude dimensions that are being displayed
             # (md_active_dims) from z_indices AFTER all merges to avoid slicing them away
             if md_active_dims:
@@ -9524,6 +9557,7 @@ class ChemometricsGUI:
                             break
 
             normalized_graph_type = str(graph_type).strip().lower()
+
             if normalized_graph_type in {'scatter', 'line'}:
                 if normalized_graph_type == 'scatter':
                     class_state = self._compute_scatter_class_layer_state(
@@ -9567,6 +9601,17 @@ class ChemometricsGUI:
                 render_config['class_edge_cmap_continuous'] = str(config.get('class_edge_cmap_continuous', self.settings_manager.get('colormap', 'viridis')))
                 render_config['class_color_cmap_qualitative'] = str(config.get('class_color_cmap_qualitative', self.settings_manager.get('qualitative_colormap', 'tab10')))
                 render_config['class_edge_cmap_qualitative'] = str(config.get('class_edge_cmap_qualitative', self.settings_manager.get('qualitative_colormap', 'tab10')))
+
+                if normalized_graph_type == 'line':
+                    series_source = config.get('line_series_labels_source')
+                    if isinstance(series_source, str) and series_source:
+                        series_data = self._get_data_from_source(outputs, series_source)
+                        if isinstance(series_data, (list, np.ndarray)):
+                            try:
+                                labels_arr = np.asarray(series_data, dtype=object).reshape(-1)
+                                render_config['line_series_labels'] = [str(item) for item in labels_arr.tolist()]
+                            except Exception:
+                                pass
 
             if normalized_graph_type in {'scatter', 'line'}:
                 render_config['scatter_reference_lines'] = self._resolve_scatter_reference_lines(config, outputs)
@@ -12725,6 +12770,21 @@ Count:
                         y_dimension = dimension
                     elif target_axis == 'z' and dimension is not None:
                         z_dimension = dimension
+
+            # Only apply axis-specific indices that are currently declared in data_slicing.
+            active_axis_dims = {'x': set(), 'y': set(), 'z': set()}
+            for nav_item in nav_axes:
+                if not isinstance(nav_item, dict):
+                    continue
+                target_axis = nav_item.get('axis')
+                if target_axis not in active_axis_dims:
+                    continue
+                dim_val = nav_item.get('dimension')
+                try:
+                    dim_idx = int(dim_val)
+                except (TypeError, ValueError):
+                    continue
+                active_axis_dims[target_axis].add(dim_idx)
             
             # Extract the actual index values from axis_indices
             if 'x' in axis_indices and x_dimension is not None:
@@ -12754,23 +12814,41 @@ Count:
             # Extract y FIRST so __index__ on x-axis can use y_data as reference
             y_indices = base_indices.copy()
             y_indices.update(md_slice_indices)  # Add multi-dimensional slices
-            if 'y' in axis_indices:
-                y_indices.update(axis_indices['y'])
+            if 'y' in axis_indices and isinstance(axis_indices.get('y'), dict):
+                for dim_key, dim_index in axis_indices['y'].items():
+                    try:
+                        dim_int = int(dim_key)
+                    except (TypeError, ValueError):
+                        continue
+                    if dim_int in active_axis_dims['y']:
+                        y_indices[dim_int] = dim_index
             y_data = self._extract_axis_data(outputs, y_axis_config, y_indices)
             
             # Merge axis indices for x (base + md + axis-specific)
             x_indices = base_indices.copy()
             x_indices.update(md_slice_indices)  # Add multi-dimensional slices
-            if 'x' in axis_indices:
-                x_indices.update(axis_indices['x'])
+            if 'x' in axis_indices and isinstance(axis_indices.get('x'), dict):
+                for dim_key, dim_index in axis_indices['x'].items():
+                    try:
+                        dim_int = int(dim_key)
+                    except (TypeError, ValueError):
+                        continue
+                    if dim_int in active_axis_dims['x']:
+                        x_indices[dim_int] = dim_index
             # Pass y_data as reference for row index generation if needed
             x_data = self._extract_axis_data(outputs, x_axis_config, x_indices, ref_data=y_data)
             
             # Merge axis indices for z (base + md + axis-specific)
             z_indices = base_indices.copy()
             z_indices.update(md_slice_indices)  # Add multi-dimensional slices
-            if 'z' in axis_indices:
-                z_indices.update(axis_indices['z'])
+            if 'z' in axis_indices and isinstance(axis_indices.get('z'), dict):
+                for dim_key, dim_index in axis_indices['z'].items():
+                    try:
+                        dim_int = int(dim_key)
+                    except (TypeError, ValueError):
+                        continue
+                    if dim_int in active_axis_dims['z']:
+                        z_indices[dim_int] = dim_index
             # For 4D+ multi-dimensional display, exclude dimensions that are being displayed
             # (md_active_dims) from z_indices AFTER all merges to avoid slicing them away
             if md_active_dims:
@@ -12970,6 +13048,7 @@ Count:
                             break
 
             normalized_graph_type = str(graph_type).strip().lower()
+
             if normalized_graph_type in {'scatter', 'line'}:
                 if normalized_graph_type == 'scatter':
                     class_state = self._compute_scatter_class_layer_state(
@@ -13013,6 +13092,17 @@ Count:
                 render_config['class_edge_cmap_continuous'] = str(config.get('class_edge_cmap_continuous', self.settings_manager.get('colormap', 'viridis')))
                 render_config['class_color_cmap_qualitative'] = str(config.get('class_color_cmap_qualitative', self.settings_manager.get('qualitative_colormap', 'tab10')))
                 render_config['class_edge_cmap_qualitative'] = str(config.get('class_edge_cmap_qualitative', self.settings_manager.get('qualitative_colormap', 'tab10')))
+
+                if normalized_graph_type == 'line':
+                    series_source = config.get('line_series_labels_source')
+                    if isinstance(series_source, str) and series_source:
+                        series_data = self._get_data_from_source(outputs, series_source)
+                        if isinstance(series_data, (list, np.ndarray)):
+                            try:
+                                labels_arr = np.asarray(series_data, dtype=object).reshape(-1)
+                                render_config['line_series_labels'] = [str(item) for item in labels_arr.tolist()]
+                            except Exception:
+                                pass
             
             # Render graph using graph_renderer module
             graph_renderer = self._get_graph_renderer()

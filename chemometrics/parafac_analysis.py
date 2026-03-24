@@ -451,6 +451,95 @@ def _instrumental_profiles(weights: np.ndarray, factors: Sequence[np.ndarray]) -
     return _component_reconstruction_tensor(weights, factors[1:])
 
 
+def _build_mode_profile_outputs(
+    factors: Any,
+    axis_n_info: Optional[Any],
+    dim_labels: Optional[Any],
+) -> Dict[str, Any]:
+    """Build navigation-friendly line-profile outputs for each PARAFAC mode."""
+    if not isinstance(factors, (list, tuple)) or not factors:
+        return {}
+
+    factor_mats: List[np.ndarray] = []
+    for factor in factors:
+        try:
+            arr = np.asarray(factor, dtype=float)
+        except Exception:
+            continue
+        if arr.ndim != 2 or arr.shape[0] <= 0 or arr.shape[1] <= 0:
+            continue
+        factor_mats.append(arr)
+
+    if not factor_mats:
+        return {}
+
+    n_modes = int(len(factor_mats))
+    n_components = int(min(mat.shape[1] for mat in factor_mats))
+    max_mode_len = int(max(mat.shape[0] for mat in factor_mats))
+
+    mode_profile_axes = np.full((n_modes, max_mode_len), np.nan, dtype=float)
+    mode_profile_factors = np.full((n_modes, n_components, max_mode_len), np.nan, dtype=float)
+
+    labels_seq = list(dim_labels) if isinstance(dim_labels, (list, tuple, np.ndarray)) else []
+    axis_seq = list(axis_n_info) if isinstance(axis_n_info, (list, tuple)) else []
+    mode_labels: List[str] = []
+    mode_y_titles: List[str] = []
+
+    def _mode_letter(index: int) -> str:
+        """Convert zero-based index to Excel-style letters: 0->A, 25->Z, 26->AA."""
+        n = int(index)
+        chars: List[str] = []
+        while True:
+            n, rem = divmod(n, 26)
+            chars.append(chr(ord("A") + rem))
+            if n == 0:
+                break
+            n -= 1
+        return "".join(reversed(chars))
+
+    for mode_idx, factor_mat in enumerate(factor_mats):
+        mode_len = int(factor_mat.shape[0])
+        mode_label = f"Mode {mode_idx + 1}"
+        if mode_idx < len(labels_seq):
+            label_text = str(labels_seq[mode_idx]).strip()
+            if label_text:
+                mode_label = label_text
+        mode_labels.append(mode_label)
+        mode_y_titles.append(f"{_mode_letter(mode_idx)} (a.u.)")
+
+        mode_axis = None
+        if mode_idx < len(axis_seq):
+            try:
+                candidate_axis = np.asarray(axis_seq[mode_idx], dtype=float).reshape(-1)
+                if candidate_axis.size == mode_len:
+                    mode_axis = candidate_axis
+            except Exception:
+                mode_axis = None
+        if mode_axis is None:
+            mode_axis = np.arange(1, mode_len + 1, dtype=float)
+        else:
+            # Keep provided axis values unless they are simple 0-based sample indices.
+            finite_axis = np.asarray(mode_axis, dtype=float)
+            if np.all(np.isfinite(finite_axis)):
+                zero_based = np.arange(0, mode_len, dtype=float)
+                if np.allclose(finite_axis, zero_based, rtol=0.0, atol=1e-12):
+                    mode_axis = finite_axis + 1.0
+
+        mode_profile_axes[mode_idx, :mode_len] = mode_axis[:mode_len]
+        mode_profile_factors[mode_idx, :, :mode_len] = np.asarray(factor_mat[:, :n_components], dtype=float).T
+
+    component_labels = [f"Component {idx + 1}" for idx in range(n_components)]
+
+    return {
+        "mode_profile_axes": mode_profile_axes,
+        "mode_profile_factors": mode_profile_factors,
+        "mode_profile_mode_labels": mode_labels,
+        "mode_profile_y_titles": mode_y_titles,
+        "mode_profile_component_labels": component_labels,
+        "mode_profile_navigation_labels_by_dimension": [mode_labels, component_labels],
+    }
+
+
 def _mean_component_value(values: np.ndarray) -> float:
     vec = np.asarray(values, dtype=float).reshape(-1)
     finite = np.isfinite(vec)
@@ -2131,6 +2220,12 @@ def parafac_analysis(
         "scores_mode_a_heatmap": None,
         "mode_a_sample_axis": None,
         "mode_a_component_axis": None,
+        "mode_profile_axes": None,
+        "mode_profile_factors": None,
+        "mode_profile_mode_labels": None,
+        "mode_profile_y_titles": None,
+        "mode_profile_component_labels": None,
+        "mode_profile_navigation_labels_by_dimension": None,
         "sweep_F": None,
         "sweep_sfit": None,
         "sweep_core_consistency": None,
@@ -2194,6 +2289,14 @@ def parafac_analysis(
             output["sweep_explained_variance"] = np.asarray([_safe_float(item.get("explained_variance")) for item in sweep_items], dtype=float)
             output["sweep_n_iter"] = np.asarray([_safe_float(item.get("n_iter")) for item in sweep_items], dtype=float)
 
+    output.update(
+        _build_mode_profile_outputs(
+            factors=result.get("factors"),
+            axis_n_info=axis_n_info,
+            dim_labels=dim_labels,
+        )
+    )
+
     return output
 
 
@@ -2203,6 +2306,12 @@ _PARAFAC_RETURN_ORDER: Tuple[str, ...] = (
     "scores_mode_a_heatmap",
     "mode_a_sample_axis",
     "mode_a_component_axis",
+    "mode_profile_axes",
+    "mode_profile_factors",
+    "mode_profile_mode_labels",
+    "mode_profile_y_titles",
+    "mode_profile_component_labels",
+    "mode_profile_navigation_labels_by_dimension",
     "sweep_F",
     "sweep_sfit",
     "sweep_core_consistency",

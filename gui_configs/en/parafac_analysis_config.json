@@ -57,6 +57,12 @@
     "scores_mode_a_heatmap": "Scores (Mode A Heatmap Matrix)",
     "mode_a_sample_axis": "Mode A Sample Axis",
     "mode_a_component_axis": "Mode A Component Axis",
+    "mode_profile_axes": "Mode Profile Axes",
+    "mode_profile_factors": "Mode Profile Factors",
+    "mode_profile_mode_labels": "Mode Profile Labels",
+    "mode_profile_y_titles": "Mode Profile Y-Axis Titles",
+    "mode_profile_component_labels": "Mode Profile Component Labels",
+    "mode_profile_navigation_labels_by_dimension": "Mode Profile Navigation Labels",
     "sweep_F": "Sweep Components (F)",
     "sweep_sfit": "Sweep sfit",
     "sweep_core_consistency": "Sweep Core Consistency",
@@ -1036,6 +1042,126 @@
                 }
               ],
               "show_md_menu": true
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "aux_axis": {
+                "data_source": "axis_n_info",
+                "labels": "dim_labels"
+              },
+              "x_axis": {
+                "data_source": "axis_n_info",
+                "index": 2,
+                "label": "dim_labels",
+                "l_index": 2
+              },
+              "y_axis": {
+                "data_source": "axis_n_info",
+                "index": 1,
+                "label": "dim_labels",
+                "l_index": 1
+              },
+              "z_axis": {
+                "data_source": "instrumental_profiles",
+                "label": "Contribution"
+              },
+              "title": "Instrumental Profiles by Component",
+              "dimension_labels": "dim_labels",
+              "data_slicing": [
+                {
+                  "name": "Component",
+                  "dimension": 0,
+                  "default": 1,
+                  "axis": "z",
+                  "show_navigation_menu": true
+                }
+              ],
+              "show_md_menu": true
+            }
+          }
+        ]
+      },
+      {
+        "title": "Mode Profiles",
+        "layout": "ew",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {
+                "data_source": "mode_profile_axes",
+                "label": "Axis",
+                "axis_labels": "dim_labels"
+              },
+              "y_axis": {
+                "data_source": "mode_profile_factors",
+                "label": "Factor Value",
+                "axis_labels": "mode_profile_y_titles"
+              },
+              "title": "Individual Mode Profiles",
+              "show_origin": false,
+              "line_series_labels_source": "mode_profile_component_labels",
+              "variable_labels": "mode_profile_navigation_labels_by_dimension",
+              "data_slicing": [
+                {
+                  "name": "Mode",
+                  "dimension": 0,
+                  "axis": "y",
+                  "nav_id": "mode_profile_mode_left",
+                  "default": 1,
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "Mode",
+                  "dimension": 0,
+                  "axis": "x",
+                  "nav_id": "mode_profile_mode_left",
+                  "default": 1,
+                  "show_navigation_menu": false
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {
+                "data_source": "mode_profile_axes",
+                "label": "Axis",
+                "axis_labels": "dim_labels"
+              },
+              "y_axis": {
+                "data_source": "mode_profile_factors",
+                "label": "Factor Value",
+                "axis_labels": "mode_profile_y_titles"
+              },
+              "title": "Individual Mode Profiles",
+              "show_origin": false,
+              "line_series_labels_source": "mode_profile_component_labels",
+              "variable_labels": "mode_profile_navigation_labels_by_dimension",
+              "data_slicing": [
+                {
+                  "name": "Mode",
+                  "dimension": 0,
+                  "axis": "y",
+                  "nav_id": "mode_profile_mode_right",
+                  "default": 2,
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "Mode",
+                  "dimension": 0,
+                  "axis": "x",
+                  "nav_id": "mode_profile_mode_right",
+                  "default": 2,
+                  "show_navigation_menu": false
+                }
+              ]
             }
           }
         ]

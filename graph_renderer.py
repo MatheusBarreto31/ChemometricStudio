@@ -1448,6 +1448,26 @@ def _render_line(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],
         # Handle 2D arrays (matrices) by plotting each row as a separate line
         if isinstance(y_data, np.ndarray) and y_data.ndim == 2:
             n_rows = y_data.shape[0]
+            n_cols = y_data.shape[1]
+            legend_show_mode = _normalize_scatter_legend_show_mode(config)
+
+            series_labels_cfg = config.get('line_series_labels')
+            series_labels: List[str] = []
+            if isinstance(series_labels_cfg, (list, np.ndarray)):
+                try:
+                    flat_labels = np.asarray(series_labels_cfg, dtype=object).reshape(-1)
+                    series_labels = [str(lbl) for lbl in flat_labels.tolist()]
+                except Exception:
+                    series_labels = []
+
+            x_vector = None
+            x_matrix = None
+            if isinstance(x_data, np.ndarray):
+                if x_data.ndim == 1 and int(x_data.shape[0]) == int(n_cols):
+                    x_vector = np.asarray(x_data, dtype=float)
+                elif x_data.ndim == 2 and int(x_data.shape[0]) == int(n_rows) and int(x_data.shape[1]) == int(n_cols):
+                    x_matrix = np.asarray(x_data, dtype=float)
+
             try:
                 cmap_obj = cm.get_cmap(cmap_name)
             except Exception:
@@ -1460,12 +1480,28 @@ def _render_line(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],
                     color = row_palette[i % len(row_palette)]
                 else:
                     color = cmap_obj(i / max(1, n_rows - 1))
-                plot_kwargs: Dict[str, Any] = {'color': color, 'label': f'Row {i+1}'}
+                if i < len(series_labels) and str(series_labels[i]).strip():
+                    label_text = str(series_labels[i]).strip()
+                else:
+                    label_text = f'Row {i+1}'
+                plot_kwargs: Dict[str, Any] = {'color': color, 'label': label_text}
                 if marker is not None:
                     plot_kwargs['marker'] = marker
-                ax.plot(row, **plot_kwargs)
-            # Show legend if enabled (default: False)
-            if config.get('show_legend', False):
+                if x_matrix is not None:
+                    ax.plot(x_matrix[i], row, **plot_kwargs)
+                elif x_vector is not None:
+                    ax.plot(x_vector, row, **plot_kwargs)
+                else:
+                    ax.plot(row, **plot_kwargs)
+
+            has_named_legend_content = any(str(lbl).strip() for lbl in series_labels)
+            show_legend = False
+            if legend_show_mode == 'yes':
+                show_legend = True
+            elif legend_show_mode == 'auto':
+                show_legend = has_named_legend_content
+
+            if show_legend:
                 ax.legend()
         else:
             plot_kwargs = {}
