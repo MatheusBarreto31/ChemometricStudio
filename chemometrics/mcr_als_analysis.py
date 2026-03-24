@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import inspect
 
 import numpy as np
+from scipy.optimize import nnls as _scipy_nnls
 
 from chemometrics.input_parsing import parse_numeric_spec
 
@@ -23,7 +24,19 @@ except ImportError:
     HAS_CV = False
 
 try:
-    from pymcr.constraints import ConstraintNonneg, ConstraintNorm  # type: ignore[import-not-found]
+    from pymcr.constraints import (  # type: ignore[import-not-found]
+        ConstraintCompressAbove,
+        ConstraintCompressBelow,
+        ConstraintCumsumNonneg,
+        ConstraintCutAbove,
+        ConstraintCutBelow,
+        ConstraintNonneg,
+        ConstraintNorm,
+        ConstraintPlanarize,
+        ConstraintReplaceZeros,
+        ConstraintZeroCumSumEndPoints,
+        ConstraintZeroEndPoints,
+    )
     from pymcr.mcr import McrAR  # type: ignore[import-not-found]
     HAS_PYMCR = True
 except Exception:
@@ -64,6 +77,325 @@ def _safe_bool(value: Any, default: bool = False) -> bool:
     if text in {"0", "false", "no", "n", "off"}:
         return False
     return bool(default)
+
+
+def _safe_optional_float(value: Any, default: Optional[float] = None) -> Optional[float]:
+    if value is None:
+        return default
+    text = str(value).strip()
+    if text == "":
+        return default
+    try:
+        return float(text)
+    except Exception:
+        return default
+
+
+def _normalize_bool_list(values: Any, count: int) -> List[bool]:
+    if isinstance(values, np.ndarray):
+        raw = np.asarray(values).reshape(-1).tolist()
+    elif isinstance(values, (list, tuple)):
+        raw = list(values)
+    elif isinstance(values, str):
+        text = values.strip()
+        if "," in text or ";" in text:
+            raw = [item.strip() for item in text.replace(";", ",").split(",") if item.strip()]
+        elif text:
+            val = _safe_bool(text, default=False)
+            return [val] * int(max(1, count))
+        else:
+            raw = []
+    elif values is None:
+        raw = []
+    else:
+        val = _safe_bool(values, default=False)
+        return [val] * int(max(1, count))
+
+    out: List[bool] = []
+    for item in raw[:count]:
+        out.append(_safe_bool(item, default=False))
+    if len(out) < count:
+        out.extend([False] * (count - len(out)))
+    return out
+
+
+def _resolve_constraint_flags(
+    values: Any,
+    legacy_c: Any,
+    legacy_st: Any,
+    default_c: bool,
+    default_st: bool,
+) -> List[bool]:
+    if values is None:
+        return [
+            _safe_bool(legacy_c, default=default_c),
+            _safe_bool(legacy_st, default=default_st),
+        ]
+    return _normalize_bool_list(values, count=2)
+
+
+def _normalize_non_negative_mode(value: Any, default: str = "nnls") -> str:
+    text = str(value).strip().lower() if value is not None else str(default).strip().lower()
+    normalized = text.replace("+", "_").replace(" ", "_").replace("-", "_")
+
+    if normalized in {"nnls", "non_negative_least_squares"}:
+        return "nnls"
+    if normalized in {"project", "projection", "clip", "constraint", "constraint_nonneg"}:
+        return "clip"
+    if normalized in {
+        "nnls_project",
+        "project_nnls",
+        "nnls_projection",
+        "projection_nnls",
+        "nnls_clip",
+        "clip_nnls",
+        "nnlsandclip",
+        "nnls_and_clip",
+    }:
+        return "nnls_clip"
+    return "nnls"
+
+
+def _parse_one_based_index_list(value: Any) -> List[int]:
+    parsed = parse_numeric_spec(value)
+    out: List[int] = []
+    for item in parsed:
+        idx = _safe_int(item, default=0) - 1
+        if idx >= 0:
+            out.append(int(idx))
+    return sorted(set(out))
+
+
+def _parse_planarize_shape(value: Any, expected_rows: int) -> Tuple[int, int]:
+    text = "" if value is None else str(value).strip().lower().replace("x", ",")
+    if not text:
+        return int(expected_rows), 1
+
+    parts = [segment.strip() for segment in text.split(",") if segment.strip()]
+    if len(parts) != 2:
+        raise ValueError("Planarize shape must be provided as 'rows,cols'.")
+
+    rows = max(1, _safe_int(parts[0], default=0))
+    cols = max(1, _safe_int(parts[1], default=0))
+    if int(rows * cols) != int(expected_rows):
+        raise ValueError(
+            f"Planarize shape product ({rows}x{cols}={rows*cols}) must equal matrix row count ({expected_rows})."
+        )
+    return int(rows), int(cols)
+
+
+def _build_mcr_constraints(
+    c_nonneg: Any,
+    st_nonneg: Any,
+    c_norm: Any,
+    constraint_non_negative: Any,
+    constraint_non_negative_clip: Any,
+    constraint_cumsum_non_negative: Any,
+    constraint_zero_end_points: Any,
+    constraint_zero_cumsum_end_points: Any,
+    constraint_normalize: Any,
+    constraint_cut_below: Any,
+    constraint_cut_above: Any,
+    constraint_compress_below: Any,
+    constraint_compress_above: Any,
+    constraint_replace_zeros: Any,
+    constraint_planarize: Any,
+    constraint_zero_end_points_span: Any,
+    constraint_zero_cumsum_nodes: Any,
+    constraint_cut_below_value: Any,
+    constraint_cut_above_value: Any,
+    constraint_compress_below_value: Any,
+    constraint_compress_above_value: Any,
+    constraint_replace_zeros_feature: Any,
+    constraint_replace_zeros_fval: Any,
+    constraint_planarize_targets_c: Any,
+    constraint_planarize_targets_st: Any,
+    constraint_planarize_shape_c: Any,
+    constraint_planarize_shape_st: Any,
+    constraint_planarize_use_vals_above: Any,
+    constraint_planarize_use_vals_below: Any,
+    constraint_planarize_lims_to_plane: Any,
+    constraint_planarize_scaler: Any,
+    constraint_planarize_recalc_scaler: Any,
+    c_rows: int,
+    c_cols: int,
+    st_rows: int,
+    st_cols: int,
+) -> Tuple[List[Any], List[Any], Dict[str, Any]]:
+    matrix_specs = [
+        {"name": "C", "rows": int(c_rows), "cols": int(c_cols), "constraints": []},
+        {"name": "ST", "rows": int(st_rows), "cols": int(st_cols), "constraints": []},
+    ]
+
+    flags_map: Dict[str, List[bool]] = {
+        "non_negative": _resolve_constraint_flags(
+            values=constraint_non_negative,
+            legacy_c=c_nonneg,
+            legacy_st=st_nonneg,
+            default_c=True,
+            default_st=True,
+        ),
+        "cumsum_non_negative": _resolve_constraint_flags(
+            values=constraint_cumsum_non_negative,
+            legacy_c=False,
+            legacy_st=False,
+            default_c=False,
+            default_st=False,
+        ),
+        "zero_end_points": _resolve_constraint_flags(
+            values=constraint_zero_end_points,
+            legacy_c=False,
+            legacy_st=False,
+            default_c=False,
+            default_st=False,
+        ),
+        "zero_cumsum_end_points": _resolve_constraint_flags(
+            values=constraint_zero_cumsum_end_points,
+            legacy_c=False,
+            legacy_st=False,
+            default_c=False,
+            default_st=False,
+        ),
+        "normalize": _resolve_constraint_flags(
+            values=constraint_normalize,
+            legacy_c=c_norm,
+            legacy_st=False,
+            default_c=False,
+            default_st=False,
+        ),
+        "cut_below": _resolve_constraint_flags(
+            values=constraint_cut_below,
+            legacy_c=False,
+            legacy_st=False,
+            default_c=False,
+            default_st=False,
+        ),
+        "cut_above": _resolve_constraint_flags(
+            values=constraint_cut_above,
+            legacy_c=False,
+            legacy_st=False,
+            default_c=False,
+            default_st=False,
+        ),
+        "compress_below": _resolve_constraint_flags(
+            values=constraint_compress_below,
+            legacy_c=False,
+            legacy_st=False,
+            default_c=False,
+            default_st=False,
+        ),
+        "compress_above": _resolve_constraint_flags(
+            values=constraint_compress_above,
+            legacy_c=False,
+            legacy_st=False,
+            default_c=False,
+            default_st=False,
+        ),
+        "replace_zeros": _resolve_constraint_flags(
+            values=constraint_replace_zeros,
+            legacy_c=False,
+            legacy_st=False,
+            default_c=False,
+            default_st=False,
+        ),
+        "planarize": _resolve_constraint_flags(
+            values=constraint_planarize,
+            legacy_c=False,
+            legacy_st=False,
+            default_c=False,
+            default_st=False,
+        ),
+    }
+    apply_flags_map: Dict[str, List[bool]] = dict(flags_map)
+    if constraint_non_negative_clip is not None:
+        apply_flags_map["non_negative"] = _normalize_bool_list(constraint_non_negative_clip, count=2)
+
+    span = max(1, _safe_int(constraint_zero_end_points_span, default=1))
+    zero_cumsum_nodes = _parse_one_based_index_list(constraint_zero_cumsum_nodes)
+    cut_below_value = _safe_float(constraint_cut_below_value, default=0.0)
+    cut_above_value = _safe_float(constraint_cut_above_value, default=1.0)
+    compress_below_value = _safe_float(constraint_compress_below_value, default=0.0)
+    compress_above_value = _safe_float(constraint_compress_above_value, default=1.0)
+    replace_feature = max(0, _safe_int(constraint_replace_zeros_feature, default=1) - 1)
+    replace_fval = _safe_float(constraint_replace_zeros_fval, default=1.0)
+
+    planarize_use_above = _safe_optional_float(constraint_planarize_use_vals_above, default=None)
+    planarize_use_below = _safe_optional_float(constraint_planarize_use_vals_below, default=None)
+    planarize_scaler = _safe_optional_float(constraint_planarize_scaler, default=None)
+    planarize_lims = _safe_bool(constraint_planarize_lims_to_plane, default=True)
+    planarize_recalc = _safe_bool(constraint_planarize_recalc_scaler, default=False)
+
+    def _append_selected(name: str, factory) -> None:
+        flags = apply_flags_map.get(name, [False, False])
+        for matrix_idx, enabled in enumerate(flags[:2]):
+            if not bool(enabled):
+                continue
+            matrix_specs[matrix_idx]["constraints"].append(factory(matrix_idx, matrix_specs[matrix_idx]))
+
+    _append_selected("non_negative", lambda _idx, _spec: ConstraintNonneg())
+    _append_selected("cumsum_non_negative", lambda _idx, _spec: ConstraintCumsumNonneg(axis=-1))
+    _append_selected("zero_end_points", lambda _idx, _spec: ConstraintZeroEndPoints(axis=-1, span=span))
+    _append_selected(
+        "zero_cumsum_end_points",
+        lambda _idx, _spec: ConstraintZeroCumSumEndPoints(nodes=(zero_cumsum_nodes or None), axis=-1),
+    )
+    _append_selected("normalize", lambda _idx, _spec: ConstraintNorm(axis=-1))
+    _append_selected("cut_below", lambda _idx, _spec: ConstraintCutBelow(value=cut_below_value))
+    _append_selected("cut_above", lambda _idx, _spec: ConstraintCutAbove(value=cut_above_value))
+    _append_selected("compress_below", lambda _idx, _spec: ConstraintCompressBelow(value=compress_below_value))
+    _append_selected("compress_above", lambda _idx, _spec: ConstraintCompressAbove(value=compress_above_value))
+    _append_selected(
+        "replace_zeros",
+        lambda _idx, spec: ConstraintReplaceZeros(
+            axis=-1,
+            feature=min(replace_feature, max(0, int(spec.get("cols", 1)) - 1)),
+            fval=replace_fval,
+        ),
+    )
+
+    def _build_planarize(matrix_idx: int, matrix_spec: Dict[str, Any]) -> Any:
+        if matrix_idx == 0:
+            target_raw = constraint_planarize_targets_c
+            shape_raw = constraint_planarize_shape_c
+        else:
+            target_raw = constraint_planarize_targets_st
+            shape_raw = constraint_planarize_shape_st
+
+        targets = [idx for idx in _parse_one_based_index_list(target_raw) if idx < int(matrix_spec["cols"])]
+        if not targets:
+            targets = [0]
+
+        shape = _parse_planarize_shape(shape_raw, expected_rows=int(matrix_spec["rows"]))
+        return ConstraintPlanarize(
+            target=targets,
+            shape=shape,
+            use_vals_above=planarize_use_above,
+            use_vals_below=planarize_use_below,
+            lims_to_plane=planarize_lims,
+            scaler=planarize_scaler,
+            recalc_scaler=planarize_recalc,
+        )
+
+    _append_selected("planarize", _build_planarize)
+
+    c_constraints = list(matrix_specs[0]["constraints"])
+    st_constraints = list(matrix_specs[1]["constraints"])
+
+    summary = {
+        "enabled_flags": {
+            key: {"C": bool(vals[0]), "ST": bool(vals[1])}
+            for key, vals in flags_map.items()
+        },
+        "applied_flags": {
+            key: {"C": bool(vals[0]), "ST": bool(vals[1])}
+            for key, vals in apply_flags_map.items()
+        },
+        "applied_constraints": {
+            "C": [type(item).__name__ for item in c_constraints],
+            "ST": [type(item).__name__ for item in st_constraints],
+        },
+    }
+    return c_constraints, st_constraints, summary
 
 
 def _as_2d_y(y: Optional[np.ndarray]) -> Optional[np.ndarray]:
@@ -476,6 +808,36 @@ def _single_fit(
     c_nonneg: bool,
     st_nonneg: bool,
     c_norm: bool,
+    constraint_non_negative: Any,
+    constraint_non_negative_mode_c: Any,
+    constraint_non_negative_mode_st: Any,
+    constraint_cumsum_non_negative: Any,
+    constraint_zero_end_points: Any,
+    constraint_zero_cumsum_end_points: Any,
+    constraint_normalize: Any,
+    constraint_cut_below: Any,
+    constraint_cut_above: Any,
+    constraint_compress_below: Any,
+    constraint_compress_above: Any,
+    constraint_replace_zeros: Any,
+    constraint_planarize: Any,
+    constraint_zero_end_points_span: Any,
+    constraint_zero_cumsum_nodes: Any,
+    constraint_cut_below_value: Any,
+    constraint_cut_above_value: Any,
+    constraint_compress_below_value: Any,
+    constraint_compress_above_value: Any,
+    constraint_replace_zeros_feature: Any,
+    constraint_replace_zeros_fval: Any,
+    constraint_planarize_targets_c: Any,
+    constraint_planarize_targets_st: Any,
+    constraint_planarize_shape_c: Any,
+    constraint_planarize_shape_st: Any,
+    constraint_planarize_use_vals_above: Any,
+    constraint_planarize_use_vals_below: Any,
+    constraint_planarize_lims_to_plane: Any,
+    constraint_planarize_scaler: Any,
+    constraint_planarize_recalc_scaler: Any,
     component_y_mapping: Any,
     nway_flag: int,
     aug_direction: Optional[int],
@@ -536,18 +898,64 @@ def _single_fit(
 
     rng = np.random.default_rng(random_state)
 
-    c_constraints: List[Any] = []
-    st_constraints: List[Any] = []
-    if c_nonneg:
-        c_constraints.append(ConstraintNonneg())
-    if c_norm:
-        c_constraints.append(ConstraintNorm())
-    if st_nonneg:
-        st_constraints.append(ConstraintNonneg())
+    non_negative_selected = _resolve_constraint_flags(
+        values=constraint_non_negative,
+        legacy_c=c_nonneg,
+        legacy_st=st_nonneg,
+        default_c=True,
+        default_st=True,
+    )
+    mode_c = _normalize_non_negative_mode(constraint_non_negative_mode_c, default="nnls")
+    mode_st = _normalize_non_negative_mode(constraint_non_negative_mode_st, default="nnls")
+
+    c_clip = bool(non_negative_selected[0]) and mode_c in {"clip", "nnls_clip"}
+    st_clip = bool(non_negative_selected[1]) and mode_st in {"clip", "nnls_clip"}
+    effective_c_regr = "NNLS" if (bool(non_negative_selected[0]) and mode_c in {"nnls", "nnls_clip"}) else "OLS"
+    effective_st_regr = "NNLS" if (bool(non_negative_selected[1]) and mode_st in {"nnls", "nnls_clip"}) else "OLS"
+
+    c_constraints, st_constraints, constraint_summary = _build_mcr_constraints(
+        c_nonneg=c_nonneg,
+        st_nonneg=st_nonneg,
+        c_norm=c_norm,
+        constraint_non_negative=constraint_non_negative,
+        constraint_non_negative_clip=[c_clip, st_clip],
+        constraint_cumsum_non_negative=constraint_cumsum_non_negative,
+        constraint_zero_end_points=constraint_zero_end_points,
+        constraint_zero_cumsum_end_points=constraint_zero_cumsum_end_points,
+        constraint_normalize=constraint_normalize,
+        constraint_cut_below=constraint_cut_below,
+        constraint_cut_above=constraint_cut_above,
+        constraint_compress_below=constraint_compress_below,
+        constraint_compress_above=constraint_compress_above,
+        constraint_replace_zeros=constraint_replace_zeros,
+        constraint_planarize=constraint_planarize,
+        constraint_zero_end_points_span=constraint_zero_end_points_span,
+        constraint_zero_cumsum_nodes=constraint_zero_cumsum_nodes,
+        constraint_cut_below_value=constraint_cut_below_value,
+        constraint_cut_above_value=constraint_cut_above_value,
+        constraint_compress_below_value=constraint_compress_below_value,
+        constraint_compress_above_value=constraint_compress_above_value,
+        constraint_replace_zeros_feature=constraint_replace_zeros_feature,
+        constraint_replace_zeros_fval=constraint_replace_zeros_fval,
+        constraint_planarize_targets_c=constraint_planarize_targets_c,
+        constraint_planarize_targets_st=constraint_planarize_targets_st,
+        constraint_planarize_shape_c=constraint_planarize_shape_c,
+        constraint_planarize_shape_st=constraint_planarize_shape_st,
+        constraint_planarize_use_vals_above=constraint_planarize_use_vals_above,
+        constraint_planarize_use_vals_below=constraint_planarize_use_vals_below,
+        constraint_planarize_lims_to_plane=constraint_planarize_lims_to_plane,
+        constraint_planarize_scaler=constraint_planarize_scaler,
+        constraint_planarize_recalc_scaler=constraint_planarize_recalc_scaler,
+        c_rows=int(D_fit.shape[0]),
+        c_cols=int(n_components),
+        st_rows=int(n_components),
+        st_cols=int(D_fit.shape[1]),
+    )
+    c_nonneg_applied = any(type(item).__name__ == "ConstraintNonneg" for item in c_constraints)
 
     mcr = McrAR(
-        c_regr=str(c_regr).upper(),
-        st_regr=str(st_regr).upper(),
+        c_regr=str(effective_c_regr).upper(),
+        st_regr=str(effective_st_regr).upper(),
         c_constraints=c_constraints,
         st_constraints=st_constraints,
         max_iter=int(max(1, _safe_int(max_iter, default=250))),
@@ -575,9 +983,17 @@ def _single_fit(
         residual = np.asarray(D_fit - reconstructed, dtype=float)
         if X_val is not None:
             D_val = np.asarray(val_prep["D"], dtype=float) if val_prep is not None else np.zeros((0, ST.shape[1]), dtype=float)
-            coef, *_ = np.linalg.lstsq(ST.T, D_val.T, rcond=None)
-            C_val_rows = np.asarray(coef.T, dtype=float)
-            if c_nonneg:
+            if str(effective_c_regr).upper() == "NNLS":
+                nnls_rows: List[np.ndarray] = []
+                a_mat = np.asarray(ST.T, dtype=float)
+                for row in np.asarray(D_val, dtype=float):
+                    coef_row, _ = _scipy_nnls(a_mat, np.asarray(row, dtype=float))
+                    nnls_rows.append(np.asarray(coef_row, dtype=float))
+                C_val_rows = np.asarray(nnls_rows, dtype=float)
+            else:
+                coef, *_ = np.linalg.lstsq(ST.T, D_val.T, rcond=None)
+                C_val_rows = np.asarray(coef.T, dtype=float)
+            if c_nonneg_applied:
                 C_val_rows = np.maximum(C_val_rows, 0.0)
         else:
             C_val_rows = None
@@ -670,15 +1086,19 @@ def _single_fit(
             "mse": _safe_float((getattr(mcr, "err", []) or [np.nan])[-1], default=np.nan),
             "sfit": sfit,
             "explained_variance": explained_variance,
-            "c_regr": str(c_regr).upper(),
-            "st_regr": str(st_regr).upper(),
+            "c_regr": str(effective_c_regr).upper(),
+            "st_regr": str(effective_st_regr).upper(),
             "fit_combined_samples": bool(combine_fit_samples),
             "n_samples_fit": int(cal_prep["sample_count"] + (0 if val_prep is None else int(val_prep["sample_count"]))),
             "n_samples_calibration": int(n_cal_samples),
             "constraints": {
-                "c_nonneg": bool(c_nonneg),
-                "st_nonneg": bool(st_nonneg),
+                "c_nonneg": bool(non_negative_selected[0]),
+                "st_nonneg": bool(non_negative_selected[1]),
                 "c_norm": bool(c_norm),
+                "selected": constraint_summary.get("enabled_flags", {}),
+                "applied_flags": constraint_summary.get("applied_flags", {}),
+                "applied": constraint_summary.get("applied_constraints", {}),
+                "non_negative_mode": {"C": mode_c, "ST": mode_st},
             },
             "original_shape": tuple(X_cal_raw.shape),
             "fit_shape": fit_shape,
@@ -697,9 +1117,12 @@ def _single_fit(
         f"Calibration samples: {int(C_cal.shape[0])}",
         f"Calibration features (unfolded): {int(D_fit.shape[1])}",
         f"Fit combined samples: {bool(combine_fit_samples)}",
+        f"C regressor: {str(effective_c_regr).upper()} | ST regressor: {str(effective_st_regr).upper()}",
         f"Iterations: {int(getattr(mcr, 'n_iter', 0) or 0)}",
         f"sfit (%): {sfit:.4f}",
         f"Explained variance (%): {explained_variance:.4f}",
+        f"Constraints C: {', '.join(constraint_summary.get('applied_constraints', {}).get('C', [])) or 'None'}",
+        f"Constraints ST: {', '.join(constraint_summary.get('applied_constraints', {}).get('ST', [])) or 'None'}",
     ]
     if calibration_models:
         report_lines.append("")
@@ -773,6 +1196,36 @@ def mcr_als_analysis(
     c_nonneg: Any = True,
     st_nonneg: Any = True,
     c_norm: Any = False,
+    constraint_non_negative: Any = None,
+    constraint_non_negative_mode_c: Any = "NNLS",
+    constraint_non_negative_mode_st: Any = "NNLS",
+    constraint_cumsum_non_negative: Any = None,
+    constraint_zero_end_points: Any = None,
+    constraint_zero_cumsum_end_points: Any = None,
+    constraint_normalize: Any = None,
+    constraint_cut_below: Any = None,
+    constraint_cut_above: Any = None,
+    constraint_compress_below: Any = None,
+    constraint_compress_above: Any = None,
+    constraint_replace_zeros: Any = None,
+    constraint_planarize: Any = None,
+    constraint_zero_end_points_span: Any = 1,
+    constraint_zero_cumsum_nodes: Any = "",
+    constraint_cut_below_value: Any = 0.0,
+    constraint_cut_above_value: Any = 1.0,
+    constraint_compress_below_value: Any = 0.0,
+    constraint_compress_above_value: Any = 1.0,
+    constraint_replace_zeros_feature: Any = 1,
+    constraint_replace_zeros_fval: Any = 1.0,
+    constraint_planarize_targets_c: Any = "",
+    constraint_planarize_targets_st: Any = "",
+    constraint_planarize_shape_c: Any = "",
+    constraint_planarize_shape_st: Any = "",
+    constraint_planarize_use_vals_above: Any = "",
+    constraint_planarize_use_vals_below: Any = "",
+    constraint_planarize_lims_to_plane: Any = True,
+    constraint_planarize_scaler: Any = "",
+    constraint_planarize_recalc_scaler: Any = False,
     sweep_mode: bool = False,
     component_range: str = "",
     component_y_mapping: Any = "",
@@ -836,6 +1289,36 @@ def mcr_als_analysis(
                     c_nonneg=c_nonneg,
                     st_nonneg=st_nonneg,
                     c_norm=c_norm,
+                    constraint_non_negative=constraint_non_negative,
+                    constraint_non_negative_mode_c=constraint_non_negative_mode_c,
+                    constraint_non_negative_mode_st=constraint_non_negative_mode_st,
+                    constraint_cumsum_non_negative=constraint_cumsum_non_negative,
+                    constraint_zero_end_points=constraint_zero_end_points,
+                    constraint_zero_cumsum_end_points=constraint_zero_cumsum_end_points,
+                    constraint_normalize=constraint_normalize,
+                    constraint_cut_below=constraint_cut_below,
+                    constraint_cut_above=constraint_cut_above,
+                    constraint_compress_below=constraint_compress_below,
+                    constraint_compress_above=constraint_compress_above,
+                    constraint_replace_zeros=constraint_replace_zeros,
+                    constraint_planarize=constraint_planarize,
+                    constraint_zero_end_points_span=constraint_zero_end_points_span,
+                    constraint_zero_cumsum_nodes=constraint_zero_cumsum_nodes,
+                    constraint_cut_below_value=constraint_cut_below_value,
+                    constraint_cut_above_value=constraint_cut_above_value,
+                    constraint_compress_below_value=constraint_compress_below_value,
+                    constraint_compress_above_value=constraint_compress_above_value,
+                    constraint_replace_zeros_feature=constraint_replace_zeros_feature,
+                    constraint_replace_zeros_fval=constraint_replace_zeros_fval,
+                    constraint_planarize_targets_c=constraint_planarize_targets_c,
+                    constraint_planarize_targets_st=constraint_planarize_targets_st,
+                    constraint_planarize_shape_c=constraint_planarize_shape_c,
+                    constraint_planarize_shape_st=constraint_planarize_shape_st,
+                    constraint_planarize_use_vals_above=constraint_planarize_use_vals_above,
+                    constraint_planarize_use_vals_below=constraint_planarize_use_vals_below,
+                    constraint_planarize_lims_to_plane=constraint_planarize_lims_to_plane,
+                    constraint_planarize_scaler=constraint_planarize_scaler,
+                    constraint_planarize_recalc_scaler=constraint_planarize_recalc_scaler,
                     sweep_mode=False,
                     component_y_mapping=component_y_mapping,
                     cv_config=None,
@@ -883,6 +1366,36 @@ def mcr_als_analysis(
                 c_nonneg=c_nonneg,
                 st_nonneg=st_nonneg,
                 c_norm=c_norm,
+                constraint_non_negative=constraint_non_negative,
+                constraint_non_negative_mode_c=constraint_non_negative_mode_c,
+                constraint_non_negative_mode_st=constraint_non_negative_mode_st,
+                constraint_cumsum_non_negative=constraint_cumsum_non_negative,
+                constraint_zero_end_points=constraint_zero_end_points,
+                constraint_zero_cumsum_end_points=constraint_zero_cumsum_end_points,
+                constraint_normalize=constraint_normalize,
+                constraint_cut_below=constraint_cut_below,
+                constraint_cut_above=constraint_cut_above,
+                constraint_compress_below=constraint_compress_below,
+                constraint_compress_above=constraint_compress_above,
+                constraint_replace_zeros=constraint_replace_zeros,
+                constraint_planarize=constraint_planarize,
+                constraint_zero_end_points_span=constraint_zero_end_points_span,
+                constraint_zero_cumsum_nodes=constraint_zero_cumsum_nodes,
+                constraint_cut_below_value=constraint_cut_below_value,
+                constraint_cut_above_value=constraint_cut_above_value,
+                constraint_compress_below_value=constraint_compress_below_value,
+                constraint_compress_above_value=constraint_compress_above_value,
+                constraint_replace_zeros_feature=constraint_replace_zeros_feature,
+                constraint_replace_zeros_fval=constraint_replace_zeros_fval,
+                constraint_planarize_targets_c=constraint_planarize_targets_c,
+                constraint_planarize_targets_st=constraint_planarize_targets_st,
+                constraint_planarize_shape_c=constraint_planarize_shape_c,
+                constraint_planarize_shape_st=constraint_planarize_shape_st,
+                constraint_planarize_use_vals_above=constraint_planarize_use_vals_above,
+                constraint_planarize_use_vals_below=constraint_planarize_use_vals_below,
+                constraint_planarize_lims_to_plane=constraint_planarize_lims_to_plane,
+                constraint_planarize_scaler=constraint_planarize_scaler,
+                constraint_planarize_recalc_scaler=constraint_planarize_recalc_scaler,
                 sweep_mode=sweep_mode,
                 component_range=component_range,
                 component_y_mapping=component_y_mapping,
@@ -930,6 +1443,36 @@ def mcr_als_analysis(
                     c_nonneg=_safe_bool(c_nonneg, default=True),
                     st_nonneg=_safe_bool(st_nonneg, default=True),
                     c_norm=_safe_bool(c_norm, default=False),
+                    constraint_non_negative=constraint_non_negative,
+                    constraint_non_negative_mode_c=constraint_non_negative_mode_c,
+                    constraint_non_negative_mode_st=constraint_non_negative_mode_st,
+                    constraint_cumsum_non_negative=constraint_cumsum_non_negative,
+                    constraint_zero_end_points=constraint_zero_end_points,
+                    constraint_zero_cumsum_end_points=constraint_zero_cumsum_end_points,
+                    constraint_normalize=constraint_normalize,
+                    constraint_cut_below=constraint_cut_below,
+                    constraint_cut_above=constraint_cut_above,
+                    constraint_compress_below=constraint_compress_below,
+                    constraint_compress_above=constraint_compress_above,
+                    constraint_replace_zeros=constraint_replace_zeros,
+                    constraint_planarize=constraint_planarize,
+                    constraint_zero_end_points_span=constraint_zero_end_points_span,
+                    constraint_zero_cumsum_nodes=constraint_zero_cumsum_nodes,
+                    constraint_cut_below_value=constraint_cut_below_value,
+                    constraint_cut_above_value=constraint_cut_above_value,
+                    constraint_compress_below_value=constraint_compress_below_value,
+                    constraint_compress_above_value=constraint_compress_above_value,
+                    constraint_replace_zeros_feature=constraint_replace_zeros_feature,
+                    constraint_replace_zeros_fval=constraint_replace_zeros_fval,
+                    constraint_planarize_targets_c=constraint_planarize_targets_c,
+                    constraint_planarize_targets_st=constraint_planarize_targets_st,
+                    constraint_planarize_shape_c=constraint_planarize_shape_c,
+                    constraint_planarize_shape_st=constraint_planarize_shape_st,
+                    constraint_planarize_use_vals_above=constraint_planarize_use_vals_above,
+                    constraint_planarize_use_vals_below=constraint_planarize_use_vals_below,
+                    constraint_planarize_lims_to_plane=constraint_planarize_lims_to_plane,
+                    constraint_planarize_scaler=constraint_planarize_scaler,
+                    constraint_planarize_recalc_scaler=constraint_planarize_recalc_scaler,
                     component_y_mapping=component_y_mapping,
                     nway_flag=resolved_nway_flag,
                     aug_direction=resolved_aug_direction,
@@ -966,6 +1509,36 @@ def mcr_als_analysis(
         c_nonneg=_safe_bool(c_nonneg, default=True),
         st_nonneg=_safe_bool(st_nonneg, default=True),
         c_norm=_safe_bool(c_norm, default=False),
+        constraint_non_negative=constraint_non_negative,
+        constraint_non_negative_mode_c=constraint_non_negative_mode_c,
+        constraint_non_negative_mode_st=constraint_non_negative_mode_st,
+        constraint_cumsum_non_negative=constraint_cumsum_non_negative,
+        constraint_zero_end_points=constraint_zero_end_points,
+        constraint_zero_cumsum_end_points=constraint_zero_cumsum_end_points,
+        constraint_normalize=constraint_normalize,
+        constraint_cut_below=constraint_cut_below,
+        constraint_cut_above=constraint_cut_above,
+        constraint_compress_below=constraint_compress_below,
+        constraint_compress_above=constraint_compress_above,
+        constraint_replace_zeros=constraint_replace_zeros,
+        constraint_planarize=constraint_planarize,
+        constraint_zero_end_points_span=constraint_zero_end_points_span,
+        constraint_zero_cumsum_nodes=constraint_zero_cumsum_nodes,
+        constraint_cut_below_value=constraint_cut_below_value,
+        constraint_cut_above_value=constraint_cut_above_value,
+        constraint_compress_below_value=constraint_compress_below_value,
+        constraint_compress_above_value=constraint_compress_above_value,
+        constraint_replace_zeros_feature=constraint_replace_zeros_feature,
+        constraint_replace_zeros_fval=constraint_replace_zeros_fval,
+        constraint_planarize_targets_c=constraint_planarize_targets_c,
+        constraint_planarize_targets_st=constraint_planarize_targets_st,
+        constraint_planarize_shape_c=constraint_planarize_shape_c,
+        constraint_planarize_shape_st=constraint_planarize_shape_st,
+        constraint_planarize_use_vals_above=constraint_planarize_use_vals_above,
+        constraint_planarize_use_vals_below=constraint_planarize_use_vals_below,
+        constraint_planarize_lims_to_plane=constraint_planarize_lims_to_plane,
+        constraint_planarize_scaler=constraint_planarize_scaler,
+        constraint_planarize_recalc_scaler=constraint_planarize_recalc_scaler,
         component_y_mapping=component_y_mapping,
         nway_flag=resolved_nway_flag,
         aug_direction=resolved_aug_direction,

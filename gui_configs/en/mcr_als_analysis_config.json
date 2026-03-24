@@ -13,11 +13,36 @@
     "max_iter": "Max Iterations",
     "tol": "Tolerance",
     "random_state": "Random Seed",
-    "c_regr": "C Regressor",
-    "st_regr": "ST Regressor",
-    "c_nonneg": "C Non-Negativity",
-    "st_nonneg": "ST Non-Negativity",
-    "c_norm": "C Normalization",
+    "constraint_non_negative": "Non-negative Constraint",
+    "constraint_non_negative_mode_c": "Non-negative Mode (C)",
+    "constraint_non_negative_mode_st": "Non-negative Mode (S)",
+    "constraint_cumsum_non_negative": "Cumsum Non-negative Constraint",
+    "constraint_zero_end_points": "Zero End Points Constraint",
+    "constraint_zero_cumsum_end_points": "Zero Cumsum End Points Constraint",
+    "constraint_normalize": "Normalize Constraint",
+    "constraint_cut_below": "Cut Below Constraint",
+    "constraint_cut_above": "Cut Above Constraint",
+    "constraint_compress_below": "Compress Below Constraint",
+    "constraint_compress_above": "Compress Above Constraint",
+    "constraint_replace_zeros": "Replace Zeros Constraint",
+    "constraint_planarize": "Planarize Constraint",
+    "constraint_zero_end_points_span": "Zero End Points Span",
+    "constraint_zero_cumsum_nodes": "Zero Cumsum Nodes",
+    "constraint_cut_below_value": "Cut Below Value",
+    "constraint_cut_above_value": "Cut Above Value",
+    "constraint_compress_below_value": "Compress Below Value",
+    "constraint_compress_above_value": "Compress Above Value",
+    "constraint_replace_zeros_feature": "Replace Zeros Feature",
+    "constraint_replace_zeros_fval": "Replace Zeros F-Value",
+    "constraint_planarize_targets_c": "Planarize Targets (C)",
+    "constraint_planarize_targets_st": "Planarize Targets (S)",
+    "constraint_planarize_shape_c": "Planarize Shape (C)",
+    "constraint_planarize_shape_st": "Planarize Shape (S)",
+    "constraint_planarize_use_vals_above": "Planarize Use Values Above",
+    "constraint_planarize_use_vals_below": "Planarize Use Values Below",
+    "constraint_planarize_lims_to_plane": "Planarize Limit To Plane",
+    "constraint_planarize_scaler": "Planarize Scaler",
+    "constraint_planarize_recalc_scaler": "Planarize Recalculate Scaler",
     "sweep_mode": "Sweep Mode",
     "component_range": "Component Range",
     "component_y_mapping": "Component-Y Mapping",
@@ -27,7 +52,7 @@
   "output_aliases": {
     "scores_mode_a": "Concentration Scores (C)",
     "val_scores_mode_a": "Validation Concentration Scores",
-    "components": "Spectral Components (ST)",
+    "components": "Spectral Components (S)",
     "reconstructed": "Reconstructed Data",
     "residual": "Residual Data",
     "metrics": "Metrics",
@@ -89,53 +114,446 @@
         "input_type": "user"
       },
       {
-        "name": "c_regr",
-        "label": "C Regressor",
-        "category": "Model Parameters",
-        "widget": "combobox",
-        "values": ["OLS", "NNLS"],
-        "value_aliases": ["OLS", "NNLS"],
-        "default": "OLS",
-        "required": true,
-        "input_type": "user"
+        "name": "constraint_non_negative",
+        "label": "Non-negative",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "2",
+        "item_labels": ["C", "S"],
+        "default": true,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Enable non-negativity for C and/or S."
       },
       {
-        "name": "st_regr",
-        "label": "ST Regressor",
-        "category": "Model Parameters",
+        "name": "constraint_non_negative_mode_c",
+        "label": "Non-negative Mode (C)",
+        "category": "Constraints",
         "widget": "combobox",
-        "values": ["OLS", "NNLS"],
-        "value_aliases": ["OLS", "NNLS"],
-        "default": "OLS",
-        "required": true,
-        "input_type": "user"
+        "values": ["NNLS", "PROJECT", "NNLS_PROJECT"],
+        "value_aliases": ["NNLS", "Project", "NNLS + Project"],
+        "default": "NNLS",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_non_negative": {
+            "operator": "index_true",
+            "index": 0
+          }
+        },
+        "tooltip": "C mode: NNLS uses non-negative solver; Project applies non-negative projection after solve; NNLS + Project does both."
       },
       {
-        "name": "c_nonneg",
-        "label": "Enforce C Non-Negativity",
+        "name": "constraint_non_negative_mode_st",
+        "label": "Non-negative Mode (S)",
+        "category": "Constraints",
+        "widget": "combobox",
+        "values": ["NNLS", "PROJECT", "NNLS_PROJECT"],
+        "value_aliases": ["NNLS", "Project", "NNLS + Project"],
+        "default": "NNLS",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_non_negative": {
+            "operator": "index_true",
+            "index": 1
+          }
+        },
+        "tooltip": "S mode: NNLS uses non-negative solver; Project applies non-negative projection after solve; NNLS + Project does both."
+      },
+      {
+        "name": "constraint_cumsum_non_negative",
+        "label": "Cumsum Non-negative",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "2",
+        "item_labels": ["C", "S"],
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Apply cumulative-sum non-negativity along each profile vector."
+      },
+      {
+        "name": "constraint_zero_end_points",
+        "label": "Zero End Points",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "2",
+        "item_labels": ["C", "S"],
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Force profile endpoints toward zero by baseline subtraction."
+      },
+      {
+        "name": "constraint_zero_end_points_span",
+        "label": "Zero End Points Span",
+        "category": "Constraints",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Number of points averaged at each edge for zero-end correction.",
+        "visible_if": {
+          "constraint_zero_end_points": {
+            "operator": "any_true"
+          }
+        }
+      },
+      {
+        "name": "constraint_zero_cumsum_end_points",
+        "label": "Zero Cumsum End Points",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "2",
+        "item_labels": ["C", "S"],
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Center cumulative-sum segments to near zero, optionally using node boundaries."
+      },
+      {
+        "name": "constraint_zero_cumsum_nodes",
+        "label": "Zero Cumsum Nodes",
+        "category": "Constraints",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_zero_cumsum_end_points": {
+            "operator": "any_true"
+          }
+        },
+        "tooltip": "Optional 1-based node indices, e.g. 3,7,10"
+      },
+      {
+        "name": "constraint_normalize",
+        "label": "Normalize",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "2",
+        "item_labels": ["C", "S"],
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "ConstraintNorm in pyMCR."
+      },
+      {
+        "name": "constraint_cut_below",
+        "label": "Cut Below",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "2",
+        "item_labels": ["C", "S"],
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Set values below threshold to zero."
+      },
+      {
+        "name": "constraint_cut_below_value",
+        "label": "Cut Below Value",
+        "category": "Constraints",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.0",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Threshold used by Cut Below.",
+        "visible_if": {
+          "constraint_cut_below": {
+            "operator": "any_true"
+          }
+        }
+      },
+      {
+        "name": "constraint_cut_above",
+        "label": "Cut Above",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "2",
+        "item_labels": ["C", "S"],
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Set values above threshold to zero."
+      },
+      {
+        "name": "constraint_cut_above_value",
+        "label": "Cut Above Value",
+        "category": "Constraints",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Threshold used by Cut Above.",
+        "visible_if": {
+          "constraint_cut_above": {
+            "operator": "any_true"
+          }
+        }
+      },
+      {
+        "name": "constraint_compress_below",
+        "label": "Compress Below",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "2",
+        "item_labels": ["C", "S"],
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Clamp values below threshold up to the threshold value."
+      },
+      {
+        "name": "constraint_compress_below_value",
+        "label": "Compress Below Value",
+        "category": "Constraints",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.0",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Threshold used by Compress Below.",
+        "visible_if": {
+          "constraint_compress_below": {
+            "operator": "any_true"
+          }
+        }
+      },
+      {
+        "name": "constraint_compress_above",
+        "label": "Compress Above",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "2",
+        "item_labels": ["C", "S"],
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Clamp values above threshold down to the threshold value."
+      },
+      {
+        "name": "constraint_compress_above_value",
+        "label": "Compress Above Value",
+        "category": "Constraints",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Threshold used by Compress Above.",
+        "visible_if": {
+          "constraint_compress_above": {
+            "operator": "any_true"
+          }
+        }
+      },
+      {
+        "name": "constraint_replace_zeros",
+        "label": "Replace Zeros",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "2",
+        "item_labels": ["C", "S"],
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Replace zero-sum rows with a fallback one-hot profile."
+      },
+      {
+        "name": "constraint_replace_zeros_feature",
+        "label": "Replace Zeros Feature",
+        "category": "Constraints",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_replace_zeros": {
+            "operator": "any_true"
+          }
+        },
+        "tooltip": "1-based feature index used by ConstraintReplaceZeros."
+      },
+      {
+        "name": "constraint_replace_zeros_fval",
+        "label": "Replace Zeros F-Value",
+        "category": "Constraints",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Total magnitude assigned to replacement rows.",
+        "visible_if": {
+          "constraint_replace_zeros": {
+            "operator": "any_true"
+          }
+        }
+      },
+      {
+        "name": "constraint_planarize",
+        "label": "Planarize",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "2",
+        "item_labels": ["C", "S"],
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Fit selected columns to a smooth plane over a 2D reshaped grid."
+      },
+      {
+        "name": "constraint_planarize_targets_c",
+        "label": "Planarize Targets (C)",
+        "category": "Constraints",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_planarize": {
+            "operator": "index_true",
+            "index": 0
+          }
+        },
+        "tooltip": "Optional 1-based column indices for C planarization."
+      },
+      {
+        "name": "constraint_planarize_shape_c",
+        "label": "Planarize Shape (C)",
+        "category": "Constraints",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_planarize": {
+            "operator": "index_true",
+            "index": 0
+          }
+        },
+        "tooltip": "rows,cols where rows*cols equals number of C rows in fit matrix."
+      },
+      {
+        "name": "constraint_planarize_targets_st",
+        "label": "Planarize Targets (S)",
+        "category": "Constraints",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_planarize": {
+            "operator": "index_true",
+            "index": 1
+          }
+        },
+        "tooltip": "Optional 1-based column indices for S planarization."
+      },
+      {
+        "name": "constraint_planarize_shape_st",
+        "label": "Planarize Shape (S)",
+        "category": "Constraints",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_planarize": {
+            "operator": "index_true",
+            "index": 1
+          }
+        },
+        "tooltip": "rows,cols where rows*cols equals number of S rows (components)."
+      },
+      {
+        "name": "constraint_planarize_use_vals_above",
+        "label": "Planarize Use Values Above",
+        "category": "Constraints",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Optional lower bound filter when fitting the plane.",
+        "visible_if": {
+          "constraint_planarize": {
+            "operator": "any_true"
+          }
+        }
+      },
+      {
+        "name": "constraint_planarize_use_vals_below",
+        "label": "Planarize Use Values Below",
+        "category": "Constraints",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Optional upper bound filter when fitting the plane.",
+        "visible_if": {
+          "constraint_planarize": {
+            "operator": "any_true"
+          }
+        }
+      },
+      {
+        "name": "constraint_planarize_lims_to_plane",
+        "label": "Planarize Limit To Plane",
         "category": "Constraints",
         "widget": "checkbutton",
         "default": true,
         "required": false,
-        "input_type": "user"
+        "input_type": "user",
+        "tooltip": "Limit planarized values to optional above/below bounds.",
+        "visible_if": {
+          "constraint_planarize": {
+            "operator": "any_true"
+          }
+        }
       },
       {
-        "name": "st_nonneg",
-        "label": "Enforce ST Non-Negativity",
+        "name": "constraint_planarize_scaler",
+        "label": "Planarize Scaler",
         "category": "Constraints",
-        "widget": "checkbutton",
-        "default": true,
+        "widget": "entry",
+        "type": "str",
+        "default": "",
         "required": false,
-        "input_type": "user"
+        "input_type": "user",
+        "tooltip": "Optional explicit scaler used for planar fit coordinate magnitudes.",
+        "visible_if": {
+          "constraint_planarize": {
+            "operator": "any_true"
+          }
+        }
       },
       {
-        "name": "c_norm",
-        "label": "Normalize C Rows",
+        "name": "constraint_planarize_recalc_scaler",
+        "label": "Planarize Recalculate Scaler",
         "category": "Constraints",
         "widget": "checkbutton",
         "default": false,
         "required": false,
-        "input_type": "user"
+        "input_type": "user",
+        "tooltip": "Recompute planarization scaler for each call instead of reusing it.",
+        "visible_if": {
+          "constraint_planarize": {
+            "operator": "any_true"
+          }
+        }
       },
       {
         "name": "sweep_mode",
@@ -196,7 +614,9 @@
         "type": "str",
         "default": "",
         "required": false,
-        "input_type": "router"
+        "input_type": "router",
+        "visible_if": false,
+        "tooltip": "Routed from upstream labels source; hidden in direct user setup."
       },
       {
         "name": "cv_config",
@@ -206,7 +626,9 @@
         "type": "CVConfig",
         "default": "",
         "required": false,
-        "input_type": "router"
+        "input_type": "router",
+        "visible_if": false,
+        "tooltip": "Routed from CV configuration step; hidden in direct user setup."
       },
       {
         "name": "nway_flag",

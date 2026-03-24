@@ -5559,8 +5559,9 @@ class ChemometricsGUI:
                 check_vars = []
                 check_widgets = []
 
-                def on_checkbutton_list_change(*_args, vars_ref=check_vars, a=instance_alias, n=name):
+                def on_checkbutton_list_change(*_args, vars_ref=check_vars, a=instance_alias, n=name, vw=visible_widgets, ch=category_headers):
                     self._save_widget_value(a, n, [var.get() for var in vars_ref])
+                    self._update_field_visibility(a, vw, ch)
 
                 for i in range(count):
                     initial_value = current_values[i] if i < len(current_values) else default_value
@@ -6170,11 +6171,46 @@ class ChemometricsGUI:
                         if "variable" in widget_data_for_condition:
                             # It's a checkbutton
                             current_value = widget_data_for_condition["variable"].get()
+                        else:
+                            cond_widget_spec = widget_data_for_condition.get("widget_spec", {})
+                            cond_widget_type = cond_widget_spec.get("widget")
+                            cond_widget = widget_data_for_condition.get("widget")
+                            if cond_widget_type == "checkbutton_list" and isinstance(cond_widget, list):
+                                current_value = [bool(var.get()) for var in cond_widget]
                         
                         # Check if condition_value is an operator dict
                         if isinstance(condition_value, dict) and "operator" in condition_value:
                             operator = condition_value.get("operator", "==")
                             expected_value = condition_value.get("value")
+
+                            # List-aware operators used by checkbutton_list fields.
+                            if operator in {"any_true", "all_true", "any_false", "all_false", "index_true", "index_false"}:
+                                if isinstance(current_value, (list, tuple)):
+                                    bool_values = [bool(v) for v in current_value]
+                                else:
+                                    bool_values = [bool(current_value)]
+
+                                if operator == "any_true":
+                                    condition_met = any(bool_values)
+                                elif operator == "all_true":
+                                    condition_met = bool_values and all(bool_values)
+                                elif operator == "any_false":
+                                    condition_met = any((not val) for val in bool_values)
+                                elif operator == "all_false":
+                                    condition_met = (not bool_values) or all((not val) for val in bool_values)
+                                elif operator in {"index_true", "index_false"}:
+                                    idx = int(condition_value.get("index", -1))
+                                    if idx < 0 or idx >= len(bool_values):
+                                        condition_met = False
+                                    else:
+                                        condition_met = bool_values[idx] if operator == "index_true" else (not bool_values[idx])
+                                else:
+                                    condition_met = True
+
+                                if not condition_met:
+                                    should_show = False
+                                    break
+                                continue
                             
                             # Try to convert to numeric for comparison
                             try:
@@ -6521,8 +6557,9 @@ class ChemometricsGUI:
         bool_values = [bool(v) for v in current_values] if isinstance(current_values, list) else []
         check_vars = []
 
-        def on_checkbutton_list_change(*_args, vars_ref=check_vars, a=func_alias, n=field_name):
+        def on_checkbutton_list_change(*_args, vars_ref=check_vars, a=func_alias, n=field_name, vw=visible_widgets):
             self._save_widget_value(a, n, [var.get() for var in vars_ref])
+            self._update_field_visibility(a, vw)
 
         for i in range(count):
             initial_value = bool_values[i] if i < len(bool_values) else default_value
