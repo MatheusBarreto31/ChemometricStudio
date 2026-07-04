@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Setup Tab - Workflow Guide - Chemometric Studio User Manual</title>
+  <link rel="stylesheet" href="assets/css/manual.css">
+</head>
+<body data-manual-page="workflow" data-manual-group="qa-workflow">
+  <div data-manual-header></div>
+
+  <main class="layout">
+    <aside class="manual-sidebar" data-manual-sidebar data-reveal></aside>
+
+    <div class="content-column">
+      <section class="panel" data-reveal>
+        <h1>Setup Tab</h1>
+        <p>The Setup tab is where you build the methodology pipeline by selecting and configuring functions.</p>
+      </section>
+
+      <section class="panel" data-reveal>
+        <h2>Basic Workflow</h2>
+        <ol class="step-list">
+          <li><strong>Add Functions:</strong> Click category names in the left panel to expand available functions.</li>
+          <li><strong>Add to Methodology:</strong> Click on a function to add an instance to your Methodology list.</li>
+          <li><strong>Configure:</strong> Select each instance and fill in required parameters in the configuration panel.</li>
+          <li><strong>Optional Passforward:</strong> For passforward-compatible functions, use the <strong>(PF)</strong> switch in Setup to expose mapped downstream outputs.</li>
+          <li><strong>Review Execution Order:</strong> Functions execute top-to-bottom in the Methodology list.</li>
+          <li><strong>Save:</strong> Use <strong>File -> Save Model</strong> to persist your pipeline as <code>model.json</code>.</li>
+        </ol>
+      </section>
+
+      <section class="panel" data-reveal>
+        <h2>Setup Overview Image</h2>
+        <p>Use this annotated image to identify the main controls before building your first workflow.</p>
+        <div class="media-card">
+          <img src="assets/images/getting_started_1.png" alt="Setup interface overview with red callouts for tabs, function library, methodology list, task actions, and model execution controls.">
+        </div>
+      </section>
+
+      <section class="panel" data-reveal>
+        <h2>Function Configuration Image</h2>
+        <p>After adding tasks, select each methodology item and configure all required parameters.</p>
+        <div class="media-card">
+          <img src="assets/images/getting_started_2.png" alt="Setup tab with red highlights showing selected methodology item and active configuration panel.">
+        </div>
+      </section>
+
+      <section class="panel" data-reveal>
+        <h2>Typical Function Order</h2>
+        <ol class="step-list">
+          <li>Load Data (or Validation Data)</li>
+          <li>Preprocessing (Baseline, Smoothing, Center and Scale)</li>
+          <li>Modeling (PLS, PCA, PARAFAC)</li>
+        </ol>
+        <p>Most routes are created automatically. Use <a href="workflow-routing.html">Routing Tab</a> only for advanced overrides.</p>
+      </section>
+    </div>
+  </main>
+
+  <footer data-manual-footer></footer>
+
+  <script src="assets/js/manual-common.js"></script>
+  <script src="assets/js/manual-shell.js"></script>
+  <script src="assets/js/manual.js"></script>
+</body>
+</html>

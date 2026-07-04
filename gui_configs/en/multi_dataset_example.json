@@ -1,0 +1,168 @@
+{
+  "display_name": "Multi-Dataset Analysis Example",
+  "category": "6.Analysis",
+  "short_description": "Example demonstrating multi-dataset scatter plots with class-based coloring",
+  "long_description": "This is an example configuration showing how to use the multi-dataset scatter plot feature with class-based coloring. It demonstrates:\n\n1. Plotting multiple datasets (calibration vs validation) on the same graph\n2. Using different marker types to distinguish datasets\n3. Using colors to distinguish classes within each dataset\n4. Integrating with data slicing navigation\n\nKey features:\n- Each dataset uses a unique marker (circles, squares, triangles)\n- Each class within a dataset uses a unique color\n- Classes maintain consistent colors across datasets\n- Full compatibility with PC slicing controls",
+  "analysis": {
+    "pages": [
+      {
+        "title": "Score Comparison",
+        "layout": "ns",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "PCA Scores: Calibration vs Validation by Class",
+              "legend_show_mode": "auto",
+              "legend_elements": {
+                "datasets": true,
+                "color": true,
+                "marker": false,
+                "fill": false,
+                "edge": false
+              },
+              "legend_position": "auto",
+              "legend_location": "inside",
+              "class_layer_order": ["color", "marker", "edge"],
+              "class_layer_map": {
+                "color": 1,
+                "marker": 2,
+                "edge": 3
+              },
+              "class_layer_nature": {
+                "1": "discrete",
+                "2": "discrete",
+                "3": "continuous"
+              },
+              "datasets": [
+                {
+                  "x_axis": {"data_source": "model_scores"},
+                  "y_axis": {"data_source": "model_scores"},
+                  "label": "Calibration",
+                  "marker": "o",
+                  "class_labels": "sample_classes"
+                },
+                {
+                  "x_axis": {"data_source": "val_scores"},
+                  "y_axis": {"data_source": "val_scores"},
+                  "label": "Validation",
+                  "marker": "s",
+                  "class_labels": "val_classes"
+                }
+              ],
+              "data_slicing": [
+                {"name": "PC-X", "dimension": 1, "axis": "x", "show_navigation_menu": true},
+                {"name": "PC-Y", "dimension": 1, "axis": "y", "show_navigation_menu": true}
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "3D Score Visualization",
+              "datasets": [
+                {
+                  "x_axis": {"data_source": "model_scores"},
+                  "y_axis": {"data_source": "model_scores"},
+                  "z_axis": {"data_source": "model_scores"},
+                  "label": "Calibration",
+                  "marker": "o",
+                  "class_labels": "sample_classes"
+                },
+                {
+                  "x_axis": {"data_source": "val_scores"},
+                  "y_axis": {"data_source": "val_scores"},
+                  "z_axis": {"data_source": "val_scores"},
+                  "label": "Validation",
+                  "marker": "s",
+                  "class_labels": "val_classes"
+                }
+              ],
+              "data_slicing": [
+                {"name": "PC-X", "dimension": 1, "axis": "x", "show_navigation_menu": true},
+                {"name": "PC-Y", "dimension": 1, "axis": "y", "show_navigation_menu": true},
+                {"name": "PC-Z", "dimension": 1, "axis": "z", "show_navigation_menu": true}
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Alternative Markers",
+        "layout": "ns",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Three Dataset Comparison",
+              "datasets": [
+                {
+                  "x_axis": {"data_source": "model_scores"},
+                  "y_axis": {"data_source": "model_scores"},
+                  "label": "Fold 1",
+                  "marker": "o"
+                },
+                {
+                  "x_axis": {"data_source": "val_scores"},
+                  "y_axis": {"data_source": "val_scores"},
+                  "label": "Fold 2",
+                  "marker": "s"
+                },
+                {
+                  "x_axis": {"data_source": "test_scores"},
+                  "y_axis": {"data_source": "test_scores"},
+                  "label": "Fold 3",
+                  "marker": "^"
+                }
+              ],
+              "data_slicing": [
+                {"name": "PC-X", "dimension": 1, "axis": "x", "show_navigation_menu": true},
+                {"name": "PC-Y", "dimension": 1, "axis": "y", "show_navigation_menu": true}
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Marker Variety Test",
+              "datasets": [
+                {
+                  "x_axis": {"data_source": "model_scores"},
+                  "y_axis": {"data_source": "model_scores"},
+                  "label": "Dataset A",
+                  "marker": "D"
+                },
+                {
+                  "x_axis": {"data_source": "val_scores"},
+                  "y_axis": {"data_source": "val_scores"},
+                  "label": "Dataset B",
+                  "marker": "p"
+                },
+                {
+                  "x_axis": {"data_source": "test_scores"},
+                  "y_axis": {"data_source": "test_scores"},
+                  "label": "Dataset C",
+                  "marker": "*"
+                },
+                {
+                  "x_axis": {"data_source": "model_scores"},
+                  "y_axis": {"data_source": "model_scores"},
+                  "label": "Dataset D",
+                  "marker": "v"
+                }
+              ],
+              "data_slicing": [
+                {"name": "PC-X", "dimension": 1, "axis": "x", "show_navigation_menu": true},
+                {"name": "PC-Y", "dimension": 1, "axis": "y", "show_navigation_menu": true}
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

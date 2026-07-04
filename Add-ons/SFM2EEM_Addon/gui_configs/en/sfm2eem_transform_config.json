@@ -1,0 +1,346 @@
+{
+  "display_name": "SFM2EEM Transform",
+  "category": "",
+  "data_type": "secondorder",
+  "input_aliases": {
+    "X_cal": "X Calibration Tensor",
+    "X_val": "X Validation Tensor",
+    "S_dl": "Offset Step",
+    "S_exc": "Excitation Step",
+    "Transpose": "Transpose Each Matrix",
+    "emission_axis_title": "New Emission Axis Title",
+    "nway_flag": "Data Order",
+    "axis_n_info": "Axis Numeric Info",
+    "axis_t_info": "Axis Text Info",
+    "dim_labels": "Dimension Labels"
+  },
+  "output_aliases": {
+    "X_cal": "X Cal (Converted)",
+    "X_val": "X Val (Converted)",
+    "axis_n_info": "Axis Numeric Info (Updated)",
+    "axis_t_info": "Axis Text Info (Updated)",
+    "dim_labels": "Dimension Labels (Updated)"
+  },
+  "short_description": "Converts each synchronous fluorescence matrix in a tensor using the SFM2EEM algorithm.",
+  "long_description": "Applies the SFM2EEM conversion to each internal matrix in the calibration and validation tensors, converting synchronous fluorescence matrices (SFMs) to excitation-emission matrices (EEMs). The function only supports second-order data (nway_flag=2 and 3D tensors shaped [samples, axis1, axis2]).\n\nUser-facing parameters:\n- S_dl: offset step\n- S_exc: excitation step\n- Transpose: if enabled, transposes each matrix before conversion\n\nAxis behavior:\n- Assumes first non-sample axis is excitation and second is offset\n- Replaces the offset axis values using the conversion sequence and initial offset",
+  "setup": {
+    "categories": [
+      "Conversion Parameters",
+      "Data Inputs"
+    ],
+    "layout": [
+      {
+        "name": "S_dl",
+        "label": "Offset Step (S_dl)",
+        "category": "Conversion Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Offset wavelength step"
+      },
+      {
+        "name": "S_exc",
+        "label": "Excitation Step (S_exc)",
+        "category": "Conversion Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Excitation wavelength step"
+      },
+      {
+        "name": "Transpose",
+        "label": "Transpose Each Matrix",
+        "category": "Conversion Parameters",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Transpose each sample matrix before conversion"
+      },
+      {
+        "name": "emission_axis_title",
+        "label": "New Emission Axis Title",
+        "category": "Conversion Parameters",
+        "widget": "entry",
+        "type": "str",
+        "default": "$\\lambda_{Emi}$ (nm)",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Title to assign to the converted emission axis"
+      },
+      {
+        "name": "X_cal",
+        "label": "X Calibration Tensor",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": true,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        },
+        "tooltip": "Routed tensor [samples, axis1, axis2]"
+      },
+      {
+        "name": "X_val",
+        "label": "X Validation Tensor",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        },
+        "tooltip": "Optional routed validation tensor [samples, axis1, axis2]"
+      },
+      {
+        "name": "axis_n_info",
+        "label": "Axis Numeric Info",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        },
+        "tooltip": "Routed axis numeric vectors"
+      },
+      {
+        "name": "axis_t_info",
+        "label": "Axis Text Info",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        },
+        "tooltip": "Routed axis text vectors"
+      },
+      {
+        "name": "nway_flag",
+        "label": "Data Order",
+        "category": "Data Inputs",
+        "widget": "entry",
+        "type": "int",
+        "default": "2",
+        "required": true,
+        "input_type": "inherited",
+        "visible_if": {
+          "input_type": "user"
+        },
+        "tooltip": "Inherited from previous data-loading stage"
+      },
+      {
+        "name": "dim_labels",
+        "label": "Dimension Labels",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        },
+        "tooltip": "Routed dimension labels"
+      }
+    ]
+  },
+  "analysis": {
+    "pages": [
+      {
+        "title": "Calibration Conversion",
+        "layout": "ew",
+        "condition": {
+          "parameter": "nway_flag",
+          "operator": "==",
+          "value": "2"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "x_axis": {
+                "data_source": "in.axis_n_info",
+                "index": 2,
+                "label": "in.dim_labels",
+                "l_index": 2
+              },
+              "y_axis": {
+                "data_source": "in.axis_n_info",
+                "index": 1,
+                "label": "in.dim_labels",
+                "l_index": 1
+              },
+              "aux_axis": {
+                "data_source": "in.axis_n_info",
+                "labels": "in.dim_labels"
+              },
+              "z_axis": {
+                "data_source": "in.X_cal",
+                "label": "Intensity"
+              },
+              "title": "Input Calibration Tensor",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [
+                {
+                  "name": "Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "nav_id": "sample_nav_calibration",
+                  "axis": "z",
+                  "show_navigation_menu": true
+                }
+              ],
+              "show_md_menu": true
+            },
+            "short_description": "Input calibration tensor heatmap.",
+            "long_description": "Displays one sample slice at a time from the input calibration tensor."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "x_axis": {
+                "data_source": "out.axis_n_info",
+                "index": 2,
+                "label": "out.dim_labels",
+                "l_index": 2
+              },
+              "y_axis": {
+                "data_source": "out.axis_n_info",
+                "index": 1,
+                "label": "out.dim_labels",
+                "l_index": 1
+              },
+              "aux_axis": {
+                "data_source": "out.axis_n_info",
+                "labels": "in.dim_labels"
+              },
+              "z_axis": {
+                "data_source": "out.X_cal",
+                "label": "Intensity"
+              },
+              "title": "Output Calibration Tensor",
+              "dimension_labels": "out.dim_labels",
+              "variable_labels": "out.axis_t_info",
+              "data_slicing": [
+                {
+                  "name": "Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "nav_id": "sample_nav_calibration",
+                  "axis": "z",
+                  "show_navigation_menu": true
+                }
+              ],
+              "show_md_menu": true
+            },
+            "short_description": "Output calibration tensor heatmap.",
+            "long_description": "Displays one sample slice at a time from the converted calibration tensor."
+          }
+        ]
+      },
+      {
+        "title": "Validation Conversion",
+        "layout": "ew",
+        "condition": {
+          "parameter": "X_val",
+          "operator": "exists",
+          "value": true
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "x_axis": {
+                "data_source": "in.axis_n_info",
+                "index": 2,
+                "label": "in.dim_labels",
+                "l_index": 2
+              },
+              "y_axis": {
+                "data_source": "in.axis_n_info",
+                "index": 1,
+                "label": "in.dim_labels",
+                "l_index": 1
+              },
+              "aux_axis": {
+                "data_source": "in.axis_n_info",
+                "labels": "in.dim_labels"
+              },
+              "z_axis": {
+                "data_source": "in.X_val",
+                "label": "Intensity"
+              },
+              "title": "Input Validation Tensor",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [
+                {
+                  "name": "Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "nav_id": "sample_nav_validation",
+                  "axis": "z",
+                  "show_navigation_menu": true
+                }
+              ],
+              "show_md_menu": true
+            },
+            "short_description": "Input validation tensor heatmap.",
+            "long_description": "Displays one sample slice at a time from the input validation tensor."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "x_axis": {
+                "data_source": "out.axis_n_info",
+                "index": 2,
+                "label": "out.dim_labels",
+                "l_index": 2
+              },
+              "y_axis": {
+                "data_source": "out.axis_n_info",
+                "index": 1,
+                "label": "out.dim_labels",
+                "l_index": 1
+              },
+              "aux_axis": {
+                "data_source": "out.axis_n_info",
+                "labels": "in.dim_labels"
+              },
+              "z_axis": {
+                "data_source": "out.X_val",
+                "label": "Intensity"
+              },
+              "title": "Output Validation Tensor",
+              "dimension_labels": "out.dim_labels",
+              "variable_labels": "out.axis_t_info",
+              "data_slicing": [
+                {
+                  "name": "Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "nav_id": "sample_nav_validation",
+                  "axis": "z",
+                  "show_navigation_menu": true
+                }
+              ],
+              "show_md_menu": true
+            },
+            "short_description": "Output validation tensor heatmap.",
+            "long_description": "Displays one sample slice at a time from the converted validation tensor."
+          }
+        ]
+      }
+    ],
+    "current_page": 0
+  }
+}

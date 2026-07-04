@@ -1,0 +1,79 @@
+{
+  "id": "sv_variant_arduino",
+  "label": "Cobalt",
+  "base": "dark",
+  "tcl_theme_name": "sv-cobalt",
+  "tcl_file": "cobalt/theme.tcl",
+  "description": "Dark colour scheme inspired by the Arduino IDE 2 editor: deep navy background with cyan/teal accent highlights.",
+  "palette": {
+    "background": "#1c1e26",
+    "foreground": "#dcdfe4",
+    "selectBackground": "#00b4cc",
+    "selectForeground": "#ffffff",
+    "activeBackground": "#252a38",
+    "activeForeground": "#dcdfe4"
+  },
+  "styles": {
+    ".": {
+      "background": "#1c1e26",
+      "foreground": "#dcdfe4"
+    },
+    "TFrame": {
+      "background": "#1c1e26"
+    },
+    "TLabel": {
+      "background": "#1c1e26",
+      "foreground": "#dcdfe4"
+    },
+    "TLabelframe": {
+      "background": "#1c1e26",
+      "foreground": "#dcdfe4"
+    },
+    "TLabelframe.Label": {
+      "background": "#1c1e26",
+      "foreground": "#dcdfe4"
+    },
+    "TEntry": {
+      "fieldbackground": "#252a38",
+      "foreground": "#dcdfe4",
+      "insertcolor": "#dcdfe4",
+      "selectbackground": "#00b4cc",
+      "selectforeground": "#ffffff"
+    },
+    "TCombobox": {
+      "fieldbackground": "#252a38",
+      "foreground": "#dcdfe4",
+      "selectbackground": "#00b4cc",
+      "selectforeground": "#ffffff"
+    },
+    "TSpinbox": {
+      "fieldbackground": "#252a38",
+      "foreground": "#dcdfe4"
+    },
+    "Treeview": {
+      "background": "#252a38",
+      "foreground": "#dcdfe4",
+      "fieldbackground": "#252a38"
+    },
+    "TNotebook": {
+      "background": "#1c1e26",
+      "tabmargins": [0, 0, 0, 0]
+    },
+    "TNotebook.Tab": {
+      "background": "#252a38",
+      "foreground": "#dcdfe4"
+    },
+    "TScrollbar": {
+      "troughcolor": "#1c1e26",
+      "background": "#3a3f52"
+    },
+    "Execution.Horizontal.TProgressbar": {
+      "troughcolor": "#252a38",
+      "background": "#00b4cc",
+      "bordercolor": "#252a38",
+      "lightcolor": "#00b4cc",
+      "darkcolor": "#00b4cc",
+      "thickness": 12
+    }
+  }
+}

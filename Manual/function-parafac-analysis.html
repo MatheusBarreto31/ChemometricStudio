@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PARAFAC Analysis - Functions - Chemometric Studio User Manual</title>
+  <link rel="stylesheet" href="assets/css/manual.css">
+</head>
+<body data-manual-page="functions" data-manual-group="qa-functions">
+  <div data-manual-header></div>
+
+  <main class="layout">
+    <aside class="manual-sidebar" data-manual-sidebar data-reveal></aside>
+
+    <div class="content-column">
+      <section class="panel" data-reveal>
+        <h1>PARAFAC Analysis</h1>
+        <p><a href="functions-category-analysis.html">Exploratory Analysis</a></p>
+      </section>
+
+      <section class="function-card" data-reveal>
+        <h2 class="function-title">PARAFAC Analysis</h2>
+        <span class="function-category">Analysis</span>
+        <p><strong>Purpose:</strong> Decompose 3D+ tensors with PARAFAC/CP using optional constraints and component sweeps.</p>
+
+        <div class="io-section">
+          <div class="io-title">Inputs:</div>
+          <ul class="io-list">
+            <li><strong>X_cal</strong>, <strong>Y_cal</strong></li>
+            <li><strong>X_val</strong>, <strong>Y_val</strong> (optional)</li>
+          </ul>
+        </div>
+
+        <div class="io-section">
+          <div class="io-title">Outputs:</div>
+          <ul class="io-list">
+            <li><strong>factors</strong>, <strong>scores_mode_a</strong>, <strong>val_scores_mode_a</strong></li>
+            <li><strong>metrics</strong>, <strong>sweep_results</strong>, <strong>cv_results</strong></li>
+            <li><strong>reconstructed</strong> tensor and residual information</li>
+          </ul>
+        </div>
+
+        <div class="io-section">
+          <div class="io-title">Key Parameters:</div>
+          <div class="param-group"><div class="param-name">n_components</div><div class="param-desc">Component count or sweep range</div></div>
+          <div class="param-group"><div class="param-name">nway_flag</div><div class="param-desc">Tensor order (3, 4, or higher)</div></div>
+          <div class="param-group"><div class="param-name">constraint_*</div><div class="param-desc">Non-negativity, smoothness, sparsity, and related options</div></div>
+          <div class="param-group"><div class="param-name">init_method</div><div class="param-desc">Initialization strategy</div></div>
+        </div>
+
+        <div class="use-case">
+          <div class="use-case-title">When to Use:</div>
+          <ul>
+            <li>For EEM, hyperspectral, and other multi-way datasets</li>
+            <li>When component interpretability matters</li>
+            <li>When evaluating component counts with sweep mode</li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer data-manual-footer></footer>
+
+  <script src="assets/js/manual-common.js"></script>
+  <script src="assets/js/manual-shell.js"></script>
+  <script src="assets/js/manual.js"></script>
+</body>
+</html>

@@ -1,0 +1,814 @@
+{
+  "display_name": "Validation/Test Set",
+  "category": "1.Load Data",
+  "data_type": "all",
+  "input_aliases": {
+    "X_cal": "X Data",
+    "Y_cal": "Y Data",
+    "smp_cal": "Sample Labels",
+    "class_data_cal": "Class Data",
+    "cal_metadata": "Sample Metadata",
+    "cal_s_mask": "Calibration Sample Mask",
+    "createVal": "Create Validation",
+    "creationMethod": "Method",
+    "calProportion": "Cal. Proportion",
+    "random_seed": "Random Seed",
+    "selection_file": "Selection File",
+    "d_specs_separator": "Data Separator",
+    "d_specs_headlines": "Header Rows",
+    "d_specs_headcolumns": "Header Columns",
+    "d_specs_type": "Data Type",
+    "d_specs_dimensions": "Data Dimensions",
+    "s_padding_type": "Sample Padding Type",
+    "y_labels": "Y Labels",
+    "y_labels_from_file": "Y Labels from File",
+    "nway_flag": "Data Dimensionality",
+    "cdata_path": "Class Data File"
+  },
+  "output_aliases": {
+    "X_cal": "X Calibration",
+    "Y_cal": "Y Calibration",
+    "X_val": "X Validation",
+    "Y_val": "Y Validation",
+    "smp_cal": "Cal Samples",
+    "smp_val": "Val Samples",
+    "class_data_cal": "Cal Class",
+    "class_data_val": "Val Class",
+    "cal_metadata": "Cal Metadata",
+    "val_metadata": "Val Metadata",
+    "cal_s_mask": "Cal Sample Mask",
+    "val_s_mask": "Val Sample Mask"
+  },
+  "output_synonyms": {
+    "X_cal": ["X", "X_train"],
+    "Y_cal": ["Y", "Y_train"],
+    "X_val": ["X_test", "X_validation"],
+    "Y_val": ["Y_test", "Y_validation"],
+    "smp_cal": ["sample_labels", "smp_train"],
+    "smp_val": ["sample_labels_val", "smp_test", "smp_validation"],
+    "class_data_cal": ["class_data", "class_labels", "class_data_train"],
+    "class_data_val": ["class_data_val", "class_labels_val", "class_data_test", "class_data_validation"],
+    "cal_metadata": ["metadata", "train_metadata"],
+    "val_metadata": ["metadata_val", "test_metadata", "validation_metadata"],
+    "cal_s_mask": ["sample_mask", "calibration_sample_mask"],
+    "val_s_mask": ["validation_sample_mask", "test_sample_mask"]
+  },
+  "short_description": "Creates or loads validation/test data for model assessment",
+  "long_description": "Validation/testing data is essential for unbiased assessment of model performance. This step creates validation sets by splitting calibration data or loads external validation data.\n\nCreating Validation Sets from Calibration Data:\n\n1. Random Splitting\n   - Randomly selects samples for validation\n   - Fastest and simplest approach\n   - Suitable for large, diverse datasets\n   - May not ensure representative distribution\n\n2. Stratified Random Splitting\n   - Random selection that preserves class proportions in both sets\n   - Requires class data to be available\n   - Use the Stratification Class Layer to choose which class column to stratify on\n\n3. Kennard-Stone Algorithm\n   - Selects samples that span the data space\n   - Ensures good representation of data range\n   - Better for small or clustered datasets\n   - More computationally expensive\n\n4. File-Based Selection\n   - Uses external index file for sample selection\n   - Allows custom selection criteria\n   - Requires pre-prepared selection file\n\nCalibration Proportion:\n- Typical value: 0.7 (70% calibration, 30% validation)\n- Larger sets: can use 0.8-0.9 for better calibration\n- Smaller datasets: may use 0.6-0.7 for more validation samples\n\nLoading External Validation Sets:\n- Load completely independent validation data\n- Useful for temporal or spatial validation\n- Provides most realistic performance estimate\n- Separate X and Y files required\n- Optional sample labels file\n\nBest Practices:\n- Validation set should be independent of calibration\n- Ensure both sets cover similar data ranges\n- Document how validation sets were selected\n- Use appropriate set size for statistical reliability\n\nUsage:\n- Create internal set OR load external set\n- Both can be used simultaneously for comprehensive validation\n- Settings applied automatically during model building.",
+  "setup": {
+    "categories": ["Validation Mode", "Creation Settings", "External Data Files", "Data Inputs", "Data Format"],
+    "layout": [
+      {
+        "name": "validation_mode",
+        "label": "Validation Set Mode",
+        "category": "Validation Mode",
+        "widget": "combobox",
+        "values": ["Load", "Create"],
+        "value_aliases": ["Load External Validation Data", "Create from Calibration Data"],
+        "default": "Load",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Choose whether to load external validation data or create it from calibration data"
+      },
+      {
+        "name": "creationMethod",
+        "label": "Creation Method",
+        "category": "Creation Settings",
+        "widget": "combobox",
+        "values": ["random", "stratified_random", "kennard_stone", "file"],
+        "value_aliases": ["Random Splitting", "Stratified Random Splitting", "Kennard-Stone Algorithm", "File-Based Selection"],
+        "default": "random",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Random: random selection. Kennard-Stone: diversity-based. File: use external selection indices",
+        "visible_if": {"validation_mode": "Create"}
+      },
+      {
+        "name": "calProportion",
+        "label": "Calibration Proportion (0-1)",
+        "category": "Creation Settings",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.7",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Fraction of data for calibration (0.7 = 70% cal, 30% val)",
+        "visible_if": {"validation_mode": "Create", "creationMethod": ["random", "stratified_random", "kennard_stone"]}
+      },
+      {
+        "name": "random_seed",
+        "label": "Random Seed (optional)",
+        "category": "Creation Settings",
+        "widget": "entry",
+        "type": "int",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Seed used for reproducible random splits (same seed = same selection)",
+        "visible_if": {"validation_mode": "Create", "creationMethod": ["random", "stratified_random"]}
+      },
+      {
+        "name": "stratify_layer",
+        "label": "Stratification Class Layer",
+        "category": "Creation Settings",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "1-based column index of the class data matrix used for stratification (1 = first class layer)",
+        "visible_if": {"validation_mode": "Create", "creationMethod": "stratified_random"}
+      },
+      {
+        "name": "selection_file",
+        "label": "Selection File (if using 'file' method)",
+        "category": "Creation Settings",
+        "widget": "file_selector",
+        "multiple": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "File with sample indices/identifiers for selection",
+        "visible_if": {"creationMethod": "file"},
+        "ispath": true
+      },
+      {
+        "name": "X_val_path",
+        "label": "X Test Data File",
+        "category": "External Data Files",
+        "widget": "file_selector",
+        "multiple": true,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Instrumental data to be used with the model for validation/testing",
+        "visible_if": {"validation_mode": "Load"},
+        "ispath": true
+      },
+      {
+        "name": "Y_val_path",
+        "label": "Y Test Data File",
+        "category": "External Data Files",
+        "widget": "file_selector",
+        "multiple": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "External validation response file",
+        "visible_if": {"validation_mode": "Load"},
+        "ispath": true
+      },
+      {
+        "name": "val_labels_path",
+        "label": "Validation Sample Labels File (optional)",
+        "category": "External Data Files",
+        "widget": "file_selector",
+        "multiple": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Labels for external validation samples",
+        "visible_if": {"validation_mode": "Load"},
+        "ispath": true
+      },
+      {
+        "name": "cdata_path",
+        "label": "Validation Classification Data File",
+        "category": "External Data Files",
+        "widget": "file_selector",
+        "multiple": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Classification file for external validation: one sample per row. Supports single label or multi-layer labels (comma/tab/space separated columns).",
+        "visible_if": {"validation_mode": "Load"},
+        "ispath": true
+      },
+      {
+        "name": "X_cal",
+        "label": "X Calibration Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": true,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed from previous function output"
+      },
+      {
+        "name": "Y_cal",
+        "label": "Y Calibration Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed from previous function output"
+      },
+      {
+        "name": "smp_cal",
+        "label": "Calibration Sample Labels",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed from previous function output"
+      },
+      {
+        "name": "class_data_cal",
+        "label": "Calibration Classification Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed from previous function output"
+      },
+      {
+        "name": "cal_metadata",
+        "label": "Calibration Sample Metadata",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed metadata dictionary from Load Data output"
+      },
+      {
+        "name": "cal_s_mask",
+        "label": "Calibration Sample Mask",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Boolean mask routed from Load Data indicating real vs padded sample values"
+      },
+      {
+        "name": "d_specs_separator",
+        "label": "Data Separator",
+        "category": "Data Format",
+        "widget": "combobox",
+        "values": ["Auto detect", "comma", "tabs", "spaces"],
+        "default": "Auto detect",
+        "required": true,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Inherited from Load Data. Default is Auto detect (comma/tab/space)."
+      },
+      {
+        "name": "d_specs_headlines",
+        "label": "Number of Header Rows",
+        "category": "Data Format",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": true,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Inherited from Load Data. Leave empty to auto-detect header rows."
+      },
+      {
+        "name": "d_specs_headcolumns",
+        "label": "Number of Header Columns",
+        "category": "Data Format",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": true,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Inherited from Load Data. Leave empty to auto-detect leading header columns."
+      },
+      {
+        "name": "d_specs_type",
+        "label": "Data Type",
+        "category": "Data Format",
+        "widget": "combobox",
+        "values": ["Auto detect", "x_vector", "xy_vector", "xyz_vector", "x_matrix", "xy_matrix"],
+        "default": "Auto detect",
+        "required": true,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Inherited from Load Data. Default is Auto detect."
+      },
+      {
+        "name": "d_specs_dimensions",
+        "label": "Data Dimensions",
+        "category": "Data Format",
+        "widget": "entry",
+        "default": "",
+        "required": false,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Automatically inherited from Load Data function"
+      },
+      {
+        "name": "s_padding_type",
+        "label": "Sample Padding Type",
+        "category": "Data Format",
+        "widget": "combobox",
+        "values": ["NaN", "Zeroes"],
+        "default": "NaN",
+        "required": false,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Inherited from Load Data. Used when nway>=2 validation samples require padding."
+      },
+      {
+        "name": "y_labels_from_file",
+        "label": "Y Labels from File",
+        "category": "Data Format",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Inherited from Load Data. Uses first Y-file row as labels and skips it from Y values."
+      },
+      {
+        "name": "y_labels",
+        "label": "Y Labels",
+        "category": "Data Format",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user", "y_labels_from_file": false},
+        "tooltip": "Inherited from Load Data. Manual Y labels separated by comma, tab, or spaces."
+      },
+      {
+        "name": "nway_flag",
+        "label": "Data Dimensionality",
+        "category": "Data Format",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": true,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Automatically inherited from Load Data function"
+      },
+      {
+        "name": "reshape_order",
+        "label": "Reshape Order (Multiway)",
+        "category": "Data Format",
+        "widget": "combobox",
+        "values": ["F", "C"],
+        "value_aliases": ["Fortran/MATLAB", "C/NumPy"],
+        "default": "F",
+        "required": false,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Automatically inherited from Load Data function"
+      }
+    ]
+  },
+  "analysis": {
+    "pages": [
+      {
+        "title": "Data Overview",
+        "layout": "ed",
+        "condition": {
+          "parameter": "nway_flag",
+          "operator": "==",
+          "value": "1"
+        },
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "data_source": "X_val",
+              "decimal_places": 4,
+              "max_rows": 200,
+              "max_cols": 200,
+              "title": "X Validation Data"
+            },
+            "short_description": "Displays X Validation Data as a table in the analysis section.",
+            "long_description": "This section presents 'X Validation Data' in tabular form. Use this view to review numeric values, compare rows/columns, and inspect detailed outputs for this section."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {
+                "data_source": "axis_n_info",
+                "index": 1,
+                "label": "dim_labels",
+                "l_index": 1
+              },
+              "y_axis": {
+                "data_source": "out.X_val",
+                "label": "Signal"
+              },
+              "title": "Validation Spectral Data Overview (Per sample)",
+              "dimension_labels": "dim_labels",
+              "variable_labels": "axis_t_info",
+              "data_slicing": [
+                {
+                  "name": "Sample",
+                  "dimension": 0,
+                  "axis": "y",
+                  "show_navigation_menu": true
+                }
+              ]
+            },
+            "short_description": "Displays Validation Spectral Data Overview (Per sample) as a line graph in the analysis section.",
+            "long_description": "This section visualizes 'Validation Spectral Data Overview (Per sample)' using a line graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
+          },
+          {
+            "type": "graph",
+            "title": "Scatter Plot of Validation X Data",
+            "config": {
+              "graph_type": "scatter",
+              "x_axis": {
+                "data_source": "X_val",
+                "axis_labels": "axis_t_info",
+                "axis_labels_nested": "1"
+              },
+              "y_axis": {
+                "data_source": "X_val",
+                "axis_labels": "axis_t_info",
+                "axis_labels_nested": "1"
+              },
+              "data_slicing": [
+                {
+                  "name": "Variable",
+                  "dimension": 1,
+                  "axis": "x",
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "Variable",
+                  "dimension": 1,
+                  "axis": "y",
+                  "default": 1,
+                  "show_navigation_menu": true
+                }
+              ]
+            },
+            "short_description": "Displays Validation Data Overview as a scatter graph in the analysis section.",
+            "long_description": "This section visualizes 'Validation Data Overview' using a scatter graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
+          }
+        ]
+      },
+      {
+        "title": "Data Overview - Validation Second Order Data",
+        "layout": "ed",
+        "condition": {
+          "parameter": "nway_flag",
+          "operator": "==",
+          "value": "2"
+        },
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "data_source": "X_val",
+              "decimal_places": 4,
+              "max_rows": 30,
+              "max_cols": 15,
+              "title": "Single Validation Sample Slice",
+              "variable_labels": "axis_t_info",
+              "data_slicing": [
+                {
+                  "name": "Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "nav_id": "sample_second_order",
+                  "show_navigation_menu": true
+                }
+              ]
+            },
+            "short_description": "Displays Single Validation Sample Slice as a table in the analysis section.",
+            "long_description": "This section presents 'Single Validation Sample Slice' in tabular form. Use this view to review numeric values, compare rows/columns, and inspect detailed outputs for this section."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "contour",
+              "x_axis": {
+                "data_source": "axis_n_info",
+                "index": 2,
+                "label": "dim_labels",
+                "l_index": 2
+              },
+              "y_axis": {
+                "data_source": "axis_n_info",
+                "index": 1,
+                "label": "dim_labels",
+                "l_index": 1
+              },
+              "z_axis": {
+                "data_source": "X_val",
+                "label": "Signal"
+              },
+              "title": "Validation Spectral Data - Contour",
+              "dimension_labels": "dim_labels",
+              "variable_labels": "axis_t_info",
+              "data_slicing": [
+                {
+                  "name": "Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "nav_id": "sample_second_order",
+                  "axis": "z",
+                  "show_navigation_menu": true
+                }
+              ]
+            },
+            "short_description": "Displays Validation Spectral Data Heatmap as a contour graph in the analysis section.",
+            "long_description": "This section visualizes 'Validation Spectral Data Heatmap' using a contour graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "3d_surf",
+              "x_axis": {
+                "data_source": "axis_n_info",
+                "index": 2,
+                "label": "dim_labels",
+                "l_index": 2
+              },
+              "y_axis": {
+                "data_source": "axis_n_info",
+                "index": 1,
+                "label": "dim_labels",
+                "l_index": 1
+              },
+              "z_axis": {
+                "data_source": "X_val",
+                "label": "Signal"
+              },
+              "title": "Validation Spectral Data - 3D Surface",
+              "dimension_labels": "dim_labels",
+              "variable_labels": "axis_t_info",
+              "data_slicing": [
+                {
+                  "name": "Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "nav_id": "sample_second_order",
+                  "axis": "z",
+                  "show_navigation_menu": true
+                }
+              ]
+            },
+            "short_description": "Displays Validation Spectral Data 3D Surface as a 3d_surf graph in the analysis section.",
+            "long_description": "This section visualizes 'Validation Spectral Data 3D Surface' using a 3d_surf graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
+          }
+        ]
+      },
+      {
+        "title": "Validation Data Overview",
+        "layout": "ew",
+        "condition": {
+          "parameter": "nway_flag",
+          "operator": ">",
+          "value": "2"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "aux_axis": {
+                "data_source": "axis_n_info",
+                "labels": "dim_labels"
+              },
+              "z_axis": {
+                "data_source": "X_val",
+                "label": "Signal"
+              },
+              "title": "Validation Spectral Data Heatmap (Per sample)",
+              "dimension_labels": "dim_labels",
+              "variable_labels": "axis_t_info",
+              "data_slicing": [
+                {
+                  "name": "Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "axis": "z",
+                  "show_navigation_menu": true
+                }
+              ],
+              "show_md_menu": true
+            },
+            "short_description": "Displays Validation Spectral Data Heatmap (4D+) as a heatmap graph in the analysis section.",
+            "long_description": "This section visualizes 'Validation Spectral Data Heatmap (4D+)' using a heatmap graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "aux_axis": {
+                "data_source": "axis_n_info",
+                "labels": "dim_labels"
+              },
+              "z_axis": {
+                "data_source": "X_val",
+                "label": "Signal"
+              },
+              "title": "Validation Spectral Data Heatmap (Full Tensor)",
+              "dimension_labels": "dim_labels",
+              "variable_labels": "axis_t_info",
+              "data_slicing": [
+                {
+                  "name": "Sample",
+                  "axis": "z"
+                }
+              ],
+              "show_md_menu": true
+            },
+            "short_description": "Displays Validation Spectral Data Heatmap (4D+) as a heatmap graph in the analysis section.",
+            "long_description": "This section visualizes 'Validation Spectral Data Heatmap (4D+)' using a heatmap graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
+          }
+        ]
+      },
+      {
+        "title": "Validation Data Overview (Full Data)",
+        "layout": "fp",
+        "condition": {
+          "parameter": "nway_flag",
+          "operator": "==",
+          "value": "1"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {
+                "data_source": "axis_n_info",
+                "index": 1,
+                "label": "dim_labels",
+                "l_index": 1
+              },
+              "y_axis": {
+                "data_source": "out.X_val",
+                "label": "Signal"
+              },
+              "class_labels": "class_data_val",
+              "title": "Validation Spectral Data Overview (Class)",
+              "dimension_labels": "dim_labels",
+              "variable_labels": "axis_t_info"
+            },
+            "short_description": "Displays all validation spectra coloured by class as a line graph in the analysis section.",
+            "long_description": "This section visualizes all loaded validation spectra simultaneously. Lines are coloured by class value using the selected colormap settings. Class data must be loaded for class-driven styling to appear."
+          }
+        ]
+      },
+      {
+        "title": "Validation Load Summary",
+        "layout": "fp",
+        "sections": [
+          {
+            "type": "text",
+            "config": {
+              "title": "Validation Data Load Report",
+              "text_template": "Validation Data Load Report\n===========================\nSamples loaded: {samples_loaded}\nDimensionality (ndim): {x_ndim}\nTotal values in X: {x_size}\nX shape: {x_shape}\nVariables in last axis: {x_last_axis}\nSample labels available: {sample_labels_count}\nDimension labels: {dim_labels}\nAxis vectors available: {axis_vector_count}\nY values loaded: {y_size}\nClass labels loaded: {class_size}",
+              "bindings": [
+                {
+                  "name": "samples_loaded",
+                  "data_source": "X_val",
+                  "nested_key": "shape",
+                  "selector": {
+                    "mode": "index",
+                    "index": "first"
+                  }
+                },
+                {
+                  "name": "x_ndim",
+                  "data_source": "X_val",
+                  "nested_key": "ndim",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "x_size",
+                  "data_source": "X_val",
+                  "nested_key": "size",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "x_shape",
+                  "data_source": "X_val",
+                  "nested_key": "shape",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "separator": " × "
+                },
+                {
+                  "name": "x_last_axis",
+                  "data_source": "X_val",
+                  "nested_key": "shape",
+                  "selector": {
+                    "mode": "index",
+                    "index": "last"
+                  }
+                },
+                {
+                  "name": "sample_labels_count",
+                  "data_source": "smp_val",
+                  "nested_key": "len",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "dim_labels",
+                  "data_source": "dim_labels",
+                  "selector": {
+                    "mode": "range",
+                    "start": "first",
+                    "end": "last"
+                  },
+                  "separator": ", "
+                },
+                {
+                  "name": "axis_vector_count",
+                  "data_source": "axis_n_info",
+                  "nested_key": "len",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "y_size",
+                  "data_source": "Y_val",
+                  "nested_key": "size",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "class_size",
+                  "data_source": "class_data_val",
+                  "nested_key": "size",
+                  "selector": {
+                    "mode": "value"
+                  }
+                }
+              ]
+            },
+            "short_description": "Displays a compact text report about loaded validation data dimensions and counts.",
+            "long_description": "This section provides a runtime text summary including number of loaded validation samples, dimensionality, overall size, shape, and availability of labels/targets."
+          }
+        ]
+      },
+      {
+        "title": "Created Split Summary",
+        "layout": "ew",
+        "condition": {
+          "parameter": "validation_mode",
+          "operator": "==",
+          "value": "Create"
+        },
+        "sections": [
+          {
+            "type": "text",
+            "config": {
+              "title": "Selected Calibration Samples",
+              "text_template": "Selected Calibration Samples\n============================\n{calibration_samples}",
+              "bindings": [
+                {
+                  "name": "calibration_samples",
+                  "data_source": "smp_cal",
+                  "selector": {
+                    "mode": "range",
+                    "start": "first",
+                    "end": "last"
+                  },
+                  "separator": "\n"
+                }
+              ]
+            },
+            "short_description": "Lists sample labels selected for calibration when creating a validation split.",
+            "long_description": "This section lists all sample labels assigned to the calibration subset by the selected split method."
+          },
+          {
+            "type": "text",
+            "config": {
+              "title": "Selected Validation Samples",
+              "text_template": "Selected Validation Samples\n===========================\n{validation_samples}",
+              "bindings": [
+                {
+                  "name": "validation_samples",
+                  "data_source": "smp_val",
+                  "selector": {
+                    "mode": "range",
+                    "start": "first",
+                    "end": "last"
+                  },
+                  "separator": "\n"
+                }
+              ]
+            },
+            "short_description": "Lists sample labels selected for validation when creating a validation split.",
+            "long_description": "This section lists all sample labels assigned to the validation subset by the selected split method."
+          }
+        ]
+      }
+    ],
+    "current_page": 0
+  }
+}

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CV Configuration - Functions - Chemometric Studio User Manual</title>
+  <link rel="stylesheet" href="assets/css/manual.css">
+</head>
+<body data-manual-page="functions" data-manual-group="qa-functions">
+  <div data-manual-header></div>
+
+  <main class="layout">
+    <aside class="manual-sidebar" data-manual-sidebar data-reveal></aside>
+
+    <div class="content-column">
+      <section class="panel" data-reveal>
+        <h1>CV Configuration</h1>
+        <p><a href="functions-category-cv-config.html">Cross-Validation Configuration</a></p>
+      </section>
+
+      <section class="function-card" data-reveal>
+        <h2 class="function-title">CV Configuration</h2>
+        <span class="function-category">Support</span>
+        <p><strong>Purpose:</strong> Define cross-validation strategy for model assessment and optimization.</p>
+
+        <div class="io-section">
+          <div class="io-title">Outputs:</div>
+          <ul class="io-list"><li><strong>cv_config</strong> object for downstream functions</li></ul>
+        </div>
+
+        <div class="io-section">
+          <div class="io-title">Key Parameters:</div>
+          <div class="param-group"><div class="param-name">use_cv</div><div class="param-desc">Enable or disable CV</div></div>
+          <div class="param-group"><div class="param-name">cv_strategy</div><div class="param-desc">kfold, repeated_kfold, timeseries, or stratified</div></div>
+          <div class="param-group"><div class="param-name">n_splits</div><div class="param-desc">Number of folds</div></div>
+          <div class="param-group"><div class="param-name">random_state</div><div class="param-desc">Seed for reproducibility</div></div>
+        </div>
+
+        <div class="use-case">
+          <div class="use-case-title">When to Use:</div>
+          <ul>
+            <li>Create once near the start of a methodology</li>
+            <li>Route into modeling and analysis steps that accept cv_config</li>
+            <li>Use to detect overfitting and estimate generalization</li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer data-manual-footer></footer>
+
+  <script src="assets/js/manual-common.js"></script>
+  <script src="assets/js/manual-shell.js"></script>
+  <script src="assets/js/manual.js"></script>
+</body>
+</html>

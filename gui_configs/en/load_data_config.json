@@ -1,0 +1,950 @@
+{
+  "display_name": "Calibration/Training Set",
+  "category": "1.Load Data",
+  "data_type": "all",
+    "input_aliases": {
+    "d_specs_separator": "Data Separator",
+    "d_specs_headlines": "Header Rows",
+    "d_specs_headcolumns": "Header Columns",
+    "d_specs_type": "Data Type",
+    "d_specs_dimensions": "Data Dimensions",
+    "data_path": "X Data Files",
+    "nway_flag": "Data Order",
+    "multi_file_per_sample": "Multiple files per sample",
+    "num_samples": "Number of Samples",
+    "s_padding_type": "Sample Padding Type",
+    "y_path": "Y Data File",
+    "y_labels": "Y Labels",
+    "y_labels_from_file": "Y Labels from File",
+    "var_path": "Axis Labels Files",
+    "smp_path": "Sample Labels",
+    "dim_labels": "Dimension Names",
+    "axis_nature": "Axis Nature",
+    "scale_type": "Scale Type",
+    "transpose": "Transpose",
+    "reshape_order": "Reshape Order",
+    "axis_info": "Axis Generation Info",
+    "cdata_path": "Classification Data File",
+    "y_from_x": "Y from X File",
+    "class_from_x": "Class from X File",
+    "smp_from_x": "Sample Labels from X File",
+    "y_columns": "Y Columns",
+    "class_columns": "Class Columns",
+    "smp_column": "Sample Label Column"
+  },
+  "output_aliases": {
+    "X_cal": "X Data",
+    "Y_cal": "Y Data",
+    "axis_t_info": "Axis Text Labels",
+    "smp_cal": "Sample Labels",
+    "axis_n_info": "Axis Vectors",
+    "axis_nature": "Axis Nature",
+    "dim_labels": "Axis Titles",
+    "class_data_cal": "Classification Data",
+    "cal_s_mask": "Calibration Sample Mask",
+    "cal_metadata": "Sample Metadata",
+    "correlation_matrix": "Correlation Matrix"
+  },
+  "translation_keys": {
+    "variable": "Variable",
+    "way_prefix": "W"
+  },
+  "output_synonyms": {
+    "X_cal": [
+      "X",
+      "X_train"
+    ],
+    "Y_cal": [
+      "Y",
+      "Y_train"
+    ],
+    "axis_t_info": [
+      "axis_labels",
+      "variable_labels"
+    ],
+    "smp_cal": [
+      "sample_labels",
+      "smp_train"
+    ],
+    "axis_n_info": [
+      "axis_info",
+      "axis_vectors",
+      "variables"
+    ],
+    "axis_nature": [
+      "axis_type",
+      "axis_types"
+    ],
+    "dim_labels": [
+      "dimension_labels"
+    ],
+    "class_data_cal": [
+      "class_data",
+      "class_labels",
+      "class_data_train"
+    ],
+    "cal_metadata": [
+      "metadata",
+      "train_metadata"
+    ],
+    "cal_s_mask": [
+      "sample_mask",
+      "calibration_sample_mask"
+    ],
+    "correlation_matrix": [
+      "pearson_correlation",
+      "correlation",
+      "corr_matrix"
+    ]
+  },
+  "short_description": "Loads calibration/training and response data from files",
+  "long_description": "This step loads your calibration/training dataset including data (X), response variables (Y), and optional metadata.\n\nInput Data Components:\n- X Data (Spectra): Main spectroscopic measurements (required)\n- Y Data (Responses): Target/dependent variables (optional)\n- Variable Labels: Wavelengths, frequencies, or variable names (optional)\n- Sample Labels: Sample IDs or identifiers (optional)\n\nData Formats:\n- CSV files with configurable delimiters (comma, tabs, spaces)\n- Matrix format: samples (rows) x variables (columns)\n- Vector formats for specialized data types\n- Support for multiple files via file selection\n\nConfiguration:\n- Use Auto detect for separator and data type when possible\n- Leave Header Rows empty to auto-detect how many non-data lines to skip\n- Leave Header Columns empty to auto-detect how many leading non-data columns to skip\n- Choose explicit values only when auto-detection is not appropriate\n- Transpose if needed (samples in columns instead of rows)\n\nThe loaded data becomes input for preprocessing and validation steps.",
+  "setup": {
+    "categories": [
+      "Data Dimensionality",
+      "Data Files",
+      "File Format",
+      "Axis Configuration",
+      "Additional Options"
+    ],
+    "layout": [
+      {
+        "name": "d_specs_separator",
+        "label": "Data Separator",
+        "category": "File Format",
+        "widget": "combobox",
+        "values": [
+          "Auto detect",
+          "comma",
+          "tabs",
+          "spaces"
+        ],
+        "value_aliases": [
+          "Auto detect",
+          "Comma-separated",
+          "Tab-separated",
+          "Space-separated"
+        ],
+        "default": "Auto detect",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Default: Auto detect. Tries comma/tab/space separators from file content."
+      },
+      {
+        "name": "d_specs_headlines",
+        "label": "Number of Header Rows",
+        "category": "File Format",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Leave empty to auto-detect header rows. Enter a number only to force a fixed skip count."
+      },
+      {
+        "name": "d_specs_headcolumns",
+        "label": "Number of Header Columns",
+        "category": "File Format",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Leave empty to auto-detect header columns. Enter a number only to force a fixed leading-column skip count."
+      },
+      {
+        "name": "d_specs_type",
+        "label": "Data Type",
+        "category": "File Format",
+        "widget": "combobox",
+        "values": [
+          "Auto detect",
+          "x_vector",
+          "xy_vector",
+          "xyz_vector",
+          "x_matrix",
+          "xy_matrix"
+        ],
+        "value_aliases": [
+          "Auto detect",
+          "X Vector",
+          "X-Y Vector",
+          "X-Y-Z Vector",
+          "X Matrix",
+          "X-Y Matrix"
+        ],
+        "default": "Auto detect",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Choose the structure that best describes your data (e.g., matrix, vector). 'Auto detect' will infer the type automatically."
+      },
+      {
+        "name": "d_specs_dimensions",
+        "label": "Data Dimensions",
+        "category": "File Format",
+        "widget": "entry_list",
+        "count_source": "nway_flag",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Only required when refolding your data. Specify the size of your data in each dimension."
+      },
+      {
+        "name": "data_path",
+        "label": "X Data Files",
+        "category": "Data Files",
+        "widget": "file_selector",
+        "multiple": true,
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Instrumental data to be used for model training/construction.",
+        "ispath": true
+      },
+      {
+        "name": "nway_flag",
+        "label": "Data Order",
+        "category": "Data Dimensionality",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Data dimensionality of each of your samples: 1 for vectors, 2 for matrices, etc."
+      },
+      {
+        "name": "multi_file_per_sample",
+        "label": "Multiple files per sample",
+        "category": "Data Files",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Enable when each sample consists of multiple data files (files will be divided equally among samples)",
+        "visible_if": {
+          "nway_flag": {
+            "operator": ">=",
+            "value": 3
+          }
+        }
+      },
+      {
+        "name": "num_samples",
+        "label": "Number of Samples",
+        "category": "Data Files",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Number of samples (files will be divided equally into groups)",
+        "visible_if": {
+          "multi_file_per_sample": true
+        }
+      },
+      {
+        "name": "s_padding_type",
+        "label": "Sample Padding Type",
+        "category": "Additional Options",
+        "widget": "combobox",
+        "values": [
+          "NaN",
+          "Zeroes"
+        ],
+        "default": "NaN",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Padding value used when samples have different sizes.",
+        "visible_if": {
+          "nway_flag": {
+            "operator": ">=",
+            "value": 2
+          }
+        }
+      },
+      {
+        "name": "y_path",
+        "label": "Y Data File",
+        "category": "Data Files",
+        "widget": "file_selector",
+        "multiple": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Response variable(s) file. It can contain multiple columns and headers (mark Y Labels from File if using headers).",
+        "ispath": true,
+        "visible_if": {
+          "y_from_x": false
+        }
+      },
+      {
+        "name": "y_columns",
+        "label": "Y Columns",
+        "category": "Data Files",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Columns of the X file to use as Y data (1-based). Supports single values (3), comma/space lists (1,3,5), ranges (1:4 or 1-4), and stepped ranges (2:2:6).",
+        "visible_if": {
+          "y_from_x": true
+        }
+      },
+      {
+        "name": "y_labels_from_file",
+        "label": "Y Labels from File",
+        "category": "Data Files",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "If enabled, the first row of the Y file is used as Y-column labels and excluded from Y numeric data.",
+        "visible_if": {
+          "y_from_x": false
+        }
+      },
+      {
+        "name": "y_labels",
+        "label": "Y Labels",
+        "category": "Data Files",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Manual labels for Y columns, separated by comma, tab, or spaces.",
+        "visible_if": {
+          "y_labels_from_file": false
+        }
+      },
+      {
+        "name": "cdata_path",
+        "label": "Classification Data File",
+        "category": "Data Files",
+        "widget": "file_selector",
+        "multiple": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "File containing class information. It can support multiple class layers by using separate columns for each layer.",
+        "ispath": true,
+        "visible_if": {
+          "class_from_x": false
+        }
+      },
+      {
+        "name": "class_columns",
+        "label": "Class Columns",
+        "category": "Data Files",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Columns of the X file to use as class labels (1-based). Supports single values (3), comma/space lists (1,3,5), ranges (1:4 or 1-4), and stepped ranges (2:2:6). String labels are preserved.",
+        "visible_if": {
+          "class_from_x": true
+        }
+      },
+      {
+        "name": "smp_path",
+        "label": "Sample Labels",
+        "category": "Data Files",
+        "widget": "file_selector",
+        "multiple": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Labels for samples (e.g., sample IDs)",
+        "ispath": true,
+        "visible_if": {
+          "smp_from_x": false
+        }
+      },
+      {
+        "name": "smp_column",
+        "label": "Sample Label Column",
+        "category": "Data Files",
+        "widget": "entry",
+        "type": "int",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Single column number (1-based) whose values become sample labels.",
+        "visible_if": {
+          "smp_from_x": true
+        }
+      },
+      {
+        "name": "y_from_x",
+        "label": "Y from X File",
+        "category": "Data Files",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Extract Y data from columns in the X file instead of loading a separate Y file. Only available for X Matrix data type.",
+        "visible_if": {
+          "d_specs_type": ["Auto detect", "x_matrix"]
+        }
+      },
+      {
+        "name": "class_from_x",
+        "label": "Class from X File",
+        "category": "Data Files",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Extract class labels from columns in the X file instead of loading a separate classification file. Only available for X Matrix data type.",
+        "visible_if": {
+          "d_specs_type": ["Auto detect", "x_matrix"]
+        }
+      },
+      {
+        "name": "smp_from_x",
+        "label": "Sample Labels from X File",
+        "category": "Data Files",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Extract sample labels from a single column in the X file instead of loading a separate labels file. Only available for X Matrix data type.",
+        "visible_if": {
+          "d_specs_type": ["Auto detect", "x_matrix"]
+        }
+      },
+      {
+        "name": "var_path",
+        "label": "Axis Labels Files",
+        "category": "Axis Configuration",
+        "widget": "file_selector_list",
+        "count_source": "nway_flag",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Files containing axis labels for each dimension (one file per dimension, based on Data Order)",
+        "ispath": true
+      },
+      {
+        "name": "dim_labels",
+        "label": "Axis Titles",
+        "category": "Axis Configuration",
+        "widget": "entry_list",
+        "count_source": "nway_flag",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Name for each dimension. Empty values will use position index."
+      },
+      {
+        "name": "axis_nature",
+        "label": "Axis Nature",
+        "category": "Axis Configuration",
+        "widget": "combobox_list",
+        "count_source": "nway_flag",
+        "values": [
+          "Continuous",
+          "Discrete"
+        ],
+        "value_aliases": [
+          "Continuous",
+          "Discrete"
+        ],
+        "default": "Continuous",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Nature for each axis (one per dimension). Use Continuous for numerical scales and Discrete for categorical/indexed axes."
+      },
+      {
+        "name": "scale_type",
+        "label": "Scale Type",
+        "category": "Axis Configuration",
+        "widget": "combobox_list",
+        "count_source": "nway_flag",
+        "values": [
+          "Linear",
+          "Log10",
+          "Log2",
+          "Ln"
+        ],
+        "default": "Linear",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Scale type for generating axis vectors from start/end points (one per dimension)"
+      },
+      {
+        "name": "transpose",
+        "label": "Transpose Data",
+        "category": "Additional Options",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Transposes data"
+      },
+      {
+        "name": "reshape_order",
+        "label": "Reshape Order",
+        "category": "Additional Options",
+        "widget": "combobox",
+        "values": [
+          "F",
+          "C"
+        ],
+        "value_aliases": [
+          "Fortran/MATLAB",
+          "C/NumPy"
+        ],
+        "default": "F",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Order for reshaping multiway data: Fortran (F) for MATLAB compatibility, C for NumPy default"
+      },
+      {
+        "name": "axis_info",
+        "label": "Axis Generation Info",
+        "category": "Axis Configuration",
+        "widget": "entry_list",
+        "count_source": "nway_flag",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Axis range for each dimension as 'start end' (e.g., '100 200'). One entry per dimension."
+      }
+    ]
+  },
+  "analysis": {
+    "pages": [
+      {
+        "title": "Data Overview",
+        "layout": "ed",
+        "condition": {
+          "parameter": "nway_flag",
+          "operator": "==",
+          "value": "1"
+        },
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "data_source": "X_cal",
+              "decimal_places": 4,
+              "max_rows": 200,
+              "max_cols": 200,
+              "title": "X Data"
+            },
+            "short_description": "Displays X Data as a table in the analysis section.",
+            "long_description": "This section presents 'X Data' in tabular form. Use this view to review numeric values, compare rows/columns, and inspect detailed outputs for this section."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {
+                "data_source": "axis_n_info",
+                "index": 1,
+                "label": "dim_labels",
+                "l_index": 1
+              },
+              "y_axis": {
+                "data_source": "out.X_cal",
+                "label": "Signal"
+              },
+              "title": "Spectral Data Overview (Per sample)",
+              "dimension_labels": "dim_labels",
+              "variable_labels": "axis_t_info",
+              "data_slicing": [
+                {
+                  "name": "Sample",
+                  "dimension": 0,
+                  "axis": "y",
+                  "show_navigation_menu": true
+                }
+              ]
+            },
+            "short_description": "Displays Spectral Data Overview (Per sample) as a line graph in the analysis section.",
+            "long_description": "This section visualizes 'Spectral Data Overview (Per sample)' using a line graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
+          },
+          {
+            "type": "graph",
+            "title": "Scatter Plot of X Data",
+            "config": {
+              "graph_type": "scatter",
+              "x_axis": {
+                "data_source": "X_cal",
+                "axis_labels": "axis_t_info",
+                "axis_labels_nested": "1"
+              },
+              "y_axis": {
+                "data_source": "X_cal",
+                "axis_labels": "axis_t_info",
+                "axis_labels_nested": "1"
+              },
+              "data_slicing": [
+                {
+                  "name": "Variable",
+                  "dimension": 1,
+                  "axis": "x",
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "Variable",
+                  "dimension": 1,
+                  "axis": "y",
+                  "default": 1,
+                  "show_navigation_menu": true
+                }
+              ]
+            },
+            "short_description": "Displays Data Overview as a scatter graph in the analysis section.",
+            "long_description": "This section visualizes 'Data Overview' using a scatter graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
+          }
+        ]
+      },
+      {
+        "title": "Data Overview - Second Order Data",
+        "layout": "ed",
+        "condition": {
+          "parameter": "nway_flag",
+          "operator": "==",
+          "value": "2"
+        },
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "data_source": "X_cal",
+              "decimal_places": 4,
+              "max_rows": 30,
+              "max_cols": 15,
+              "title": "Single Sample Slice",
+              "variable_labels": "axis_t_info",
+              "data_slicing": [
+                {
+                  "name": "Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "nav_id": "sample_second_order",
+                  "show_navigation_menu": true
+                }
+              ]
+            },
+            "short_description": "Displays Single Sample Slice as a table in the analysis section.",
+            "long_description": "This section presents 'Single Sample Slice' in tabular form. Use this view to review numeric values, compare rows/columns, and inspect detailed outputs for this section."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "contour",
+              "x_axis": {
+                "data_source": "axis_n_info",
+                "index": 2,
+                "label": "dim_labels",
+                "l_index": 2
+              },
+              "y_axis": {
+                "data_source": "axis_n_info",
+                "index": 1,
+                "label": "dim_labels",
+                "l_index": 1
+              },
+              "z_axis": {
+                "data_source": "X_cal",
+                "label": "Signal"
+              },
+              "title": "Spectral Data - Contour",
+              "dimension_labels": "dim_labels",
+              "variable_labels": "axis_t_info",
+              "data_slicing": [
+                {
+                  "name": "Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "nav_id": "sample_second_order",
+                  "axis": "z",
+                  "show_navigation_menu": true
+                }
+              ]
+            },
+            "short_description": "Displays Spectral Data Heatmap as a contour graph in the analysis section.",
+            "long_description": "This section visualizes 'Spectral Data Heatmap' using a contour graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "3d_surf",
+              "x_axis": {
+                "data_source": "axis_n_info",
+                "index": 2,
+                "label": "dim_labels",
+                "l_index": 2
+              },
+              "y_axis": {
+                "data_source": "axis_n_info",
+                "index": 1,
+                "label": "dim_labels",
+                "l_index": 1
+              },
+              "z_axis": {
+                "data_source": "X_cal",
+                "label": "Signal"
+              },
+              "title": "Spectral Data - 3D Surface",
+              "dimension_labels": "dim_labels",
+              "variable_labels": "axis_t_info",
+              "data_slicing": [
+                {
+                  "name": "Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "nav_id": "sample_second_order",
+                  "axis": "z",
+                  "show_navigation_menu": true
+                }
+              ]
+            },
+            "short_description": "Displays Spectral Data 3D Surface as a 3d_surf graph in the analysis section.",
+            "long_description": "This section visualizes 'Spectral Data 3D Surface' using a 3d_surf graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
+          }
+        ]
+      },
+      {
+        "title": "Data Overview",
+        "layout": "ew",
+        "condition": {
+          "parameter": "nway_flag",
+          "operator": ">",
+          "value": "2"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "aux_axis": {
+                "data_source": "axis_n_info",
+                "labels": "dim_labels"
+              },
+              "z_axis": {
+                "data_source": "X_cal",
+                "label": "Signal"
+              },
+              "title": "Spectral Data Heatmap (Per sample)",
+              "dimension_labels": "dim_labels",
+              "variable_labels": "axis_t_info",
+              "data_slicing": [
+                {
+                  "name": "Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "axis": "z",
+                  "show_navigation_menu": true
+                }
+              ],
+              "show_md_menu": true
+            },
+            "short_description": "Displays Spectral Data Heatmap (4D+) as a heatmap graph in the analysis section.",
+            "long_description": "This section visualizes 'Spectral Data Heatmap (4D+)' using a heatmap graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "aux_axis": {
+                "data_source": "axis_n_info",
+                "labels": "dim_labels"
+              },
+              "z_axis": {
+                "data_source": "X_cal",
+                "label": "Signal"
+              },
+              "title": "Spectral Data Heatmap (Full Tensor)",
+              "dimension_labels": "dim_labels",
+              "variable_labels": "axis_t_info",
+              "data_slicing": [
+                {
+                  "name": "Sample",
+                  "axis": "z"
+                }
+              ],
+              "show_md_menu": true
+            },
+            "short_description": "Displays Spectral Data Heatmap (4D+) as a heatmap graph in the analysis section.",
+            "long_description": "This section visualizes 'Spectral Data Heatmap (4D+)' using a heatmap graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
+          }
+        ]
+      },
+      {
+        "title": "Data Overview (Full Data)",
+        "layout": "fp",
+        "condition": {
+          "parameter": "nway_flag",
+          "operator": "==",
+          "value": "1"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {
+                "data_source": "axis_n_info",
+                "index": 1,
+                "label": "dim_labels",
+                "l_index": 1
+              },
+              "y_axis": {
+                "data_source": "out.X_cal",
+                "label": "Signal"
+              },
+              "class_labels": "class_data_cal",
+              "title": "Spectral Data Overview (Class)",
+              "dimension_labels": "dim_labels",
+              "variable_labels": "axis_t_info"
+            },
+            "short_description": "Displays all spectra coloured by class as a line graph in the analysis section.",
+            "long_description": "This section visualizes all loaded spectra simultaneously. Lines are coloured by class value using the selected colormap settings. Class data must be loaded for class-driven styling to appear."
+          }
+        ]
+      },
+      {
+        "title": "Load Summary",
+        "layout": "fp",
+        "sections": [
+          {
+            "type": "text",
+            "config": {
+              "title": "Data Load Report",
+              "text_template": "Data Load Report\n================\nSamples loaded: {samples_loaded}\nDimensionality (ndim): {x_ndim}\nTotal values in X: {x_size}\nX shape: {x_shape}\nVariables in last axis: {x_last_axis}\nSample labels available: {sample_labels_count}\nDimension labels: {dim_labels}\nAxis vectors available: {axis_vector_count}\nY values loaded: {y_size}\nClass labels loaded: {class_size}",
+              "bindings": [
+                {
+                  "name": "samples_loaded",
+                  "data_source": "X_cal",
+                  "nested_key": "shape",
+                  "selector": {
+                    "mode": "index",
+                    "index": "first"
+                  }
+                },
+                {
+                  "name": "x_ndim",
+                  "data_source": "X_cal",
+                  "nested_key": "ndim",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "x_size",
+                  "data_source": "X_cal",
+                  "nested_key": "size",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "x_shape",
+                  "data_source": "X_cal",
+                  "nested_key": "shape",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "separator": " × "
+                },
+                {
+                  "name": "x_last_axis",
+                  "data_source": "X_cal",
+                  "nested_key": "shape",
+                  "selector": {
+                    "mode": "index",
+                    "index": "last"
+                  }
+                },
+                {
+                  "name": "sample_labels_count",
+                  "data_source": "smp_cal",
+                  "nested_key": "len",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "dim_labels",
+                  "data_source": "dim_labels",
+                  "selector": {
+                    "mode": "range",
+                    "start": "first",
+                    "end": "last"
+                  },
+                  "separator": ", "
+                },
+                {
+                  "name": "axis_vector_count",
+                  "data_source": "axis_n_info",
+                  "nested_key": "len",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "y_size",
+                  "data_source": "Y_cal",
+                  "nested_key": "size",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "class_size",
+                  "data_source": "class_data_cal",
+                  "nested_key": "size",
+                  "selector": {
+                    "mode": "value"
+                  }
+                }
+              ]
+            },
+            "short_description": "Displays a compact text report about loaded data dimensions and counts.",
+            "long_description": "This section provides a runtime text summary including number of loaded samples, dimensionality, overall size, shape, and availability of labels/targets."
+          }
+        ]
+      },
+      {
+        "title": "Correlation Matrix",
+        "layout": "fp",
+        "condition": {
+          "parameter": "nway_flag",
+          "operator": "==",
+          "value": "1"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "flip_xy": false,
+              "x_axis": {
+                "data_source": "axis_t_info",
+                "index": 1,
+                "label": "Variables",
+                "force_integer": "conditional"
+              },
+              "y_axis": {
+                "data_source": "axis_t_info",
+                "index": 1,
+                "reverse_axis": true,
+                "label": "Variables",
+                "force_integer": "conditional"
+              },
+              "z_axis": {
+                "data_source": "correlation_matrix",
+                "label": "Correlation"
+              },
+              "title": "Pearson Correlation Matrix"
+            },
+            "short_description": "Displays Pearson correlation matrix as a heatmap.",
+            "long_description": "This section visualizes the Pearson correlation coefficients between all variable pairs as a heatmap."
+          }
+        ]
+      }
+    ],
+    "current_page": 0
+  }
+}

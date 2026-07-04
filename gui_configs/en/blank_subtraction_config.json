@@ -1,0 +1,378 @@
+{
+  "display_name": "Blank Subtraction",
+  "category": "2.Preprocessing",
+  "data_type": "all",
+  "input_aliases": {
+    "X_cal": "X Calibration",
+    "X_val": "X Validation",
+    "blank_path": "Blank Data File",
+    "d_specs_separator": "Data Separator",
+    "d_specs_headlines": "Header Rows",
+    "d_specs_headcolumns": "Header Columns",
+    "d_specs_type": "Data Type",
+    "d_specs_dimensions": "Data Dimensions",
+    "nway_flag": "Data Dimensionality",
+    "transpose": "Transpose",
+    "reshape_order": "Reshape Order"
+  },
+  "output_aliases": {
+    "X_cal": "X Cal (Blank Corrected)",
+    "X_val": "X Val (Blank Corrected)"
+  },
+  "output_synonyms": {
+    "X_cal": ["X", "X_train"],
+    "X_val": ["X_test", "X_validation"]
+  },
+  "short_description": "Subtracts a loaded blank reference from calibration and validation spectra",
+  "long_description": "This preprocessing step loads a blank/reference file and subtracts it from both calibration and validation X datasets. The blank file uses the same inherited file-format settings used by Load Data (separator, headers, data type, dimensions, transpose, and reshape order).\n\nBehavior:\n- Blank file is loaded using inherited Load Data settings\n- If multiple blank samples are present, the mean blank profile is used\n- The same blank reference is subtracted from X calibration and X validation\n- Output keeps original dataset dimensionality",
+  "setup": {
+    "categories": ["Blank File", "Data Inputs", "Data Format"],
+    "layout": [
+      {
+        "name": "blank_path",
+        "label": "Blank Data File",
+        "category": "Blank File",
+        "widget": "file_selector",
+        "multiple": false,
+        "required": true,
+        "input_type": "user",
+        "tooltip": "File containing blank/reference signal to subtract from X data",
+        "ispath": true
+      },
+      {
+        "name": "X_cal",
+        "label": "X Calibration Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": true,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed from previous function output"
+      },
+      {
+        "name": "X_val",
+        "label": "X Validation Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed from previous function output"
+      },
+      {
+        "name": "d_specs_separator",
+        "label": "Data Separator",
+        "category": "Data Format",
+        "widget": "combobox",
+        "values": ["Auto detect", "comma", "tabs", "spaces"],
+        "default": "Auto detect",
+        "required": true,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Inherited from Load Data. Default is Auto detect."
+      },
+      {
+        "name": "d_specs_headlines",
+        "label": "Number of Header Rows",
+        "category": "Data Format",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": true,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Inherited from Load Data. Leave empty to auto-detect header rows."
+      },
+      {
+        "name": "d_specs_headcolumns",
+        "label": "Number of Header Columns",
+        "category": "Data Format",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": true,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Inherited from Load Data. Leave empty to auto-detect leading header columns."
+      },
+      {
+        "name": "d_specs_type",
+        "label": "Data Type",
+        "category": "Data Format",
+        "widget": "combobox",
+        "values": ["Auto detect", "x_vector", "xy_vector", "xyz_vector", "x_matrix", "xy_matrix"],
+        "default": "Auto detect",
+        "required": true,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Inherited from Load Data. Default is Auto detect."
+      },
+      {
+        "name": "d_specs_dimensions",
+        "label": "Data Dimensions",
+        "category": "Data Format",
+        "widget": "entry_list",
+        "count_source": "nway_flag",
+        "default": "",
+        "required": false,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Inherited from Load Data. Dimension size for each axis."
+      },
+      {
+        "name": "nway_flag",
+        "label": "Data Dimensionality",
+        "category": "Data Format",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": true,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Automatically inherited from Load Data function"
+      },
+      {
+        "name": "transpose",
+        "label": "Transpose",
+        "category": "Data Format",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Inherited from Load Data transpose setting"
+      },
+      {
+        "name": "reshape_order",
+        "label": "Reshape Order",
+        "category": "Data Format",
+        "widget": "combobox",
+        "values": ["F", "C"],
+        "default": "F",
+        "required": false,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Inherited from Load Data. F = Fortran/MATLAB, C = C/Python order"
+      }
+    ]
+  },
+  "analysis": {
+    "pages": [
+      {
+        "title": "Blank Subtraction Comparison",
+        "layout": "ew",
+        "condition": {"parameter": "nway_flag", "operator": "==", "value": "1"},
+        "sections": [
+          {
+            "type": "graph",
+            "short_description": "Displays the input calibration spectra before blank subtraction.",
+            "long_description": "Shows the original X calibration data before the blank reference is subtracted. Use this section to inspect raw signal levels and the additive blank contribution.",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "y_axis": {"data_source": "in.X_cal", "label": "Intensity"},
+              "title": "Original Spectra",
+              "class_labels": "class_data_cal",
+              "dimension_labels": "in.dim_labels"
+            }
+          },
+          {
+            "type": "graph",
+            "short_description": "Displays the blank-corrected calibration spectra.",
+            "long_description": "Shows the X calibration data after the blank reference has been subtracted. Compare against the original to verify that the blank contribution is removed.",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "y_axis": {"data_source": "out.X_cal", "label": "Intensity"},
+              "title": "Processed Spectra",
+              "class_labels": "class_data_cal",
+              "dimension_labels": "in.dim_labels"
+            }
+          }
+        ]
+      },
+      {
+        "title": "Blank Subtraction Comparison",
+        "layout": "ew",
+        "condition": {"parameter": "nway_flag", "operator": "==", "value": "2"},
+        "sections": [
+          {
+            "type": "graph",
+            "short_description": "Contour view of one selected calibration sample before blank subtraction.",
+            "long_description": "Displays a contour plot of the original multiway calibration data for the selected sample index. Use the sample navigation control to inspect spatial/spectral structure prior to blank subtraction.",
+            "config": {
+              "graph_type": "contour",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 2, "label": "in.dim_labels", "l_index": 2},
+              "y_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "z_axis": {"data_source": "in.X_cal", "label": "Intensity"},
+              "title": "Original Spectra",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}]
+            }
+          },
+          {
+            "type": "graph",
+            "short_description": "Contour view of one selected calibration sample after blank subtraction.",
+            "long_description": "Displays a contour plot of the blank-corrected multiway calibration data for the selected sample index. Compare with the original contour to verify the blank contribution is removed.",
+            "config": {
+              "graph_type": "contour",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 2, "label": "in.dim_labels", "l_index": 2},
+              "y_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "z_axis": {"data_source": "out.X_cal", "label": "Intensity"},
+              "title": "Processed Spectra",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Blank Subtraction Comparison",
+        "layout": "ew",
+        "condition": {"parameter": "nway_flag", "operator": ">", "value": "2"},
+        "sections": [
+          {
+            "type": "graph",
+            "short_description": "Heatmap view of higher-dimensional calibration data before blank subtraction.",
+            "long_description": "Displays the original calibration data as a heatmap for n-way datasets with dimensionality greater than 2. Use slicing and axis controls to inspect specific samples before blank subtraction.",
+            "config": {
+              "graph_type": "heatmap",
+              "aux_axis": {"data_source": "in.axis_n_info", "labels": "in.dim_labels"},
+              "z_axis": {"data_source": "in.X_cal", "label": "Intensity"},
+              "title": "Original Spectra",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}],
+              "show_md_menu": true
+            }
+          },
+          {
+            "type": "graph",
+            "short_description": "Heatmap view of higher-dimensional calibration data after blank subtraction.",
+            "long_description": "Displays the blank-corrected calibration data as a heatmap for n-way datasets with dimensionality greater than 2. Compare with the original heatmap to validate the blank correction.",
+            "config": {
+              "graph_type": "heatmap",
+              "aux_axis": {"data_source": "in.axis_n_info", "labels": "in.dim_labels"},
+              "z_axis": {"data_source": "out.X_cal", "label": "Intensity"},
+              "title": "Processed Spectra",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}],
+              "show_md_menu": true
+            }
+          }
+        ]
+      },
+      {
+        "title": "Blank Subtraction Comparison (Validation)",
+        "layout": "ew",
+        "condition": {"parameter": "nway_flag", "operator": "==", "value": "1"},
+        "sections": [
+          {
+            "type": "graph",
+            "short_description": "Displays the input validation spectra before blank subtraction.",
+            "long_description": "Shows the original X validation data before the blank reference is subtracted.",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "y_axis": {"data_source": "in.X_val", "label": "Intensity"},
+              "title": "Original Validation",
+              "class_labels": "class_data_val",
+              "dimension_labels": "in.dim_labels"
+            }
+          },
+          {
+            "type": "graph",
+            "short_description": "Displays the blank-corrected validation spectra.",
+            "long_description": "Shows the X validation data after the blank reference has been subtracted.",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "y_axis": {"data_source": "out.X_val", "label": "Intensity"},
+              "title": "Processed Validation",
+              "class_labels": "class_data_val",
+              "dimension_labels": "in.dim_labels"
+            }
+          }
+        ]
+      },
+      {
+        "title": "Blank Subtraction Comparison (Validation)",
+        "layout": "ew",
+        "condition": {"parameter": "nway_flag", "operator": "==", "value": "2"},
+        "sections": [
+          {
+            "type": "graph",
+            "short_description": "Contour view of one selected validation sample before blank subtraction.",
+            "long_description": "Displays a contour plot of the original multiway validation data for the selected sample index.",
+            "config": {
+              "graph_type": "contour",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 2, "label": "in.dim_labels", "l_index": 2},
+              "y_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "z_axis": {"data_source": "in.X_val", "label": "Intensity"},
+              "title": "Original Validation",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}]
+            }
+          },
+          {
+            "type": "graph",
+            "short_description": "Contour view of one selected validation sample after blank subtraction.",
+            "long_description": "Displays a contour plot of the blank-corrected multiway validation data for the selected sample index.",
+            "config": {
+              "graph_type": "contour",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 2, "label": "in.dim_labels", "l_index": 2},
+              "y_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "z_axis": {"data_source": "out.X_val", "label": "Intensity"},
+              "title": "Processed Validation",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Blank Subtraction Comparison (Validation)",
+        "layout": "ew",
+        "condition": {"parameter": "nway_flag", "operator": ">", "value": "2"},
+        "sections": [
+          {
+            "type": "graph",
+            "short_description": "Heatmap view of higher-dimensional validation data before blank subtraction.",
+            "long_description": "Displays the original validation data as a heatmap for n-way datasets with dimensionality greater than 2.",
+            "config": {
+              "graph_type": "heatmap",
+              "aux_axis": {"data_source": "in.axis_n_info", "labels": "in.dim_labels"},
+              "z_axis": {"data_source": "in.X_val", "label": "Intensity"},
+              "title": "Original Validation",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}],
+              "show_md_menu": true
+            }
+          },
+          {
+            "type": "graph",
+            "short_description": "Heatmap view of higher-dimensional validation data after blank subtraction.",
+            "long_description": "Displays the blank-corrected validation data as a heatmap for n-way datasets with dimensionality greater than 2.",
+            "config": {
+              "graph_type": "heatmap",
+              "aux_axis": {"data_source": "in.axis_n_info", "labels": "in.dim_labels"},
+              "z_axis": {"data_source": "out.X_val", "label": "Intensity"},
+              "title": "Processed Validation",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}],
+              "show_md_menu": true
+            }
+          }
+        ]
+      }
+    ],
+    "current_page": 0
+  }
+}

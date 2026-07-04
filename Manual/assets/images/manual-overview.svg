@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" role="img" aria-labelledby="title desc">
+  <title id="title">Chemometric Studio Manual Overview</title>
+  <desc id="desc">Diagram showing Setup, Routing, Analysis, Report, and Outputs.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e8f3ff"/>
+      <stop offset="1" stop-color="#d8e8f6"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="520" fill="url(#bg)"/>
+  <g font-family="Segoe UI, Trebuchet MS, sans-serif" fill="#153c61">
+    <text x="40" y="44" font-size="30" font-weight="700">Chemometric Studio Workflow</text>
+    <text x="40" y="74" font-size="16">From pipeline design to analysis and reporting</text>
+  </g>
+
+  <g font-family="Segoe UI, Trebuchet MS, sans-serif" font-size="18" fill="#ffffff" text-anchor="middle">
+    <rect x="40" y="130" width="150" height="70" rx="12" fill="#153c61"/>
+    <text x="115" y="173">Setup</text>
+
+    <rect x="230" y="130" width="150" height="70" rx="12" fill="#1f5f90"/>
+    <text x="305" y="173">Routing</text>
+
+    <rect x="420" y="130" width="150" height="70" rx="12" fill="#007aff"/>
+    <text x="495" y="173">Execution</text>
+
+    <rect x="610" y="130" width="150" height="70" rx="12" fill="#57c785"/>
+    <text x="685" y="173">Analysis</text>
+
+    <rect x="380" y="290" width="180" height="74" rx="12" fill="#d96b98"/>
+    <text x="470" y="335">Report Output</text>
+  </g>
+
+  <g stroke="#2a5b82" stroke-width="4" fill="none" stroke-linecap="round">
+    <path d="M190 165 H230"/>
+    <path d="M380 165 H420"/>
+    <path d="M570 165 H610"/>
+    <path d="M685 200 V250 H470 V290"/>
+  </g>
+
+  <g font-family="Consolas, monospace" font-size="14" fill="#294965">
+    <text x="52" y="246">1. Add functions by category</text>
+    <text x="52" y="272">2. Configure parameters</text>
+    <text x="52" y="298">3. Build data routes</text>
+
+    <text x="430" y="412">Run Model, inspect plots, export tables and PDF report</text>
+  </g>
+</svg>

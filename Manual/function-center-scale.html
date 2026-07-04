@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Center and Scale - Functions - Chemometric Studio User Manual</title>
+  <link rel="stylesheet" href="assets/css/manual.css">
+</head>
+<body data-manual-page="functions" data-manual-group="qa-functions">
+  <div data-manual-header></div>
+
+  <main class="layout">
+    <aside class="manual-sidebar" data-manual-sidebar data-reveal></aside>
+
+    <div class="content-column">
+      <section class="panel" data-reveal>
+        <h1>Center and Scale</h1>
+        <p><a href="functions-category-preprocessing.html">Preprocessing</a></p>
+      </section>
+
+      <section class="function-card" data-reveal>
+        <h2 class="function-title">Center and Scale</h2>
+        <span class="function-category">Preprocessing</span>
+        <p><strong>Purpose:</strong> Standardize variables by centering and scaling.</p>
+
+        <div class="io-section">
+          <div class="io-title">Inputs:</div>
+          <ul class="io-list"><li><strong>X_cal</strong>, <strong>X_val</strong></li></ul>
+        </div>
+
+        <div class="io-section">
+          <div class="io-title">Outputs:</div>
+          <ul class="io-list">
+            <li><strong>X_cal</strong>, <strong>X_val</strong> standardized</li>
+            <li><strong>was_scaled</strong> indicating applied scaling</li>
+          </ul>
+        </div>
+
+        <div class="io-section">
+          <div class="io-title">Key Parameters:</div>
+          <div class="param-group"><div class="param-name">scaling_method</div><div class="param-desc">none, autoscale, or snv</div></div>
+        </div>
+
+        <div class="use-case">
+          <div class="use-case-title">When to Use:</div>
+          <ul>
+            <li>When variables have different units or magnitude</li>
+            <li>Before PCA and most regression models</li>
+            <li>Near the end of preprocessing</li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer data-manual-footer></footer>
+
+  <script src="assets/js/manual-common.js"></script>
+  <script src="assets/js/manual-shell.js"></script>
+  <script src="assets/js/manual.js"></script>
+</body>
+</html>

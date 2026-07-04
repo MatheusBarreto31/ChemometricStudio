@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Loop Start and Loop End - Functions - Chemometric Studio User Manual</title>
+  <link rel="stylesheet" href="assets/css/manual.css">
+</head>
+<body data-manual-page="functions" data-manual-group="qa-functions">
+  <div data-manual-header></div>
+
+  <main class="layout">
+    <aside class="manual-sidebar" data-manual-sidebar data-reveal></aside>
+
+    <div class="content-column">
+      <section class="panel" data-reveal>
+        <h1>Loop Start and Loop End</h1>
+        <p><a href="functions-category-workflow.html">Workflow Control</a></p>
+      </section>
+
+      <section class="function-card" data-reveal>
+        <h2 class="function-title">Loop Start and Loop End</h2>
+        <span class="function-category">Workflow</span>
+        <p><strong>Purpose:</strong> Create iterative sweeps over parameters or benchmark metrics.</p>
+
+        <div class="io-section">
+          <div class="io-title">Key Parameters:</div>
+          <div class="param-group"><div class="param-name">iterations</div><div class="param-desc">Number of loop runs</div></div>
+          <div class="param-group"><div class="param-name">mode</div><div class="param-desc">Loop behavior mode</div></div>
+          <div class="param-group"><div class="param-name">sweep_target / sweep_values</div><div class="param-desc">Parameter path and candidate values</div></div>
+        </div>
+
+        <div class="use-case">
+          <div class="use-case-title">When to Use:</div>
+          <ul>
+            <li>To test ranges of components or hyperparameters</li>
+            <li>To automate model comparisons with repeated execution</li>
+            <li>To pick the best setting based on benchmark outputs</li>
+          </ul>
+        </div>
+
+        <div class="note-section">
+          Advanced feature: use when you need controlled parameter sweeps.
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer data-manual-footer></footer>
+
+  <script src="assets/js/manual-common.js"></script>
+  <script src="assets/js/manual-shell.js"></script>
+  <script src="assets/js/manual.js"></script>
+</body>
+</html>

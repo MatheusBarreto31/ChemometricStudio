@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Classification and Novelty Detection - Functions - Chemometric Studio User Manual</title>
+  <link rel="stylesheet" href="assets/css/manual.css">
+</head>
+<body data-manual-page="functions" data-manual-group="qa-functions">
+  <div data-manual-header></div>
+
+  <main class="layout">
+    <aside class="manual-sidebar" data-manual-sidebar data-reveal></aside>
+
+    <div class="content-column">
+      <section class="panel" data-reveal>
+        <h1>Classification and Novelty Detection</h1>
+        <p>This category includes supervised classification methods for multi-class prediction and one-class models for outlier detection and novelty identification.</p>
+      </section>
+
+      <section class="panel" data-reveal>
+        <h2>N-Class Classification</h2>
+        <p>Supervised multi-class classification with multiple algorithm choices:</p>
+        <ul>
+          <li><strong>Logistic Regression</strong> — Linear probabilistic classifier for multi-class problems.</li>
+          <li><strong>Random Forest</strong> — Ensemble of decision trees for robust classification.</li>
+          <li><strong>Extra Trees</strong> — Extremely randomized trees for faster training with competitive accuracy.</li>
+          <li><strong>Support Vector Classifier (SVC)</strong> — RBF kernel-based non-linear classifier.</li>
+          <li><strong>K-Nearest Neighbors (KNN)</strong> — Distance-based classifier with multiple distance metrics (Euclidean, Manhattan, Minkowski, Chebyshev, Mahalanobis, Chord).</li>
+          <li><strong>Linear Discriminant Analysis (LDA)</strong> — Linear discriminant classifier based on class means.</li>
+          <li><strong>Quadratic Discriminant Analysis (QDA)</strong> — Non-linear classifier using quadratic decision boundaries.</li>
+          <li><strong>PLS-DA</strong> — Partial Least Squares Discriminant Analysis for classification with dimensionality reduction.</li>
+        </ul>
+      </section>
+
+      <section class="panel" data-reveal>
+        <h2>One-Class and Novelty Detection</h2>
+        <p>Unsupervised and semi-supervised methods for identifying outliers and detecting novel observations:</p>
+        <ul>
+          <li><strong>SIMCA</strong> — Soft Independent Modeling of Class Analogies; PCA-based one-class classifier with configurable decision rules (Q-only, T²-only, combined).</li>
+          <li><strong>DD-SIMCA</strong> — Dynamical Distance SIMCA; an advanced variant with robust parameter estimation.</li>
+          <li><strong>One-Class SVM</strong> — Support Vector Data Description for boundary-based outlier detection.</li>
+          <li><strong>Isolation Forest</strong> — Efficient anomaly detection via random isolation of observations.</li>
+          <li><strong>Elliptic Envelope</strong> — Robust covariance-based outlier detection using minimum covariance determinant.</li>
+          <li><strong>Local Outlier Factor (LOF)</strong> — Density-based novelty detection identifying local anomalies.</li>
+        </ul>
+      </section>
+
+      <section class="panel" data-reveal>
+        <h2>Common Features</h2>
+        <ul>
+          <li>Cross-validation support for model assessment and hyperparameter tuning.</li>
+          <li>Probability and score outputs for decision thresholding.</li>
+          <li>Confusion matrices and classification metrics (accuracy, precision, recall, F1-score).</li>
+          <li>Integration with ensemble workflows for combined predictions.</li>
+          <li>Calibration and validation dataset support.</li>
+        </ul>
+      </section>
+    </div>
+  </main>
+
+  <footer data-manual-footer></footer>
+
+  <script src="assets/js/manual-common.js"></script>
+  <script src="assets/js/manual-shell.js"></script>
+  <script src="assets/js/manual.js"></script>
+</body>
+</html>

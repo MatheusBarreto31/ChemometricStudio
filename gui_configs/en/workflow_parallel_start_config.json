@@ -1,0 +1,28 @@
+{
+  "display_name": "Parallel Start",
+  "category": "7.Workflow\\2.Parallel",
+  "data_type": "workflow",
+  "input_aliases": {
+    "merge_strategy": "Merge Strategy"
+  },
+  "output_aliases": {},
+  "short_description": "Start a parallel block.",
+  "long_description": "Functions between Parallel Start and Parallel End run in independent branches split by Parallel Branch.",
+  "setup": {
+    "categories": ["Parallel"],
+    "layout": [
+      {
+        "name": "merge_strategy",
+        "label": "Merge Strategy",
+        "category": "Parallel",
+        "widget": "combobox",
+        "values": ["merge", "keep_last"],
+        "value_aliases": ["Merge Branch Outputs", "Keep Last Branch Outputs"],
+        "default": "merge",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "merge keeps all branch outputs by instance alias; keep_last applies only last branch outputs"
+      }
+    ]
+  }
+}

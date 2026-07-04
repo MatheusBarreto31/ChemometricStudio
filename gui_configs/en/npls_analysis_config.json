@@ -1,0 +1,1926 @@
+{
+  "display_name": "N-PLS / U-PLS",
+  "category": "5.Regression",
+  "data_type": "multiway",
+  "input_aliases": {
+    "X_cal": "X Calibration",
+    "Y_cal": "Y Calibration",
+    "X_val": "X Validation",
+    "Y_val": "Y Validation",
+    "n_components": "Latent Variables",
+    "nway_flag": "Data Order",
+    "cv_config": "CV Configuration",
+    "multiway_method": "Multiway Method",
+    "multilinear_rank": "Interferent Rank",
+    "lod_distribution": "LOD Distribution",
+    "lod_confidence_level": "LOD Confidence Level",
+    "pls_scale": "Scale in U-PLS",
+    "tol": "Tolerance",
+    "max_iter": "Max Iterations",
+    "random_state": "Random Seed"
+  },
+  "output_aliases": {
+    "y_cal_pred": "Calibration Predictions",
+    "y_val_pred": "Validation Predictions",
+    "y_cv_pred": "CV Predictions",
+    "y_cal_true": "Calibration Reference",
+    "y_val_true": "Validation Reference",
+    "y_cal_error": "Calibration Error",
+    "y_val_error": "Validation Error",
+    "y_cv_error": "CV Error",
+    "pred_ref_diag_x": "Predicted vs Reference Diagonal X",
+    "pred_ref_diag_y": "Predicted vs Reference Diagonal Y",
+    "pred_ref_diag_val_x": "Predicted vs Reference Diagonal X (Validation)",
+    "pred_ref_diag_val_y": "Predicted vs Reference Diagonal Y (Validation)",
+    "metrics": "Metrics",
+    "model": "Model Metadata",
+    "sensitivity": "Sensitivity",
+    "concentration_sd": "Concentration SD",
+    "lod_min": "LOD Min",
+    "lod_max": "LOD Max",
+    "loq_min": "LOQ Min",
+    "loq_max": "LOQ Max",
+    "residual_diagnostics": "Residual Diagnostics",
+    "explained_variance_by_lv": "Explained Variance by LV",
+    "interferent_profiles": "Interferent Profiles",
+    "residual_multilinearization": "Residual Multilinearization",
+    "residual_multilinearization_scores": "Residual Multilinearization Scores",
+    "residual_multilinearization_loadings": "Residual Multilinearization Loadings",
+    "residual_multilinearization_core": "Residual Multilinearization Core",
+    "residual_multilinearization_reconstructed": "Residual Multilinearization Reconstruction",
+    "cv_results": "CV Results",
+    "npls_report": "N-PLS Report"
+  },
+  "short_description": "Multiway calibration using U-PLS (unfolded) or N-PLS (CP-PLSR) with canonical residual correction.",
+  "long_description": "Select U-PLS to unfold multiway X into 2D and run standard PLS, or N-PLS to run CP-PLSR directly on tensor X. Residual correction uses RBL (SVD) for nway_flag=2 and Tucker-based multilinear correction for nway_flag>=3.",
+  "setup": {
+    "categories": [
+      "Model Parameters",
+      "Residual Multilinearization",
+      "LOD/LOQ Settings",
+      "Cross-Validation",
+      "Data Inputs"
+    ],
+    "layout": [
+      {
+        "name": "multiway_method",
+        "label": "Multiway Method",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "n_pls",
+        "values": [
+          "u_pls",
+          "n_pls"
+        ],
+        "value_aliases": [
+          "U-PLS (Unfolded PLS)",
+          "N-PLS (CP-PLSR)"
+        ],
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Choose U-PLS to unfold X and run standard PLS, or N-PLS to run CP-PLSR directly on multiway data."
+      },
+      {
+        "name": "n_components",
+        "label": "Latent Variables",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "2",
+        "required": true,
+        "input_type": "user"
+      },
+      {
+        "name": "pls_scale",
+        "label": "Scale in U-PLS",
+        "category": "Model Parameters",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "multiway_method": "u_pls"
+        }
+      },
+      {
+        "name": "tol",
+        "label": "Tolerance",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1e-9",
+        "required": false,
+        "input_type": "user"
+      },
+      {
+        "name": "max_iter",
+        "label": "Max Iterations",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "200",
+        "required": false,
+        "input_type": "user"
+      },
+      {
+        "name": "random_state",
+        "label": "Random Seed",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "42",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "multiway_method": "n_pls"
+        }
+      },
+      {
+        "name": "multilinear_rank",
+        "label": "Interferent Rank",
+        "category": "Residual Multilinearization",
+        "widget": "entry",
+        "type": "str",
+        "default": "0",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Single interferent rank (Aint). Use 0 to disable correction; values >0 enable RBL/RTL correction."
+      },
+      {
+        "name": "lod_distribution",
+        "label": "LOD Distribution",
+        "category": "LOD/LOQ Settings",
+        "widget": "combobox",
+        "type": "str",
+        "default": "student",
+        "values": [
+          "student",
+          "normal"
+        ],
+        "value_aliases": [
+          "Student (t)",
+          "Normal (z)"
+        ],
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Distribution used to derive the LOD/LOQ confidence factor from confidence level."
+      },
+      {
+        "name": "lod_confidence_level",
+        "label": "LOD Confidence Level",
+        "category": "LOD/LOQ Settings",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.95",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Confidence level used to derive LOD factor (one-sided alpha=beta) using Student's t with calibration dof. LOQ uses the same factor internally."
+      },
+      {
+        "name": "cv_config",
+        "label": "CV Configuration",
+        "category": "Cross-Validation",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        },
+        "tooltip": "Routed from CV Configuration function; leave empty for single fit"
+      },
+      {
+        "name": "X_cal",
+        "label": "X Calibration",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": true,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        }
+      },
+      {
+        "name": "Y_cal",
+        "label": "Y Calibration",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": true,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        }
+      },
+      {
+        "name": "X_val",
+        "label": "X Validation",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        }
+      },
+      {
+        "name": "Y_val",
+        "label": "Y Validation",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        }
+      },
+      {
+        "name": "nway_flag",
+        "label": "Data Order",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": true,
+        "input_type": "inherited",
+        "visible_if": {
+          "input_type": "user"
+        }
+      },
+      {
+        "name": "y_labels",
+        "label": "Y Labels",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "inherited",
+        "visible_if": {
+          "input_type": "user"
+        }
+      },
+      {
+        "name": "axis_n_info",
+        "label": "Axis N Info",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "inherited",
+        "visible_if": {
+          "input_type": "user"
+        }
+      },
+      {
+        "name": "dim_labels",
+        "label": "Dimension Labels",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "inherited",
+        "visible_if": {
+          "input_type": "user"
+        }
+      }
+    ]
+  },
+  "analysis": {
+    "pages": [
+      {
+        "title": "Predictions",
+        "layout": "fd",
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "title": "Calibration Predictions",
+              "row_label": "Sample",
+              "row_headers": "smp_cal",
+              "columns": [
+                {
+                  "data_source": "y_cal_true",
+                  "name": "Reference"
+                },
+                {
+                  "data_source": "y_cal_pred",
+                  "name": "Predicted"
+                },
+                {
+                  "data_source": "y_cal_error",
+                  "name": "Error"
+                },
+                {
+                  "data_source": "y_cv_pred",
+                  "name": "Predicted (CV)"
+                },
+                {
+                  "data_source": "y_cv_error",
+                  "name": "Error (CV)"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "default": 0,
+                  "nav_id": "npls_response",
+                  "show_navigation_menu": true,
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0
+                }
+              ],
+              "slice_title_source": "y_labels",
+              "slice_title_dimension": 1,
+              "decimal_places": 6,
+              "max_rows": 500
+            },
+            "short_description": "Sample-level calibration predictions and residuals, with cross-validation comparison."
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Validation Predictions",
+              "row_label": "Sample",
+              "row_headers": "smp_val",
+              "columns": [
+                {
+                  "data_source": "y_val_true",
+                  "name": "Reference"
+                },
+                {
+                  "data_source": "y_val_pred",
+                  "name": "Predicted"
+                },
+                {
+                  "data_source": "y_val_error",
+                  "name": "Error"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "default": 0,
+                  "nav_id": "npls_response",
+                  "show_navigation_menu": true,
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0
+                }
+              ],
+              "slice_title_source": "y_labels",
+              "slice_title_dimension": 1,
+              "decimal_places": 6,
+              "max_rows": 500
+            },
+            "short_description": "Sample-level validation predictions and residuals."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Reference vs Predicted Y (Calibration / CV)",
+              "show_origin": false,
+              "show_labels": false,
+              "equal_scale": true,
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "y_cal_true",
+                    "axis_type": "linear",
+                    "axis_labels": "y_labels",
+                    "axis_labels_dimension": 1,
+                    "label_template": "$y_{{Ref}}$ ({label})"
+                  },
+                  "y_axis": {
+                    "data_source": "y_cal_pred",
+                    "axis_type": "linear",
+                    "axis_labels": "y_labels",
+                    "axis_labels_dimension": 1,
+                    "label_template": "$y_{{Pred}}$ ({label})"
+                  },
+                  "point_labels_source": "smp_cal",
+                  "label": "Calibration"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "y_cal_true",
+                    "axis_type": "linear",
+                    "axis_labels": "y_labels",
+                    "axis_labels_dimension": 1,
+                    "label_template": "$y_{{Ref}}$ ({label})"
+                  },
+                  "y_axis": {
+                    "data_source": "y_cv_pred",
+                    "axis_type": "linear",
+                    "axis_labels": "y_labels",
+                    "axis_labels_dimension": 1,
+                    "label_template": "$y_{{Pred}}$ ({label})"
+                  },
+                  "point_labels_source": "smp_cal",
+                  "label": "Cross-Validation"
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "path",
+                  "x": "pred_ref_diag_x",
+                  "y": "pred_ref_diag_y",
+                  "color": "red",
+                  "linestyle": "-",
+                  "linewidth": 1.5,
+                  "alpha": 0.85
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "x",
+                  "nav_id": "npls_response",
+                  "show_navigation_menu": true,
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0
+                },
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "y",
+                  "nav_id": "npls_response",
+                  "show_navigation_menu": false
+                }
+              ]
+            },
+            "short_description": "Scatter plot of reference versus calibration and cross-validation predicted Y with a 1:1 diagonal."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Reference vs Predicted Y (Validation)",
+              "show_origin": false,
+              "show_labels": false,
+              "equal_scale": true,
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "y_val_true",
+                    "axis_type": "linear",
+                    "axis_labels": "y_labels",
+                    "axis_labels_dimension": 1,
+                    "label_template": "$y_{{Ref}}$ ({label})"
+                  },
+                  "y_axis": {
+                    "data_source": "y_val_pred",
+                    "axis_type": "linear",
+                    "axis_labels": "y_labels",
+                    "axis_labels_dimension": 1,
+                    "label_template": "$y_{{Pred}}$ ({label})"
+                  },
+                  "point_labels_source": "smp_val",
+                  "label": "Validation"
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "path",
+                  "x": "pred_ref_diag_val_x",
+                  "y": "pred_ref_diag_val_y",
+                  "color": "red",
+                  "linestyle": "-",
+                  "linewidth": 1.5,
+                  "alpha": 0.85
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "x",
+                  "nav_id": "npls_response",
+                  "show_navigation_menu": true,
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0
+                },
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "y",
+                  "nav_id": "npls_response",
+                  "show_navigation_menu": false
+                }
+              ]
+            },
+            "short_description": "Validation scatter of reference versus predicted Y with a 1:1 diagonal reference line."
+          }
+        ]
+      },
+      {
+        "title": "Performance Report",
+        "layout": "fp",
+        "sections": [
+          {
+            "type": "text",
+            "config": {
+              "title": "N-PLS / U-PLS Report",
+              "text_template": "{report_text}",
+              "bindings": [
+                {
+                  "name": "report_text",
+                  "data_source": "npls_report",
+                  "selector": {
+                    "mode": "value"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Per-Response Performance Metrics",
+              "row_label": "Response",
+              "row_headers": "y_labels",
+              "columns": [
+                {
+                  "data_source": "metrics",
+                  "nested_key": "calibration.r2_per_response",
+                  "name": "R² (Cal)"
+                },
+                {
+                  "data_source": "metrics",
+                  "nested_key": "calibration.rmse_per_response",
+                  "name": "RMSE (Cal)"
+                },
+                {
+                  "data_source": "metrics",
+                  "nested_key": "cv.r2_per_response",
+                  "name": "R² (CV)"
+                },
+                {
+                  "data_source": "metrics",
+                  "nested_key": "cv.rmse_per_response",
+                  "name": "RMSE (CV)"
+                },
+                {
+                  "data_source": "metrics",
+                  "nested_key": "validation.r2_per_response",
+                  "name": "R² (Val)"
+                },
+                {
+                  "data_source": "metrics",
+                  "nested_key": "validation.rmse_per_response",
+                  "name": "RMSE (Val)"
+                }
+              ],
+              "decimal_places": 6,
+              "max_rows": 20
+            },
+            "short_description": "Per-response R² and RMSE for calibration, cross-validation, and validation sets."
+          }
+        ]
+      },
+      {
+        "title": "Error Diagnostics",
+        "layout": "ed",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Error Profile by Sample",
+              "line_style": "lines+markers",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Sample Index",
+                    "reference_source": "y_cal_error"
+                  },
+                  "y_axis": {
+                    "data_source": "y_cal_error",
+                    "axis_type": "linear",
+                    "label": "Error"
+                  },
+                  "marker": "o",
+                  "label": "Calibration"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Sample Index",
+                    "reference_source": "y_cv_error"
+                  },
+                  "y_axis": {
+                    "data_source": "y_cv_error",
+                    "axis_type": "linear",
+                    "label": "Error"
+                  },
+                  "marker": "o",
+                  "label": "Cross-Validation"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Sample Index",
+                    "reference_source": "y_val_error"
+                  },
+                  "y_axis": {
+                    "data_source": "y_val_error",
+                    "axis_type": "linear",
+                    "label": "Error"
+                  },
+                  "marker": "o",
+                  "label": "Validation"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "y",
+                  "default": 0,
+                  "nav_id": "npls_response",
+                  "show_navigation_menu": true,
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0
+                }
+              ]
+            },
+            "short_description": "Prediction error per sample for calibration, cross-validation, and validation sets."
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Calibration Error Table",
+              "row_label": "Sample",
+              "row_headers": "smp_cal",
+              "columns": [
+                {
+                  "data_source": "y_cal_true",
+                  "name": "Reference"
+                },
+                {
+                  "data_source": "y_cal_pred",
+                  "name": "Predicted"
+                },
+                {
+                  "data_source": "y_cal_error",
+                  "name": "Error"
+                },
+                {
+                  "data_source": "y_cv_pred",
+                  "name": "Predicted (CV)"
+                },
+                {
+                  "data_source": "y_cv_error",
+                  "name": "Error (CV)"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "default": 0,
+                  "nav_id": "npls_response",
+                  "show_navigation_menu": true,
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0
+                }
+              ],
+              "slice_title_source": "y_labels",
+              "slice_title_dimension": 1,
+              "decimal_places": 6,
+              "max_rows": 500
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Validation Error Table",
+              "row_label": "Sample",
+              "row_headers": "smp_val",
+              "columns": [
+                {
+                  "data_source": "y_val_true",
+                  "name": "Reference"
+                },
+                {
+                  "data_source": "y_val_pred",
+                  "name": "Predicted"
+                },
+                {
+                  "data_source": "y_val_error",
+                  "name": "Error"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "default": 0,
+                  "nav_id": "npls_response",
+                  "show_navigation_menu": true,
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0
+                }
+              ],
+              "slice_title_source": "y_labels",
+              "slice_title_dimension": 1,
+              "decimal_places": 6,
+              "max_rows": 500
+            }
+          }
+        ]
+      },
+      {
+        "title": "CV Fold Metrics",
+        "layout": "fp",
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "title": "Cross-Validation Fold Results",
+              "row_label": "Fold",
+              "columns": [
+                {
+                  "data_source": "cv_results",
+                  "nested_key": "rmse_folds",
+                  "name": "RMSECV"
+                },
+                {
+                  "data_source": "cv_results",
+                  "nested_key": "r2_folds",
+                  "name": "R²"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "default": 0,
+                  "nav_id": "npls_response",
+                  "show_navigation_menu": true,
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0
+                }
+              ],
+              "slice_title_source": "y_labels",
+              "slice_title_dimension": 1,
+              "decimal_places": 6,
+              "max_rows": 200
+            },
+            "short_description": "Per-fold RMSECV and R² from the cross-validation run."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "RMSECV and R² by Fold",
+              "line_style": "lines+markers",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Fold",
+                    "force_integer": true,
+                    "reference_source": "cv_results",
+                    "reference_nested_key": "rmse_folds"
+                  },
+                  "y_axis": {
+                    "data_source": "cv_results",
+                    "nested_key": "rmse_folds",
+                    "axis_type": "linear",
+                    "label": "RMSECV"
+                  },
+                  "label": "RMSECV per Fold",
+                  "marker": "o",
+                  "color": "#1f77b4"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Fold",
+                    "force_integer": true,
+                    "reference_source": "cv_results",
+                    "reference_nested_key": "r2_folds"
+                  },
+                  "y_axis": {
+                    "data_source": "cv_results",
+                    "nested_key": "r2_folds",
+                    "axis_type": "linear",
+                    "label": "R²"
+                  },
+                  "label": "R² per Fold",
+                  "marker": "s",
+                  "color": "#ff7f0e"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "nav_id": "npls_response",
+                  "show_navigation_menu": false
+                }
+              ]
+            },
+            "short_description": "RMSECV and R² per cross-validation fold."
+          }
+        ]
+      },
+      {
+        "title": "Explained Variance",
+        "layout": "ew",
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "title": "Variance Explained by LV",
+              "row_label": "LV",
+              "columns": [
+                {
+                  "data_source": "explained_variance_by_lv",
+                  "nested_key": "x_percent",
+                  "name": "X Variance (%)"
+                },
+                {
+                  "data_source": "explained_variance_by_lv",
+                  "nested_key": "y_percent",
+                  "name": "Y Variance (%)"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "default": 0,
+                  "nav_id": "npls_response",
+                  "show_navigation_menu": true,
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0
+                }
+              ],
+              "slice_title_source": "y_labels",
+              "slice_title_dimension": 1,
+              "decimal_places": 2,
+              "max_rows": 20
+            },
+            "short_description": "Percentage of X and Y variance explained by each latent variable."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "X and Y Explained Variance by LV",
+              "line_style": "lines+markers",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "LV",
+                    "force_integer": true,
+                    "reference_source": "explained_variance_by_lv",
+                    "reference_nested_key": "x_percent"
+                  },
+                  "y_axis": {
+                    "data_source": "explained_variance_by_lv",
+                    "nested_key": "x_percent",
+                    "axis_type": "linear",
+                    "label": "Variance Explained (%)"
+                  },
+                  "label": "X Variance",
+                  "marker": "o",
+                  "color": "#1f77b4"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "LV",
+                    "force_integer": true,
+                    "reference_source": "explained_variance_by_lv",
+                    "reference_nested_key": "y_percent"
+                  },
+                  "y_axis": {
+                    "data_source": "explained_variance_by_lv",
+                    "nested_key": "y_percent",
+                    "axis_type": "linear",
+                    "label": "Variance Explained (%)"
+                  },
+                  "label": "Y Variance",
+                  "marker": "s",
+                  "color": "#ff7f0e"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "nav_id": "npls_response",
+                  "show_navigation_menu": false
+                }
+              ]
+            },
+            "short_description": "Scree-style plot of X and Y variance explained per latent variable."
+          }
+        ]
+      },
+      {
+        "title": "Analytical Figures of Merit",
+        "layout": "ns",
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "title": "Analytical Figures of Merit per Validation Sample",
+              "row_label": "Sample",
+              "row_headers": "smp_val",
+              "columns": [
+                {
+                  "data_source": "y_val_true",
+                  "name": "Reference"
+                },
+                {
+                  "data_source": "y_val_pred",
+                  "name": "Predicted"
+                },
+                {
+                  "data_source": "lod_min",
+                  "name": "LOD Min"
+                },
+                {
+                  "data_source": "lod_max",
+                  "name": "LOD Max"
+                },
+                {
+                  "data_source": "loq_min",
+                  "name": "LOQ Min"
+                },
+                {
+                  "data_source": "loq_max",
+                  "name": "LOQ Max"
+                },
+                {
+                  "data_source": "sensitivity",
+                  "name": "Sensitivity"
+                },
+                {
+                  "data_source": "concentration_sd",
+                  "name": "Concentration SD"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "default": 0,
+                  "nav_id": "npls_response",
+                  "show_navigation_menu": true,
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0
+                }
+              ],
+              "slice_title_source": "y_labels",
+              "slice_title_dimension": 1,
+              "decimal_places": 6,
+              "max_rows": 500
+            },
+            "short_description": "Reference and predicted concentrations with LOD, LOQ, sensitivity, and concentration SD per validation sample."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "LOD / LOQ Range by Sample",
+              "line_style": "lines+markers",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Sample",
+                    "force_integer": true,
+                    "reference_source": "lod_min"
+                  },
+                  "y_axis": {
+                    "data_source": "lod_min",
+                    "axis_type": "linear",
+                    "label": "Concentration"
+                  },
+                  "label": "LOD Min",
+                  "marker": "o",
+                  "color": "#2ca02c"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Sample",
+                    "force_integer": true,
+                    "reference_source": "lod_max"
+                  },
+                  "y_axis": {
+                    "data_source": "lod_max",
+                    "axis_type": "linear",
+                    "label": "Concentration"
+                  },
+                  "label": "LOD Max",
+                  "marker": "o",
+                  "color": "#d62728"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Sample",
+                    "force_integer": true,
+                    "reference_source": "loq_min"
+                  },
+                  "y_axis": {
+                    "data_source": "loq_min",
+                    "axis_type": "linear",
+                    "label": "Concentration"
+                  },
+                  "label": "LOQ Min",
+                  "marker": "s",
+                  "color": "#9467bd"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Sample",
+                    "force_integer": true,
+                    "reference_source": "loq_max"
+                  },
+                  "y_axis": {
+                    "data_source": "loq_max",
+                    "axis_type": "linear",
+                    "label": "Concentration"
+                  },
+                  "label": "LOQ Max",
+                  "marker": "s",
+                  "color": "#8c564b"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "y",
+                  "nav_id": "npls_response",
+                  "show_navigation_menu": true,
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0
+                }
+              ]
+            },
+            "short_description": "LOD and LOQ min/max bounds plotted across validation samples."
+          }
+        ]
+      },
+      {
+        "title": "Residual Diagnostics",
+        "layout": "ew",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Sample Residual Norm Before / After Correction",
+              "line_style": "lines+markers",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Validation Sample",
+                    "force_integer": true,
+                    "reference_source": "residual_diagnostics",
+                    "reference_nested_key": "sample_residual_norm_before"
+                  },
+                  "y_axis": {
+                    "data_source": "residual_diagnostics",
+                    "nested_key": "sample_residual_norm_before",
+                    "axis_type": "linear",
+                    "label": "Residual Norm"
+                  },
+                  "label": "Before Correction",
+                  "marker": "o",
+                  "color": "#d62728"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Validation Sample",
+                    "force_integer": true,
+                    "reference_source": "residual_diagnostics",
+                    "reference_nested_key": "sample_residual_norm_after"
+                  },
+                  "y_axis": {
+                    "data_source": "residual_diagnostics",
+                    "nested_key": "sample_residual_norm_after",
+                    "axis_type": "linear",
+                    "label": "Residual Norm"
+                  },
+                  "label": "After Correction",
+                  "marker": "o",
+                  "color": "#2ca02c"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "y",
+                  "default": 0,
+                  "nav_id": "npls_response",
+                  "show_navigation_menu": true,
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0
+                }
+              ]
+            },
+            "short_description": "Sample residual norms before and after RBL/RTL correction."
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Residual Diagnostics per Sample",
+              "row_label": "Sample",
+              "row_headers": "smp_val",
+              "columns": [
+                {
+                  "data_source": "residual_diagnostics",
+                  "nested_key": "sample_residual_norm_before",
+                  "name": "Norm (Before)"
+                },
+                {
+                  "data_source": "residual_diagnostics",
+                  "nested_key": "sample_residual_norm_after",
+                  "name": "Norm (After)"
+                },
+                {
+                  "data_source": "residual_diagnostics",
+                  "nested_key": "sample_residual_std_before",
+                  "name": "Std (Before)"
+                },
+                {
+                  "data_source": "residual_diagnostics",
+                  "nested_key": "sample_residual_std_after",
+                  "name": "Std (After)"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "default": 0,
+                  "nav_id": "npls_response",
+                  "show_navigation_menu": true,
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0
+                }
+              ],
+              "slice_title_source": "y_labels",
+              "slice_title_dimension": 1,
+              "decimal_places": 6,
+              "max_rows": 500
+            },
+            "short_description": "Per-sample residual norm and standard deviation before and after RBL/RTL correction."
+          }
+        ]
+      },
+      {
+        "title": "LV Scores — U-PLS",
+        "layout": "fd",
+        "condition": {
+          "parameter": "out.model.method",
+          "operator": "==",
+          "value": "u_pls"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "LV Scores — Factor Pair (Calibration)",
+              "show_origin": true,
+              "show_labels": false,
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "model",
+                    "nested_key": "t_scores",
+                    "axis_type": "linear",
+                    "label": "LV Score",
+                    "axis_labels": "model",
+                    "axis_labels_nested": "lv_labels"
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "t_scores",
+                    "axis_type": "linear",
+                    "label": "LV Score",
+                    "axis_labels": "model",
+                    "axis_labels_nested": "lv_labels"
+                  },
+                  "point_labels_source": "smp_cal",
+                  "label": "Calibration"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 2,
+                  "axis": "x",
+                  "default": 0,
+                  "nav_id": "npls_response",
+                  "show_navigation_menu": true,
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0
+                },
+                {
+                  "name": "LV-X",
+                  "dimension": 1,
+                  "axis": "x",
+                  "default": 0,
+                  "nav_id": "npls_lv_pair_x",
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "Response",
+                  "dimension": 2,
+                  "axis": "y",
+                  "default": 0,
+                  "nav_id": "npls_response",
+                  "show_navigation_menu": false
+                },
+                {
+                  "name": "LV-Y",
+                  "dimension": 1,
+                  "axis": "y",
+                  "default": 1,
+                  "nav_id": "npls_lv_pair_y",
+                  "show_navigation_menu": true
+                }
+              ]
+            },
+            "short_description": "Pairwise scatter of calibration U-PLS LV scores; select the LV pair and response to plot."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "X Loadings and Weights — LV Pair",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "model",
+                    "nested_key": "x_loadings_upls",
+                    "axis_type": "linear",
+                    "label": "Loading",
+                    "axis_labels": "model",
+                    "axis_labels_nested": "lv_labels"
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "x_loadings_upls",
+                    "axis_type": "linear",
+                    "label": "Loading",
+                    "axis_labels": "model",
+                    "axis_labels_nested": "lv_labels"
+                  },
+                  "label": "X Loadings"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "model",
+                    "nested_key": "x_weights_upls",
+                    "axis_type": "linear",
+                    "label": "Weight",
+                    "axis_labels": "model",
+                    "axis_labels_nested": "lv_labels"
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "x_weights_upls",
+                    "axis_type": "linear",
+                    "label": "Weight",
+                    "axis_labels": "model",
+                    "axis_labels_nested": "lv_labels"
+                  },
+                  "label": "X Weights"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 2,
+                  "axis": "x",
+                  "default": 0,
+                  "nav_id": "npls_response",
+                  "show_navigation_menu": false
+                },
+                {
+                  "name": "LV-X",
+                  "dimension": 1,
+                  "axis": "x",
+                  "default": 0,
+                  "nav_id": "npls_lv_pair_x",
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "Response",
+                  "dimension": 2,
+                  "axis": "y",
+                  "default": 0,
+                  "nav_id": "npls_response",
+                  "show_navigation_menu": false
+                },
+                {
+                  "name": "LV-Y",
+                  "dimension": 1,
+                  "axis": "y",
+                  "default": 1,
+                  "nav_id": "npls_lv_pair_y",
+                  "show_navigation_menu": true
+                }
+              ]
+            },
+            "short_description": "Pairwise scatter of X loadings and weights by LV; each point is a feature; shows structure across LV pairs."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "X and Y Variance Explained by LV",
+              "line_style": "lines+markers",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "LV",
+                    "force_integer": true,
+                    "reference_source": "explained_variance_by_lv",
+                    "reference_nested_key": "x_percent"
+                  },
+                  "y_axis": {
+                    "data_source": "explained_variance_by_lv",
+                    "nested_key": "x_percent",
+                    "axis_type": "linear",
+                    "label": "Variance Explained (%)"
+                  },
+                  "label": "X Variance",
+                  "marker": "o",
+                  "color": "#1f77b4"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "LV",
+                    "force_integer": true,
+                    "reference_source": "explained_variance_by_lv",
+                    "reference_nested_key": "y_percent"
+                  },
+                  "y_axis": {
+                    "data_source": "explained_variance_by_lv",
+                    "nested_key": "y_percent",
+                    "axis_type": "linear",
+                    "label": "Variance Explained (%)"
+                  },
+                  "label": "Y Variance",
+                  "marker": "s",
+                  "color": "#ff7f0e"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "default": 0,
+                  "nav_id": "npls_response",
+                  "show_navigation_menu": false
+                }
+              ]
+            },
+            "short_description": "X and Y variance explained per LV for the selected response."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "X Loadings and Weights by Feature",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "axis_n_info",
+                    "axis_type": "linear",
+                    "index": 1,
+                    "label": "Variable Index"
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "x_loadings_upls",
+                    "axis_type": "linear",
+                    "label": "Value",
+                    "axis_labels": "model",
+                    "axis_labels_nested": "lv_labels"
+                  },
+                  "label": "X Loadings"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "axis_n_info",
+                    "axis_type": "linear",
+                    "index": 1,
+                    "label": "Variable Index"
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "x_weights_upls",
+                    "axis_type": "linear",
+                    "label": "Value",
+                    "axis_labels": "model",
+                    "axis_labels_nested": "lv_labels"
+                  },
+                  "label": "X Weights"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 2,
+                  "axis": "y",
+                  "default": 0,
+                  "nav_id": "npls_response",
+                  "show_navigation_menu": false
+                },
+                {
+                  "name": "LV",
+                  "dimension": 1,
+                  "axis": "y",
+                  "default": 0,
+                  "nav_id": "npls_feature_lv",
+                  "show_navigation_menu": true
+                }
+              ]
+            },
+            "short_description": "X loadings and weights plotted against feature index; navigate by LV and response."
+          }
+        ]
+      },
+      {
+        "title": "LV Scores — N-PLS",
+        "layout": "fd",
+        "condition": {
+          "parameter": "out.model.method",
+          "operator": "==",
+          "value": "n_pls"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "LV Scores — Factor Pair (Calibration)",
+              "show_origin": true,
+              "show_labels": false,
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "model",
+                    "nested_key": "t_scores",
+                    "axis_type": "linear",
+                    "label": "LV Score",
+                    "axis_labels": "model",
+                    "axis_labels_nested": "lv_labels"
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "t_scores",
+                    "axis_type": "linear",
+                    "label": "LV Score",
+                    "axis_labels": "model",
+                    "axis_labels_nested": "lv_labels"
+                  },
+                  "point_labels_source": "smp_cal",
+                  "label": "Calibration"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 2,
+                  "axis": "x",
+                  "default": 0,
+                  "nav_id": "npls_response",
+                  "show_navigation_menu": true,
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0
+                },
+                {
+                  "name": "LV-X",
+                  "dimension": 1,
+                  "axis": "x",
+                  "default": 0,
+                  "nav_id": "npls_lv_pair_x",
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "Response",
+                  "dimension": 2,
+                  "axis": "y",
+                  "default": 0,
+                  "nav_id": "npls_response",
+                  "show_navigation_menu": false
+                },
+                {
+                  "name": "LV-Y",
+                  "dimension": 1,
+                  "axis": "y",
+                  "default": 1,
+                  "nav_id": "npls_lv_pair_y",
+                  "show_navigation_menu": true
+                }
+              ]
+            },
+            "short_description": "Pairwise scatter of calibration N-PLS LV scores; select the LV pair and response to plot."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "X Mode Factor Profiles",
+              "show_origin": false,
+              "x_axis": {
+                "data_source": "model",
+                "nested_key": "x_mode_factor_axes",
+                "label": "Feature",
+                "axis_labels": "model",
+                "axis_labels_nested": "x_mode_factor_dim_labels"
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "x_mode_factors",
+                "label": "Factor Value"
+              },
+              "line_series_labels_source": "model",
+              "line_series_labels_nested": "lv_labels",
+              "data_slicing": [
+                {
+                  "name": "Mode",
+                  "dimension": 0,
+                  "axis": "x",
+                  "default": 0,
+                  "nav_id": "npls_mf_mode",
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "Mode",
+                  "dimension": 0,
+                  "axis": "y",
+                  "default": 0,
+                  "nav_id": "npls_mf_mode",
+                  "show_navigation_menu": false
+                },
+                {
+                  "name": "Response",
+                  "dimension": 2,
+                  "axis": "y",
+                  "default": 0,
+                  "nav_id": "npls_response",
+                  "show_navigation_menu": false,
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0
+                }
+              ]
+            },
+            "short_description": "N-PLS CP mode factor profiles for all LVs overlaid; each series is one LV; navigate by spatial mode and response."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "X and Y Explained Variance by LV",
+              "line_style": "lines+markers",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "LV",
+                    "force_integer": true,
+                    "reference_source": "explained_variance_by_lv",
+                    "reference_nested_key": "x_percent"
+                  },
+                  "y_axis": {
+                    "data_source": "explained_variance_by_lv",
+                    "nested_key": "x_percent",
+                    "axis_type": "linear",
+                    "label": "Variance Explained (%)"
+                  },
+                  "label": "X Variance",
+                  "marker": "o",
+                  "color": "#1f77b4"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "LV",
+                    "force_integer": true,
+                    "reference_source": "explained_variance_by_lv",
+                    "reference_nested_key": "y_percent"
+                  },
+                  "y_axis": {
+                    "data_source": "explained_variance_by_lv",
+                    "nested_key": "y_percent",
+                    "axis_type": "linear",
+                    "label": "Variance Explained (%)"
+                  },
+                  "label": "Y Variance",
+                  "marker": "s",
+                  "color": "#ff7f0e"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "nav_id": "npls_response",
+                  "show_navigation_menu": false
+                }
+              ]
+            },
+            "short_description": "Scree-style plot of X and Y variance explained per latent variable."
+          }
+        ]
+      },
+      {
+        "title": "Interferent Profiles",
+        "layout": "ew",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Interferent Mode Profiles (left)",
+              "show_origin": false,
+              "x_axis": {
+                "data_source": "interferent_profiles",
+                "nested_key": "mode_profile_axes",
+                "label": "Feature",
+                "axis_labels": "interferent_profiles",
+                "axis_labels_nested": "mode_dim_labels"
+              },
+              "y_axis": {
+                "data_source": "interferent_profiles",
+                "nested_key": "mode_profile_factors",
+                "label": "Interferent Factor Loading"
+              },
+              "line_series_labels_source": "interferent_profiles",
+              "line_series_labels_nested": "mode_profile_rank_labels",
+              "data_slicing": [
+                {
+                  "name": "Val Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "nav_id": "npls_interf_sample",
+                  "labels_source": "smp_val",
+                  "labels_dimension": 0,
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "Mode",
+                  "dimension": 1,
+                  "axis": "y",
+                  "default": 0,
+                  "nav_id": "npls_interf_mode_left",
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "Mode",
+                  "dimension": 1,
+                  "axis": "x",
+                  "default": 0,
+                  "nav_id": "npls_interf_mode_left",
+                  "show_navigation_menu": false
+                }
+              ]
+            },
+            "short_description": "Mode-resolved interferent factor profiles per validation sample; browse by sample and mode."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Interferent Mode Profiles (right)",
+              "show_origin": false,
+              "x_axis": {
+                "data_source": "interferent_profiles",
+                "nested_key": "mode_profile_axes",
+                "label": "Feature",
+                "axis_labels": "interferent_profiles",
+                "axis_labels_nested": "mode_dim_labels"
+              },
+              "y_axis": {
+                "data_source": "interferent_profiles",
+                "nested_key": "mode_profile_factors",
+                "label": "Interferent Factor Loading"
+              },
+              "line_series_labels_source": "interferent_profiles",
+              "line_series_labels_nested": "mode_profile_rank_labels",
+              "data_slicing": [
+                {
+                  "name": "Val Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "nav_id": "npls_interf_sample",
+                  "labels_source": "smp_val",
+                  "labels_dimension": 0,
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "Mode",
+                  "dimension": 1,
+                  "axis": "y",
+                  "default": 1,
+                  "nav_id": "npls_interf_mode_right",
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "Mode",
+                  "dimension": 1,
+                  "axis": "x",
+                  "default": 1,
+                  "nav_id": "npls_interf_mode_right",
+                  "show_navigation_menu": false
+                }
+              ]
+            },
+            "short_description": "Second mode panel for side-by-side comparison; shares the sample selector with the left panel."
+          }
+        ]
+      },
+      {
+        "title": "EJCR",
+        "layout": "ew",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Calibration EJCR",
+              "show_origin": false,
+              "show_labels": false,
+              "confidence_ellipses": false,
+              "x_axis": {
+                "data_source": "ejcr_cal",
+                "nested_key": "fit_slope",
+                "label": "Slope"
+              },
+              "y_axis": {
+                "data_source": "ejcr_cal",
+                "nested_key": "fit_intercept",
+                "label": "Intercept"
+              },
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "ejcr_cal",
+                "nested_key": "fit_slope",
+                    "label": "Slope"
+                  },
+                  "y_axis": {
+                    "data_source": "ejcr_cal",
+                "nested_key": "fit_intercept",
+                    "label": "Intercept"
+                  },
+                  "label": "OLS Fit",
+                  "marker": "D"
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "custom_ellipsis",
+                  "ellipses_data": {
+                    "data_source": "ejcr_cal"
+                  },
+                  "label": "EJCR",
+                  "expand_limits": true
+                },
+                {
+                  "orientation": "vertical",
+                  "values": [1.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                },
+                {
+                  "orientation": "horizontal",
+                  "values": [0.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "default": 0,
+                  "nav_id": "npls_response",
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0,
+                  "show_navigation_menu": true
+                }
+              ]
+            },
+            "short_description": "Ellipsoidal joint confidence region (EJCR) for OLS slope and intercept of calibration predictions. The ideal point (slope=1, intercept=0) inside the ellipse indicates unbiased calibration."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Validation EJCR",
+              "show_origin": false,
+              "show_labels": false,
+              "confidence_ellipses": false,
+              "x_axis": {
+                "data_source": "ejcr_val",
+                "nested_key": "fit_slope",
+                "label": "Slope"
+              },
+              "y_axis": {
+                "data_source": "ejcr_val",
+                "nested_key": "fit_intercept",
+                "label": "Intercept"
+              },
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "ejcr_val",
+                "nested_key": "fit_slope",
+                    "label": "Slope"
+                  },
+                  "y_axis": {
+                    "data_source": "ejcr_val",
+                "nested_key": "fit_intercept",
+                    "label": "Intercept"
+                  },
+                  "label": "OLS Fit",
+                  "marker": "D"
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "custom_ellipsis",
+                  "ellipses_data": {
+                    "data_source": "ejcr_val"
+                  },
+                  "label": "EJCR",
+                  "expand_limits": true
+                },
+                {
+                  "orientation": "vertical",
+                  "values": [1.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                },
+                {
+                  "orientation": "horizontal",
+                  "values": [0.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "default": 0,
+                  "nav_id": "npls_response",
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0,
+                  "show_navigation_menu": false
+                }
+              ]
+            },
+            "short_description": "Ellipsoidal joint confidence region (EJCR) for OLS slope and intercept of validation predictions. The ideal point (slope=1, intercept=0) inside the ellipse indicates unbiased prediction."
+          }
+        ]
+      }
+    ]
+  }
+}

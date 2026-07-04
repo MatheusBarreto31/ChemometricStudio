@@ -1,0 +1,326 @@
+{
+  "display_name": "Smoothing",
+  "category": "2.Preprocessing",
+  "data_type": "firstorder",
+  "input_aliases": {
+    "X_cal": "X Calibration",
+    "method": "Method",
+    "X_val": "X Validation",
+    "nway_flag": "Dimensionality",
+    "direction": "Direction",
+    "window_size": "Window Size",
+    "polyorder": "Polynomial Order"
+  },
+  "output_aliases": {
+    "X_cal": "X Cal (Smoothed)",
+    "X_val": "X Val (Smoothed)"
+  },
+  "output_synonyms": {
+    "X_cal": ["X", "X_train"],
+    "X_val": ["X_test", "X_validation"]
+  },
+  "short_description": "Reduces noise while preserving spectral features",
+  "long_description": "Smoothing reduces high-frequency noise in spectroscopic data while preserving important spectral features and peak information.\n\nSmoothing Methods:\n\n1. Moving Average\n   - Simple averaging over a sliding window\n   - Fast and straightforward\n   - Can flatten sharp peaks if window is too large\n   - Good for initial noise reduction\n\n2. Savitzky-Golay Filter\n   - Polynomial-preserving filter\n   - Better at maintaining spectral peak shapes\n   - Uses polynomial fitting within sliding window\n   - More computationally intensive than moving average\n   - Requires polynomial order < window size\n\nParameters:\n\nWindow Size:\n- Larger windows = stronger smoothing but more feature loss\n- Typical values: 5-15 points\n- Must be odd number\n- Should be smaller than spectral feature width\n\nPolynomial Order (Savitzky-Golay only):\n- Order 2: parabolic fitting (recommended)\n- Order 3-5: higher-degree polynomials\n- Lower orders preserve features better\n\nMultiway Data:\n- Specify dimensionality for 3D+ data\n- Direction parameter controls axis of smoothing\n\nTip: For best results, apply baseline correction before smoothing.",
+  "setup": {
+    "categories": ["Method Parameters", "Data Inputs", "Multiway Configuration"],
+    "layout": [
+      {
+        "name": "method",
+        "label": "Smoothing Method",
+        "category": "Method Parameters",
+        "widget": "combobox",
+        "values": ["moving_average", "savitzky_golay"],
+        "value_aliases": ["Moving Average", "Savitzky-Golay Filter"],
+        "default": "moving_average",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Moving Average: simple averaging. Savitzky-Golay: polynomial-preserving filter"
+      },
+      {
+        "name": "direction",
+        "label": "Direction (for multiway)",
+        "category": "Multiway Configuration",
+        "widget": "entry",
+        "type": "int",
+        "default": "-1",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Dimension to smooth (-1 for default/last dimension)"
+      },
+      {
+        "name": "window_size",
+        "label": "Window Size",
+        "category": "Method Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "5",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Number of points for moving average or Savitzky-Golay window"
+      },
+      {
+        "name": "polyorder",
+        "label": "Polynomial Order",
+        "category": "Method Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "2",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Polynomial degree (must be smaller than the window size and typically 2-5)",
+        "visible_if": {"method": "savitzky_golay"}
+      },
+      {
+        "name": "X_cal",
+        "label": "X Calibration Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": true,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed from previous function output"
+      },
+      {
+        "name": "X_val",
+        "label": "X Validation Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed from previous function output"
+      },
+      {
+        "name": "nway_flag",
+        "label": "Data Dimensionality",
+        "category": "Multiway Configuration",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": true,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Automatically inherited from Load Data function"
+      }
+    ]
+  },
+  "analysis": {
+    "pages": [
+      {
+        "title": "Smoothing Comparison",
+        "layout": "ew",
+        "condition": {"parameter": "nway_flag", "operator": "==", "value": "1"},
+        "sections": [
+          {
+            "type": "graph",
+            "short_description": "Displays the input calibration spectra before smoothing.",
+            "long_description": "Shows the original X calibration data before smoothing is applied. Use this section to inspect noise levels and spectral features prior to filtering.",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "y_axis": {"data_source": "in.X_cal", "label": "Intensity"},
+              "title": "Original Spectra",
+              "class_labels": "class_data_cal",
+              "dimension_labels": "in.dim_labels"
+            }
+          },
+          {
+            "type": "graph",
+            "short_description": "Displays the smoothed calibration spectra.",
+            "long_description": "Shows the X calibration data after smoothing is applied. Compare against the original to verify that noise is reduced while spectral features are preserved.",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "y_axis": {"data_source": "out.X_cal", "label": "Intensity"},
+              "title": "Processed Spectra",
+              "class_labels": "class_data_cal",
+              "dimension_labels": "in.dim_labels"
+            }
+          }
+        ]
+      },
+      {
+        "title": "Smoothing Comparison",
+        "layout": "ew",
+        "condition": {"parameter": "nway_flag", "operator": "==", "value": "2"},
+        "sections": [
+          {
+            "type": "graph",
+            "short_description": "Contour view of one selected calibration sample before smoothing.",
+            "long_description": "Displays a contour plot of the original multiway calibration data for the selected sample index. Use the sample navigation control to inspect spatial/spectral structure prior to smoothing.",
+            "config": {
+              "graph_type": "contour",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 2, "label": "in.dim_labels", "l_index": 2},
+              "y_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "z_axis": {"data_source": "in.X_cal", "label": "Intensity"},
+              "title": "Original Spectra",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}]
+            }
+          },
+          {
+            "type": "graph",
+            "short_description": "Contour view of one selected calibration sample after smoothing.",
+            "long_description": "Displays a contour plot of the smoothed multiway calibration data for the selected sample index. Compare with the original contour to assess the effect of smoothing on signal distribution.",
+            "config": {
+              "graph_type": "contour",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 2, "label": "in.dim_labels", "l_index": 2},
+              "y_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "z_axis": {"data_source": "out.X_cal", "label": "Intensity"},
+              "title": "Processed Spectra",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Smoothing Comparison",
+        "layout": "ew",
+        "condition": {"parameter": "nway_flag", "operator": ">", "value": "2"},
+        "sections": [
+          {
+            "type": "graph",
+            "short_description": "Heatmap view of higher-dimensional calibration data before smoothing.",
+            "long_description": "Displays the original calibration data as a heatmap for n-way datasets with dimensionality greater than 2. Use slicing and axis controls to inspect specific samples before smoothing.",
+            "config": {
+              "graph_type": "heatmap",
+              "aux_axis": {"data_source": "in.axis_n_info", "labels": "in.dim_labels"},
+              "z_axis": {"data_source": "in.X_cal", "label": "Intensity"},
+              "title": "Original Spectra",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}],
+              "show_md_menu": true
+            }
+          },
+          {
+            "type": "graph",
+            "short_description": "Heatmap view of higher-dimensional calibration data after smoothing.",
+            "long_description": "Displays the smoothed calibration data as a heatmap for n-way datasets with dimensionality greater than 2. Compare with the original heatmap to validate the smoothing effect across slices and dimensions.",
+            "config": {
+              "graph_type": "heatmap",
+              "aux_axis": {"data_source": "in.axis_n_info", "labels": "in.dim_labels"},
+              "z_axis": {"data_source": "out.X_cal", "label": "Intensity"},
+              "title": "Processed Spectra",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}],
+              "show_md_menu": true
+            }
+          }
+        ]
+      },
+      {
+        "title": "Smoothing Comparison (Validation)",
+        "layout": "ew",
+        "condition": {"parameter": "nway_flag", "operator": "==", "value": "1"},
+        "sections": [
+          {
+            "type": "graph",
+            "short_description": "Displays the input validation spectra before smoothing.",
+            "long_description": "Shows the original X validation data before smoothing is applied. Use this section to inspect noise levels and spectral features prior to filtering.",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "y_axis": {"data_source": "in.X_val", "label": "Intensity"},
+              "title": "Original Validation",
+              "class_labels": "class_data_val",
+              "dimension_labels": "in.dim_labels"
+            }
+          },
+          {
+            "type": "graph",
+            "short_description": "Displays the smoothed validation spectra.",
+            "long_description": "Shows the X validation data after smoothing is applied. Compare against the original to verify that noise is reduced while spectral features are preserved.",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "y_axis": {"data_source": "out.X_val", "label": "Intensity"},
+              "title": "Processed Validation",
+              "class_labels": "class_data_val",
+              "dimension_labels": "in.dim_labels"
+            }
+          }
+        ]
+      },
+      {
+        "title": "Smoothing Comparison (Validation)",
+        "layout": "ew",
+        "condition": {"parameter": "nway_flag", "operator": "==", "value": "2"},
+        "sections": [
+          {
+            "type": "graph",
+            "short_description": "Contour view of one selected validation sample before smoothing.",
+            "long_description": "Displays a contour plot of the original multiway validation data for the selected sample index.",
+            "config": {
+              "graph_type": "contour",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 2, "label": "in.dim_labels", "l_index": 2},
+              "y_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "z_axis": {"data_source": "in.X_val", "label": "Intensity"},
+              "title": "Original Validation",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}]
+            }
+          },
+          {
+            "type": "graph",
+            "short_description": "Contour view of one selected validation sample after smoothing.",
+            "long_description": "Displays a contour plot of the smoothed multiway validation data for the selected sample index.",
+            "config": {
+              "graph_type": "contour",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 2, "label": "in.dim_labels", "l_index": 2},
+              "y_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "z_axis": {"data_source": "out.X_val", "label": "Intensity"},
+              "title": "Processed Validation",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Smoothing Comparison (Validation)",
+        "layout": "ew",
+        "condition": {"parameter": "nway_flag", "operator": ">", "value": "2"},
+        "sections": [
+          {
+            "type": "graph",
+            "short_description": "Heatmap view of higher-dimensional validation data before smoothing.",
+            "long_description": "Displays the original validation data as a heatmap for n-way datasets with dimensionality greater than 2.",
+            "config": {
+              "graph_type": "heatmap",
+              "aux_axis": {"data_source": "in.axis_n_info", "labels": "in.dim_labels"},
+              "z_axis": {"data_source": "in.X_val", "label": "Intensity"},
+              "title": "Original Validation",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}],
+              "show_md_menu": true
+            }
+          },
+          {
+            "type": "graph",
+            "short_description": "Heatmap view of higher-dimensional validation data after smoothing.",
+            "long_description": "Displays the smoothed validation data as a heatmap for n-way datasets with dimensionality greater than 2.",
+            "config": {
+              "graph_type": "heatmap",
+              "aux_axis": {"data_source": "in.axis_n_info", "labels": "in.dim_labels"},
+              "z_axis": {"data_source": "out.X_val", "label": "Intensity"},
+              "title": "Processed Validation",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}],
+              "show_md_menu": true
+            }
+          }
+        ]
+      }
+    ],
+    "current_page": 0
+  }
+}

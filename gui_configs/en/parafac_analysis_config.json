@@ -1,0 +1,2431 @@
+{
+  "display_name": "PARAFAC",
+  "category": "4.Exploratory Analysis",
+  "data_type": "multiway",
+  "input_aliases": {
+    "X_cal": "X Calibration",
+    "Y_cal": "Y Calibration",
+    "X_val": "X Validation",
+    "Y_val": "Y Validation",
+    "n_components": "Number of Factors",
+    "nway_flag": "Data Order",
+    "mode_centering": "Mode Centering",
+    "mode_normalization": "Mode Normalization",
+    "constraint_non_negative": "Non-negative Constraint",
+    "constraint_l1_reg": "L1 Regularization Constraint",
+    "constraint_l1_reg_strength": "L1 Regularization Strength",
+    "constraint_l2_reg": "L2 Regularization Constraint",
+    "constraint_l2_reg_strength": "L2 Regularization Strength",
+    "constraint_l2_square_reg": "L2 Squared Regularization Constraint",
+    "constraint_l2_square_reg_strength": "L2 Squared Regularization Strength",
+    "constraint_unimodality": "Unimodality Constraint",
+    "constraint_normalize": "Normalize Constraint",
+    "constraint_simplex": "Simplex Constraint",
+    "constraint_simplex_strength": "Simplex Strength",
+    "constraint_normalized_sparsity": "Normalized Sparsity Constraint",
+    "constraint_normalized_sparsity_strength": "Normalized Sparsity Strength",
+    "constraint_soft_sparsity": "Soft Sparsity Constraint",
+    "constraint_soft_sparsity_strength": "Soft Sparsity Strength",
+    "constraint_smoothness": "Smoothness Constraint",
+    "constraint_smoothness_strength": "Smoothness Strength",
+    "constraint_monotonicity": "Monotonicity Constraint",
+    "constraint_hard_sparsity": "Hard Sparsity Constraint",
+    "constraint_hard_sparsity_strength": "Hard Sparsity Strength",
+    "unconstrained_sparsity": "Sparsity (Unconstrained Only)",
+    "unconstrained_linesearch": "Linesearch (Unconstrained Only)",
+    "unconstrained_orthogonalise": "Orthogonalise (Unconstrained Only)",
+    "init_method": "Initialization",
+    "random_multi_start": "Random Multi-Start",
+    "random_multi_start_runs": "Random Multi-Start Runs",
+    "max_iter": "Max Iterations",
+    "tol": "Tolerance",
+    "random_state": "Random Seed",
+    "missing_constrained_solver": "Missing+Constraint Solver",
+    "orient_mostly_negative_pairs": "Orient Mostly-Negative Mode Pairs",
+    "profile_paths": "Profile Files",
+    "profile_usage": "Profile Usage",
+    "sweep_mode": "Sweep Mode",
+    "component_range": "Component Range",
+    "component_y_mapping": "Component-Y Mapping",
+    "cv_config": "CV Configuration",
+    "axis_n_info": "Axis Vectors",
+    "axis_t_info": "Axis Text Labels",
+    "dim_labels": "Dimension Labels",
+    "validation_processing": "Validation Processing"
+  },
+  "output_aliases": {
+    "scores_mode_a": "Scores (Mode A)",
+    "val_scores_mode_a": "Validation Scores (Mode A)",
+    "scores_mode_a_heatmap": "Scores (Mode A Heatmap Matrix)",
+    "scores_mode_a_heatmap_full": "Scores (Mode A Heatmap Matrix, All Samples)",
+    "mode_a_sample_axis": "Mode A Sample Axis",
+    "mode_a_sample_axis_full": "Mode A Sample Axis (All Samples)",
+    "mode_a_component_axis": "Mode A Component Axis",
+    "mode_profile_axes": "Mode Profile Axes",
+    "mode_profile_axes_full_a": "Mode Profile Axes (A Mode Full)",
+    "mode_profile_factors": "Mode Profile Factors",
+    "mode_profile_factors_full_a": "Mode Profile Factors (A Mode Full)",
+    "mode_profile_mode_labels": "Mode Profile Labels",
+    "mode_profile_y_titles": "Mode Profile Y-Axis Titles",
+    "mode_profile_component_labels": "Mode Profile Component Labels",
+    "mode_profile_navigation_labels_by_dimension": "Mode Profile Navigation Labels",
+    "sweep_F": "Sweep Components (F)",
+    "sweep_sfit": "Sweep sfit",
+    "sweep_core_consistency": "Sweep Core Consistency",
+    "sweep_explained_variance": "Sweep Explained Variance",
+    "sweep_n_iter": "Sweep Iterations",
+    "factors": "Factors",
+    "weights": "Weights",
+    "instrumental_profiles": "Instrumental Profiles",
+    "reconstructed": "Reconstructed Tensor",
+    "residual": "Residual Tensor",
+    "metrics": "Metrics",
+    "calibration_models": "Calibration Models",
+    "component_y_mapping": "Component-Y Pairing",
+    "reference_angles": "Reference Angles",
+    "parafac_report": "PARAFAC Report",
+    "sweep_results": "Sweep Results",
+    "selected_n_components": "Selected Components",
+    "cv_results": "CV Results",
+    "y_cv_pred": "CV Predictions",
+    "validation_processing": "Validation Processing Mode",
+    "sbs_scores_mode_a": "SBS A Scores (Cal)",
+    "sbs_val_scores_mode_a": "SBS A Scores (Val Sample)",
+    "sbs_scores_mode_a_heatmap": "SBS A Scores Heatmap",
+    "sbs_scores_mode_a_heatmap_full": "SBS A Scores Heatmap (All Samples)",
+    "sbs_instrumental_profiles": "SBS Instrumental Profiles",
+    "sbs_mode_profile_factors": "SBS Mode Profile Factors",
+    "sbs_mode_profile_factors_full_a": "SBS Mode Profile Factors (A Mode Full)",
+    "sbs_mode_profile_axes": "SBS Mode Profile Axes",
+    "sbs_mode_profile_axes_full_a": "SBS Mode Profile Axes (A Mode Full)",
+    "sbs_mode_profile_mode_labels": "SBS Mode Profile Labels",
+    "sbs_mode_profile_y_titles": "SBS Mode Profile Y Titles",
+    "sbs_similarity_matrix": "SBS Similarity Matrix",
+    "sbs_val_sample_axis": "SBS Validation Sample Axis",
+    "sbs_mode_a_sample_axis": "SBS Mode A Sample Axis",
+    "sbs_mode_a_sample_axis_full": "SBS Mode A Sample Axis (All Samples)",
+    "sbs_mode_a_component_axis": "SBS Mode A Component Axis",
+    "sbs_factor_labels": "SBS Factor Labels"
+  },
+  "passforward": {
+    "compatible": true,
+    "description": "Expose selected PARAFAC outputs as routed downstream inputs when enabled.",
+    "mappings": {
+      "X_cal": {
+        "source": "scores_mode_a",
+        "label": "(PF) X Calibration"
+      },
+      "X_val": {
+        "source": "val_scores_mode_a",
+        "label": "(PF) X Validation"
+      },
+      "axis_n_info": {
+        "builder": "score_axis_n_info",
+        "sample_source": "axis_n_info",
+        "component_source": "mode_a_component_axis",
+        "label": "(PF) Axis N Info"
+      },
+      "axis_t_info": {
+        "builder": "score_axis_t_info",
+        "sample_text_source": "axis_t_info",
+        "sample_axis_source": "mode_a_sample_axis",
+        "component_source": "mode_a_component_axis",
+        "component_prefix": "F",
+        "label": "(PF) Axis T Info"
+      },
+      "dim_labels": {
+        "builder": "score_dim_labels",
+        "sample_label_source": "dim_labels",
+        "factor_label": "Factor",
+        "label": "(PF) Dimension Labels"
+      },
+      "nway_flag": {
+        "value": 1,
+        "label": "(PF) Data Order"
+      }
+    }
+  },
+  "short_description": "PARAFAC decomposition with missing-data, profile constraints, sweep, calibration, and CV support.",
+  "long_description": "Fits a CP/PARAFAC model to multiway data, supports NaN-aware fitting, optional reference/initial/fixed profiles, optional sweep across component counts, and calibration of mode-A scores against Y.",
+  "setup": {
+    "categories": [
+      "Model Parameters",
+      "Data Inputs",
+      "Per-Mode Options",
+      "Constraints",
+      "Unconstrained Model Options",
+      "Profiles",
+      "Calibration",
+      "Cross-Validation"
+    ],
+    "layout": [
+      {
+        "name": "n_components",
+        "label": "Number of Factors",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "2",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Number of factors to extract from the data tensor."
+      },
+      {
+        "name": "init_method",
+        "label": "Initialization",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "values": [
+          "svd",
+          "random",
+          "custom"
+        ],
+        "value_aliases": [
+          "SVD",
+          "Random",
+          "Custom"
+        ],
+        "default": "svd",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Method for initializing factor matrices. 'SVD' uses singular value decomposition, 'Random' uses random values, and 'Custom' allows user-provided initial factors."
+      },
+      {
+        "name": "max_iter",
+        "label": "Maximum Iterations",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "500",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Maximum number of iterations for the fitting algorithm."
+      },
+      {
+        "name": "random_multi_start",
+        "label": "Random Multi-Start",
+        "category": "Model Parameters",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "init_method": "random"
+        },
+        "tooltip": "When enabled, run multiple random initializations and keep the best fit."
+      },
+      {
+        "name": "random_multi_start_runs",
+        "label": "Random Multi-Start Runs",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "5",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "init_method": "random",
+          "random_multi_start": true
+        },
+        "tooltip": "Number of random starts when multi-start is enabled. Minimum is 1."
+      },
+      {
+        "name": "tol",
+        "label": "Tolerance",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1e-7",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Convergence tolerance for the fitting algorithm."
+      },
+      {
+        "name": "random_state",
+        "label": "Random Seed",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Optional integer seed. Leave blank for different random results on each run."
+      },
+      {
+        "name": "missing_constrained_solver",
+        "label": "Missing+Constraint Solver",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "values": [
+          "em",
+          "em_adaptive",
+          "weighted_ao_admm"
+        ],
+        "value_aliases": [
+          "EM",
+          "EM Adaptive",
+          "Weighted AO-ADMM"
+        ],
+        "default": "em",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Used only when both missing values and TensorLy constraints are active."
+      },
+      {
+        "name": "orient_mostly_negative_pairs",
+        "label": "Orient Mostly-Negative Mode Pairs",
+        "category": "Model Parameters",
+        "widget": "checkbutton",
+        "default": true,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "If enabled, components are sign-oriented by flipping pairs of mostly-negative mode vectors before score extraction. This improves interpretability without changing the fitted tensor."
+      },
+      {
+        "name": "sweep_mode",
+        "label": "Sweep Factors",
+        "category": "Model Parameters",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "When enabled, multiple models are fitted while sweeping factor numbers and evaluated instead of a single user-specified count. Useful for generating scree plots."
+      },
+      {
+        "name": "component_range",
+        "label": "Factor Range (for sweeping)",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "sweep_mode": true
+        },
+        "tooltip": "Examples: 2:6, 2-8, 2,3,4,5"
+      },
+      {
+        "name": "validation_processing",
+        "label": "Validation Processing",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "values": [
+          "batch",
+          "sample_by_sample"
+        ],
+        "value_aliases": [
+          "Batch",
+          "Sample by Sample"
+        ],
+        "default": "batch",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Batch: adds all validation/test samples at once. Sample by Sample: fits one model per validation/test sample."
+      },
+      {
+        "name": "mode_centering",
+        "label": "Mode Centering",
+        "category": "Per-Mode Options",
+        "widget": "checkbutton_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_label_prefix": "Mode",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Enable centering for selected modes. One checkbox per mode."
+      },
+      {
+        "name": "mode_normalization",
+        "label": "Mode Normalization",
+        "category": "Per-Mode Options",
+        "widget": "checkbutton_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_label_prefix": "Mode",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Enable normalization for selected modes. One checkbox per mode."
+      },
+      {
+        "name": "constraint_non_negative",
+        "label": "Non-negative",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_label_prefix": "Mode",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Forces selected mode factors to be non-negative (no values below zero)."
+      },
+      {
+        "name": "constraint_normalize",
+        "label": "Normalize",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_label_prefix": "Mode",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Normalizes selected mode factors during updates to reduce scale ambiguity across modes."
+      },
+      {
+        "name": "constraint_unimodality",
+        "label": "Unimodality",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_label_prefix": "Mode",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Enforces single-peak (single-hump) profiles for selected modes."
+      },
+      {
+        "name": "constraint_monotonicity",
+        "label": "Monotonicity",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_label_prefix": "Mode",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Enforces monotonic profiles (increasing or decreasing) for selected modes."
+      },
+      {
+        "name": "constraint_smoothness",
+        "label": "Smoothness",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_label_prefix": "Mode",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Penalizes rapid point-to-point changes to produce smoother selected mode profiles."
+      },
+      {
+        "name": "constraint_smoothness_strength",
+        "label": "Smoothness Strength",
+        "category": "Constraints",
+        "widget": "entry_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_visible_if": {
+          "field": "constraint_smoothness",
+          "operator": "index_true"
+        },
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_smoothness": {
+            "operator": "any_true"
+          }
+        },
+        "tooltip": "Optional per-mode smoothness weight. Leave entries empty to use default 1.0 for enabled modes."
+      },
+      {
+        "name": "constraint_simplex",
+        "label": "Simplex",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_label_prefix": "Mode",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Constrains selected mode factors to the simplex (non-negative with fixed sum, e.g., compositional profiles)."
+      },
+      {
+        "name": "constraint_simplex_strength",
+        "label": "Simplex Strength",
+        "category": "Constraints",
+        "widget": "entry_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_visible_if": {
+          "field": "constraint_simplex",
+          "operator": "index_true"
+        },
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_simplex": {
+            "operator": "any_true"
+          }
+        },
+        "tooltip": "Optional per-mode simplex target. Leave entries empty to use default 1.0 for enabled modes."
+      },
+      {
+        "name": "constraint_l1_reg",
+        "label": "L1 Regularization",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_label_prefix": "Mode",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Applies L1 penalty (sum of absolute values), promoting element-wise sparsity and exact zeros."
+      },
+      {
+        "name": "constraint_l1_reg_strength",
+        "label": "L1 Regularization Strength",
+        "category": "Constraints",
+        "widget": "entry_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_visible_if": {
+          "field": "constraint_l1_reg",
+          "operator": "index_true"
+        },
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_l1_reg": {
+            "operator": "any_true"
+          }
+        },
+        "tooltip": "Optional per-mode L1 weight. Leave entries empty to use default 1.0 for enabled modes."
+      },
+      {
+        "name": "constraint_l2_reg",
+        "label": "L2 Regularization",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_label_prefix": "Mode",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Applies L2 penalty on the norm (not squared), shrinking whole vectors/groups by magnitude."
+      },
+      {
+        "name": "constraint_l2_reg_strength",
+        "label": "L2 Regularization Strength",
+        "category": "Constraints",
+        "widget": "entry_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_visible_if": {
+          "field": "constraint_l2_reg",
+          "operator": "index_true"
+        },
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_l2_reg": {
+            "operator": "any_true"
+          }
+        },
+        "tooltip": "Optional per-mode L2 weight. Leave entries empty to use default 1.0 for enabled modes."
+      },
+      {
+        "name": "constraint_l2_square_reg",
+        "label": "L2 Squared Regularization",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_label_prefix": "Mode",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Applies squared L2 penalty (ridge/Tikhonov), giving smooth shrinkage that usually does not create exact zeros."
+      },
+      {
+        "name": "constraint_l2_square_reg_strength",
+        "label": "L2 Squared Regularization Strength",
+        "category": "Constraints",
+        "widget": "entry_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_visible_if": {
+          "field": "constraint_l2_square_reg",
+          "operator": "index_true"
+        },
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_l2_square_reg": {
+            "operator": "any_true"
+          }
+        },
+        "tooltip": "Optional per-mode squared-L2 (ridge) weight. Leave entries empty to use default 1.0 for enabled modes."
+      },
+      {
+        "name": "constraint_normalized_sparsity",
+        "label": "Normalized Sparsity",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_label_prefix": "Mode",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Encourages sparsity with scale normalization, making sparsity pressure less dependent on raw magnitude."
+      },
+      {
+        "name": "constraint_normalized_sparsity_strength",
+        "label": "Normalized Sparsity Strength",
+        "category": "Constraints",
+        "widget": "entry_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_visible_if": {
+          "field": "constraint_normalized_sparsity",
+          "operator": "index_true"
+        },
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_normalized_sparsity": {
+            "operator": "any_true"
+          }
+        },
+        "tooltip": "Optional per-mode normalized-sparsity level. Leave entries empty to use default 1.0 for enabled modes."
+      },
+      {
+        "name": "constraint_soft_sparsity",
+        "label": "Soft Sparsity",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_label_prefix": "Mode",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Applies a soft sparsity penalty that shrinks many entries toward zero without hard thresholding."
+      },
+      {
+        "name": "constraint_soft_sparsity_strength",
+        "label": "Soft Sparsity Strength",
+        "category": "Constraints",
+        "widget": "entry_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_visible_if": {
+          "field": "constraint_soft_sparsity",
+          "operator": "index_true"
+        },
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_soft_sparsity": {
+            "operator": "any_true"
+          }
+        },
+        "tooltip": "Optional per-mode soft-sparsity weight. Leave entries empty to use default 1.0 for enabled modes."
+      },
+      {
+        "name": "constraint_hard_sparsity",
+        "label": "Hard Sparsity",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_label_prefix": "Mode",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Applies hard sparsity by keeping only the strongest entries and setting the rest to zero."
+      },
+      {
+        "name": "constraint_hard_sparsity_strength",
+        "label": "Hard Sparsity Strength",
+        "category": "Constraints",
+        "widget": "entry_list",
+        "count_source": "nway_flag",
+        "count_offset": 1,
+        "item_visible_if": {
+          "field": "constraint_hard_sparsity",
+          "operator": "index_true"
+        },
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_hard_sparsity": {
+            "operator": "any_true"
+          }
+        },
+        "tooltip": "Optional per-mode hard-sparsity level (kept entries). Leave entries empty to use default 1 for enabled modes."
+      },
+      {
+        "name": "unconstrained_sparsity",
+        "label": "Sparsity",
+        "category": "Unconstrained Model Options",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Unconstrained PARAFAC only. Global model-level option (not per-mode). Ignored when any mode constraints are enabled."
+      },
+      {
+        "name": "unconstrained_linesearch",
+        "label": "Linesearch",
+        "category": "Unconstrained Model Options",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Unconstrained PARAFAC only. Global model-level option (not per-mode). Ignored when any mode constraints are enabled."
+      },
+      {
+        "name": "unconstrained_orthogonalise",
+        "label": "Orthogonalise",
+        "category": "Unconstrained Model Options",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Unconstrained PARAFAC only. Global model-level option (not per-mode). Ignored when any mode constraints are enabled."
+      },
+      {
+        "name": "profile_paths",
+        "label": "Profile Files",
+        "category": "Profiles",
+        "widget": "file_selector_list",
+        "count_source": "nway_flag",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "List of profile files (one per data mode, based on Data Order)."
+      },
+      {
+        "name": "profile_usage",
+        "label": "Profile Usage",
+        "category": "Profiles",
+        "widget": "combobox_list",
+        "count_source": "nway_flag",
+        "values": [
+          "none",
+          "reference",
+          "initial",
+          "fixed"
+        ],
+        "value_aliases": [
+          "None",
+          "Reference",
+          "Initial",
+          "Fixed"
+        ],
+        "default": "none",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Usage mode per profile input: none, reference, initial, or fixed."
+      },
+      {
+        "name": "component_y_mapping",
+        "label": "Component to Y Mapping",
+        "category": "Calibration",
+        "widget": "entry_list",
+        "count_source": "n_components",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "One entry per component: Y column index (1-based). Empty entry excludes that component. If all are empty, all valid component-to-Y combinations are evaluated automatically."
+      },
+      {
+        "name": "X_cal",
+        "label": "X Calibration Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": true,
+        "visible_if": {
+          "input_type": "user"
+        },
+        "input_type": "routed"
+      },
+      {
+        "name": "Y_cal",
+        "label": "Y Calibration Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "visible_if": {
+          "input_type": "user"
+        },
+        "input_type": "routed"
+      },
+      {
+        "name": "X_val",
+        "label": "X Validation Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "visible_if": {
+          "input_type": "user"
+        },
+        "input_type": "routed"
+      },
+      {
+        "name": "Y_val",
+        "label": "Y Validation Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "visible_if": {
+          "input_type": "user"
+        },
+        "input_type": "routed"
+      },
+      {
+        "name": "nway_flag",
+        "label": "Data Order",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "visible_if": {
+          "input_type": "user"
+        },
+        "input_type": "inherited"
+      },
+      {
+        "name": "axis_n_info",
+        "label": "Axis Vectors",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "visible_if": {
+          "input_type": "user"
+        },
+        "input_type": "routed"
+      },
+      {
+        "name": "dim_labels",
+        "label": "Dimension Labels",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "visible_if": {
+          "input_type": "user"
+        },
+        "input_type": "routed"
+      },
+      {
+        "name": "cv_config",
+        "label": "CV Configuration",
+        "category": "Cross-Validation",
+        "widget": "data_input",
+        "required": false,
+        "visible_if": {
+          "input_type": "user"
+        },
+        "input_type": "routed"
+      },
+      {
+        "name": "class_data_cal",
+        "label": "Calibration Class Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "visible_if": {
+          "input_type": "user"
+        },
+        "input_type": "routed",
+        "tooltip": "Routed from validation_data_main output for class coloring on score plots"
+      },
+      {
+        "name": "class_data_val",
+        "label": "Validation Class Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "visible_if": {
+          "input_type": "user"
+        },
+        "input_type": "routed",
+        "tooltip": "Routed from validation_data_main output for class coloring on score plots"
+      },
+      {
+        "name": "smp_cal",
+        "label": "Calibration Sample Labels",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "visible_if": {
+          "input_type": "user"
+        },
+        "input_type": "routed",
+        "tooltip": "Routed from load_data or validation_data_main output for tooltip display on score plots"
+      },
+      {
+        "name": "smp_val",
+        "label": "Validation Sample Labels",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "visible_if": {
+          "input_type": "user"
+        },
+        "input_type": "routed",
+        "tooltip": "Routed from validation_data_main output for tooltip display on validation score plots"
+      }
+    ]
+  },
+  "analysis": {
+    "pages": [
+      {
+        "title": "PARAFAC Report",
+        "layout": "fp",
+        "sections": [
+          {
+            "type": "text",
+            "config": {
+              "title": "PARAFAC Text Report",
+              "text_template": "{report_text}",
+              "bindings": [
+                {
+                  "name": "report_text",
+                  "data_source": "parafac_report",
+                  "selector": {
+                    "mode": "value"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Sweep Scree",
+        "layout": "fd",
+        "condition": {
+          "parameter": "sweep_results",
+          "operator": "exists",
+          "value": true
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "marker": "o",
+              "x_axis": {
+                "data_source": "sweep_F",
+                "force_integer": true,
+                "label": "F"
+              },
+              "y_axis": {
+                "data_source": "sweep_sfit",
+                "label": "sfit"
+              },
+              "title": "Sweep: sfit vs F",
+              "show_origin": false
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "marker": "o",
+              "x_axis": {
+                "data_source": "sweep_F",
+                "force_integer": true,
+                "label": "F"
+              },
+              "y_axis": {
+                "data_source": "sweep_core_consistency",
+                "label": "Core Consistency"
+              },
+              "title": "Sweep: Core Consistency vs F",
+              "show_origin": false
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "marker": "o",
+              "x_axis": {
+                "data_source": "sweep_F",
+                "force_integer": true,
+                "label": "F"
+              },
+              "y_axis": {
+                "data_source": "sweep_explained_variance",
+                "label": "Explained Variance (%)"
+              },
+              "title": "Sweep: Explained Variance vs F",
+              "show_origin": false
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "marker": "o",
+              "x_axis": {
+                "data_source": "sweep_F",
+                "force_integer": true,
+                "label": "F"
+              },
+              "y_axis": {
+                "data_source": "sweep_n_iter",
+                "label": "Iterations"
+              },
+              "title": "Sweep: Iterations vs F",
+              "show_origin": false
+            }
+          }
+        ]
+      },
+      {
+        "title": "A Scores",
+        "layout": "ew",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "A Scores (Factor x Factor)",
+              "show_grid": false,
+              "show_origin": true,
+              "show_labels": false,
+              "confidence_ellipses": false,
+              "confidence_level": "95",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "scores_mode_a",
+                    "axis_type": "linear",
+                    "axis_labels": "factor_labels"
+                  },
+                  "y_axis": {
+                    "data_source": "scores_mode_a",
+                    "axis_type": "linear",
+                    "axis_labels": "factor_labels"
+                  },
+                  "class_labels": "class_data_cal",
+                  "point_labels_source": "smp_cal",
+                  "label": "Calibration"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "val_scores_mode_a",
+                    "axis_type": "linear",
+                    "axis_labels": "factor_labels"
+                  },
+                  "y_axis": {
+                    "data_source": "val_scores_mode_a",
+                    "axis_type": "linear",
+                    "axis_labels": "factor_labels"
+                  },
+                  "class_labels": "class_data_val",
+                  "point_labels_source": "smp_val",
+                  "label": "Validation"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "F-X",
+                  "dimension": 1,
+                  "axis": "x",
+                  "default": 0,
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "F-Y",
+                  "dimension": 1,
+                  "axis": "y",
+                  "default": 1,
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "flip_xy": true,
+              "y_axis": {
+                "data_source": "mode_a_component_axis",
+                "force_integer": true,
+                "label": "Factor"
+              },
+              "x_axis": {
+                "data_source": "mode_a_sample_axis_full",
+                "force_integer": true,
+                "reverse_axis": true,
+                "label": "Sample"
+              },
+              "z_axis": {
+                "data_source": "scores_mode_a_heatmap_full",
+                "label": "A (a.u.)"
+              },
+              "title": "A Scores Heatmap (All Samples x Factors)"
+            }
+          }
+        ],
+        "condition": {
+          "parameter": "validation_processing",
+          "operator": "==",
+          "value": "batch"
+        }
+      },
+      {
+        "title": "Mode Profiles",
+        "layout": "ew",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {
+                "data_source": "mode_profile_axes_full_a",
+                "label": "Axis",
+                "axis_labels": "dim_labels"
+              },
+              "y_axis": {
+                "data_source": "mode_profile_factors_full_a",
+                "label": "Factor Value",
+                "axis_labels": "mode_profile_y_titles"
+              },
+              "title": "Individual Mode Profiles",
+              "show_origin": false,
+              "line_series_labels_source": "mode_profile_component_labels",
+              "variable_labels": "mode_profile_navigation_labels_by_dimension",
+              "data_slicing": [
+                {
+                  "name": "Mode",
+                  "dimension": 0,
+                  "axis": "y",
+                  "nav_id": "mode_profile_mode_left",
+                  "default": 1,
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "Mode",
+                  "dimension": 0,
+                  "axis": "x",
+                  "nav_id": "mode_profile_mode_left",
+                  "default": 1,
+                  "show_navigation_menu": false
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {
+                "data_source": "mode_profile_axes_full_a",
+                "label": "Axis",
+                "axis_labels": "dim_labels"
+              },
+              "y_axis": {
+                "data_source": "mode_profile_factors_full_a",
+                "label": "Factor Value",
+                "axis_labels": "mode_profile_y_titles"
+              },
+              "title": "Individual Mode Profiles",
+              "show_origin": false,
+              "line_series_labels_source": "mode_profile_component_labels",
+              "variable_labels": "mode_profile_navigation_labels_by_dimension",
+              "data_slicing": [
+                {
+                  "name": "Mode",
+                  "dimension": 0,
+                  "axis": "y",
+                  "nav_id": "mode_profile_mode_right",
+                  "default": 2,
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "Mode",
+                  "dimension": 0,
+                  "axis": "x",
+                  "nav_id": "mode_profile_mode_right",
+                  "default": 2,
+                  "show_navigation_menu": false
+                }
+              ]
+            }
+          }
+        ],
+        "condition": {
+          "parameter": "validation_processing",
+          "operator": "==",
+          "value": "batch"
+        }
+      },
+      {
+        "title": "Instrumental Profiles",
+        "layout": "ew",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "x_axis": {
+                "data_source": "axis_n_info",
+                "index": 2,
+                "label": "dim_labels",
+                "l_index": 2
+              },
+              "y_axis": {
+                "data_source": "axis_n_info",
+                "index": 1,
+                "label": "dim_labels",
+                "l_index": 1
+              },
+              "z_axis": {
+                "data_source": "instrumental_profiles",
+                "label": "Contribution"
+              },
+              "title": "Instrumental Profiles by Component",
+              "dimension_labels": "dim_labels",
+              "data_slicing": [
+                {
+                  "name": "Component",
+                  "dimension": 0,
+                  "default": 0,
+                  "axis": "z",
+                  "show_navigation_menu": true
+                }
+              ],
+              "show_md_menu": true
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "aux_axis": {
+                "data_source": "axis_n_info",
+                "labels": "dim_labels"
+              },
+              "x_axis": {
+                "data_source": "axis_n_info",
+                "index": 2,
+                "label": "dim_labels",
+                "l_index": 2
+              },
+              "y_axis": {
+                "data_source": "axis_n_info",
+                "index": 1,
+                "label": "dim_labels",
+                "l_index": 1
+              },
+              "z_axis": {
+                "data_source": "instrumental_profiles",
+                "label": "Contribution"
+              },
+              "title": "Instrumental Profiles by Component",
+              "dimension_labels": "dim_labels",
+              "data_slicing": [
+                {
+                  "name": "Component",
+                  "dimension": 0,
+                  "default": 1,
+                  "axis": "z",
+                  "show_navigation_menu": true
+                }
+              ],
+              "show_md_menu": true
+            }
+          }
+        ],
+        "condition": {
+          "parameter": "validation_processing",
+          "operator": "==",
+          "value": "batch"
+        }
+      },
+      {
+        "title": "A Scores (SBS)",
+        "layout": "ew",
+        "condition": {
+          "all": [
+            {
+              "parameter": "validation_processing",
+              "operator": "==",
+              "value": "sample_by_sample"
+            },
+            {
+              "parameter": "sbs_factor_labels",
+              "operator": "exists",
+              "value": true
+            }
+          ]
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "A Scores – Cal + Val Sample",
+              "show_grid": false,
+              "show_origin": true,
+              "show_labels": false,
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "sbs_scores_mode_a",
+                    "axis_type": "linear",
+                    "axis_labels": "sbs_factor_labels"
+                  },
+                  "y_axis": {
+                    "data_source": "sbs_scores_mode_a",
+                    "axis_type": "linear",
+                    "axis_labels": "sbs_factor_labels"
+                  },
+                  "point_labels_source": "smp_cal",
+                  "label": "Calibration"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "sbs_val_scores_mode_a",
+                    "axis_type": "linear",
+                    "axis_labels": "sbs_factor_labels"
+                  },
+                  "y_axis": {
+                    "data_source": "sbs_val_scores_mode_a",
+                    "axis_type": "linear",
+                    "axis_labels": "sbs_factor_labels"
+                  },
+                  "label": "Val Sample (this model)"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Val Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_pf_val_sample"
+                },
+                {
+                  "name": "F-X",
+                  "dimension": 2,
+                  "axis": "x",
+                  "default": 0,
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "F-Y",
+                  "dimension": 2,
+                  "axis": "y",
+                  "default": 1,
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "flip_xy": true,
+              "y_axis": {
+                "data_source": "sbs_mode_a_component_axis",
+                "force_integer": true,
+                "label": "Factor"
+              },
+              "x_axis": {
+                "data_source": "sbs_mode_a_sample_axis_full",
+                "force_integer": true,
+                "reverse_axis": true,
+                "label": "Sample"
+              },
+              "z_axis": {
+                "data_source": "sbs_scores_mode_a_heatmap_full",
+                "label": "A (a.u.)"
+              },
+              "title": "A Scores Heatmap (All Samples x Factors)",
+              "data_slicing": [
+                {
+                  "name": "Val Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_pf_val_sample"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Mode Profiles (SBS)",
+        "layout": "ew",
+        "condition": {
+          "all": [
+            {
+              "parameter": "validation_processing",
+              "operator": "==",
+              "value": "sample_by_sample"
+            },
+            {
+              "parameter": "sbs_factor_labels",
+              "operator": "exists",
+              "value": true
+            }
+          ]
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {
+                "data_source": "sbs_mode_profile_axes_full_a",
+                "label": "Axis",
+                "axis_labels": "dim_labels"
+              },
+              "y_axis": {
+                "data_source": "sbs_mode_profile_factors_full_a",
+                "label": "Factor Value",
+                "axis_labels": "sbs_mode_profile_y_titles"
+              },
+              "title": "Mode Profiles (SBS)",
+              "show_origin": false,
+              "line_series_labels_source": "sbs_factor_labels",
+              "data_slicing": [
+                {
+                  "name": "Val Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_pf_val_sample"
+                },
+                {
+                  "name": "Mode",
+                  "dimension": 1,
+                  "axis": "y",
+                  "nav_id": "sbs_pf_mode_left",
+                  "default": 1,
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "Mode",
+                  "dimension": 1,
+                  "axis": "x",
+                  "nav_id": "sbs_pf_mode_left",
+                  "default": 1,
+                  "show_navigation_menu": false
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {
+                "data_source": "sbs_mode_profile_axes_full_a",
+                "label": "Axis",
+                "axis_labels": "dim_labels"
+              },
+              "y_axis": {
+                "data_source": "sbs_mode_profile_factors_full_a",
+                "label": "Factor Value",
+                "axis_labels": "sbs_mode_profile_y_titles"
+              },
+              "title": "Mode Profiles (SBS)",
+              "show_origin": false,
+              "line_series_labels_source": "sbs_factor_labels",
+              "data_slicing": [
+                {
+                  "name": "Val Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_pf_val_sample"
+                },
+                {
+                  "name": "Mode",
+                  "dimension": 1,
+                  "axis": "y",
+                  "nav_id": "sbs_pf_mode_right",
+                  "default": 2,
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "Mode",
+                  "dimension": 1,
+                  "axis": "x",
+                  "nav_id": "sbs_pf_mode_right",
+                  "default": 2,
+                  "show_navigation_menu": false
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Instrumental Profiles (SBS)",
+        "layout": "ew",
+        "condition": {
+          "all": [
+            {
+              "parameter": "validation_processing",
+              "operator": "==",
+              "value": "sample_by_sample"
+            },
+            {
+              "parameter": "sbs_factor_labels",
+              "operator": "exists",
+              "value": true
+            }
+          ]
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "x_axis": {
+                "data_source": "axis_n_info",
+                "index": 2,
+                "label": "dim_labels",
+                "l_index": 2
+              },
+              "y_axis": {
+                "data_source": "axis_n_info",
+                "index": 1,
+                "label": "dim_labels",
+                "l_index": 1
+              },
+              "z_axis": {
+                "data_source": "sbs_instrumental_profiles",
+                "label": "Contribution"
+              },
+              "title": "Instrumental Profiles by Component (Model for Val Sample)",
+              "dimension_labels": "dim_labels",
+              "data_slicing": [
+                {
+                  "name": "Val Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_pf_val_sample"
+                },
+                {
+                  "name": "Component",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "x_axis": {
+                "data_source": "axis_n_info",
+                "index": 2,
+                "label": "dim_labels",
+                "l_index": 2
+              },
+              "y_axis": {
+                "data_source": "axis_n_info",
+                "index": 1,
+                "label": "dim_labels",
+                "l_index": 1
+              },
+              "z_axis": {
+                "data_source": "sbs_instrumental_profiles",
+                "label": "Contribution"
+              },
+              "title": "Instrumental Profiles by Component (Model for Val Sample)",
+              "dimension_labels": "dim_labels",
+              "data_slicing": [
+                {
+                  "name": "Val Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_pf_val_sample"
+                },
+                {
+                  "name": "Component",
+                  "dimension": 1,
+                  "default": 1,
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Factor Stability (SBS)",
+        "layout": "fp",
+        "condition": {
+          "all": [
+            {
+              "parameter": "validation_processing",
+              "operator": "==",
+              "value": "sample_by_sample"
+            },
+            {
+              "parameter": "sbs_factor_labels",
+              "operator": "exists",
+              "value": true
+            }
+          ]
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "x_axis": {
+                "data_source": "sbs_val_sample_axis",
+                "force_integer": true,
+                "label": "Validation Sample (Model j)"
+              },
+              "y_axis": {
+                "data_source": "sbs_val_sample_axis",
+                "force_integer": true,
+                "label": "Validation Sample (Model i)"
+              },
+              "z_axis": {
+                "data_source": "sbs_similarity_matrix",
+                "label": "Cosine Similarity"
+              },
+              "title": "Instrumental Profile Cosine Similarity Between SBS Models",
+              "data_slicing": [
+                {
+                  "name": "Factor",
+                  "dimension": 0,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_pf_factor"
+                }
+              ],
+              "colormap": "RdYlGn",
+              "vmin": -1.0,
+              "vmax": 1.0
+            }
+          }
+        ]
+      },
+      {
+        "title": "Prediction Tables",
+        "layout": "fd",
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "title": "Calibration Predictions, References, and Error",
+              "row_label": "Sample",
+              "row_headers": "smp_cal",
+              "columns": [
+                {
+                  "data_source": "y_cal_pred_pairs",
+                  "name": "Predicted"
+                },
+                {
+                  "data_source": "y_cal_true_pairs",
+                  "name": "Reference"
+                },
+                {
+                  "data_source": "y_cal_error_pairs",
+                  "name": "Error"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Pairing",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "parafac_pairing"
+                }
+              ],
+              "variable_labels": "parafac_pairing_labels_by_dimension",
+              "pairing_labels_source": "parafac_pairing_labels",
+              "slice_title_source": "parafac_pair_y_titles",
+              "slice_title_dimension": 1,
+              "slice_title_prefix": "Y",
+              "decimal_places": 6,
+              "max_rows": 500
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Validation Predictions, References, and Error",
+              "row_label": "Sample",
+              "row_headers": "smp_val",
+              "columns": [
+                {
+                  "data_source": "y_val_pred_pairs",
+                  "name": "Predicted"
+                },
+                {
+                  "data_source": "y_val_true_pairs",
+                  "name": "Reference"
+                },
+                {
+                  "data_source": "y_val_error_pairs",
+                  "name": "Error"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Pairing",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "parafac_pairing"
+                }
+              ],
+              "variable_labels": "parafac_pairing_labels_by_dimension",
+              "pairing_labels_source": "parafac_pairing_labels",
+              "slice_title_source": "parafac_pair_y_titles",
+              "slice_title_dimension": 1,
+              "slice_title_prefix": "Y",
+              "decimal_places": 6,
+              "max_rows": 500
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "A Scores vs Reference Y",
+              "show_origin": false,
+              "show_labels": false,
+              "datasets": [
+                {
+                  "x_axis": {
+                      "data_source": "y_cal_true_pairs",
+                      "axis_type": "linear",
+                      "axis_labels": "parafac_pair_y_titles",
+                      "axis_labels_dimension": 1,
+                      "label_template": "$y_{{Ref}}$ ({label})"
+                  },
+                  "y_axis": {
+                      "data_source": "a_scores_cal_pairs",
+                      "axis_type": "linear",
+                      "axis_labels": "parafac_pair_components",
+                      "axis_labels_dimension": 1,
+                      "label_template": "A Score (F{label})"
+                  },
+                  "point_labels_source": "smp_cal",
+                  "label": "Calibration"
+                },
+                {
+                  "x_axis": {
+                      "data_source": "y_val_effective_pairs",
+                      "axis_type": "linear",
+                      "axis_labels": "parafac_pair_y_titles",
+                      "axis_labels_dimension": 1,
+                      "label_template": "$y_{{Ref}}$ ({label})"
+                  },
+                  "y_axis": {
+                      "data_source": "a_scores_val_pairs",
+                      "axis_type": "linear",
+                      "axis_labels": "parafac_pair_components",
+                      "axis_labels_dimension": 1,
+                      "label_template": "A Score (F{label})"
+                  },
+                  "point_labels_source": "smp_val",
+                  "label": "Validation"
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "path",
+                  "x": {
+                    "data_source": "cal_regression_line_x_pairs"
+                  },
+                  "y": {
+                    "data_source": "cal_regression_line_y_pairs"
+                  },
+                  "color": "red",
+                  "linestyle": "-",
+                  "linewidth": 1.5,
+                  "alpha": 0.85
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Pairing",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "parafac_pairing",
+                  "labels_source": "parafac_pairing_labels",
+                  "labels_dimension": 0
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Predicted vs Reference (Validation)",
+              "show_origin": false,
+              "show_labels": false,
+              "equal_scale": true,
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "y_val_true_pairs",
+                    "axis_type": "linear",
+                    "axis_labels": "parafac_pair_y_titles",
+                    "axis_labels_dimension": 1,
+                    "label_template": "$y_{{Ref}}$ ({label})"
+                  },
+                  "y_axis": {
+                    "data_source": "y_val_pred_pairs",
+                    "axis_type": "linear",
+                    "axis_labels": "parafac_pair_y_titles",
+                    "axis_labels_dimension": 1,
+                    "label_template": "$y_{{Pred}}$ ({label})"
+                  },
+                  "point_labels_source": "smp_val",
+                  "label": "Validation"
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "path",
+                  "x": "val_pred_ref_diag_x",
+                  "y": "val_pred_ref_diag_y",
+                  "color": "red",
+                  "linestyle": "-",
+                  "linewidth": 1.5,
+                  "alpha": 0.85
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Pairing",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "parafac_pairing",
+                  "labels_source": "parafac_pairing_labels",
+                  "labels_dimension": 0
+                }
+              ]
+            }
+          }
+        ],
+        "condition": {
+          "all": [
+            {"parameter": "validation_processing","operator": "==","value": "batch"},
+            {"parameter": "Y_cal","operator": "exists"}]
+        }
+      },
+      {
+        "title": "Prediction Tables (SBS)",
+        "layout": "fd",
+        "condition": {
+          "all": [
+            {
+              "parameter": "validation_processing",
+              "operator": "==",
+              "value": "sample_by_sample"
+            },
+            {
+              "parameter": "sbs_factor_labels",
+              "operator": "exists",
+              "value": true
+            },
+            {"parameter": "Y_cal","operator": "exists"}
+          ]
+        },
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "title": "Calibration Predictions, References, and Error (Model for Val Sample)",
+              "row_label": "Cal Sample",
+              "row_headers": "smp_cal",
+              "columns": [
+                {
+                  "data_source": "sbs_y_cal_pred_pairs",
+                  "name": "Predicted"
+                },
+                {
+                  "data_source": "sbs_y_cal_true_pairs",
+                  "name": "Reference"
+                },
+                {
+                  "data_source": "sbs_y_cal_error_pairs",
+                  "name": "Error"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Val Sample (Model)",
+                  "dimension": 0,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_pf_pred_val_sample",
+                  "labels_source": "smp_val",
+                  "labels_dimension": 0
+                },
+                {
+                  "name": "Pairing",
+                  "dimension": 2,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_pf_pred_pairing",
+                  "labels_source": "parafac_pairing_labels",
+                  "labels_dimension": 0
+                }
+              ],
+              "slice_title_source": "parafac_pair_y_titles",
+              "slice_title_dimension": 1,
+              "slice_title_prefix": "Y",
+              "decimal_places": 6,
+              "max_rows": 500
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Validation Prediction, Reference, and Error (One Sample per Model)",
+              "row_label": "Val Sample",
+              "row_headers": "smp_val",
+              "columns": [
+                {
+                  "data_source": "sbs_y_val_pred_pairs",
+                  "name": "Predicted"
+                },
+                {
+                  "data_source": "sbs_y_val_true_pairs",
+                  "name": "Reference"
+                },
+                {
+                  "data_source": "sbs_y_val_error_pairs",
+                  "name": "Error"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Pairing",
+                  "dimension": 2,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_pf_pred_pairing",
+                  "labels_source": "parafac_pairing_labels",
+                  "labels_dimension": 0
+                }
+              ],
+              "slice_title_source": "parafac_pair_y_titles",
+              "slice_title_dimension": 2,
+              "slice_title_prefix": "Y",
+              "decimal_places": 6,
+              "max_rows": 500
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "A Scores vs Reference Y (Model for Val Sample)",
+              "show_origin": false,
+              "show_labels": false,
+              "equal_scale": false,
+              "datasets": [
+                {
+                  "x_axis": {
+                      "data_source": "sbs_y_cal_true_pairs",
+                      "axis_type": "linear",
+                    "axis_labels": "parafac_pair_y_titles",
+                    "axis_labels_dimension": 2,
+                    "label_template": "$y_{{Ref}}$ ({label})"
+                  },
+                  "y_axis": {
+                      "data_source": "sbs_a_scores_cal_pairs",
+                      "axis_type": "linear",
+                      "axis_labels": "sbs_factor_labels"
+                  },
+                  "point_labels_source": "smp_cal",
+                  "label": "Calibration"
+                },
+                {
+                  "x_axis": {
+                      "data_source": "sbs_y_val_effective_pairs",
+                      "axis_type": "linear",
+                    "axis_labels": "parafac_pair_y_titles",
+                    "axis_labels_dimension": 2,
+                    "label_template": "$y_{{Ref}}$ ({label})"
+                  },
+                  "y_axis": {
+                      "data_source": "sbs_a_scores_val_pairs",
+                      "axis_type": "linear",
+                      "axis_labels": "sbs_factor_labels"
+                  },
+                  "label": "Val Sample (this model)"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Val Sample (Model)",
+                  "dimension": 0,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_pf_pred_val_sample",
+                  "labels_source": "smp_val",
+                  "labels_dimension": 0
+                },
+                {
+                  "name": "Pairing",
+                  "dimension": 2,
+                  "axis": "x",
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_pf_pred_pairing",
+                  "labels_source": "parafac_pairing_labels",
+                  "labels_dimension": 0
+                },
+                {
+                  "name": "Pairing",
+                  "dimension": 2,
+                  "axis": "y",
+                  "default": 0,
+                  "show_navigation_menu": false,
+                  "nav_id": "sbs_pf_pred_pairing",
+                  "labels_source": "parafac_pairing_labels",
+                  "labels_dimension": 0
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "path",
+                  "x": {
+                    "data_source": "sbs_cal_regression_line_x_pairs"
+                  },
+                  "y": {
+                    "data_source": "sbs_cal_regression_line_y_pairs"
+                  },
+                  "color": "red",
+                  "linestyle": "-",
+                  "linewidth": 1.5,
+                  "alpha": 0.85
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Predicted vs Reference (All Val Samples)",
+              "show_origin": false,
+              "show_labels": false,
+              "equal_scale": true,
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "y_val_true_pairs",
+                    "axis_type": "linear",
+                    "axis_labels": "parafac_pair_y_titles",
+                    "axis_labels_dimension": 1,
+                    "label_template": "$y_{{Ref}}$ ({label})"
+                  },
+                  "y_axis": {
+                    "data_source": "y_val_pred_pairs",
+                    "axis_type": "linear",
+                    "axis_labels": "parafac_pair_y_titles",
+                    "axis_labels_dimension": 1,
+                    "label_template": "$y_{{Pred}}$ ({label})"
+                  },
+                  "point_labels_source": "smp_val",
+                  "label": "Validation"
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "path",
+                  "x": "val_pred_ref_diag_x",
+                  "y": "val_pred_ref_diag_y",
+                  "color": "red",
+                  "linestyle": "-",
+                  "linewidth": 1.5,
+                  "alpha": 0.85
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Pairing",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_pf_pred_pairing",
+                  "labels_source": "parafac_pairing_labels",
+                  "labels_dimension": 0
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "EJCR",
+        "layout": "ew",
+        "condition": {
+          "all": [
+            {"parameter": "validation_processing","operator": "==","value": "batch"},
+            {"parameter": "Y_cal","operator": "exists"}]
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Calibration EJCR",
+              "show_origin": false,
+              "show_labels": false,
+              "confidence_ellipses": false,
+              "x_axis": {
+                "data_source": "ejcr_cal",
+                "nested_key": "fit_slope",
+                "label": "Slope"
+              },
+              "y_axis": {
+                "data_source": "ejcr_cal",
+                "nested_key": "fit_intercept",
+                "label": "Intercept"
+              },
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "ejcr_cal",
+                "nested_key": "fit_slope",
+                    "label": "Slope"
+                  },
+                  "y_axis": {
+                    "data_source": "ejcr_cal",
+                "nested_key": "fit_intercept",
+                    "label": "Intercept"
+                  },
+                  "label": "OLS Fit",
+                  "marker": "D"
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "custom_ellipsis",
+                  "ellipses_data": {
+                    "data_source": "ejcr_cal"
+                  },
+                  "label": "EJCR",
+                  "expand_limits": true
+                },
+                {
+                  "orientation": "vertical",
+                  "values": [1.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                },
+                {
+                  "orientation": "horizontal",
+                  "values": [0.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Pairing",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "parafac_pairing",
+                  "labels_source": "parafac_pairing_labels",
+                  "labels_dimension": 0
+                }
+              ]
+            },
+            "short_description": "Ellipsoidal joint confidence region (EJCR) for OLS slope and intercept of calibration predictions. The ideal point (slope=1, intercept=0) inside the ellipse indicates unbiased calibration."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Validation EJCR",
+              "show_origin": false,
+              "show_labels": false,
+              "confidence_ellipses": false,
+              "x_axis": {
+                "data_source": "ejcr_val",
+                "nested_key": "fit_slope",
+                "label": "Slope"
+              },
+              "y_axis": {
+                "data_source": "ejcr_val",
+                "nested_key": "fit_intercept",
+                "label": "Intercept"
+              },
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "ejcr_val",
+                "nested_key": "fit_slope",
+                    "label": "Slope"
+                  },
+                  "y_axis": {
+                    "data_source": "ejcr_val",
+                "nested_key": "fit_intercept",
+                    "label": "Intercept"
+                  },
+                  "label": "OLS Fit",
+                  "marker": "D"
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "custom_ellipsis",
+                  "ellipses_data": {
+                    "data_source": "ejcr_val"
+                  },
+                  "label": "EJCR",
+                  "expand_limits": true
+                },
+                {
+                  "orientation": "vertical",
+                  "values": [1.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                },
+                {
+                  "orientation": "horizontal",
+                  "values": [0.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Pairing",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "parafac_pairing",
+                  "labels_source": "parafac_pairing_labels",
+                  "labels_dimension": 0
+                }
+              ]
+            },
+            "short_description": "Ellipsoidal joint confidence region (EJCR) for OLS slope and intercept of validation predictions. The ideal point (slope=1, intercept=0) inside the ellipse indicates unbiased prediction."
+          }
+        ]
+      },
+      {
+        "title": "EJCR (SBS)",
+        "layout": "ew",
+        "condition": {
+          "all": [
+            {
+              "parameter": "validation_processing",
+              "operator": "==",
+              "value": "sample_by_sample"
+            },
+            {
+              "parameter": "sbs_factor_labels",
+              "operator": "exists",
+              "value": true
+            },
+            {"parameter": "Y_cal","operator": "exists"}
+          ]
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Calibration EJCR (Model for Val Sample)",
+              "show_origin": false,
+              "show_labels": false,
+              "confidence_ellipses": false,
+              "x_axis": {
+                "data_source": "sbs_ejcr_cal",
+                "nested_key": "fit_slope",
+                "label": "Slope"
+              },
+              "y_axis": {
+                "data_source": "sbs_ejcr_cal",
+                "nested_key": "fit_intercept",
+                "label": "Intercept"
+              },
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "sbs_ejcr_cal",
+                "nested_key": "fit_slope",
+                    "label": "Slope"
+                  },
+                  "y_axis": {
+                    "data_source": "sbs_ejcr_cal",
+                "nested_key": "fit_intercept",
+                    "label": "Intercept"
+                  },
+                  "label": "OLS Fit",
+                  "marker": "D"
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "custom_ellipsis",
+                  "ellipses_data": {
+                    "data_source": "sbs_ejcr_cal"
+                  },
+                  "label": "EJCR",
+                  "expand_limits": true
+                },
+                {
+                  "orientation": "vertical",
+                  "values": [1.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                },
+                {
+                  "orientation": "horizontal",
+                  "values": [0.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Pairing",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_pf_pred_pairing",
+                  "labels_source": "parafac_pairing_labels",
+                  "labels_dimension": 0
+                },
+                {
+                  "name": "Val Sample (Model)",
+                  "dimension": 2,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_pf_pred_val_sample",
+                  "labels_source": "smp_val",
+                  "labels_dimension": 0
+                }
+              ]
+            },
+            "short_description": "EJCR for the calibration OLS fit of the PARAFAC model built for each validation sample. Navigate by pairing and by validation sample (model index)."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Validation EJCR (Aggregated Over All Val Samples)",
+              "show_origin": false,
+              "show_labels": false,
+              "confidence_ellipses": false,
+              "x_axis": {
+                "data_source": "sbs_ejcr_val",
+                "nested_key": "fit_slope",
+                "label": "Slope"
+              },
+              "y_axis": {
+                "data_source": "sbs_ejcr_val",
+                "nested_key": "fit_intercept",
+                "label": "Intercept"
+              },
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "sbs_ejcr_val",
+                "nested_key": "fit_slope",
+                    "label": "Slope"
+                  },
+                  "y_axis": {
+                    "data_source": "sbs_ejcr_val",
+                "nested_key": "fit_intercept",
+                    "label": "Intercept"
+                  },
+                  "label": "OLS Fit",
+                  "marker": "D"
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "custom_ellipsis",
+                  "ellipses_data": {
+                    "data_source": "sbs_ejcr_val"
+                  },
+                  "label": "EJCR",
+                  "expand_limits": true
+                },
+                {
+                  "orientation": "vertical",
+                  "values": [1.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                },
+                {
+                  "orientation": "horizontal",
+                  "values": [0.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Pairing",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_pf_pred_pairing",
+                  "labels_source": "parafac_pairing_labels",
+                  "labels_dimension": 0
+                }
+              ]
+            },
+            "short_description": "EJCR for the validation OLS fit, computed by aggregating all validation samples across SBS models. The ideal point (slope=1, intercept=0) inside the ellipse indicates unbiased prediction."
+          }
+        ]
+      }
+    ],
+    "current_page": 0
+  }
+}

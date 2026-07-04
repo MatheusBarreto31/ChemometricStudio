@@ -1,0 +1,1572 @@
+{
+  "display_name": "Ensemble Start",
+  "category": "8.Ensemble",
+  "data_type": "workflow",
+  "input_aliases": {
+    "ensemble_task_type": "Ensemble Task Type",
+    "regression_aggregation_method": "Regression Aggregation",
+    "classification_aggregation_method": "Classification Aggregation",
+    "weights": "Member Weights",
+    "smp_cal": "Calibration Sample IDs",
+    "smp_val": "Validation Sample IDs",
+    "X_cal": "Calibration Features",
+    "X_val": "Validation Features",
+    "class_data_cal": "Calibration Class Labels",
+    "class_data_val": "Validation Class Labels",
+    "one_class_reference_class": "One-Class Reference Class",
+    "one_class_calibration_scope": "One-Class Calibration Scope",
+    "cv_config": "CV Configuration",
+    "stacking_use_passthrough": "Stacking Passthrough",
+    "stacking_n_jobs": "Stacking Parallel Jobs",
+    "stacking_verbose": "Stacking Verbosity",
+    "stacking_regression_model": "Regression Stacker",
+    "stacking_regression_alpha": "Regression Alpha",
+    "stacking_regression_n_estimators": "Regression Trees",
+    "stacking_regression_max_depth": "Regression Tree Depth",
+    "stacking_classification_model": "Classification Stacker",
+    "stacking_classification_c": "Classification C",
+    "stacking_classification_max_iter": "Classification Max Iterations",
+    "stacking_classification_n_estimators": "Classification Trees",
+    "stacking_classification_max_depth": "Classification Tree Depth",
+    "stacking_regression_fit_intercept": "Regression Stacker Intercept",
+    "stacking_classification_fit_intercept": "Classification Stacker Intercept",
+    "classification_input_type": "Classification Input Type"
+  },
+  "output_aliases": {
+    "y_cal_pred": "Ensemble Calibration Prediction",
+    "y_val_pred": "Ensemble Validation Prediction",
+    "y_cv_pred": "Ensemble CV Prediction",
+    "y_cal_true": "Calibration Reference",
+    "y_val_true": "Validation Reference",
+    "class_cal_pred": "Ensemble Calibration Class Prediction",
+    "class_val_pred": "Ensemble Validation Class Prediction",
+    "class_cv_pred": "Ensemble CV Class Prediction",
+    "class_cal_true": "Calibration Class Reference",
+    "class_val_true": "Validation Class Reference",
+    "smp_cal": "Calibration Sample IDs",
+    "smp_val": "Validation Sample IDs",
+    "metrics": "Metrics",
+    "cv_results": "CV Results",
+    "member_sources": "Member Sources",
+    "member_count": "Member Count",
+    "aggregation_method": "Aggregation Method",
+    "ensemble_task_type": "Ensemble Task Type",
+    "y_cal_error": "Calibration Error",
+    "y_val_error": "Validation Error",
+    "y_cv_error": "Cross-Validation Error",
+    "pred_ref_diag_x": "Prediction Diagonal X",
+    "pred_ref_diag_y": "Prediction Diagonal Y"
+  },
+  "short_description": "Start an ensemble wrapper block.",
+  "long_description": "Functions between Ensemble Start and Ensemble End are treated as independent ensemble members separated by Ensemble Member markers. Member predictions are aligned by sample IDs and then aggregated according to task type and aggregation method.",
+  "execution_report_specs": {
+    "messages": {},
+    "warnings": {},
+    "errors": {
+      "stacking_requires_cv_config": "Stacking requires a routed CV Configuration on Ensemble Start.",
+      "stacking_requires_cv_enabled": "Stacking requires CV Configuration with use_cv enabled on Ensemble Start."
+    }
+  },
+  "setup": {
+    "categories": ["Ensemble"],
+    "layout": [
+      {
+        "name": "ensemble_task_type",
+        "label": "Task Type",
+        "category": "Ensemble",
+        "widget": "combobox",
+        "values": ["regression", "classification"],
+        "value_aliases": ["Regression", "$X.Classification"],
+        "default": "regression",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Select regression or classification; this determines supported aggregation behavior"
+      },
+      {
+        "name": "classification_input_type",
+        "label": "Member Input Type",
+        "category": "Ensemble",
+        "widget": "combobox",
+        "values": ["classes", "probabilities"],
+        "value_aliases": ["Classes", "Probabilities"],
+        "default": "classes",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {"ensemble_task_type": "classification"},
+        "tooltip": "Classes: aggregate hard class label predictions. Probabilities: aggregate member probability outputs — soft voting for majority/weighted vote, probability columns as meta-features for stacking"
+      },
+      {
+        "name": "regression_aggregation_method",
+        "label": "Regression Aggregation",
+        "category": "Ensemble",
+        "widget": "combobox",
+        "values": ["mean", "weighted_mean", "median", "stacking"],
+        "value_aliases": ["Mean", "Weighted Mean", "Median", "Stacking"],
+        "default": "mean",
+        "required": true,
+        "input_type": "user",
+        "visible_if": {"ensemble_task_type": "regression"},
+        "tooltip": "Aggregation method used when ensemble task type is regression"
+      },
+      {
+        "name": "classification_aggregation_method",
+        "label": "Classification Aggregation",
+        "category": "Ensemble",
+        "widget": "combobox",
+        "values": ["majority_vote", "weighted_vote", "stacking"],
+        "value_aliases": ["Majority Vote", "Weighted Vote", "Stacking"],
+        "default": "majority_vote",
+        "required": true,
+        "input_type": "user",
+        "visible_if": {"ensemble_task_type": "classification"},
+        "tooltip": "Aggregation method used when ensemble task type is classification"
+      },
+      {
+        "name": "one_class_reference_class",
+        "label": "One-Class Reference Class",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {"ensemble_task_type": "classification"},
+        "tooltip": "Optional class label used by one-class methods as the accepted/reference class"
+      },
+      {
+        "name": "one_class_calibration_scope",
+        "label": "One-Class Calibration Scope",
+        "category": "Ensemble",
+        "widget": "combobox",
+        "values": ["auto_single_class", "filter_by_reference_class", "no_filter"],
+        "value_aliases": ["Auto (Use Single-Class Calibration)", "Filter by Reference Class", "Do Not Filter"],
+        "default": "auto_single_class",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {"ensemble_task_type": "classification"},
+        "tooltip": "Future one-class behavior: auto uses calibration when it already has one class; filter uses One-Class Reference Class"
+      },
+      {
+        "name": "smp_cal",
+        "label": "Calibration Sample IDs",
+        "category": "Ensemble",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed sample IDs for calibration alignment (auto-matches smp_cal outputs)"
+      },
+      {
+        "name": "smp_val",
+        "label": "Validation Sample IDs",
+        "category": "Ensemble",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed sample IDs for validation alignment (auto-matches smp_val outputs)"
+      },
+      {
+        "name": "X_cal",
+        "label": "Calibration Features",
+        "category": "Ensemble",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed calibration feature matrix for stacking passthrough"
+      },
+      {
+        "name": "X_val",
+        "label": "Validation Features",
+        "category": "Ensemble",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed validation feature matrix for stacking passthrough"
+      },
+      {
+        "name": "class_data_cal",
+        "label": "Calibration Class Labels",
+        "category": "Ensemble",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed calibration class labels for one-class preparation and future class filtering"
+      },
+      {
+        "name": "class_data_val",
+        "label": "Validation Class Labels",
+        "category": "Ensemble",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed validation class labels used as reference labels in classification workflows"
+      },
+      {
+        "name": "cv_config",
+        "label": "CV Configuration",
+        "category": "Ensemble",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed CV configuration. Required when stacking aggregation is selected"
+      },
+      {
+        "name": "weights",
+        "label": "Member Weights",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Comma-separated weights for weighted methods, for example 1,2,1"
+      },
+      {
+        "name": "stacking_use_passthrough",
+        "label": "Stacking Passthrough",
+        "category": "Ensemble",
+        "widget": "checkbutton",
+        "type": "bool",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Append original X features to meta-features when fitting/predicting the stacker"
+      },
+      {
+        "name": "stacking_n_jobs",
+        "label": "Stacking Parallel Jobs",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "any": [
+            {
+              "ensemble_task_type": "regression",
+              "regression_aggregation_method": "stacking",
+              "stacking_regression_model": ["random_forest", "extra_trees", "bagging"]
+            },
+            {
+              "ensemble_task_type": "classification",
+              "classification_aggregation_method": "stacking",
+              "stacking_classification_model": ["random_forest", "extra_trees", "bagging"]
+            }
+          ]
+        },
+        "tooltip": "Number of parallel jobs for compatible stacking estimators (for example random forest)"
+      },
+      {
+        "name": "stacking_verbose",
+        "label": "Stacking Verbosity",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "int",
+        "default": "0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "any": [
+            {
+              "ensemble_task_type": "regression",
+              "regression_aggregation_method": "stacking",
+              "stacking_regression_model": ["random_forest", "extra_trees", "bagging", "gradient_boosting", "hist_gradient_boosting"]
+            },
+            {
+              "ensemble_task_type": "classification",
+              "classification_aggregation_method": "stacking",
+              "stacking_classification_model": ["random_forest", "extra_trees", "bagging", "gradient_boosting", "hist_gradient_boosting"]
+            }
+          ]
+        },
+        "tooltip": "Verbosity level for compatible stacking estimators"
+      },
+      {
+        "name": "stacking_regression_model",
+        "label": "Regression Stacker",
+        "category": "Ensemble",
+        "widget": "combobox",
+        "values": ["linear", "ridge", "random_forest", "extra_trees", "bagging", "adaboost", "gradient_boosting", "hist_gradient_boosting"],
+        "value_aliases": ["Linear Regression", "Ridge Regression", "Random Forest", "Extra Trees", "Bagging", "AdaBoost", "Gradient Boosting", "Histogram Gradient Boosting"],
+        "default": "linear",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "regression",
+          "regression_aggregation_method": "stacking"
+        },
+        "tooltip": "Meta-model used by regression stacking"
+      },
+      {
+        "name": "stacking_regression_alpha",
+        "label": "Regression Alpha",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "regression",
+          "regression_aggregation_method": "stacking",
+          "stacking_regression_model": "ridge"
+        },
+        "tooltip": "Regularization alpha used by ridge regression stacker"
+      },
+      {
+        "name": "stacking_regression_n_estimators",
+        "label": "Regression Trees",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "int",
+        "default": "200",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "regression",
+          "regression_aggregation_method": "stacking",
+          "stacking_regression_model": ["random_forest", "extra_trees", "bagging", "adaboost", "gradient_boosting", "hist_gradient_boosting"]
+        },
+        "tooltip": "Number of estimators/iterations used by supported regression ensemble stackers"
+      },
+      {
+        "name": "stacking_regression_max_depth",
+        "label": "Regression Tree Depth",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "int",
+        "default": "0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "regression",
+          "regression_aggregation_method": "stacking",
+          "stacking_regression_model": ["random_forest", "extra_trees", "gradient_boosting", "hist_gradient_boosting"]
+        },
+        "tooltip": "Maximum tree depth for supported regression tree-based stackers (0 = estimator default/unlimited depending on model)"
+      },
+      {
+        "name": "stacking_classification_model",
+        "label": "Classification Stacker",
+        "category": "Ensemble",
+        "widget": "combobox",
+        "values": ["logistic", "random_forest", "extra_trees", "bagging", "adaboost", "gradient_boosting", "hist_gradient_boosting"],
+        "value_aliases": ["Logistic Regression", "Random Forest", "Extra Trees", "Bagging", "AdaBoost", "Gradient Boosting", "Histogram Gradient Boosting"],
+        "default": "logistic",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "classification",
+          "classification_aggregation_method": "stacking"
+        },
+        "tooltip": "Meta-model used by classification stacking"
+      },
+      {
+        "name": "stacking_classification_c",
+        "label": "Classification C",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "classification",
+          "classification_aggregation_method": "stacking",
+          "stacking_classification_model": "logistic"
+        },
+        "tooltip": "Inverse regularization strength C for logistic regression stacker"
+      },
+      {
+        "name": "stacking_classification_max_iter",
+        "label": "Classification Max Iterations",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "int",
+        "default": "1000",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "classification",
+          "classification_aggregation_method": "stacking",
+          "stacking_classification_model": "logistic"
+        },
+        "tooltip": "Maximum training iterations for logistic regression stacker"
+      },
+      {
+        "name": "stacking_classification_n_estimators",
+        "label": "Classification Trees",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "int",
+        "default": "200",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "classification",
+          "classification_aggregation_method": "stacking",
+          "stacking_classification_model": ["random_forest", "extra_trees", "bagging", "adaboost", "gradient_boosting", "hist_gradient_boosting"]
+        },
+        "tooltip": "Number of estimators/iterations used by supported classification ensemble stackers"
+      },
+      {
+        "name": "stacking_classification_max_depth",
+        "label": "Classification Tree Depth",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "int",
+        "default": "0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "classification",
+          "classification_aggregation_method": "stacking",
+          "stacking_classification_model": ["random_forest", "extra_trees", "gradient_boosting", "hist_gradient_boosting"]
+        },
+        "tooltip": "Maximum tree depth for supported classification tree-based stackers (0 = estimator default/unlimited depending on model)"
+      },
+      {
+        "name": "stacking_classification_min_samples_leaf",
+        "label": "Classification Min Samples Leaf",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "classification",
+          "classification_aggregation_method": "stacking",
+          "stacking_classification_model": ["random_forest", "extra_trees", "gradient_boosting", "hist_gradient_boosting"]
+        },
+        "tooltip": "Minimum samples per leaf for supported classification tree-based stackers"
+      },
+      {
+        "name": "stacking_classification_max_features",
+        "label": "Classification Max Features",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "classification",
+          "classification_aggregation_method": "stacking",
+          "stacking_classification_model": ["random_forest", "extra_trees", "bagging", "gradient_boosting"]
+        },
+        "tooltip": "Feature subset size per learner split/model; supports blank, int, float. sqrt/log2 apply to random_forest, extra_trees, and gradient_boosting"
+      },
+      {
+        "name": "stacking_classification_learning_rate",
+        "label": "Classification Learning Rate",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.1",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "classification",
+          "classification_aggregation_method": "stacking",
+          "stacking_classification_model": ["adaboost", "gradient_boosting", "hist_gradient_boosting"]
+        },
+        "tooltip": "Learning-rate shrinkage for supported boosting classification stackers"
+      },
+      {
+        "name": "stacking_regression_fit_intercept",
+        "label": "Regression Stacker Intercept",
+        "category": "Ensemble",
+        "widget": "checkbutton",
+        "type": "bool",
+        "default": true,
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "regression",
+          "regression_aggregation_method": "stacking",
+          "stacking_regression_model": ["linear", "ridge"]
+        },
+        "tooltip": "Whether the regression stacking meta-model includes an intercept term"
+      },
+      {
+        "name": "stacking_regression_min_samples_leaf",
+        "label": "Regression Min Samples Leaf",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "regression",
+          "regression_aggregation_method": "stacking",
+          "stacking_regression_model": ["random_forest", "extra_trees", "gradient_boosting", "hist_gradient_boosting"]
+        },
+        "tooltip": "Minimum samples per leaf for supported regression tree-based stackers"
+      },
+      {
+        "name": "stacking_regression_max_features",
+        "label": "Regression Max Features",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "regression",
+          "regression_aggregation_method": "stacking",
+          "stacking_regression_model": ["random_forest", "extra_trees", "bagging", "gradient_boosting"]
+        },
+        "tooltip": "Feature subset size per learner split/model; supports blank, int, float. sqrt/log2 apply to random_forest, extra_trees, and gradient_boosting"
+      },
+      {
+        "name": "stacking_regression_learning_rate",
+        "label": "Regression Learning Rate",
+        "category": "Ensemble",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.1",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "regression",
+          "regression_aggregation_method": "stacking",
+          "stacking_regression_model": ["adaboost", "gradient_boosting", "hist_gradient_boosting"]
+        },
+        "tooltip": "Learning-rate shrinkage for supported boosting regression stackers"
+      },
+      {
+        "name": "stacking_classification_fit_intercept",
+        "label": "Classification Stacker Intercept",
+        "category": "Ensemble",
+        "widget": "checkbutton",
+        "type": "bool",
+        "default": true,
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "ensemble_task_type": "classification",
+          "classification_aggregation_method": "stacking",
+          "stacking_classification_model": "logistic"
+        },
+        "tooltip": "Whether the classification stacking meta-model includes an intercept term"
+      }
+    ]
+  },
+  "analysis": {
+    "pages": [
+      {
+        "title": "Ensemble Summary",
+        "layout": "fp",
+        "sections": [
+          {
+            "type": "text",
+            "config": {
+              "title": "Ensemble Configuration",
+              "text_template": "Ensemble Summary\n================\nTask Type:      {task_type}\nAggregation:    {aggregation}\nMember Count:   {member_count}\nMember Sources: {member_sources}",
+              "bindings": [
+                {
+                  "name": "task_type",
+                  "data_source": "ensemble_task_type",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "aggregation",
+                  "data_source": "aggregation_method",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "member_count",
+                  "data_source": "member_count",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "member_sources",
+                  "data_source": "member_sources",
+                  "selector": { "mode": "value" }
+                }
+              ]
+            },
+            "short_description": "Displays ensemble configuration: task type, aggregation method, member count, and member source names."
+          },
+          {
+            "type": "text",
+            "condition": {
+              "any": [
+                { "parameter": "regression_aggregation_method", "operator": "==", "value": "stacking" },
+                { "parameter": "classification_aggregation_method", "operator": "==", "value": "stacking" }
+              ]
+            },
+            "config": {
+              "title": "Stacking Meta-Model",
+              "text_template": "Stacking Meta-Model\n===================\nModel Type:   {stacking_model}\nPassthrough:  {passthrough}",
+              "bindings": [
+                {
+                  "name": "stacking_model",
+                  "data_source": "model",
+                  "nested_key": "model_type",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "passthrough",
+                  "data_source": "model",
+                  "nested_key": "use_passthrough",
+                  "selector": { "mode": "value" }
+                }
+              ]
+            },
+            "short_description": "Stacking meta-model type and passthrough setting."
+          }
+        ]
+      },
+      {
+        "title": "Performance Report",
+        "condition": {
+          "parameter": "ensemble_task_type",
+          "operator": "==",
+          "value": "regression"
+        },
+        "layout": "fp",
+        "sections": [
+          {
+            "type": "text",
+            "config": {
+              "title": "Regression Performance",
+              "text_template": "Ensemble Regression Report\n==========================\nAggregation: {aggregation}\n\nCalibration\n-----------\nR2:    {r2_cal}\nRMSEC: {rmsec_cal}\nN:     {n_cal}\n\nCross-Validation\n----------------\nR2:     {r2_cv}\nRMSECV: {rmsecv}\n\nValidation\n----------\nR2:    {r2_val}\nRMSEP: {rmsep_val}\nN:     {n_val}",
+              "bindings": [
+                {
+                  "name": "aggregation",
+                  "data_source": "aggregation_method",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "r2_cal",
+                  "data_source": "metrics",
+                  "nested_key": "calibration.R2",
+                  "value_format": ".4f",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "rmsec_cal",
+                  "data_source": "metrics",
+                  "nested_key": "calibration.RMSEP",
+                  "value_format": ".4g",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "n_cal",
+                  "data_source": "metrics",
+                  "nested_key": "calibration.n_samples",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "r2_cv",
+                  "data_source": "metrics",
+                  "nested_key": "cv.R2",
+                  "value_format": ".4f",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "rmsecv",
+                  "data_source": "metrics",
+                  "nested_key": "cv.RMSEP",
+                  "value_format": ".4g",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "r2_val",
+                  "data_source": "metrics",
+                  "nested_key": "validation.R2",
+                  "value_format": ".4f",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "rmsep_val",
+                  "data_source": "metrics",
+                  "nested_key": "validation.RMSEP",
+                  "value_format": ".4g",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "n_val",
+                  "data_source": "metrics",
+                  "nested_key": "validation.n_samples",
+                  "selector": { "mode": "value" }
+                }
+              ]
+            },
+            "short_description": "R2 and RMSEP/RMSECV metrics for calibration, cross-validation, and validation sets."
+          }
+        ]
+      },
+      {
+        "title": "Predictions",
+        "condition": {
+          "parameter": "ensemble_task_type",
+          "operator": "==",
+          "value": "regression"
+        },
+        "layout": "fd",
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "title": "Calibration Predictions",
+              "row_label": "Sample",
+              "row_headers": "smp_cal",
+              "columns": [
+                { "data_source": "y_cal_true", "name": "Reference" },
+                { "data_source": "y_cal_pred", "name": "Predicted" },
+                { "data_source": "y_cal_error", "name": "Error" },
+                { "data_source": "y_cv_pred", "name": "Predicted (CV)" },
+                { "data_source": "y_cv_error", "name": "Error (CV)" }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true
+                }
+              ],
+              "decimal_places": 6,
+              "max_rows": 500
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Validation Predictions",
+              "row_label": "Sample",
+              "row_headers": "smp_val",
+              "columns": [
+                { "data_source": "y_val_true", "name": "Reference" },
+                { "data_source": "y_val_pred", "name": "Predicted" },
+                { "data_source": "y_val_error", "name": "Error" }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true
+                }
+              ],
+              "decimal_places": 6,
+              "max_rows": 500
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Reference vs Predicted Y",
+              "show_origin": false,
+              "show_labels": false,
+              "equal_scale": true,
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "y_cal_true",
+                    "axis_type": "linear",
+                    "label": "Reference Y"
+                  },
+                  "y_axis": {
+                    "data_source": "y_cal_pred",
+                    "axis_type": "linear",
+                    "label": "Predicted Y"
+                  },
+                  "point_labels_source": "smp_cal",
+                  "label": "Calibration"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "y_cal_true",
+                    "axis_type": "linear",
+                    "label": "Reference Y"
+                  },
+                  "y_axis": {
+                    "data_source": "y_cv_pred",
+                    "axis_type": "linear",
+                    "label": "Predicted Y"
+                  },
+                  "point_labels_source": "smp_cal",
+                  "label": "Cross-Validation"
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "path",
+                  "x": "pred_ref_diag_x",
+                  "y": "pred_ref_diag_y",
+                  "color": "red",
+                  "linestyle": "-",
+                  "linewidth": 1.5,
+                  "alpha": 0.85
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "x",
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "y",
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Predicted vs Reference (Validation)",
+              "show_origin": false,
+              "show_labels": false,
+              "equal_scale": true,
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "y_val_true",
+                    "axis_type": "linear",
+                    "label": "Reference Y"
+                  },
+                  "y_axis": {
+                    "data_source": "y_val_pred",
+                    "axis_type": "linear",
+                    "label": "Predicted Y"
+                  },
+                  "point_labels_source": "smp_val",
+                  "label": "Validation"
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "path",
+                  "x": "pred_ref_diag_x",
+                  "y": "pred_ref_diag_y",
+                  "color": "red",
+                  "linestyle": "-",
+                  "linewidth": 1.5,
+                  "alpha": 0.85
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "x",
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "y",
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Error Diagnostics",
+        "condition": {
+          "parameter": "ensemble_task_type",
+          "operator": "==",
+          "value": "regression"
+        },
+        "layout": "ed",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Error Profile by Sample",
+              "line_style": "lines+markers",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Sample Index",
+                    "reference_source": "y_cal_error"
+                  },
+                  "y_axis": {
+                    "data_source": "y_cal_error",
+                    "axis_type": "linear",
+                    "label": "Error"
+                  },
+                  "marker": "o",
+                  "label": "Calibration"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Sample Index",
+                    "reference_source": "y_cv_error"
+                  },
+                  "y_axis": {
+                    "data_source": "y_cv_error",
+                    "axis_type": "linear",
+                    "label": "Error"
+                  },
+                  "marker": "o",
+                  "label": "Cross-Validation"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Sample Index",
+                    "reference_source": "y_val_error"
+                  },
+                  "y_axis": {
+                    "data_source": "y_val_error",
+                    "axis_type": "linear",
+                    "label": "Error"
+                  },
+                  "marker": "o",
+                  "label": "Validation"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "y",
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Calibration Error Table",
+              "row_label": "Sample",
+              "row_headers": "smp_cal",
+              "columns": [
+                { "data_source": "y_cal_true", "name": "Reference" },
+                { "data_source": "y_cal_pred", "name": "Predicted" },
+                { "data_source": "y_cal_error", "name": "Error" },
+                { "data_source": "y_cv_pred", "name": "Predicted (CV)" },
+                { "data_source": "y_cv_error", "name": "Error (CV)" }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true
+                }
+              ],
+              "decimal_places": 6,
+              "max_rows": 500
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Validation Error Table",
+              "row_label": "Sample",
+              "row_headers": "smp_val",
+              "columns": [
+                { "data_source": "y_val_true", "name": "Reference" },
+                { "data_source": "y_val_pred", "name": "Predicted" },
+                { "data_source": "y_val_error", "name": "Error" }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true
+                }
+              ],
+              "decimal_places": 6,
+              "max_rows": 500
+            }
+          }
+        ]
+      },
+      {
+        "title": "Prediction Table",
+        "condition": {
+          "parameter": "ensemble_task_type",
+          "operator": "==",
+          "value": "regression"
+        },
+        "layout": "ns",
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "title": "Calibration Predictions",
+              "row_label": "Sample",
+              "row_headers": "smp_cal",
+              "columns": [
+                { "data_source": "y_cal_true", "name": "Measured" },
+                { "data_source": "y_cal_pred", "name": "Predicted" },
+                { "data_source": "y_cv_pred", "name": "Predicted (CV)" }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true
+                }
+              ],
+              "decimal_places": 6,
+              "max_rows": 500
+            },
+            "short_description": "Sample-level calibration and cross-validation predictions."
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Validation Predictions",
+              "row_label": "Sample",
+              "row_headers": "smp_val",
+              "columns": [
+                { "data_source": "y_val_true", "name": "Measured" },
+                { "data_source": "y_val_pred", "name": "Predicted" },
+                { "data_source": "y_val_error", "name": "Residual" }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true
+                }
+              ],
+              "decimal_places": 6,
+              "max_rows": 500
+            },
+            "short_description": "Sample-level validation predictions and residuals."
+          }
+        ]
+      },
+      {
+        "title": "Member Predictions",
+        "condition": {
+          "parameter": "ensemble_task_type",
+          "operator": "==",
+          "value": "regression"
+        },
+        "layout": "ns",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Member Calibration Predictions",
+              "line_style": "lines+markers",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Sample Index",
+                    "reference_source": "member_cal_predictions",
+                    "reference_axis": 0
+                  },
+                  "y_axis": {
+                    "data_source": "member_cal_predictions",
+                    "axis_type": "linear",
+                    "label": "Predicted Y",
+                    "axis_labels": "member_sources"
+                  },
+                  "label": "Member",
+                  "marker": "o"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Sample Index",
+                    "reference_source": "y_cal_pred",
+                    "reference_axis": 0
+                  },
+                  "y_axis": {
+                    "data_source": "y_cal_pred",
+                    "axis_type": "linear",
+                    "label": "Predicted Y"
+                  },
+                  "label": "Ensemble",
+                  "marker": "o"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Member",
+                  "dimension": 1,
+                  "default": 0,
+                  "nav_id": "ensemble_member_nav",
+                  "show_navigation_menu": true
+                }
+              ]
+            },
+            "short_description": "Individual member calibration predictions overlaid with the ensemble aggregated prediction. Navigate with the Member selector."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Member Validation Predictions",
+              "line_style": "lines+markers",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Sample Index",
+                    "reference_source": "member_val_predictions",
+                    "reference_axis": 0
+                  },
+                  "y_axis": {
+                    "data_source": "member_val_predictions",
+                    "axis_type": "linear",
+                    "label": "Predicted Y",
+                    "axis_labels": "member_sources"
+                  },
+                  "label": "Member",
+                  "marker": "o"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Sample Index",
+                    "reference_source": "y_val_pred",
+                    "reference_axis": 0
+                  },
+                  "y_axis": {
+                    "data_source": "y_val_pred",
+                    "axis_type": "linear",
+                    "label": "Predicted Y"
+                  },
+                  "label": "Ensemble",
+                  "marker": "o"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Member",
+                  "dimension": 1,
+                  "default": 0,
+                  "nav_id": "ensemble_member_nav",
+                  "show_navigation_menu": true
+                }
+              ]
+            },
+            "short_description": "Individual member validation predictions overlaid with the ensemble aggregated prediction."
+          }
+        ]
+      },
+      {
+        "title": "EJCR",
+        "condition": {
+          "parameter": "ensemble_task_type",
+          "operator": "==",
+          "value": "regression"
+        },
+        "layout": "ew",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Calibration EJCR",
+              "show_origin": false,
+              "show_labels": false,
+              "confidence_ellipses": false,
+              "x_axis": {
+                "data_source": "ejcr_cal",
+                "nested_key": "fit_slope",
+                "label": "Slope"
+              },
+              "y_axis": {
+                "data_source": "ejcr_cal",
+                "nested_key": "fit_intercept",
+                "label": "Intercept"
+              },
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "ejcr_cal",
+                    "nested_key": "fit_slope",
+                    "label": "Slope"
+                  },
+                  "y_axis": {
+                    "data_source": "ejcr_cal",
+                    "nested_key": "fit_intercept",
+                    "label": "Intercept"
+                  },
+                  "label": "OLS Fit",
+                  "marker": "D"
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "custom_ellipsis",
+                  "ellipses_data": {
+                    "data_source": "ejcr_cal"
+                  },
+                  "label": "EJCR",
+                  "expand_limits": true
+                },
+                {
+                  "orientation": "vertical",
+                  "values": [1.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                },
+                {
+                  "orientation": "horizontal",
+                  "values": [0.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                }
+              ]
+            },
+            "short_description": "Ellipsoidal joint confidence region (EJCR) for OLS slope and intercept of ensemble calibration predictions. The ideal point (slope=1, intercept=0) inside the ellipse indicates unbiased calibration."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Validation EJCR",
+              "show_origin": false,
+              "show_labels": false,
+              "confidence_ellipses": false,
+              "x_axis": {
+                "data_source": "ejcr_val",
+                "nested_key": "fit_slope",
+                "label": "Slope"
+              },
+              "y_axis": {
+                "data_source": "ejcr_val",
+                "nested_key": "fit_intercept",
+                "label": "Intercept"
+              },
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "ejcr_val",
+                    "nested_key": "fit_slope",
+                    "label": "Slope"
+                  },
+                  "y_axis": {
+                    "data_source": "ejcr_val",
+                    "nested_key": "fit_intercept",
+                    "label": "Intercept"
+                  },
+                  "label": "OLS Fit",
+                  "marker": "D"
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "custom_ellipsis",
+                  "ellipses_data": {
+                    "data_source": "ejcr_val"
+                  },
+                  "label": "EJCR",
+                  "expand_limits": true
+                },
+                {
+                  "orientation": "vertical",
+                  "values": [1.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                },
+                {
+                  "orientation": "horizontal",
+                  "values": [0.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                }
+              ]
+            },
+            "short_description": "Ellipsoidal joint confidence region (EJCR) for OLS slope and intercept of ensemble validation predictions. The ideal point (slope=1, intercept=0) inside the ellipse indicates unbiased prediction."
+          }
+        ]
+      },
+      {
+        "title": "Performance Summary",
+        "condition": {
+          "parameter": "ensemble_task_type",
+          "operator": "==",
+          "value": "classification"
+        },
+        "layout": "fp",
+        "sections": [
+          {
+            "type": "text",
+            "config": {
+              "title": "Classification Performance",
+              "text_template": "Ensemble Classification Report\n================================\nAggregation: {aggregation}\n\nCalibration\n-----------\nAccuracy:          {acc_cal}\nF1 (Macro):        {f1_cal}\nPrecision (Macro): {prec_cal}\nRecall (Macro):    {rec_cal}\nSamples:           {n_cal}\n\nCross-Validation\n----------------\nAccuracy:          {acc_cv}\nF1 (Macro):        {f1_cv}\nPrecision (Macro): {prec_cv}\nRecall (Macro):    {rec_cv}\n\nValidation\n----------\nAccuracy:          {acc_val}\nF1 (Macro):        {f1_val}\nPrecision (Macro): {prec_val}\nRecall (Macro):    {rec_val}\nSamples:           {n_val}",
+              "bindings": [
+                {
+                  "name": "aggregation",
+                  "data_source": "aggregation_method",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "acc_cal",
+                  "data_source": "metrics",
+                  "nested_key": "calibration.accuracy",
+                  "value_format": ".4f",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "f1_cal",
+                  "data_source": "metrics",
+                  "nested_key": "calibration.f1_macro",
+                  "value_format": ".4f",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "prec_cal",
+                  "data_source": "metrics",
+                  "nested_key": "calibration.precision_macro",
+                  "value_format": ".4f",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "rec_cal",
+                  "data_source": "metrics",
+                  "nested_key": "calibration.recall_macro",
+                  "value_format": ".4f",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "n_cal",
+                  "data_source": "metrics",
+                  "nested_key": "calibration.n_samples",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "acc_cv",
+                  "data_source": "metrics",
+                  "nested_key": "cv.accuracy",
+                  "value_format": ".4f",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "f1_cv",
+                  "data_source": "metrics",
+                  "nested_key": "cv.f1_macro",
+                  "value_format": ".4f",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "prec_cv",
+                  "data_source": "metrics",
+                  "nested_key": "cv.precision_macro",
+                  "value_format": ".4f",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "rec_cv",
+                  "data_source": "metrics",
+                  "nested_key": "cv.recall_macro",
+                  "value_format": ".4f",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "acc_val",
+                  "data_source": "metrics",
+                  "nested_key": "validation.accuracy",
+                  "value_format": ".4f",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "f1_val",
+                  "data_source": "metrics",
+                  "nested_key": "validation.f1_macro",
+                  "value_format": ".4f",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "prec_val",
+                  "data_source": "metrics",
+                  "nested_key": "validation.precision_macro",
+                  "value_format": ".4f",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "rec_val",
+                  "data_source": "metrics",
+                  "nested_key": "validation.recall_macro",
+                  "value_format": ".4f",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "n_val",
+                  "data_source": "metrics",
+                  "nested_key": "validation.n_samples",
+                  "selector": { "mode": "value" }
+                }
+              ]
+            },
+            "short_description": "Accuracy, F1, precision, and recall for calibration, cross-validation, and validation sets."
+          }
+        ]
+      },
+      {
+        "title": "Confusion Matrices",
+        "condition": {
+          "parameter": "ensemble_task_type",
+          "operator": "==",
+          "value": "classification"
+        },
+        "layout": "fd",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "title": "Calibration Confusion Matrix",
+              "x_axis": {
+                "data_source": "confusion_matrices",
+                "nested_key": "calibration.labels",
+                "label": "Predicted"
+              },
+              "y_axis": {
+                "data_source": "confusion_matrices",
+                "nested_key": "calibration.labels",
+                "label": "Reference"
+              },
+              "z_axis": {
+                "data_source": "confusion_matrices",
+                "nested_key": "calibration.matrix"
+              },
+              "cmap": "Blues",
+              "annotate_heatmap": true
+            },
+            "short_description": "Confusion matrix for ensemble calibration predictions."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "title": "CV Confusion Matrix",
+              "x_axis": {
+                "data_source": "confusion_matrices",
+                "nested_key": "cv.labels",
+                "label": "Predicted"
+              },
+              "y_axis": {
+                "data_source": "confusion_matrices",
+                "nested_key": "cv.labels",
+                "label": "Reference"
+              },
+              "z_axis": {
+                "data_source": "confusion_matrices",
+                "nested_key": "cv.matrix"
+              },
+              "cmap": "Blues",
+              "annotate_heatmap": true
+            },
+            "short_description": "Confusion matrix for ensemble cross-validation predictions."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "title": "Validation Confusion Matrix",
+              "x_axis": {
+                "data_source": "confusion_matrices",
+                "nested_key": "validation.labels",
+                "label": "Predicted"
+              },
+              "y_axis": {
+                "data_source": "confusion_matrices",
+                "nested_key": "validation.labels",
+                "label": "Reference"
+              },
+              "z_axis": {
+                "data_source": "confusion_matrices",
+                "nested_key": "validation.matrix"
+              },
+              "cmap": "Blues",
+              "annotate_heatmap": true
+            },
+            "short_description": "Confusion matrix for ensemble validation predictions."
+          },
+          { "type": null }
+        ]
+      },
+      {
+        "title": "Predictions",
+        "condition": {
+          "parameter": "ensemble_task_type",
+          "operator": "==",
+          "value": "classification"
+        },
+        "layout": "ns",
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "title": "Calibration Predictions",
+              "row_headers": "smp_cal",
+              "columns": [
+                { "data_source": "class_cal_true", "name": "Reference" },
+                { "data_source": "class_cal_pred", "name": "Predicted" },
+                { "data_source": "class_cal_error", "name": "Error" },
+                { "data_source": "class_cv_pred", "name": "Predicted (CV)" },
+                { "data_source": "class_cv_error", "name": "Error (CV)" }
+              ],
+              "decimal_places": 0,
+              "max_rows": 500
+            },
+            "short_description": "Sample-level calibration and cross-validation class predictions with mismatch indicators."
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Validation Predictions",
+              "row_headers": "smp_val",
+              "columns": [
+                { "data_source": "class_val_true", "name": "Reference" },
+                { "data_source": "class_val_pred", "name": "Predicted" },
+                { "data_source": "class_val_error", "name": "Error" }
+              ],
+              "decimal_places": 0,
+              "max_rows": 500
+            },
+            "short_description": "Sample-level validation class predictions with mismatch indicators."
+          }
+        ]
+      }
+    ]
+  }
+}

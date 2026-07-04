@@ -1,0 +1,15 @@
+:root {
+  /* Palette aligned with splash screen visual identity */
+  --bg: #d8e7f5;
+  --bg-soft: #edf4fb;
+  --surface: #ffffff;
+  --surface-alt: #f2f8ff;
+  --text: #10263d;
+  --muted: #46617a;
+  --primary: #1f5f90;
+  --primary-strong: #153c61;
+  --accent: #007aff;
+  --success: #57c785;
+  --border: #b7d0e4;
+  --shadow: rgba(21, 60, 97, 0.18);
+}

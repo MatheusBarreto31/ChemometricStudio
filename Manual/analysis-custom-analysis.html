@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Custom Analysis Tab - Chemometric Studio User Manual</title>
+  <link rel="stylesheet" href="assets/css/manual.css">
+</head>
+<body data-manual-page="analysis" data-manual-group="qa-analysis">
+  <div data-manual-header></div>
+
+  <main class="layout">
+    <aside class="manual-sidebar" data-manual-sidebar data-reveal></aside>
+
+    <div class="content-column">
+      <section class="grid" data-reveal>
+        <article class="panel">
+          <h1>Custom Analysis Tab</h1>
+          <p>The Custom Analysis tab lets you build a consolidated review page by reusing sections from existing analysis results.</p>
+          <ul>
+            <li><strong>Add Section</strong> in an empty slot to import a section or an entire page from any methodology analysis tab.</li>
+            <li><strong>Add Text</strong> to place notes, interpretation, and conclusions directly in the custom layout.</li>
+            <li><strong>Add Page</strong> and <strong>Remove Page</strong> to organize your custom narrative across multiple pages.</li>
+            <li><strong>Remove section</strong> to clear a slot and choose different content.</li>
+          </ul>
+        </article>
+        <aside class="panel alt">
+          <h2>How It Works</h2>
+          <ul>
+            <li>Custom Analysis uses the same page and section layout system as regular analysis pages.</li>
+            <li>When you add a section, you can preview candidates before applying the selection.</li>
+            <li>Section visibility conditions are preserved from the source analysis configuration.</li>
+            <li>You must run the model (or run to a node) before adding data-driven sections.</li>
+          </ul>
+        </aside>
+      </section>
+
+      <section class="panel" data-reveal>
+        <h2>Suggested Workflow</h2>
+        <ol class="step-list">
+          <li>Run your methodology so analysis outputs are available.</li>
+          <li>Open <strong>Custom Analysis</strong> and add a page with the layout you need.</li>
+          <li>Use <strong>Add Section</strong> in each slot to pull the most relevant views from different functions.</li>
+          <li>Add text blocks for comments and decision notes.</li>
+          <li>Finalize the arrangement and use it as your main interpretation workspace before reporting.</li>
+        </ol>
+      </section>
+    </div>
+  </main>
+
+  <footer data-manual-footer></footer>
+
+  <script src="assets/js/manual-common.js"></script>
+  <script src="assets/js/manual-shell.js"></script>
+  <script src="assets/js/manual.js"></script>
+</body>
+</html>

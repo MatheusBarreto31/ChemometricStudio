@@ -1,0 +1,13 @@
+{
+  "display_name": "Ensemble Member",
+  "category": "8.Ensemble",
+  "data_type": "workflow",
+  "input_aliases": {},
+  "output_aliases": {},
+  "short_description": "Split to the next ensemble member branch.",
+  "long_description": "Marks the boundary between ensemble members. Functions between boundaries are executed independently and later aggregated by Ensemble Start settings.",
+  "setup": {
+    "categories": ["Ensemble"],
+    "layout": []
+  }
+}

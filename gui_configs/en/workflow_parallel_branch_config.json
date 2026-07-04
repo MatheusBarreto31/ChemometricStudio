@@ -1,0 +1,13 @@
+{
+  "display_name": "Parallel Branch",
+  "category": "7.Workflow\\2.Parallel",
+  "data_type": "workflow",
+  "input_aliases": {},
+  "output_aliases": {},
+  "short_description": "Split to next branch.",
+  "long_description": "Separates branches in a parallel block.",
+  "setup": {
+    "categories": ["Parallel"],
+    "layout": []
+  }
+}

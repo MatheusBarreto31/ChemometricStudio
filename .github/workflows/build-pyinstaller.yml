@@ -1,0 +1,525 @@
+name: Build distributables (PyInstaller)
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_windows:
+        description: "Build Windows (x64)"
+        required: true
+        default: true
+        type: boolean
+      build_macos_intel:
+        description: "Build macOS Intel (x64)"
+        required: true
+        default: true
+        type: boolean
+      build_macos_arm:
+        description: "Build macOS Apple Silicon (ARM64)"
+        required: true
+        default: true
+        type: boolean
+      build_linux:
+        description: "Build Linux x86_64 packages"
+        required: true
+        default: true
+        type: boolean
+      build_linux_arm:
+        description: "Build Linux ARM64 packages"
+        required: true
+        default: false
+        type: boolean
+      linux_package:
+        description: "Linux x86_64 package format"
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - deb
+          - rpm
+          - pkg
+      linux_arm_package:
+        description: "Linux ARM64 package format"
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - deb
+          - rpm
+          - pkg
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  # All builds are 64-bit binaries (Windows x64, macOS Intel/ARM x64, Linux x86_64/ARM64)
+  # 64-bit builds can use significantly more than 4GB RAM (limited by OS, not 32-bit 4GB cap)
+
+  build-windows:
+    name: Windows
+    runs-on: windows-latest
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_windows }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Extract version and commit hash
+        id: meta
+        shell: bash
+        run: |
+          VERSION=$(grep '^version = ' pyproject.toml | head -1 | sed 's/version = "//;s/"$//' | sed 's/ /-/g')
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pyinstaller
+
+      - name: Verify build inputs
+        run: python -c "from pathlib import Path; p=Path('ChemometricStudio.spec'); assert p.exists(), 'Spec not found'"
+
+      - name: Build with PyInstaller
+        run: python -m PyInstaller --noconfirm --clean ChemometricStudio.spec
+
+      - name: Verify executables
+        shell: pwsh
+        run: |
+          if (!(Test-Path "dist/ChemometricStudio/ChemometricStudio.exe")) { throw "Missing main executable" }
+          if (!(Test-Path "dist/ChemometricStudio/ChemometricStudioUser.exe")) { throw "Missing user executable" }
+
+      - name: Package (zip)
+        shell: pwsh
+        run: |
+          $name = "ChemometricStudio-${{ steps.meta.outputs.version }}-Windows-${{ steps.meta.outputs.short_sha }}-x86_64.zip"
+          Compress-Archive -Path dist/ChemometricStudio/* -DestinationPath $name -Force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: ChemometricStudio-${{ steps.meta.outputs.version }}-Windows-x86_64
+          path: ChemometricStudio-${{ steps.meta.outputs.version }}-Windows-${{ steps.meta.outputs.short_sha }}-x86_64.zip
+          if-no-files-found: error
+
+  build-macos-intel:
+    name: macOS Intel
+    runs-on: macos-14
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_macos_intel }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Extract version and commit hash
+        id: meta
+        shell: bash
+        run: |
+          VERSION=$(grep '^version = ' pyproject.toml | head -1 | sed 's/version = "//;s/"$//' | sed 's/ /-/g')
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pyinstaller
+
+      - name: Verify build inputs
+        run: python -c "from pathlib import Path; p=Path('ChemometricStudio.spec'); assert p.exists(), 'Spec not found'"
+
+      - name: Build with PyInstaller
+        run: python -m PyInstaller --noconfirm --clean ChemometricStudio.spec
+
+      - name: Verify executables
+        shell: bash
+        run: |
+          test -f dist/ChemometricStudio/ChemometricStudio || (echo "Missing main executable" && exit 1)
+          test -f dist/ChemometricStudio/ChemometricStudioUser || (echo "Missing user executable" && exit 1)
+
+      - name: Package (tar.gz)
+        shell: bash
+        run: |
+          NAME="ChemometricStudio-${{ steps.meta.outputs.version }}-macOS.Intel-${{ steps.meta.outputs.short_sha }}-x86_64.tar.gz"
+          tar -czf "$NAME" -C dist ChemometricStudio
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: ChemometricStudio-${{ steps.meta.outputs.version }}-macOS.Intel-x86_64
+          path: ChemometricStudio-${{ steps.meta.outputs.version }}-macOS.Intel-${{ steps.meta.outputs.short_sha }}-x86_64.tar.gz
+          if-no-files-found: error
+
+  build-macos-arm:
+    name: macOS Apple Silicon
+    runs-on: macos-14
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_macos_arm }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Extract version and commit hash
+        id: meta
+        shell: bash
+        run: |
+          VERSION=$(grep '^version = ' pyproject.toml | head -1 | sed 's/version = "//;s/"$//' | sed 's/ /-/g')
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pyinstaller
+
+      - name: Verify build inputs
+        run: python -c "from pathlib import Path; p=Path('ChemometricStudio.spec'); assert p.exists(), 'Spec not found'"
+
+      - name: Build with PyInstaller
+        run: python -m PyInstaller --noconfirm --clean ChemometricStudio.spec
+
+      - name: Verify executables
+        shell: bash
+        run: |
+          test -f dist/ChemometricStudio/ChemometricStudio || (echo "Missing main executable" && exit 1)
+          test -f dist/ChemometricStudio/ChemometricStudioUser || (echo "Missing user executable" && exit 1)
+
+      - name: Package (tar.gz)
+        shell: bash
+        run: |
+          NAME="ChemometricStudio-${{ steps.meta.outputs.version }}-macOS.AppleSilicon-${{ steps.meta.outputs.short_sha }}-arm64.tar.gz"
+          tar -czf "$NAME" -C dist ChemometricStudio
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: ChemometricStudio-${{ steps.meta.outputs.version }}-macOS.AppleSilicon-arm64
+          path: ChemometricStudio-${{ steps.meta.outputs.version }}-macOS.AppleSilicon-${{ steps.meta.outputs.short_sha }}-arm64.tar.gz
+          if-no-files-found: error
+
+  build-linux-x86:
+    name: Linux x86_64
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_linux }}
+    container:
+      image: python:3.11-bullseye
+    env:
+      LINUX_PACKAGE_SELECTION: ${{ github.event_name == 'workflow_dispatch' && inputs.linux_package || 'all' }}
+      DEB_ARCH: amd64
+      RPM_ARCH: x86_64
+      PKG_ARCH: x86_64
+      FILE_ARCH: x86_64
+      PKG_DESC: "Chemometric Studio desktop application"
+    steps:
+      - uses: actions/checkout@v6
+      - name: Determine version and commit hash
+        id: meta
+        shell: bash
+        run: |
+          VER=$(grep '^version = ' pyproject.toml | head -1 | sed 's/version = "//;s/"$//' | sed 's/ /-/g')
+          echo "PACKAGE_VERSION=${VER}" >> "$GITHUB_ENV"
+          echo "SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)" >> "$GITHUB_ENV"
+          echo "package_version=${VER}" >> "$GITHUB_OUTPUT"
+      - name: Install system dependencies
+        shell: bash
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends tk tcl libx11-6 libxext6 libxrender1 libsm6 libxft2 libgl1 libglib2.0-0 patchelf rpm zstd file ruby ruby-dev build-essential libarchive-tools desktop-file-utils
+          gem install --no-document fpm
+      - name: Install Python dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt pyinstaller
+      - name: Build with PyInstaller
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: python -m PyInstaller --noconfirm --clean ChemometricStudio.spec
+      - name: Verify executables
+        shell: bash
+        run: |
+          test -f dist/ChemometricStudio/ChemometricStudio || (echo "Missing main executable" && exit 1)
+          test -f dist/ChemometricStudio/ChemometricStudioUser || (echo "Missing user executable" && exit 1)
+      - name: Prepare package payload
+        shell: bash
+        run: |
+          rm -rf pkgroot
+          mkdir -p pkgroot/opt/ChemometricStudio pkgroot/usr/share/applications pkgroot/usr/share/icons/hicolor/256x256/apps
+          cp -r dist/ChemometricStudio/* pkgroot/opt/ChemometricStudio/
+          chmod 755 pkgroot/opt/ChemometricStudio/ChemometricStudio pkgroot/opt/ChemometricStudio/ChemometricStudioUser
+          cp Graphics/Icon.png pkgroot/usr/share/icons/hicolor/256x256/apps/chemometricstudio.png
+          cp Graphics/icon-user.png pkgroot/usr/share/icons/hicolor/256x256/apps/chemometricstudio-user.png
+          printf '[Desktop Entry]\nType=Application\nName=Chemometric Studio\nExec=/opt/ChemometricStudio/ChemometricStudio\nTryExec=/opt/ChemometricStudio/ChemometricStudio\nIcon=chemometricstudio\nTerminal=false\nCategories=Science;Education;\n' > pkgroot/usr/share/applications/chemometricstudio.desktop
+          printf '[Desktop Entry]\nType=Application\nName=Chemometric Studio - User\nExec=/opt/ChemometricStudio/ChemometricStudioUser\nTryExec=/opt/ChemometricStudio/ChemometricStudioUser\nIcon=chemometricstudio-user\nTerminal=false\nCategories=Science;Education;\n' > pkgroot/usr/share/applications/chemometricstudio-user.desktop
+          test -f pkgroot/usr/share/applications/chemometricstudio.desktop
+          test -f pkgroot/usr/share/applications/chemometricstudio-user.desktop
+          desktop-file-validate pkgroot/usr/share/applications/chemometricstudio.desktop
+          desktop-file-validate pkgroot/usr/share/applications/chemometricstudio-user.desktop
+          printf '#!/bin/sh\nset -e\nupdate-desktop-database /usr/share/applications >/dev/null 2>&1 || true\ngtk-update-icon-cache /usr/share/icons/hicolor >/dev/null 2>&1 || true\n' > postinstall.sh && chmod +x postinstall.sh
+          cp postinstall.sh postremove.sh
+      - name: Build packages
+        shell: bash
+        run: |
+          rm -f ./*.deb ./*.rpm ./*.pkg.tar.zst
+          fpm_args="-n chemometricstudio -v $PACKAGE_VERSION --license Apache-2.0 --description '$PKG_DESC' --maintainer 'Matheus Barreto' --after-install postinstall.sh --after-remove postremove.sh -C pkgroot opt usr"
+            if [ "$LINUX_PACKAGE_SELECTION" = "all" ] || [ "$LINUX_PACKAGE_SELECTION" = "deb" ]; then
+              eval "fpm -s dir -t deb --architecture $DEB_ARCH $fpm_args"
+            fi
+            if [ "$LINUX_PACKAGE_SELECTION" = "all" ] || [ "$LINUX_PACKAGE_SELECTION" = "rpm" ]; then
+              eval "fpm -s dir -t rpm --architecture $RPM_ARCH $fpm_args"
+            fi
+            if [ "$LINUX_PACKAGE_SELECTION" = "all" ] || [ "$LINUX_PACKAGE_SELECTION" = "pkg" ]; then
+              eval "fpm -s dir -t pacman --architecture $PKG_ARCH --pacman-compression zstd $fpm_args"
+            fi
+      - name: Collect and rename artifacts
+        shell: bash
+        run: |
+          set -e
+          set -x
+          mkdir -p linux-packages
+          echo "Workspace contents:"
+          ls -la ./ | head -20
+          echo "Moving packages to linux-packages..."
+          for f in ./*.deb ./*.rpm ./*.pkg.tar.zst; do
+            if [ -e "$f" ]; then
+              echo "Found: $f"
+              mv "$f" linux-packages/ || { echo "ERROR: Failed to move $f"; exit 1; }
+            fi
+          done
+          echo "Verifying packages collected:"
+          if [ -z "$(ls -A linux-packages)" ]; then
+            echo "ERROR: No packages in linux-packages after collect"
+            ls -la
+            exit 1
+          fi
+          ls -lh linux-packages/
+          echo "Renaming packages with commit SHA..."
+          cd linux-packages
+          for f in *; do
+            if [ -f "$f" ]; then
+              case "$f" in
+                *.pkg.tar.zst)
+                  newname="ChemometricStudio-${PACKAGE_VERSION}-Linux.Arch-based-${SHORT_SHA}-${FILE_ARCH}.pkg.tar.zst"
+                  ;;
+                *.deb)
+                  newname="ChemometricStudio-${PACKAGE_VERSION}-Linux.Debian-based-${SHORT_SHA}-${FILE_ARCH}.deb"
+                  ;;
+                *.rpm)
+                  newname="ChemometricStudio-${PACKAGE_VERSION}-Linux.Fedora-${SHORT_SHA}-${FILE_ARCH}.rpm"
+                  ;;
+                *)
+                  echo "Skipping unsupported package format: $f"
+                  continue
+                  ;;
+              esac
+              echo "Renaming: $f -> $newname"
+              mv "$f" "$newname" || { echo "ERROR: Failed to rename $f"; exit 1; }
+            fi
+          done
+          echo "Final artifacts:"
+          ls -lh
+      - name: Verify package contents
+        shell: bash
+        run: |
+          set -e
+          for p in linux-packages/*; do
+            [ -f "$p" ] || continue
+            case "$p" in
+              *.deb)
+                dpkg-deb -c "$p" > pkg_contents.txt
+                grep -q 'usr/share/applications/chemometricstudio.desktop' pkg_contents.txt
+                grep -q 'usr/share/applications/chemometricstudio-user.desktop' pkg_contents.txt
+                grep -q 'opt/ChemometricStudio/ChemometricStudio$' pkg_contents.txt
+                grep -q 'opt/ChemometricStudio/ChemometricStudioUser$' pkg_contents.txt
+                rm -f pkg_contents.txt
+                ;;
+              *.rpm)
+                rpm -qlp "$p" > pkg_contents.txt
+                grep -q '^/usr/share/applications/chemometricstudio.desktop$' pkg_contents.txt
+                grep -q '^/usr/share/applications/chemometricstudio-user.desktop$' pkg_contents.txt
+                grep -q '^/opt/ChemometricStudio/ChemometricStudio$' pkg_contents.txt
+                grep -q '^/opt/ChemometricStudio/ChemometricStudioUser$' pkg_contents.txt
+                rm -f pkg_contents.txt
+                ;;
+              *.pkg.tar.zst)
+                bsdtar -tf "$p" > pkg_contents.txt
+                grep -q '^usr/share/applications/chemometricstudio.desktop$' pkg_contents.txt
+                grep -q '^usr/share/applications/chemometricstudio-user.desktop$' pkg_contents.txt
+                grep -q '^opt/ChemometricStudio/ChemometricStudio$' pkg_contents.txt
+                grep -q '^opt/ChemometricStudio/ChemometricStudioUser$' pkg_contents.txt
+                rm -f pkg_contents.txt
+                ;;
+            esac
+          done
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: ChemometricStudio-${{ steps.meta.outputs.package_version }}-Linux-packages-x86_64
+          path: linux-packages/*
+          if-no-files-found: error
+
+  build-linux-arm64:
+    name: Linux ARM64
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_linux_arm }}
+    env:
+      LINUX_PACKAGE_SELECTION: ${{ github.event_name == 'workflow_dispatch' && inputs.linux_arm_package || 'all' }}
+      DEB_ARCH: arm64
+      RPM_ARCH: aarch64
+      PKG_ARCH: aarch64
+      FILE_ARCH: arm64
+      PKG_DESC: "Chemometric Studio desktop application (ARM64)"
+    steps:
+      - uses: actions/checkout@v6
+      - name: Determine version and commit hash
+        id: meta
+        shell: bash
+        run: |
+          VER=$(grep '^version = ' pyproject.toml | head -1 | sed 's/version = "//;s/"$//' | sed 's/ /-/g')
+          echo "PACKAGE_VERSION=${VER}" >> "$GITHUB_ENV"
+          echo "SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)" >> "$GITHUB_ENV"
+          echo "package_version=${VER}" >> "$GITHUB_OUTPUT"
+      - name: Set up QEMU for ARM64 emulation
+        uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+      - name: Build and package inside ARM64 container
+        shell: bash
+        run: |
+          docker run --rm --platform linux/arm64 \
+            -e LINUX_PACKAGE_SELECTION \
+            -e DEB_ARCH \
+            -e RPM_ARCH \
+            -e PKG_ARCH \
+            -e FILE_ARCH \
+            -e PKG_DESC \
+            -e PACKAGE_VERSION \
+            -e SHORT_SHA \
+            -v "$PWD:/work" \
+            -w /work \
+            python:3.11-bullseye bash -lc '
+              set -e
+              apt-get update
+              apt-get install -y --no-install-recommends tk tcl libx11-6 libxext6 libxrender1 libsm6 libxft2 libgl1 libglib2.0-0 patchelf rpm zstd file ruby ruby-dev build-essential libarchive-tools desktop-file-utils
+              gem install --no-document fpm
+
+              python -m pip install --upgrade pip
+              python -m pip install -r requirements.txt pyinstaller
+              python -m PyInstaller --noconfirm --clean ChemometricStudio.spec
+
+              test -f dist/ChemometricStudio/ChemometricStudio || { echo "Missing main executable"; exit 1; }
+              test -f dist/ChemometricStudio/ChemometricStudioUser || { echo "Missing user executable"; exit 1; }
+
+              rm -rf pkgroot
+              mkdir -p pkgroot/opt/ChemometricStudio pkgroot/usr/share/applications pkgroot/usr/share/icons/hicolor/256x256/apps
+              cp -r dist/ChemometricStudio/* pkgroot/opt/ChemometricStudio/
+              chmod 755 pkgroot/opt/ChemometricStudio/ChemometricStudio pkgroot/opt/ChemometricStudio/ChemometricStudioUser
+              cp Graphics/Icon.png pkgroot/usr/share/icons/hicolor/256x256/apps/chemometricstudio.png
+              cp Graphics/icon-user.png pkgroot/usr/share/icons/hicolor/256x256/apps/chemometricstudio-user.png
+              printf "[Desktop Entry]\nType=Application\nName=Chemometric Studio\nExec=/opt/ChemometricStudio/ChemometricStudio\nTryExec=/opt/ChemometricStudio/ChemometricStudio\nIcon=chemometricstudio\nTerminal=false\nCategories=Science;Education;\n" > pkgroot/usr/share/applications/chemometricstudio.desktop
+              printf "[Desktop Entry]\nType=Application\nName=Chemometric Studio - User\nExec=/opt/ChemometricStudio/ChemometricStudioUser\nTryExec=/opt/ChemometricStudio/ChemometricStudioUser\nIcon=chemometricstudio-user\nTerminal=false\nCategories=Science;Education;\n" > pkgroot/usr/share/applications/chemometricstudio-user.desktop
+              test -f pkgroot/usr/share/applications/chemometricstudio.desktop
+              test -f pkgroot/usr/share/applications/chemometricstudio-user.desktop
+              desktop-file-validate pkgroot/usr/share/applications/chemometricstudio.desktop
+              desktop-file-validate pkgroot/usr/share/applications/chemometricstudio-user.desktop
+              printf "#!/bin/sh\nset -e\nupdate-desktop-database /usr/share/applications >/dev/null 2>&1 || true\ngtk-update-icon-cache /usr/share/icons/hicolor >/dev/null 2>&1 || true\n" > postinstall.sh && chmod +x postinstall.sh
+              cp postinstall.sh postremove.sh
+
+              rm -f ./*.deb ./*.rpm ./*.pkg.tar.zst
+              fpm_args="-n chemometricstudio -v $PACKAGE_VERSION --license Apache-2.0 --description \"$PKG_DESC\" --maintainer \"Matheus Barreto\" --after-install postinstall.sh --after-remove postremove.sh -C pkgroot opt usr"
+              if [ "$LINUX_PACKAGE_SELECTION" = "all" ] || [ "$LINUX_PACKAGE_SELECTION" = "deb" ]; then
+                eval "fpm -s dir -t deb --architecture $DEB_ARCH $fpm_args"
+              fi
+              if [ "$LINUX_PACKAGE_SELECTION" = "all" ] || [ "$LINUX_PACKAGE_SELECTION" = "rpm" ]; then
+                eval "fpm -s dir -t rpm --architecture $RPM_ARCH $fpm_args"
+              fi
+              if [ "$LINUX_PACKAGE_SELECTION" = "all" ] || [ "$LINUX_PACKAGE_SELECTION" = "pkg" ]; then
+                eval "fpm -s dir -t pacman --architecture $PKG_ARCH --pacman-compression zstd $fpm_args"
+              fi
+
+              mkdir -p linux-packages
+              for f in ./*.deb ./*.rpm ./*.pkg.tar.zst; do
+                [ -e "$f" ] && mv "$f" linux-packages/
+              done
+
+              if [ -z "$(ls -A linux-packages)" ]; then
+                echo "ERROR: No packages in linux-packages after collect"
+                exit 1
+              fi
+
+              cd linux-packages
+              for f in *; do
+                [ -f "$f" ] || continue
+                case "$f" in
+                  *.pkg.tar.zst)
+                    newname="ChemometricStudio-${PACKAGE_VERSION}-Linux.Arch-based-${SHORT_SHA}-${FILE_ARCH}.pkg.tar.zst"
+                    ;;
+                  *.deb)
+                    newname="ChemometricStudio-${PACKAGE_VERSION}-Linux.Debian-based-${SHORT_SHA}-${FILE_ARCH}.deb"
+                    ;;
+                  *.rpm)
+                    newname="ChemometricStudio-${PACKAGE_VERSION}-Linux.Fedora-${SHORT_SHA}-${FILE_ARCH}.rpm"
+                    ;;
+                  *)
+                    echo "Skipping unsupported package format: $f"
+                    continue
+                    ;;
+                esac
+                mv "$f" "$newname"
+              done
+
+              for p in *; do
+                [ -f "$p" ] || continue
+                case "$p" in
+                  *.deb)
+                    dpkg-deb -c "$p" > pkg_contents.txt
+                    grep -q "usr/share/applications/chemometricstudio.desktop" pkg_contents.txt
+                    grep -q "usr/share/applications/chemometricstudio-user.desktop" pkg_contents.txt
+                    grep -q "opt/ChemometricStudio/ChemometricStudio$" pkg_contents.txt
+                    grep -q "opt/ChemometricStudio/ChemometricStudioUser$" pkg_contents.txt
+                    rm -f pkg_contents.txt
+                    ;;
+                  *.rpm)
+                    rpm -qlp "$p" > pkg_contents.txt
+                    grep -q "^/usr/share/applications/chemometricstudio.desktop$" pkg_contents.txt
+                    grep -q "^/usr/share/applications/chemometricstudio-user.desktop$" pkg_contents.txt
+                    grep -q "^/opt/ChemometricStudio/ChemometricStudio$" pkg_contents.txt
+                    grep -q "^/opt/ChemometricStudio/ChemometricStudioUser$" pkg_contents.txt
+                    rm -f pkg_contents.txt
+                    ;;
+                  *.pkg.tar.zst)
+                    bsdtar -tf "$p" > pkg_contents.txt
+                    grep -q "^usr/share/applications/chemometricstudio.desktop$" pkg_contents.txt
+                    grep -q "^usr/share/applications/chemometricstudio-user.desktop$" pkg_contents.txt
+                    grep -q "^opt/ChemometricStudio/ChemometricStudio$" pkg_contents.txt
+                    grep -q "^opt/ChemometricStudio/ChemometricStudioUser$" pkg_contents.txt
+                    rm -f pkg_contents.txt
+                    ;;
+                esac
+              done
+            '
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: ChemometricStudio-${{ steps.meta.outputs.package_version }}-Linux-packages-ARM64
+          path: linux-packages/*
+          if-no-files-found: error
+

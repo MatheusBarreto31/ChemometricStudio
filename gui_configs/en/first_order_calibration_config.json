@@ -1,0 +1,3687 @@
+{
+  "display_name": "First-Order Calibration",
+  "category": "5.Regression",
+  "data_type": "firstorder",
+  "input_aliases": {
+    "X_cal": "X Calibration",
+    "Y_cal": "Y Calibration",
+    "X_val": "X Validation",
+    "Y_val": "Y Validation",
+    "y_labels": "Y Labels",
+    "model_type": "Method",
+    "n_components": "Latent Variables / PCs",
+    "pls_scale": "PLS Scaling",
+    "ridge_alpha": "Ridge Alpha",
+    "lasso_alpha": "Lasso Alpha",
+    "elastic_net_alpha": "Elastic Net Alpha",
+    "elastic_net_l1_ratio": "Elastic Net L1 Ratio",
+    "random_forest_n_estimators": "Random Forest Trees",
+    "random_forest_max_depth": "Random Forest Max Depth",
+    "random_forest_min_samples_leaf": "Random Forest Min Samples Leaf",
+    "random_forest_max_features": "Random Forest Max Features",
+    "random_forest_bootstrap": "Random Forest Bootstrap",
+    "random_forest_oob_score": "Random Forest OOB Score",
+    "svr_c": "SVR C",
+    "svr_epsilon": "SVR Epsilon",
+    "svr_gamma": "SVR Gamma",
+    "svr_kernel": "SVR Kernel",
+    "svr_degree": "SVR Degree",
+    "svr_coef0": "SVR Coef0",
+    "gradient_boosting_n_estimators": "GB Trees",
+    "gradient_boosting_learning_rate": "GB Learning Rate",
+    "gradient_boosting_subsample": "GB Subsample",
+    "gradient_boosting_max_features": "GB Max Features",
+    "gradient_boosting_max_depth": "GB Max Depth",
+    "gradient_boosting_min_samples_leaf": "GB Min Samples Leaf",
+    "hist_gradient_boosting_n_estimators": "HistGB Iterations",
+    "hist_gradient_boosting_learning_rate": "HistGB Learning Rate",
+    "hist_gradient_boosting_max_depth": "HistGB Max Depth",
+    "hist_gradient_boosting_max_leaf_nodes": "HistGB Max Leaf Nodes",
+    "hist_gradient_boosting_min_samples_leaf": "HistGB Min Samples Leaf",
+    "hist_gradient_boosting_l2_regularization": "HistGB L2 Regularization",
+    "hist_gradient_boosting_max_bins": "HistGB Max Bins",
+    "gaussian_process_alpha": "GPR Alpha",
+    "gaussian_process_length_scale": "GPR Length Scale",
+    "gaussian_process_constant_value": "GPR Constant Value",
+    "gaussian_process_n_restarts_optimizer": "GPR Optimizer Restarts",
+    "gaussian_process_normalize_y": "GPR Normalize Y",
+    "kernel_pls_gamma": "Kernel PLS Gamma",
+    "kernel_pls_n_features": "Kernel PLS Mapped Features",
+    "local_method": "Local Regression Mode",
+    "local_distance": "Local Distance Metric",
+    "local_minkowski_p": "Minkowski p",
+    "n_neighbors": "Number of Neighbors",
+    "idw_power": "IDW Power",
+    "adaptive_alpha": "Adaptive Alpha",
+    "radius_threshold": "Radius Threshold",
+    "kernel_bandwidth": "Kernel Bandwidth",
+    "optimize_parameters": "Optimize Parameter",
+    "n_components_range": "LV/PC Optimization Range",
+    "ridge_alpha_range": "Ridge Alpha Optimization Range",
+    "lasso_alpha_range": "Lasso Alpha Optimization Range",
+    "elastic_net_alpha_range": "Elastic Net Alpha Optimization Range",
+    "random_forest_n_estimators_range": "RF Trees Optimization Range",
+    "svr_c_range": "SVR C Optimization Range",
+    "gradient_boosting_n_estimators_range": "GB Trees Optimization Range",
+    "hist_gradient_boosting_n_estimators_range": "HistGB Iterations Optimization Range",
+    "gaussian_process_alpha_range": "GPR Alpha Optimization Range",
+    "n_neighbors_range": "Neighbors Optimization Range",
+    "idw_power_range": "IDW Power Optimization Range",
+    "adaptive_alpha_range": "Adaptive Alpha Optimization Range",
+    "radius_threshold_range": "Radius Threshold Optimization Range",
+    "kernel_bandwidth_range": "Kernel Bandwidth Optimization Range",
+    "cv_config": "CV Configuration",
+    "was_scaled": "Input Was Scaled"
+  },
+  "output_aliases": {
+    "y_cal_pred": "Calibration Predictions",
+    "y_val_pred": "Validation Predictions",
+    "y_cv_pred": "Cross-Validation Predictions",
+    "y_cal_true": "Calibration Reference",
+    "y_val_true": "Validation Reference",
+    "selected_parameter_name": "Selected Parameter Name",
+    "selected_parameter_value": "Selected Parameter Value",
+    "metrics": "Metrics",
+    "cv_results": "CV Results",
+    "optimization_results": "Optimization Results",
+    "pred_ref_diag_x": "Prediction Diagonal X",
+    "pred_ref_diag_y": "Prediction Diagonal Y"
+  },
+  "short_description": "Unified first-order calibration with linear, kernel, tree, kernelized latent-variable, and local regression models",
+  "long_description": "Builds first-order calibration models for quantitative prediction with optional parameter optimization. Supports OLS, Ridge, Lasso, Elastic Net, Random Forest, SVR, Gradient Boosting, HistGradientBoosting, Gaussian Process Regression, PLS, PCR, Kernel PLS extension, and Local Regression (KNN, IDW, Adaptive Threshold, Radius, Kernel). Computes calibration/CV/validation statistics, provides model-specific diagnostics, supports local distance metrics, and exposes optimization curves for parameter tuning. Note: PLS/PCR/Kernel PLS apply latent-variable modeling of transformed predictors. For scale-sensitive models (Ridge, Lasso, Elastic Net, SVR, Gaussian Process, Kernel PLS), if routed flag 'was_scaled' is missing or false, autoscaling fallback is applied with a warning.",
+  "execution_report_specs": {
+    "messages": {
+      "first_order_calibration_default_loocv": "No enabled CV configuration was found during optimization. Defaulted to LOOCV for parameter selection."
+    },
+    "warnings": {
+      "first_order_calibration_autoscale_fallback": "The selected model requires scaled predictors for stable performance. Input flag 'was_scaled' was missing or false, so data was autoscaled as a fallback."
+    },
+    "errors": {
+      "first_order_calibration_ols_underdetermined": "OLS cannot be fitted because the calibration design is underdetermined (number of variables is greater than or equal to number of calibration samples). Use PLS/PCR/Ridge or reduce variables.",
+      "first_order_calibration_ols_fit_failed": "OLS fitting failed due to an unstable or degenerate predictor matrix. Use PLS/PCR/Ridge or reduce variables."
+    }
+  },
+  "translation_keys": {
+    "parameter_display_names_by_model": {
+      "pls": {
+        "n_components": "Latent Variables"
+      },
+      "kernel_pls": {
+        "n_components": "Latent Variables"
+      },
+      "pcr": {
+        "n_components": "Principal Components"
+      }
+    },
+    "parameter_display_names": {
+      "n_components": "Latent Variables / PCs",
+      "ridge_alpha": "Ridge Alpha",
+      "lasso_alpha": "Lasso Alpha",
+      "elastic_net_alpha": "Elastic Net Alpha",
+      "random_forest_n_estimators": "Random Forest Trees",
+      "svr_c": "SVR C",
+      "gradient_boosting_n_estimators": "GB Trees",
+      "hist_gradient_boosting_n_estimators": "HistGB Iterations",
+      "gaussian_process_alpha": "GPR Alpha",
+      "n_neighbors": "Number of Neighbors",
+      "idw_power": "IDW Power",
+      "adaptive_alpha": "Adaptive Alpha",
+      "radius_threshold": "Radius Threshold",
+      "kernel_bandwidth": "Kernel Bandwidth"
+    }
+  },
+  "setup": {
+    "categories": [
+      "Model Parameters",
+      "Optimization",
+      "Data Inputs",
+      "Cross-Validation"
+    ],
+    "layout": [
+      {
+        "name": "model_type",
+        "label": "Method",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "pls",
+        "values": [
+          "ols",
+          "ridge",
+          "lasso",
+          "elastic_net",
+          "pls",
+          "pcr",
+          "kernel_pls",
+          "svr",
+          "gaussian_process",
+          "random_forest",
+          "gradient_boosting",
+          "hist_gradient_boosting",
+          "local"
+        ],
+        "value_aliases": [
+          "Ordinary Least Squares",
+          "Ridge Regression",
+          "Lasso Regression",
+          "Elastic Net Regression",
+          "Partial Least Squares",
+          "Principal Component Regression",
+          "Kernel PLS Regression",
+          "Support Vector Regression",
+          "Gaussian Process Regression",
+          "Random Forest Regression",
+          "Gradient Boosting Regression",
+          "Histogram Gradient Boosting Regression",
+          "Local Regression"
+        ],
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Calibration method: OLS, Ridge, Lasso, Elastic Net, Random Forest, SVR, Gradient Boosting, HistGradientBoosting, Gaussian Process, PLS, PCR, Kernel PLS, or Local Regression."
+      },
+      {
+        "name": "local_method",
+        "label": "Local Regression Mode",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "knn",
+        "values": [
+          "knn",
+          "idw",
+          "adaptive",
+          "radius",
+          "kernel"
+        ],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "local"
+        },
+        "tooltip": "knn = nearest-neighbor averaging, idw = inverse-distance weighted averaging, adaptive = similarity-threshold averaging, radius = radius-based averaging, kernel = Gaussian-kernel weighted averaging"
+      },
+      {
+        "name": "local_distance",
+        "label": "Local Distance Metric",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "euclidean",
+        "values": [
+          "euclidean",
+          "mahalanobis",
+          "manhattan",
+          "minkowski",
+          "chebyshev",
+          "chord"
+        ],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "local"
+        },
+        "tooltip": "Distance metric for local regression neighborhood/weighting calculations"
+      },
+      {
+        "name": "local_minkowski_p",
+        "label": "Minkowski p",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "3.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "local",
+          "local_distance": "minkowski"
+        },
+        "tooltip": "Exponent p used by Minkowski distance (must be > 0)"
+      },
+      {
+        "name": "n_components",
+        "label": "Latent Variables / PCs",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "2",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": [
+            "pls",
+            "pcr",
+            "kernel_pls"
+          ],
+          "optimize_parameters": false
+        },
+        "tooltip": "Fixed latent-variable count (PLS) or principal components (PCR) when optimization is OFF"
+      },
+      {
+        "name": "pls_scale",
+        "label": "PLS Scaling",
+        "category": "Model Parameters",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": [
+            "pls",
+            "kernel_pls"
+          ]
+        },
+        "tooltip": "If enabled, PLS applies variance scaling after internal mean-centering"
+      },
+      {
+        "name": "ridge_alpha",
+        "label": "Ridge Alpha",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "ridge",
+          "optimize_parameters": false
+        },
+        "tooltip": "Fixed ridge regularization value when optimization is OFF"
+      },
+      {
+        "name": "lasso_alpha",
+        "label": "Lasso Alpha",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "lasso",
+          "optimize_parameters": false
+        },
+        "tooltip": "Fixed lasso regularization value when optimization is OFF"
+      },
+      {
+        "name": "elastic_net_alpha",
+        "label": "Elastic Net Alpha",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "elastic_net",
+          "optimize_parameters": false
+        },
+        "tooltip": "Elastic Net regularization strength when optimization is OFF"
+      },
+      {
+        "name": "elastic_net_l1_ratio",
+        "label": "Elastic Net L1 Ratio",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.5",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "elastic_net"
+        },
+        "tooltip": "Elastic Net L1 ratio in [0,1] controlling L1 vs L2 balance"
+      },
+      {
+        "name": "linear_max_iter",
+        "label": "Max Iterations",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "10000",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": [
+            "ridge",
+            "lasso",
+            "elastic_net"
+          ]
+        },
+        "tooltip": "Maximum number of solver iterations. Increase if you see convergence warnings."
+      },
+      {
+        "name": "random_forest_n_estimators",
+        "label": "Random Forest Trees",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "200",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "random_forest",
+          "optimize_parameters": false
+        },
+        "tooltip": "Number of trees in the Random Forest when optimization is OFF"
+      },
+      {
+        "name": "random_forest_max_depth",
+        "label": "Random Forest Max Depth",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "random_forest"
+        },
+        "tooltip": "Maximum tree depth (0 means no limit)"
+      },
+      {
+        "name": "random_forest_min_samples_leaf",
+        "label": "Random Forest Min Samples Leaf",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "random_forest"
+        },
+        "tooltip": "Minimum number of samples required in each terminal leaf"
+      },
+      {
+        "name": "random_forest_max_features",
+        "label": "Random Forest Max Features",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "str",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "random_forest"
+        },
+        "tooltip": "Feature subset size per split (use numeric fraction, integer count, sqrt, log2, or none)"
+      },
+      {
+        "name": "random_forest_bootstrap",
+        "label": "Random Forest Bootstrap",
+        "category": "Model Parameters",
+        "widget": "checkbutton",
+        "default": true,
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "random_forest"
+        },
+        "tooltip": "Enable bootstrap sampling for Random Forest"
+      },
+      {
+        "name": "random_forest_oob_score",
+        "label": "Random Forest OOB Score",
+        "category": "Model Parameters",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "random_forest",
+          "random_forest_bootstrap": true
+        },
+        "tooltip": "Compute out-of-bag score (requires bootstrap enabled)"
+      },
+      {
+        "name": "svr_kernel",
+        "label": "SVR Kernel",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "rbf",
+        "values": [
+          "rbf",
+          "linear",
+          "poly",
+          "sigmoid"
+        ],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "svr"
+        },
+        "tooltip": "Kernel for support vector regression"
+      },
+      {
+        "name": "svr_c",
+        "label": "SVR C",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "svr",
+          "optimize_parameters": false
+        },
+        "tooltip": "SVR regularization parameter C when optimization is OFF"
+      },
+      {
+        "name": "svr_epsilon",
+        "label": "SVR Epsilon",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.1",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "svr"
+        },
+        "tooltip": "SVR epsilon-insensitive loss width"
+      },
+      {
+        "name": "svr_gamma",
+        "label": "SVR Gamma",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.1",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "svr"
+        },
+        "tooltip": "SVR kernel gamma (>0, <=0 uses internal scaling)"
+      },
+      {
+        "name": "svr_degree",
+        "label": "SVR Degree",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "3",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "svr"
+        },
+        "tooltip": "Polynomial degree for SVR when using poly kernel"
+      },
+      {
+        "name": "svr_coef0",
+        "label": "SVR Coef0",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "svr"
+        },
+        "tooltip": "Independent term for poly/sigmoid SVR kernels"
+      },
+      {
+        "name": "gradient_boosting_n_estimators",
+        "label": "GB Trees",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "200",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "gradient_boosting",
+          "optimize_parameters": false
+        },
+        "tooltip": "Number of trees for Gradient Boosting when optimization is OFF"
+      },
+      {
+        "name": "gradient_boosting_learning_rate",
+        "label": "GB Learning Rate",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.05",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "gradient_boosting"
+        },
+        "tooltip": "Learning rate for Gradient Boosting"
+      },
+      {
+        "name": "gradient_boosting_subsample",
+        "label": "GB Subsample",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "gradient_boosting"
+        },
+        "tooltip": "Fraction of samples used to fit each boosting stage (0,1]"
+      },
+      {
+        "name": "gradient_boosting_max_features",
+        "label": "GB Max Features",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "str",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "gradient_boosting"
+        },
+        "tooltip": "Feature subset size per split (numeric fraction, integer count, sqrt, log2, or none)"
+      },
+      {
+        "name": "gradient_boosting_max_depth",
+        "label": "GB Max Depth",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "3",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "gradient_boosting"
+        },
+        "tooltip": "Tree depth for Gradient Boosting base learners"
+      },
+      {
+        "name": "gradient_boosting_min_samples_leaf",
+        "label": "GB Min Samples Leaf",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "gradient_boosting"
+        },
+        "tooltip": "Minimum samples per leaf for Gradient Boosting"
+      },
+      {
+        "name": "hist_gradient_boosting_n_estimators",
+        "label": "HistGB Iterations",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "200",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "hist_gradient_boosting",
+          "optimize_parameters": false
+        },
+        "tooltip": "Boosting iterations for HistGradientBoosting when optimization is OFF"
+      },
+      {
+        "name": "hist_gradient_boosting_learning_rate",
+        "label": "HistGB Learning Rate",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.05",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "hist_gradient_boosting"
+        },
+        "tooltip": "Learning rate for HistGradientBoosting"
+      },
+      {
+        "name": "hist_gradient_boosting_max_depth",
+        "label": "HistGB Max Depth",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "hist_gradient_boosting"
+        },
+        "tooltip": "Maximum depth for HistGradientBoosting (0 means no limit)"
+      },
+      {
+        "name": "hist_gradient_boosting_max_leaf_nodes",
+        "label": "HistGB Max Leaf Nodes",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "31",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "hist_gradient_boosting"
+        },
+        "tooltip": "Maximum number of leaves per tree (<=0 uses no explicit limit)"
+      },
+      {
+        "name": "hist_gradient_boosting_min_samples_leaf",
+        "label": "HistGB Min Samples Leaf",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "20",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "hist_gradient_boosting"
+        },
+        "tooltip": "Minimum samples per leaf for HistGradientBoosting"
+      },
+      {
+        "name": "hist_gradient_boosting_l2_regularization",
+        "label": "HistGB L2 Regularization",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "hist_gradient_boosting"
+        },
+        "tooltip": "L2 regularization strength for HistGradientBoosting"
+      },
+      {
+        "name": "hist_gradient_boosting_max_bins",
+        "label": "HistGB Max Bins",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "255",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "hist_gradient_boosting"
+        },
+        "tooltip": "Maximum number of bins for non-missing values (2-255)"
+      },
+      {
+        "name": "gaussian_process_alpha",
+        "label": "GPR Alpha",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.000001",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "gaussian_process",
+          "optimize_parameters": false
+        },
+        "tooltip": "Noise regularization alpha for Gaussian Process"
+      },
+      {
+        "name": "gaussian_process_length_scale",
+        "label": "GPR Length Scale",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "gaussian_process"
+        },
+        "tooltip": "RBF length scale for Gaussian Process kernel"
+      },
+      {
+        "name": "gaussian_process_constant_value",
+        "label": "GPR Constant Value",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "gaussian_process"
+        },
+        "tooltip": "Constant multiplier for Gaussian Process kernel"
+      },
+      {
+        "name": "gaussian_process_n_restarts_optimizer",
+        "label": "GPR Optimizer Restarts",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "gaussian_process"
+        },
+        "tooltip": "Number of optimizer restarts for Gaussian Process hyperparameter tuning"
+      },
+      {
+        "name": "gaussian_process_normalize_y",
+        "label": "GPR Normalize Y",
+        "category": "Model Parameters",
+        "widget": "checkbutton",
+        "default": true,
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "gaussian_process"
+        },
+        "tooltip": "Normalize response values before fitting Gaussian Process"
+      },
+      {
+        "name": "kernel_pls_gamma",
+        "label": "Kernel PLS Gamma",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.1",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "kernel_pls"
+        },
+        "tooltip": "RBF mapping gamma for Kernel PLS extension"
+      },
+      {
+        "name": "kernel_pls_n_features",
+        "label": "Kernel PLS Mapped Features",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "300",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "kernel_pls"
+        },
+        "tooltip": "Number of random Fourier mapped features for Kernel PLS"
+      },
+      {
+        "name": "n_neighbors",
+        "label": "Number of Neighbors",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "5",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "local",
+          "local_method": [
+            "knn",
+            "idw"
+          ],
+          "optimize_parameters": false
+        },
+        "tooltip": "Fixed local neighborhood size when optimization is OFF (used by KNN and IDW)"
+      },
+      {
+        "name": "idw_power",
+        "label": "IDW Power",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "local",
+          "local_method": "idw",
+          "optimize_parameters": false
+        },
+        "tooltip": "Distance-weight exponent for IDW mode using k nearest neighbors (higher = stronger near-neighbor emphasis)"
+      },
+      {
+        "name": "adaptive_alpha",
+        "label": "Adaptive Alpha",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "local",
+          "local_method": "adaptive",
+          "optimize_parameters": false
+        },
+        "tooltip": "Alpha exponent controlling adaptive similarity-threshold neighborhood selection"
+      },
+      {
+        "name": "radius_threshold",
+        "label": "Radius Threshold",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "local",
+          "local_method": "radius",
+          "optimize_parameters": false
+        },
+        "tooltip": "Distance cutoff used to include neighbors in Radius mode"
+      },
+      {
+        "name": "kernel_bandwidth",
+        "label": "Kernel Bandwidth",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "model_type": "local",
+          "local_method": "kernel",
+          "optimize_parameters": false
+        },
+        "tooltip": "Gaussian kernel bandwidth used in Kernel mode"
+      },
+      {
+        "name": "optimize_parameters",
+        "label": "Optimize Parameter",
+        "category": "Optimization",
+        "widget": "checkbutton",
+        "default": false,
+        "required": true,
+        "input_type": "user",
+        "tooltip": "If enabled, fixed parameter inputs are hidden and a parameter range is used"
+      },
+      {
+        "name": "n_components_range",
+        "label": "LV/PC Optimization Range",
+        "category": "Optimization",
+        "widget": "entry",
+        "type": "str",
+        "default": "1:12",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "optimize_parameters": true,
+          "model_type": [
+            "pls",
+            "pcr",
+            "kernel_pls"
+          ]
+        },
+        "tooltip": "Integer range for latent variables/components. Single value X is interpreted as 1:X"
+      },
+      {
+        "name": "ridge_alpha_range",
+        "label": "Ridge Alpha Optimization Range",
+        "category": "Optimization",
+        "widget": "entry",
+        "type": "str",
+        "default": "0.0001,0.001,0.01,0.1,1,10,100",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "optimize_parameters": true,
+          "model_type": "ridge"
+        },
+        "tooltip": "Positive alpha values to test for ridge regularization"
+      },
+      {
+        "name": "lasso_alpha_range",
+        "label": "Lasso Alpha Optimization Range",
+        "category": "Optimization",
+        "widget": "entry",
+        "type": "str",
+        "default": "0.0001,0.001,0.01,0.1,1,10,100",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "optimize_parameters": true,
+          "model_type": "lasso"
+        },
+        "tooltip": "Positive alpha values to test for lasso regularization"
+      },
+      {
+        "name": "elastic_net_alpha_range",
+        "label": "Elastic Net Alpha Optimization Range",
+        "category": "Optimization",
+        "widget": "entry",
+        "type": "str",
+        "default": "0.0001,0.001,0.01,0.1,1,10,100",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "optimize_parameters": true,
+          "model_type": "elastic_net"
+        },
+        "tooltip": "Positive alpha values to test for Elastic Net regularization"
+      },
+      {
+        "name": "random_forest_n_estimators_range",
+        "label": "RF Trees Optimization Range",
+        "category": "Optimization",
+        "widget": "entry",
+        "type": "str",
+        "default": "100,200,300,500",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "optimize_parameters": true,
+          "model_type": "random_forest"
+        },
+        "tooltip": "Tree counts to test for Random Forest regression"
+      },
+      {
+        "name": "svr_c_range",
+        "label": "SVR C Optimization Range",
+        "category": "Optimization",
+        "widget": "entry",
+        "type": "str",
+        "default": "0.1,1,10,100",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "optimize_parameters": true,
+          "model_type": "svr"
+        },
+        "tooltip": "C values to test for Support Vector Regression"
+      },
+      {
+        "name": "gradient_boosting_n_estimators_range",
+        "label": "GB Trees Optimization Range",
+        "category": "Optimization",
+        "widget": "entry",
+        "type": "str",
+        "default": "100,200,300,500",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "optimize_parameters": true,
+          "model_type": "gradient_boosting"
+        },
+        "tooltip": "Tree counts to test for Gradient Boosting"
+      },
+      {
+        "name": "hist_gradient_boosting_n_estimators_range",
+        "label": "HistGB Iterations Optimization Range",
+        "category": "Optimization",
+        "widget": "entry",
+        "type": "str",
+        "default": "100,200,300,500",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "optimize_parameters": true,
+          "model_type": "hist_gradient_boosting"
+        },
+        "tooltip": "Iteration counts to test for HistGradientBoosting"
+      },
+      {
+        "name": "gaussian_process_alpha_range",
+        "label": "GPR Alpha Optimization Range",
+        "category": "Optimization",
+        "widget": "entry",
+        "type": "str",
+        "default": "1e-8,1e-6,1e-4,1e-2,1e-1",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "optimize_parameters": true,
+          "model_type": "gaussian_process"
+        },
+        "tooltip": "Alpha values to test for Gaussian Process regularization"
+      },
+      {
+        "name": "n_neighbors_range",
+        "label": "Neighbors Optimization Range",
+        "category": "Optimization",
+        "widget": "entry",
+        "type": "str",
+        "default": "3:2:21",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "optimize_parameters": true,
+          "model_type": "local",
+          "local_method": "knn"
+        },
+        "tooltip": "Neighbor counts to test for local regression (odd steps recommended)"
+      },
+      {
+        "name": "idw_power_range",
+        "label": "IDW Power Optimization Range",
+        "category": "Optimization",
+        "widget": "entry",
+        "type": "str",
+        "default": "0.25,0.5,1,2,3,5",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "optimize_parameters": true,
+          "model_type": "local",
+          "local_method": "idw"
+        },
+        "tooltip": "Positive power values to test for IDW distance weighting"
+      },
+      {
+        "name": "adaptive_alpha_range",
+        "label": "Adaptive Alpha Optimization Range",
+        "category": "Optimization",
+        "widget": "entry",
+        "type": "str",
+        "default": "0.25,0.5,1,2,3,5",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "optimize_parameters": true,
+          "model_type": "local",
+          "local_method": "adaptive"
+        },
+        "tooltip": "Positive alpha values to test adaptive threshold behavior"
+      },
+      {
+        "name": "radius_threshold_range",
+        "label": "Radius Threshold Optimization Range",
+        "category": "Optimization",
+        "widget": "entry",
+        "type": "str",
+        "default": "0.25,0.5,1,2,3,5",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "optimize_parameters": true,
+          "model_type": "local",
+          "local_method": "radius"
+        },
+        "tooltip": "Positive radius thresholds to test in Radius mode"
+      },
+      {
+        "name": "kernel_bandwidth_range",
+        "label": "Kernel Bandwidth Optimization Range",
+        "category": "Optimization",
+        "widget": "entry",
+        "type": "str",
+        "default": "0.25,0.5,1,2,3,5",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "optimize_parameters": true,
+          "model_type": "local",
+          "local_method": "kernel"
+        },
+        "tooltip": "Positive bandwidth values to test in Kernel mode"
+      },
+      {
+        "name": "cv_config",
+        "label": "CV Configuration",
+        "category": "Cross-Validation",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        },
+        "tooltip": "Routed from CV Configuration function"
+      },
+      {
+        "name": "was_scaled",
+        "label": "Input Was Scaled",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "type": "bool",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        },
+        "tooltip": "Optional routed flag from Center & Scale. If false or missing with Ridge/Lasso, autoscaling fallback is applied with a warning."
+      },
+      {
+        "name": "X_cal",
+        "label": "X Calibration Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": true,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        },
+        "tooltip": "Routed from previous function output"
+      },
+      {
+        "name": "Y_cal",
+        "label": "Y Calibration Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": true,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        },
+        "tooltip": "Routed from previous function output"
+      },
+      {
+        "name": "X_val",
+        "label": "X Validation Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        },
+        "tooltip": "Optional validation predictors"
+      },
+      {
+        "name": "Y_val",
+        "label": "Y Validation Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        },
+        "tooltip": "Optional validation references"
+      },
+      {
+        "name": "y_labels",
+        "label": "Y Labels",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "inherited",
+        "visible_if": {
+          "input_type": "user"
+        },
+        "tooltip": "Optional inherited response labels from data loading or previous functions"
+      }
+    ]
+  },
+  "analysis": {
+    "pages": [
+      {
+        "title": "Predictions",
+        "layout": "fd",
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "title": "Calibration Predictions",
+              "row_label": "Sample",
+              "row_headers": "smp_cal",
+              "columns": [
+                { "data_source": "y_cal_true", "name": "Reference" },
+                { "data_source": "y_cal_pred", "name": "Predicted" },
+                { "data_source": "y_cal_error", "name": "Error" },
+                { "data_source": "y_cv_pred", "name": "Predicted (CV)" },
+                { "data_source": "y_cv_error", "name": "Error (CV)" }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "default": 0,
+                  "nav_id": "first_order_response",
+                  "show_navigation_menu": true,
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0
+                }
+              ],
+              "slice_title_source": "y_labels",
+              "slice_title_dimension": 1,
+              "decimal_places": 6,
+              "max_rows": 500
+            },
+            "short_description": "Sample-level calibration predictions and residuals, with cross-validation comparison."
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Validation Predictions",
+              "row_label": "Sample",
+              "row_headers": "smp_val",
+              "columns": [
+                { "data_source": "y_val_true", "name": "Reference" },
+                { "data_source": "y_val_pred", "name": "Predicted" },
+                { "data_source": "y_val_error", "name": "Error" }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "default": 0,
+                  "nav_id": "first_order_response",
+                  "show_navigation_menu": true,
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0
+                }
+              ],
+              "slice_title_source": "y_labels",
+              "slice_title_dimension": 1,
+              "decimal_places": 6,
+              "max_rows": 500
+            },
+            "short_description": "Sample-level validation predictions and residuals."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Reference vs Predicted Y (Calibration / CV)",
+              "show_origin": false,
+              "show_labels": false,
+              "equal_scale": true,
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "y_cal_true",
+                    "axis_type": "linear",
+                    "axis_labels": "y_labels",
+                    "axis_labels_dimension": 1,
+                    "label_template": "$y_{{Ref}}$ ({label})"
+                  },
+                  "y_axis": {
+                    "data_source": "y_cal_pred",
+                    "axis_type": "linear",
+                    "axis_labels": "y_labels",
+                    "axis_labels_dimension": 1,
+                    "label_template": "$y_{{Pred}}$ ({label})"
+                  },
+                  "point_labels_source": "smp_cal",
+                  "label": "Calibration"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "y_cal_true",
+                    "axis_type": "linear",
+                    "axis_labels": "y_labels",
+                    "axis_labels_dimension": 1,
+                    "label_template": "$y_{{Ref}}$ ({label})"
+                  },
+                  "y_axis": {
+                    "data_source": "y_cv_pred",
+                    "axis_type": "linear",
+                    "axis_labels": "y_labels",
+                    "axis_labels_dimension": 1,
+                    "label_template": "$y_{{Pred}}$ ({label})"
+                  },
+                  "point_labels_source": "smp_cal",
+                  "label": "Cross-Validation"
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "path",
+                  "x": "pred_ref_diag_x",
+                  "y": "pred_ref_diag_y",
+                  "color": "red",
+                  "linestyle": "-",
+                  "linewidth": 1.5,
+                  "alpha": 0.85
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "x",
+                  "nav_id": "first_order_response",
+                  "show_navigation_menu": true,
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0
+                },
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "y",
+                  "nav_id": "first_order_response",
+                  "show_navigation_menu": false
+                }
+              ]
+            },
+            "short_description": "Scatter plot of reference versus calibration and cross-validation predicted Y with a 1:1 diagonal."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Reference vs Predicted Y (Validation)",
+              "show_origin": false,
+              "show_labels": false,
+              "equal_scale": true,
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "y_val_true",
+                    "axis_type": "linear",
+                    "axis_labels": "y_labels",
+                    "axis_labels_dimension": 1,
+                    "label_template": "$y_{{Ref}}$ ({label})"
+                  },
+                  "y_axis": {
+                    "data_source": "y_val_pred",
+                    "axis_type": "linear",
+                    "axis_labels": "y_labels",
+                    "axis_labels_dimension": 1,
+                    "label_template": "$y_{{Pred}}$ ({label})"
+                  },
+                  "point_labels_source": "smp_val",
+                  "label": "Validation"
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "path",
+                  "x": "pred_ref_diag_x",
+                  "y": "pred_ref_diag_y",
+                  "color": "red",
+                  "linestyle": "-",
+                  "linewidth": 1.5,
+                  "alpha": 0.85
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "x",
+                  "nav_id": "first_order_response",
+                  "show_navigation_menu": true,
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0
+                },
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "y",
+                  "nav_id": "first_order_response",
+                  "show_navigation_menu": false
+                }
+              ]
+            },
+            "short_description": "Validation scatter of reference versus predicted Y with a 1:1 diagonal reference line."
+          }
+        ]
+      },
+      {
+        "title": "Performance Report",
+        "layout": "fp",
+        "sections": [
+          {
+            "type": "text",
+            "config": {
+              "title": "Calibration Report",
+              "text_template": "{report_text}",
+              "bindings": [
+                {
+                  "name": "report_text",
+                  "data_source": "model",
+                  "nested_key": "report_text",
+                  "selector": {
+                    "mode": "value"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Error Diagnostics",
+        "layout": "ed",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Error Profile by Sample",
+              "line_style": "lines+markers",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Sample Index",
+                    "reference_source": "y_cal_error"
+                  },
+                  "y_axis": {
+                    "data_source": "y_cal_error",
+                    "axis_type": "linear",
+                    "label": "Error"
+                  },
+                  "marker": "o",
+                  "label": "Calibration"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Sample Index",
+                    "reference_source": "y_cv_error"
+                  },
+                  "y_axis": {
+                    "data_source": "y_cv_error",
+                    "axis_type": "linear",
+                    "label": "Error"
+                  },
+                  "marker": "o",
+                  "label": "Cross-Validation"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Sample Index",
+                    "reference_source": "y_val_error"
+                  },
+                  "y_axis": {
+                    "data_source": "y_val_error",
+                    "axis_type": "linear",
+                    "label": "Error"
+                  },
+                  "marker": "o",
+                  "label": "Validation"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "y",
+                  "nav_id": "first_order_response",
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0,
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Calibration Error Table",
+              "row_label": "Sample",
+              "row_headers": "smp_cal",
+              "columns": [
+                {
+                  "data_source": "y_cal_true",
+                  "name": "Reference"
+                },
+                {
+                  "data_source": "y_cal_pred",
+                  "name": "Predicted"
+                },
+                {
+                  "data_source": "y_cal_error",
+                  "name": "Error"
+                },
+                {
+                  "data_source": "y_cv_pred",
+                  "name": "Predicted (CV)"
+                },
+                {
+                  "data_source": "y_cv_error",
+                  "name": "Error (CV)"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "first_order_response",
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0
+                }
+              ],
+              "slice_title_source": "y_labels",
+              "slice_title_dimension": 1,
+              "decimal_places": 6,
+              "max_rows": 500
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Validation Error Table",
+              "row_label": "Sample",
+              "row_headers": "smp_val",
+              "columns": [
+                {
+                  "data_source": "y_val_true",
+                  "name": "Reference"
+                },
+                {
+                  "data_source": "y_val_pred",
+                  "name": "Predicted"
+                },
+                {
+                  "data_source": "y_val_error",
+                  "name": "Error"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "first_order_response",
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0
+                }
+              ],
+              "slice_title_source": "y_labels",
+              "slice_title_dimension": 1,
+              "decimal_places": 6,
+              "max_rows": 500
+            }
+          }
+        ]
+      },
+      {
+        "title": "CV Fold Metrics",
+        "layout": "fp",
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "title": "Cross-Validation Fold Metrics",
+              "row_label": "Fold",
+              "columns": [
+                {
+                  "data_source": "cv_results",
+                  "nested_key": "fold",
+                  "name": "Fold"
+                },
+                {
+                  "data_source": "cv_results",
+                  "nested_key": "n_train",
+                  "name": "n_train"
+                },
+                {
+                  "data_source": "cv_results",
+                  "nested_key": "n_test",
+                  "name": "n_test"
+                },
+                {
+                  "data_source": "cv_results",
+                  "nested_key": "r2_train",
+                  "name": "R2 (Train)"
+                },
+                {
+                  "data_source": "cv_results",
+                  "nested_key": "r2_test",
+                  "name": "R2 (Test)"
+                },
+                {
+                  "data_source": "cv_results",
+                  "nested_key": "rmse_train",
+                  "name": "RMSE (Train)"
+                },
+                {
+                  "data_source": "cv_results",
+                  "nested_key": "rmse_test",
+                  "name": "RMSE (Test)"
+                }
+              ],
+              "decimal_places": 6,
+              "max_rows": 200
+            }
+          }
+        ]
+      },
+      {
+        "title": "OLS Diagnostics",
+        "layout": "ed",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "ols"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "OLS Coefficient Profile",
+              "x_axis": {
+                "data_source": "axis_n_info",
+                "axis_type": "linear",
+                "index": 1,
+                "label": "dim_labels",
+                "l_index": 1
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.linear.coefficients",
+                "axis_type": "linear",
+                "label": "Coefficient"
+              },
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "y",
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "OLS Coefficients",
+              "data_source": "model",
+              "nested_key": "model_specific.linear.coefficients",
+              "row_label": "Feature",
+              "value_format": ".4g",
+              "decimal_places": 6,
+              "max_rows": 300
+            }
+          },
+          {
+            "type": "text",
+            "config": {
+              "title": "OLS Model Summary",
+              "text_template": "{summary_report_text}",
+              "bindings": [
+                {
+                  "name": "summary_report_text",
+                  "data_source": "model",
+                  "nested_key": "model_specific.summary_report_text",
+                  "selector": {
+                    "mode": "value"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Ridge Diagnostics",
+        "layout": "ed",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "ridge"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Ridge Coefficient Profile",
+              "x_axis": {
+                "data_source": "axis_n_info",
+                "axis_type": "linear",
+                "index": 1,
+                "label": "dim_labels",
+                "l_index": 1
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.linear.coefficients",
+                "axis_type": "linear",
+                "label": "Coefficient"
+              },
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "y",
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Ridge Coefficients",
+              "data_source": "model",
+              "nested_key": "model_specific.linear.coefficients",
+              "row_label": "Feature",
+              "value_format": ".4g",
+              "decimal_places": 6,
+              "max_rows": 300
+            }
+          },
+          {
+            "type": "text",
+            "config": {
+              "title": "Ridge Model Summary",
+              "text_template": "{summary_report_text}",
+              "bindings": [
+                {
+                  "name": "summary_report_text",
+                  "data_source": "model",
+                  "nested_key": "model_specific.summary_report_text",
+                  "selector": {
+                    "mode": "value"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Lasso Diagnostics",
+        "layout": "ed",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "lasso"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Lasso Coefficient Profile",
+              "x_axis": {
+                "data_source": "axis_n_info",
+                "axis_type": "linear",
+                "index": 1,
+                "label": "dim_labels",
+                "l_index": 1
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.linear.coefficients",
+                "axis_type": "linear",
+                "label": "Coefficient"
+              },
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "y",
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          },
+          {
+            "type": "text",
+            "config": {
+              "title": "Lasso Sparsity Summary",
+              "text_template": "{summary_report_text}",
+              "bindings": [
+                {
+                  "name": "summary_report_text",
+                  "data_source": "model",
+                  "nested_key": "model_specific.summary_report_text",
+                  "selector": {
+                    "mode": "value"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Lasso Coefficients",
+              "data_source": "model",
+              "nested_key": "model_specific.linear.coefficients",
+              "row_label": "Feature",
+              "value_format": ".4g",
+              "decimal_places": 6,
+              "max_rows": 300
+            }
+          }
+        ]
+      },
+      {
+        "title": "Elastic Net Diagnostics",
+        "layout": "fd",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "elastic_net"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Elastic Net Coefficient Profile",
+              "x_axis": {
+                "data_source": "axis_n_info",
+                "axis_type": "linear",
+                "index": 1,
+                "label": "dim_labels",
+                "l_index": 1
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.linear.coefficients",
+                "axis_type": "linear",
+                "label": "Coefficient"
+              },
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "y",
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          },
+          {
+            "type": "text",
+            "config": {
+              "title": "Elastic Net Summary",
+              "text_template": "{summary_report_text}",
+              "bindings": [
+                {
+                  "name": "summary_report_text",
+                  "data_source": "model",
+                  "nested_key": "model_specific.summary_report_text",
+                  "selector": {
+                    "mode": "value"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Elastic Net Coefficients",
+              "data_source": "model",
+              "nested_key": "model_specific.linear.coefficients",
+              "row_label": "Feature",
+              "value_format": ".4g",
+              "decimal_places": 6,
+              "max_rows": 300
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Elastic Net Parameters",
+              "row_label": "Metric",
+              "columns": [
+                {
+                  "data_source": "model",
+                  "nested_key": "elastic_net_alpha",
+                  "name": "Alpha"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "elastic_net_l1_ratio",
+                  "name": "L1 Ratio"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "model_specific.linear.nonzero_coefficients",
+                  "name": "Nonzero Coefficients"
+                }
+              ],
+              "value_format": ".4g",
+              "decimal_places": 6,
+              "max_rows": 20
+            }
+          }
+        ]
+      },
+      {
+        "title": "PLS Diagnostics",
+        "layout": "fd",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "pls"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "PLS Scores (Calibration)",
+              "x_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.pls.x_scores",
+                "axis_type": "linear",
+                "label": "LV Score",
+                "axis_labels": "model",
+                "axis_labels_nested": "model_specific.pls.lv_labels"
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.pls.x_scores",
+                "axis_type": "linear",
+                "label": "LV Score",
+                "axis_labels": "model",
+                "axis_labels_nested": "model_specific.pls.lv_labels"
+              },
+              "point_labels_source": "smp_cal",
+              "data_slicing": [
+                {
+                  "name": "LV-X",
+                  "dimension": 1,
+                  "axis": "x",
+                  "default": 0,
+                  "nav_id": "pls_lv_pair_x",
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "LV-Y",
+                  "dimension": 1,
+                  "axis": "y",
+                  "default": 1,
+                  "nav_id": "pls_lv_pair_y",
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "PLS X/Y Loadings (LV Pair)",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pls.x_loadings",
+                    "axis_type": "linear",
+                    "label": "Loading",
+                    "axis_labels": "model",
+                    "axis_labels_nested": "model_specific.pls.lv_labels"
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pls.x_loadings",
+                    "axis_type": "linear",
+                    "label": "Loading",
+                    "axis_labels": "model",
+                    "axis_labels_nested": "model_specific.pls.lv_labels"
+                  },
+                  "point_labels_source": "axis_t_info",
+                  "point_labels_index": 1,
+                  "label": "X Loadings"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pls.y_loadings",
+                    "axis_type": "linear",
+                    "label": "Loading",
+                    "axis_labels": "model",
+                    "axis_labels_nested": "model_specific.pls.lv_labels"
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pls.y_loadings",
+                    "axis_type": "linear",
+                    "label": "Loading",
+                    "axis_labels": "model",
+                    "axis_labels_nested": "model_specific.pls.lv_labels"
+                  },
+                  "label": "Y Loadings"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "LV-X",
+                  "dimension": 1,
+                  "axis": "x",
+                  "default": 0,
+                  "nav_id": "pls_lv_pair_x",
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "LV-Y",
+                  "dimension": 1,
+                  "axis": "y",
+                  "default": 1,
+                  "nav_id": "pls_lv_pair_y",
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Y Residual Variance by LV",
+              "line_style": "lines+markers",
+              "x_axis": {
+                "data_source": "__index__",
+                "axis_type": "linear",
+                "label": "LV",
+                "force_integer": true,
+                "reference_source": "model",
+                "reference_nested_key": "model_specific.pls.y_residual_variance_by_lv"
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.pls.y_residual_variance_by_lv",
+                "axis_type": "linear",
+                "label": "Residual Variance"
+              }
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "X Loadings and Weights by Feature",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "axis_n_info",
+                    "axis_type": "linear",
+                    "index": 1,
+                    "label": "dim_labels",
+                    "l_index": 1
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pls.x_loadings",
+                    "axis_type": "linear",
+                    "label": "Value",
+                    "axis_labels": "model",
+                    "axis_labels_nested": "model_specific.pls.lv_labels"
+                  },
+                  "label": "X Loadings"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "axis_n_info",
+                    "axis_type": "linear",
+                    "index": 1,
+                    "label": "dim_labels",
+                    "l_index": 1
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pls.x_weights",
+                    "axis_type": "linear",
+                    "label": "Value",
+                    "axis_labels": "model",
+                    "axis_labels_nested": "model_specific.pls.lv_labels"
+                  },
+                  "label": "X Weights"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "LV",
+                  "dimension": 1,
+                  "axis": "y",
+                  "default": 0,
+                  "nav_id": "pls_feature_lv",
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "PLS Component Norms",
+        "layout": "ew",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "pls"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "X Weight and Loading Norms by Component",
+              "line_style": "lines+markers",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "LV",
+                    "force_integer": true,
+                    "reference_source": "model",
+                    "reference_nested_key": "model_specific.pls.x_weights_norm"
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pls.x_weights_norm",
+                    "axis_type": "linear",
+                    "label": "Norm"
+                  },
+                  "label": "X Weights Norm"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "LV",
+                    "force_integer": true,
+                    "reference_source": "model",
+                    "reference_nested_key": "model_specific.pls.x_loadings_norm"
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pls.x_loadings_norm",
+                    "axis_type": "linear",
+                    "label": "Norm"
+                  },
+                  "label": "X Loadings Norm"
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "PLS Y Scores (Calibration)",
+              "x_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.pls.y_scores",
+                "axis_type": "linear",
+                "label": "Y Score",
+                "axis_labels": "model",
+                "axis_labels_nested": "model_specific.pls.lv_labels"
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.pls.y_scores",
+                "axis_type": "linear",
+                "label": "Y Score",
+                "axis_labels": "model",
+                "axis_labels_nested": "model_specific.pls.lv_labels"
+              },
+              "point_labels_source": "smp_cal",
+              "show_origin": true,
+              "data_slicing": [
+                {
+                  "name": "LV-X",
+                  "dimension": 1,
+                  "axis": "x",
+                  "default": 0,
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "LV-Y",
+                  "dimension": 1,
+                  "axis": "y",
+                  "default": 1,
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "PLS Outlier Detection",
+        "layout": "fp",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "pls"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "title": "Leverage vs Q-Residuals (SPE)",
+              "graph_type": "scatter",
+              "show_grid": true,
+              "flip_xy": true,
+              "show_origin": false,
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pls.leverage",
+                    "axis_type": "linear",
+                    "label": "Leverage (h)"
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pls.q_residuals",
+                    "axis_type": "linear",
+                    "label": "Q-Residuals (SPE)"
+                  },
+                  "point_labels_source": "smp_cal",
+                  "label": "Calibration",
+                  "marker": "o"
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "title": "T² Hotelling by Sample",
+              "graph_type": "line",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Sample",
+                    "force_integer": true,
+                    "reference_source": "model",
+                    "reference_nested_key": "model_specific.pls.t2_hotelling"
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pls.t2_hotelling",
+                    "axis_type": "linear",
+                    "label": "T² Hotelling"
+                  },
+                  "point_labels_source": "smp_cal",
+                  "label": "Calibration",
+                  "marker": "o"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "PCR Diagnostics",
+        "layout": "fd",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "pcr"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "PCA Scores",
+              "show_grid": false,
+              "show_origin": true,
+              "show_labels": false,
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pcr.pca_scores",
+                    "axis_type": "linear",
+                    "label": "PC Score",
+                    "axis_labels": "model",
+                    "axis_labels_nested": "model_specific.pcr.pc_labels"
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pcr.pca_scores",
+                    "axis_type": "linear",
+                    "label": "PC Score",
+                    "axis_labels": "model",
+                    "axis_labels_nested": "model_specific.pcr.pc_labels"
+                  },
+                  "point_labels_source": "smp_cal",
+                  "label": "Calibration"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "PC-X",
+                  "dimension": 1,
+                  "axis": "x",
+                  "default": 0,
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "PC-Y",
+                  "dimension": 1,
+                  "axis": "y",
+                  "default": 1,
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "PCA Loadings",
+              "show_origin": true,
+              "x_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.pcr.pca_loadings",
+                "axis_type": "linear",
+                "label": "Loading",
+                "axis_labels": "model",
+                "axis_labels_nested": "model_specific.pcr.pc_labels"
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.pcr.pca_loadings",
+                "axis_type": "linear",
+                "label": "Loading",
+                "axis_labels": "model",
+                "axis_labels_nested": "model_specific.pcr.pc_labels"
+              },
+              "point_labels_source": "axis_t_info",
+              "point_labels_index": 1,
+              "data_slicing": [
+                {
+                  "name": "PC-X",
+                  "dimension": 1,
+                  "axis": "x",
+                  "default": 0,
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "PC-Y",
+                  "dimension": 1,
+                  "axis": "y",
+                  "default": 1,
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "marker": "o",
+              "line_style": "lines+markers",
+              "x_axis": {
+                "data_source": "__index__",
+                "axis_type": "linear",
+                "label": "PC",
+                "reference_source": "model",
+                "reference_nested_key": "model_specific.pcr.explained_variance_ratio"
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.pcr.explained_variance_ratio",
+                "axis_type": "linear",
+                "label": "Explained Variance Ratio"
+              },
+              "title": "Explained Variance by Component"
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "PCA Loadings Profile",
+              "x_axis": {
+                "data_source": "axis_n_info",
+                "axis_type": "linear",
+                "index": 1,
+                "label": "dim_labels",
+                "l_index": 1
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.pcr.pca_loadings",
+                "axis_type": "linear",
+                "label": "Loading",
+                "axis_labels": "model",
+                "axis_labels_nested": "model_specific.pcr.pc_labels"
+              },
+              "data_slicing": [
+                {
+                  "name": "PC",
+                  "dimension": 1,
+                  "axis": "y",
+                  "default": 0,
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "PCR Outlier Detection",
+        "layout": "fp",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "pcr"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "title": "Leverage vs Q-Residuals (SPE)",
+              "graph_type": "scatter",
+              "show_grid": true,
+              "flip_xy": true,
+              "show_origin": false,
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pcr.leverage",
+                    "axis_type": "linear",
+                    "label": "Leverage (h)"
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pcr.q_residuals",
+                    "axis_type": "linear",
+                    "label": "Q-Residuals (SPE)"
+                  },
+                  "point_labels_source": "smp_cal",
+                  "label": "Calibration",
+                  "marker": "o"
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "title": "T² Hotelling by Sample",
+              "graph_type": "line",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Sample",
+                    "force_integer": true,
+                    "reference_source": "model",
+                    "reference_nested_key": "model_specific.pcr.t2_hotelling"
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pcr.t2_hotelling",
+                    "axis_type": "linear",
+                    "label": "T² Hotelling"
+                  },
+                  "point_labels_source": "smp_cal",
+                  "label": "Calibration",
+                  "marker": "o"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Kernel PLS Diagnostics",
+        "layout": "fd",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "kernel_pls"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Kernel PLS Scores (Calibration)",
+              "x_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.pls.x_scores",
+                "axis_type": "linear",
+                "label": "LV Score",
+                "axis_labels": "model",
+                "axis_labels_nested": "model_specific.pls.lv_labels"
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.pls.x_scores",
+                "axis_type": "linear",
+                "label": "LV Score",
+                "axis_labels": "model",
+                "axis_labels_nested": "model_specific.pls.lv_labels"
+              },
+              "point_labels_source": "smp_cal",
+              "show_origin": true,
+              "data_slicing": [
+                {
+                  "name": "LV-X",
+                  "dimension": 1,
+                  "axis": "x",
+                  "default": 0,
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "LV-Y",
+                  "dimension": 1,
+                  "axis": "y",
+                  "default": 1,
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Kernel PLS X/Y Loadings (LV Pair)",
+              "show_origin": true,
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pls.x_loadings",
+                    "axis_type": "linear",
+                    "label": "Loading",
+                    "axis_labels": "model",
+                    "axis_labels_nested": "model_specific.pls.lv_labels"
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pls.x_loadings",
+                    "axis_type": "linear",
+                    "label": "Loading",
+                    "axis_labels": "model",
+                    "axis_labels_nested": "model_specific.pls.lv_labels"
+                  },
+                  "point_labels_source": "axis_t_info",
+                  "point_labels_index": 1,
+                  "label": "X Loadings"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pls.y_loadings",
+                    "axis_type": "linear",
+                    "label": "Loading",
+                    "axis_labels": "model",
+                    "axis_labels_nested": "model_specific.pls.lv_labels"
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pls.y_loadings",
+                    "axis_type": "linear",
+                    "label": "Loading",
+                    "axis_labels": "model",
+                    "axis_labels_nested": "model_specific.pls.lv_labels"
+                  },
+                  "label": "Y Loadings"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "LV-X",
+                  "dimension": 1,
+                  "axis": "x",
+                  "default": 0,
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "LV-Y",
+                  "dimension": 1,
+                  "axis": "y",
+                  "default": 1,
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Kernel PLS Loadings and Weights by Feature",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "axis_n_info",
+                    "axis_type": "linear",
+                    "index": 1,
+                    "label": "dim_labels",
+                    "l_index": 1
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pls.x_loadings",
+                    "axis_type": "linear",
+                    "label": "Value",
+                    "axis_labels": "model",
+                    "axis_labels_nested": "model_specific.pls.lv_labels"
+                  },
+                  "label": "X Loadings"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "axis_n_info",
+                    "axis_type": "linear",
+                    "index": 1,
+                    "label": "dim_labels",
+                    "l_index": 1
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pls.x_weights",
+                    "axis_type": "linear",
+                    "label": "Value",
+                    "axis_labels": "model",
+                    "axis_labels_nested": "model_specific.pls.lv_labels"
+                  },
+                  "label": "X Weights"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "LV",
+                  "dimension": 1,
+                  "axis": "y",
+                  "default": 0,
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Y Residual Variance by LV",
+              "line_style": "lines+markers",
+              "x_axis": {
+                "data_source": "__index__",
+                "axis_type": "linear",
+                "label": "LV",
+                "force_integer": true,
+                "reference_source": "model",
+                "reference_nested_key": "model_specific.pls.y_residual_variance_by_lv"
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.pls.y_residual_variance_by_lv",
+                "axis_type": "linear",
+                "label": "Residual Variance"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "title": "Kernel PLS Component Norms",
+        "layout": "ed",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "kernel_pls"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Kernel PLS Component Norms",
+              "line_style": "lines+markers",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Component",
+                    "reference_source": "model",
+                    "reference_nested_key": "model_specific.pls.x_weights_norm"
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pls.x_weights_norm",
+                    "axis_type": "linear",
+                    "label": "Norm"
+                  },
+                  "label": "X Weights Norm"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Component",
+                    "reference_source": "model",
+                    "reference_nested_key": "model_specific.pls.x_loadings_norm"
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pls.x_loadings_norm",
+                    "axis_type": "linear",
+                    "label": "Norm"
+                  },
+                  "label": "X Loadings Norm"
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Kernel PLS Y Scores (Calibration)",
+              "x_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.pls.y_scores",
+                "axis_type": "linear",
+                "label": "Y Score",
+                "axis_labels": "model",
+                "axis_labels_nested": "model_specific.pls.lv_labels"
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.pls.y_scores",
+                "axis_type": "linear",
+                "label": "Y Score",
+                "axis_labels": "model",
+                "axis_labels_nested": "model_specific.pls.lv_labels"
+              },
+              "point_labels_source": "smp_cal",
+              "show_origin": true,
+              "data_slicing": [
+                {
+                  "name": "LV-X",
+                  "dimension": 1,
+                  "axis": "x",
+                  "default": 0,
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "LV-Y",
+                  "dimension": 1,
+                  "axis": "y",
+                  "default": 1,
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Kernel PLS Parameters",
+              "row_label": "Metric",
+              "columns": [
+                {
+                  "data_source": "model",
+                  "nested_key": "kernel_pls_gamma",
+                  "name": "Kernel Gamma"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "kernel_pls_n_features",
+                  "name": "Mapped Features"
+                },
+                {
+                  "data_source": "selected_parameter_value",
+                  "name": "Selected Components"
+                }
+              ],
+              "value_format": ".4g",
+              "decimal_places": 6,
+              "max_rows": 20
+            }
+          }
+        ]
+      },
+      {
+        "title": "Kernel PLS Outlier Detection",
+        "layout": "fp",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "kernel_pls"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "title": "Leverage vs Q-Residuals (SPE)",
+              "graph_type": "scatter",
+              "show_grid": true,
+              "flip_xy": true,
+              "show_origin": false,
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pls.leverage",
+                    "axis_type": "linear",
+                    "label": "Leverage (h)"
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pls.q_residuals",
+                    "axis_type": "linear",
+                    "label": "Q-Residuals (SPE)"
+                  },
+                  "point_labels_source": "smp_cal",
+                  "label": "Calibration",
+                  "marker": "o"
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "title": "T² Hotelling by Sample",
+              "graph_type": "line",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Sample",
+                    "force_integer": true,
+                    "reference_source": "model",
+                    "reference_nested_key": "model_specific.pls.t2_hotelling"
+                  },
+                  "y_axis": {
+                    "data_source": "model",
+                    "nested_key": "model_specific.pls.t2_hotelling",
+                    "axis_type": "linear",
+                    "label": "T² Hotelling"
+                  },
+                  "point_labels_source": "smp_cal",
+                  "label": "Calibration",
+                  "marker": "o"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Random Forest Diagnostics",
+        "layout": "ew",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "random_forest"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Random Forest Feature Importance",
+              "x_axis": {
+                "data_source": "axis_n_info",
+                "axis_type": "linear",
+                "index": 1,
+                "label": "dim_labels",
+                "l_index": 1
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.random_forest.feature_importances",
+                "axis_type": "linear",
+                "label": "Importance"
+              }
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Random Forest Parameters",
+              "row_label": "Metric",
+              "columns": [
+                {
+                  "data_source": "model",
+                  "nested_key": "model_specific.random_forest.n_estimators",
+                  "name": "Trees"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "model_specific.random_forest.max_depth",
+                  "name": "Max Depth"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "model_specific.random_forest.min_samples_leaf",
+                  "name": "Min Samples Leaf"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "model_specific.random_forest.max_features",
+                  "name": "Max Features"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "model_specific.random_forest.bootstrap",
+                  "name": "Bootstrap"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "model_specific.random_forest.oob_score",
+                  "name": "OOB Score Enabled"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "model_specific.random_forest.oob_score_value",
+                  "name": "OOB Score (R²)"
+                }
+              ],
+              "decimal_places": 6,
+              "max_rows": 20
+            }
+          }
+        ]
+      },
+      {
+        "title": "Gradient Boosting Diagnostics",
+        "layout": "ew",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "gradient_boosting"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Gradient Boosting Feature Importance",
+              "x_axis": {
+                "data_source": "axis_n_info",
+                "axis_type": "linear",
+                "index": 1,
+                "label": "dim_labels",
+                "l_index": 1
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.gradient_boosting.feature_importances",
+                "axis_type": "linear",
+                "label": "Importance"
+              }
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Gradient Boosting Parameters",
+              "row_label": "Metric",
+              "columns": [
+                {
+                  "data_source": "model",
+                  "nested_key": "gradient_boosting_n_estimators",
+                  "name": "Trees"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "gradient_boosting_learning_rate",
+                  "name": "Learning Rate"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "gradient_boosting_subsample",
+                  "name": "Subsample"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "gradient_boosting_max_depth",
+                  "name": "Max Depth"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "gradient_boosting_min_samples_leaf",
+                  "name": "Min Samples Leaf"
+                }
+              ],
+              "decimal_places": 6,
+              "max_rows": 20
+            }
+          }
+        ]
+      },
+      {
+        "title": "Hist Gradient Boosting Diagnostics",
+        "layout": "ew",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "hist_gradient_boosting"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Hist Gradient Boosting Feature Importance",
+              "x_axis": {
+                "data_source": "axis_n_info",
+                "axis_type": "linear",
+                "index": 1,
+                "label": "dim_labels",
+                "l_index": 1
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.hist_gradient_boosting.feature_importances",
+                "axis_type": "linear",
+                "label": "Importance"
+              }
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Hist Gradient Boosting Parameters",
+              "row_label": "Metric",
+              "columns": [
+                {
+                  "data_source": "model",
+                  "nested_key": "hist_gradient_boosting_n_estimators",
+                  "name": "Iterations"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "hist_gradient_boosting_learning_rate",
+                  "name": "Learning Rate"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "hist_gradient_boosting_max_depth",
+                  "name": "Max Depth"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "hist_gradient_boosting_max_leaf_nodes",
+                  "name": "Max Leaf Nodes"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "hist_gradient_boosting_min_samples_leaf",
+                  "name": "Min Samples Leaf"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "hist_gradient_boosting_l2_regularization",
+                  "name": "L2 Regularization"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "hist_gradient_boosting_max_bins",
+                  "name": "Max Bins"
+                }
+              ],
+              "decimal_places": 6,
+              "max_rows": 20
+            }
+          }
+        ]
+      },
+      {
+        "title": "SVR Diagnostics",
+        "layout": "ew",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "svr"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "SVR Residual Profile",
+              "x_axis": {
+                "data_source": "__index__",
+                "axis_type": "linear",
+                "label": "Sample Index",
+                "reference_source": "y_cal_error"
+              },
+              "y_axis": {
+                "data_source": "y_cal_error",
+                "axis_type": "linear",
+                "label": "Residual"
+              },
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "y",
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "SVR Parameters",
+              "row_label": "Metric",
+              "columns": [
+                {
+                  "data_source": "model",
+                  "nested_key": "svr_kernel",
+                  "name": "Kernel"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "svr_c",
+                  "name": "C"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "svr_epsilon",
+                  "name": "Epsilon"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "svr_gamma",
+                  "name": "Gamma"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "svr_degree",
+                  "name": "Degree"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "svr_coef0",
+                  "name": "Coef0"
+                }
+              ],
+              "decimal_places": 6,
+              "max_rows": 20
+            }
+          }
+        ]
+      },
+      {
+        "title": "Gaussian Process Diagnostics",
+        "layout": "ew",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "gaussian_process"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Gaussian Process Residual Profile",
+              "x_axis": {
+                "data_source": "__index__",
+                "axis_type": "linear",
+                "label": "Sample Index",
+                "reference_source": "y_cal_error"
+              },
+              "y_axis": {
+                "data_source": "y_cal_error",
+                "axis_type": "linear",
+                "label": "Residual"
+              },
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "y",
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Gaussian Process Parameters",
+              "row_label": "Metric",
+              "columns": [
+                {
+                  "data_source": "model",
+                  "nested_key": "gaussian_process_alpha",
+                  "name": "Noise Alpha"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "gaussian_process_length_scale",
+                  "name": "Initial Length Scale"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "gaussian_process_constant_value",
+                  "name": "Initial Constant"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "gaussian_process_n_restarts_optimizer",
+                  "name": "Optimizer Restarts"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "gaussian_process_normalize_y",
+                  "name": "Normalize Y"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "model_specific.gaussian_process.fitted_length_scale",
+                  "name": "Fitted Length Scale"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "model_specific.gaussian_process.fitted_constant_value",
+                  "name": "Fitted Constant"
+                }
+              ],
+              "decimal_places": 6,
+              "max_rows": 20
+            }
+          }
+        ]
+      },
+      {
+        "title": "Local Regression Diagnostics",
+        "layout": "ew",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "local"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Local Regression Residual Profile",
+              "x_axis": {
+                "data_source": "__index__",
+                "axis_type": "linear",
+                "label": "Sample Index",
+                "reference_source": "y_cal_error"
+              },
+              "y_axis": {
+                "data_source": "y_cal_error",
+                "axis_type": "linear",
+                "label": "Residual"
+              },
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "y",
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Local Regression Parameter Snapshot",
+              "row_label": "Metric",
+              "columns": [
+                {
+                  "data_source": "model",
+                  "nested_key": "model_specific.local.method",
+                  "name": "Method"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "model_specific.local.distance",
+                  "name": "Distance"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "model_specific.local.n_neighbors",
+                  "name": "Neighbors"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "model_specific.local.idw_power",
+                  "name": "IDW Power"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "model_specific.local.adaptive_alpha",
+                  "name": "Adaptive Alpha"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "model_specific.local.radius_threshold",
+                  "name": "Radius Threshold"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "model_specific.local.kernel_bandwidth",
+                  "name": "Kernel Bandwidth"
+                },
+                {
+                  "data_source": "model",
+                  "nested_key": "model_specific.local.minkowski_p",
+                  "name": "Minkowski p"
+                }
+              ],
+              "value_format": ".4g",
+              "decimal_places": 6,
+              "max_rows": 20
+            }
+          }
+        ]
+      },
+      {
+        "title": "Optimization",
+        "layout": "ew",
+        "condition": {
+          "parameter": "optimize_parameters",
+          "operator": "==",
+          "value": true
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "R2 Across Candidate Values",
+              "scatter_lines": [
+                {
+                  "orientation": "vertical",
+                  "value": {
+                    "data_source": "optimization_results",
+                    "nested_key": "best_value"
+                  },
+                  "color": "black",
+                  "linestyle": "--",
+                  "linewidth": 1.5,
+                  "alpha": 0.9,
+                  "label": "Optimal"
+                }
+              ],
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "optimization_results",
+                    "nested_key": "parameter_values",
+                    "axis_type": "linear",
+                    "label": "optimization_results",
+                    "label_nested": "parameter_display_name"
+                  },
+                  "y_axis": {
+                    "data_source": "optimization_results",
+                    "nested_key": "self_r2",
+                    "axis_type": "linear",
+                    "label": "R2"
+                  },
+                  "label": "Self Prediction"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "optimization_results",
+                    "nested_key": "parameter_values",
+                    "axis_type": "linear",
+                    "label": "optimization_results",
+                    "label_nested": "parameter_display_name"
+                  },
+                  "y_axis": {
+                    "data_source": "optimization_results",
+                    "nested_key": "cv_r2",
+                    "axis_type": "linear",
+                    "label": "R2"
+                  },
+                  "label": "Cross-Validation"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "optimization_results",
+                    "nested_key": "parameter_values",
+                    "axis_type": "linear",
+                    "label": "optimization_results",
+                    "label_nested": "parameter_display_name"
+                  },
+                  "y_axis": {
+                    "data_source": "optimization_results",
+                    "nested_key": "val_r2",
+                    "axis_type": "linear",
+                    "label": "R2"
+                  },
+                  "label": "Validation"
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "RMSE Across Candidate Values",
+              "scatter_lines": [
+                {
+                  "orientation": "vertical",
+                  "value": {
+                    "data_source": "optimization_results",
+                    "nested_key": "best_value"
+                  },
+                  "color": "black",
+                  "linestyle": "--",
+                  "linewidth": 1.5,
+                  "alpha": 0.9,
+                  "label": "Optimal"
+                }
+              ],
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "optimization_results",
+                    "nested_key": "parameter_values",
+                    "axis_type": "linear",
+                    "label": "optimization_results",
+                    "label_nested": "parameter_display_name"
+                  },
+                  "y_axis": {
+                    "data_source": "optimization_results",
+                    "nested_key": "self_rmsep",
+                    "axis_type": "linear",
+                    "label": "RMSE"
+                  },
+                  "label": "Self Prediction"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "optimization_results",
+                    "nested_key": "parameter_values",
+                    "axis_type": "linear",
+                    "label": "optimization_results",
+                    "label_nested": "parameter_display_name"
+                  },
+                  "y_axis": {
+                    "data_source": "optimization_results",
+                    "nested_key": "cv_rmsep",
+                    "axis_type": "linear",
+                    "label": "RMSE"
+                  },
+                  "label": "Cross-Validation"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "optimization_results",
+                    "nested_key": "parameter_values",
+                    "axis_type": "linear",
+                    "label": "optimization_results",
+                    "label_nested": "parameter_display_name"
+                  },
+                  "y_axis": {
+                    "data_source": "optimization_results",
+                    "nested_key": "val_rmsep",
+                    "axis_type": "linear",
+                    "label": "RMSE"
+                  },
+                  "label": "Validation"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "EJCR",
+        "layout": "ew",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Calibration EJCR",
+              "show_origin": false,
+              "show_labels": false,
+              "confidence_ellipses": false,
+              "x_axis": {
+                "data_source": "ejcr_cal",
+                "nested_key": "fit_slope",
+                "label": "Slope"
+              },
+              "y_axis": {
+                "data_source": "ejcr_cal",
+                "nested_key": "fit_intercept",
+                "label": "Intercept"
+              },
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "ejcr_cal",
+                "nested_key": "fit_slope",
+                    "label": "Slope"
+                  },
+                  "y_axis": {
+                    "data_source": "ejcr_cal",
+                "nested_key": "fit_intercept",
+                    "label": "Intercept"
+                  },
+                  "label": "OLS Fit",
+                  "marker": "D"
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "custom_ellipsis",
+                  "ellipses_data": {
+                    "data_source": "ejcr_cal"
+                  },
+                  "label": "EJCR",
+                  "expand_limits": true
+                },
+                {
+                  "orientation": "vertical",
+                  "values": [1.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                },
+                {
+                  "orientation": "horizontal",
+                  "values": [0.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "default": 0,
+                  "nav_id": "first_order_response",
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0,
+                  "show_navigation_menu": true
+                }
+              ]
+            },
+            "short_description": "Ellipsoidal joint confidence region (EJCR) for OLS slope and intercept of calibration predictions. The ideal point (slope=1, intercept=0) inside the ellipse indicates unbiased calibration."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Validation EJCR",
+              "show_origin": false,
+              "show_labels": false,
+              "confidence_ellipses": false,
+              "x_axis": {
+                "data_source": "ejcr_val",
+                "nested_key": "fit_slope",
+                "label": "Slope"
+              },
+              "y_axis": {
+                "data_source": "ejcr_val",
+                "nested_key": "fit_intercept",
+                "label": "Intercept"
+              },
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "ejcr_val",
+                "nested_key": "fit_slope",
+                    "label": "Slope"
+                  },
+                  "y_axis": {
+                    "data_source": "ejcr_val",
+                "nested_key": "fit_intercept",
+                    "label": "Intercept"
+                  },
+                  "label": "OLS Fit",
+                  "marker": "D"
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "custom_ellipsis",
+                  "ellipses_data": {
+                    "data_source": "ejcr_val"
+                  },
+                  "label": "EJCR",
+                  "expand_limits": true
+                },
+                {
+                  "orientation": "vertical",
+                  "values": [1.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                },
+                {
+                  "orientation": "horizontal",
+                  "values": [0.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "default": 0,
+                  "nav_id": "first_order_response",
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0,
+                  "show_navigation_menu": true
+                }
+              ]
+            },
+            "short_description": "Ellipsoidal joint confidence region (EJCR) for OLS slope and intercept of validation predictions. The ideal point (slope=1, intercept=0) inside the ellipse indicates unbiased prediction."
+          }
+        ]
+      }
+    ]
+  }
+}

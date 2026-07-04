@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>User GUI - Chemometric Studio User Manual</title>
+  <link rel="stylesheet" href="assets/css/manual.css">
+</head>
+<body data-manual-page="user-gui" data-manual-group="qa-user-gui">
+  <div data-manual-header></div>
+
+  <main class="layout">
+    <aside class="manual-sidebar" data-manual-sidebar data-reveal></aside>
+
+    <div class="content-column">
+      <section class="panel" data-reveal>
+        <h1>User GUI</h1>
+        <p>The User GUI is a simplified interface designed for non-specialized users who need guided model execution with minimal setup complexity.</p>
+        <p>It lets teams share validated models from expert users to operators, technicians, and collaborators who mainly need to load data, run the model, and inspect predefined outputs.</p>
+      </section>
+
+      <section class="grid" data-reveal>
+        <article class="panel">
+          <h2>Why It Matters</h2>
+          <ul>
+            <li><strong>Reduces misuse:</strong> hides advanced configuration that could break validated workflows.</li>
+            <li><strong>Improves consistency:</strong> users run the same prepared model with the same expected logic.</li>
+            <li><strong>Speeds onboarding:</strong> non-specialists can execute analyses without learning full model construction.</li>
+            <li><strong>Supports operations:</strong> ideal for routine QC and production checks based on approved models.</li>
+          </ul>
+        </article>
+        <aside class="panel alt">
+          <h2>When To Use It</h2>
+          <ul>
+            <li>You already have a model prepared by a specialist in the full interface.</li>
+            <li>Users need guided execution, not model architecture editing.</li>
+            <li>You want standardized outputs for recurrent decisions.</li>
+            <li>You need reliable day-to-day operation with lower training effort.</li>
+          </ul>
+        </aside>
+      </section>
+
+      <section class="panel" id="how-to-use" data-reveal>
+        <h2>How To Use the User GUI</h2>
+        <ol class="step-list">
+          <li>Start the user application executable (<code>ChemometricStudioUser</code>).</li>
+          <li>Load a pre-configured model supplied by the specialist team.</li>
+          <li>Select the required input data files.</li>
+          <li>Run the model and wait for execution to complete.</li>
+          <li>Review guided outputs and follow your local decision protocol.</li>
+          <li>Export or report results when required by your process.</li>
+        </ol>
+        <div class="note">If the model or inputs fail validation, send the model file and logs to the specialist team instead of editing internals in the user interface.</div>
+      </section>
+
+      <section class="panel" id="good-practices" data-reveal>
+        <h2>Good Practices</h2>
+        <ul>
+          <li>Use versioned model files approved by your organization.</li>
+          <li>Keep input templates and naming conventions consistent.</li>
+          <li>Document who ran each analysis and when.</li>
+          <li>Escalate unexpected results to the model owner before changing process settings.</li>
+        </ul>
+      </section>
+    </div>
+  </main>
+
+  <footer data-manual-footer></footer>
+
+  <script src="assets/js/manual-common.js"></script>
+  <script src="assets/js/manual-shell.js"></script>
+  <script src="assets/js/manual.js"></script>
+</body>
+</html>

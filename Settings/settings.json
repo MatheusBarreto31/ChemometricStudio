@@ -1,0 +1,11 @@
+{
+  "language": "en",
+  "theme": "sv_dark",
+  "web_theme": "web-classic",
+  "colormap": "jet",
+  "graph_font_scale": 1.0,
+  "display_splashscreen": true,
+  "import_loading_mode": "eager",
+  "categories_start_collapsed": true,
+  "qualitative_colormap": "tab10"
+}

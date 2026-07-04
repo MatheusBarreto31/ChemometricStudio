@@ -1,0 +1,2206 @@
+{
+  "display_name": "MCR-ALS",
+  "category": "4.Exploratory Analysis",
+  "data_type": "multiway",
+  "input_aliases": {
+    "X_cal": "X Calibration",
+    "Y_cal": "Y Calibration",
+    "X_val": "X Validation",
+    "Y_val": "Y Validation",
+    "cal_s_mask": "Calibration Sample Mask",
+    "val_s_mask": "Validation Sample Mask",
+    "n_components": "Components",
+    "nway_flag": "Data Order",
+    "aug_direction": "S Profile Direction",
+    "max_iter": "Max Iterations",
+    "tol": "Tolerance",
+    "random_state": "Random Seed",
+    "constraint_non_negative": "Non-negative Constraint",
+    "constraint_non_negative_mode_c": "Non-negative Mode (C)",
+    "constraint_non_negative_mode_st": "Non-negative Mode (S)",
+    "constraint_cumsum_non_negative": "Cumsum Non-negative Constraint",
+    "constraint_zero_end_points": "Zero End Points Constraint",
+    "constraint_zero_cumsum_end_points": "Zero Cumsum End Points Constraint",
+    "constraint_normalize": "Normalize Constraint",
+    "constraint_cut_below": "Cut Below Constraint",
+    "constraint_cut_above": "Cut Above Constraint",
+    "constraint_compress_below": "Compress Below Constraint",
+    "constraint_compress_above": "Compress Above Constraint",
+    "constraint_replace_zeros": "Replace Zeros Constraint",
+    "constraint_planarize": "Planarize Constraint",
+    "constraint_zero_end_points_span": "Zero End Points Span",
+    "constraint_zero_cumsum_nodes": "Zero Cumsum Nodes",
+    "constraint_cut_below_value": "Cut Below Value",
+    "constraint_cut_above_value": "Cut Above Value",
+    "constraint_compress_below_value": "Compress Below Value",
+    "constraint_compress_above_value": "Compress Above Value",
+    "constraint_replace_zeros_feature": "Replace Zeros Feature",
+    "constraint_replace_zeros_fval": "Replace Zeros F-Value",
+    "constraint_planarize_targets_c": "Planarize Targets (C)",
+    "constraint_planarize_targets_st": "Planarize Targets (S)",
+    "constraint_planarize_shape_c": "Planarize Shape (C)",
+    "constraint_planarize_shape_st": "Planarize Shape (S)",
+    "constraint_planarize_use_vals_above": "Planarize Use Values Above",
+    "constraint_planarize_use_vals_below": "Planarize Use Values Below",
+    "constraint_planarize_lims_to_plane": "Planarize Limit To Plane",
+    "constraint_planarize_scaler": "Planarize Scaler",
+    "constraint_planarize_recalc_scaler": "Planarize Recalculate Scaler",
+    "sweep_mode": "Sweep Mode",
+    "component_range": "Component Range",
+    "mcr_component_y_mapping": "Component-Y Mapping",
+    "cv_config": "CV Configuration",
+    "y_labels": "Y Labels",
+    "validation_processing": "Validation Processing"
+  },
+  "output_aliases": {
+    "c_scores": "Concentration Scores (C)",
+    "val_c_scores": "Validation Concentration Scores",
+    "c_scores_heatmap_full": "C Scores Heatmap (All Samples)",
+    "c_sample_axis_full": "C Sample Axis (All Samples)",
+    "concentrations_unfolded": "Unfolded Concentration Profiles",
+    "concentration_row_axis": "Unfolded Row Axis",
+    "s_axis_vector": "S Axis Vector",
+    "sample_boundary_positions": "Sample Boundary Positions",
+    "cal_val_boundary_position": "Calibration/Validation Boundary",
+    "s_profiles": "Spectral Profiles (S)",
+    "reconstructed": "Reconstructed Data",
+    "residual": "Residual Data",
+    "metrics": "Metrics",
+    "calibration_models": "Calibration Models",
+    "component_y_mapping": "Component-Y Pairing",
+    "mcr_als_report": "MCR-ALS Report",
+    "cv_results": "CV Results",
+    "y_cv_pred": "CV Predictions",
+    "s_axis_label": "S Axis Label",
+    "c_aggregation_label": "C Aggregation Label",
+    "auto_mapping_used": "Auto Component-Y Mapping Used",
+    "sweep_n_iter": "Sweep Iterations",
+    "validation_processing": "Validation Processing Mode",
+    "sbs_c_scores": "SBS C Scores (Cal)",
+    "sbs_val_c_scores": "SBS C Scores (Val Sample)",
+    "sbs_c_scores_heatmap": "SBS C Scores Heatmap",
+    "sbs_c_scores_heatmap_full": "SBS C Scores Heatmap (All Samples)",
+    "sbs_concentrations_unfolded": "SBS Unfolded C Profiles",
+    "sbs_concentration_row_axis": "SBS Unfolded Row Axis",
+    "sbs_sample_boundary_positions": "SBS Sample Boundaries",
+    "sbs_cal_val_boundary_position": "SBS Cal/Val Boundary",
+    "sbs_s_profiles": "SBS S Profiles",
+    "sbs_similarity_matrix": "SBS Similarity Matrix",
+    "sbs_val_sample_axis": "SBS Validation Sample Axis",
+    "sbs_c_sample_axis": "SBS C Sample Axis",
+    "sbs_c_sample_axis_full": "SBS C Sample Axis (All Samples)",
+    "sbs_c_component_axis": "SBS C Component Axis",
+    "sbs_component_labels": "SBS Component Labels"
+  },
+  "passforward": {
+    "compatible": true,
+    "description": "Expose selected MCR-ALS outputs as routed downstream inputs when enabled.",
+    "mappings": {
+      "X_cal": {
+        "source": "c_scores",
+        "label": "(PF) X Calibration"
+      },
+      "X_val": {
+        "source": "val_c_scores",
+        "label": "(PF) X Validation"
+      },
+      "axis_n_info": {
+        "builder": "score_axis_n_info",
+        "sample_source": "axis_n_info",
+        "component_source": "c_component_axis",
+        "label": "(PF) Axis N Info"
+      },
+      "axis_t_info": {
+        "builder": "score_axis_t_info",
+        "sample_text_source": "axis_t_info",
+        "sample_axis_source": "c_sample_axis",
+        "component_source": "c_component_axis",
+        "component_prefix": "C",
+        "label": "(PF) Axis T Info"
+      },
+      "dim_labels": {
+        "builder": "score_dim_labels",
+        "sample_label_source": "dim_labels",
+        "factor_label": "Component",
+        "label": "(PF) Dimension Labels"
+      },
+      "nway_flag": {
+        "value": 1,
+        "label": "(PF) Data Order"
+      }
+    }
+  },
+  "short_description": "MCR-ALS (pyMCR) decomposition with optional calibration, sweep, and cross-validation.",
+  "long_description": "Fits MCR-ALS to unfolded calibration data using pyMCR, estimates concentration/spectral profiles, and optionally maps components to Y targets for calibration and validation prediction.",
+  "setup": {
+    "categories": [
+      "Model Parameters",
+      "Constraints",
+      "Calibration",
+      "Cross-Validation",
+      "Data Inputs"
+    ],
+    "layout": [
+      {
+        "name": "n_components",
+        "label": "Number of Components",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "2",
+        "required": true,
+        "tooltip": "Number of components to extract.",
+        "input_type": "user"
+      },
+      {
+        "name": "max_iter",
+        "label": "Maximum Iterations",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "250",
+        "required": true,
+        "tooltip": "Maximum number of iterations for the fitting algorithm.",
+        "input_type": "user"
+      },
+      {
+        "name": "tol",
+        "label": "Tolerance",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1e-8",
+        "required": true,
+        "tooltip": "Convergence tolerance for the fitting algorithm.",
+        "input_type": "user"
+      },
+      {
+        "name": "random_state",
+        "label": "Random Seed",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "str",
+        "default": "42",
+        "required": false,
+        "tooltip": "Random seed for reproducibility. Can be an integer or 'None' for no fixed seed.",
+        "input_type": "user"
+      },
+      {
+        "name": "constraint_non_negative",
+        "label": "Non-negative",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "2",
+        "item_labels": [
+          "C",
+          "S"
+        ],
+        "default": true,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Enable non-negativity for C and/or S."
+      },
+      {
+        "name": "constraint_non_negative_mode_c",
+        "label": "Non-negative Mode (C)",
+        "category": "Constraints",
+        "widget": "combobox",
+        "values": [
+          "NNLS",
+          "PROJECT",
+          "NNLS_PROJECT"
+        ],
+        "value_aliases": [
+          "NNLS",
+          "Project",
+          "NNLS + Project"
+        ],
+        "default": "NNLS",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_non_negative": {
+            "operator": "index_true",
+            "index": 0
+          }
+        },
+        "tooltip": "C mode: NNLS uses non-negative solver; Project applies non-negative projection after solve; NNLS + Project does both."
+      },
+      {
+        "name": "constraint_non_negative_mode_st",
+        "label": "Non-negative Mode (S)",
+        "category": "Constraints",
+        "widget": "combobox",
+        "values": [
+          "NNLS",
+          "PROJECT",
+          "NNLS_PROJECT"
+        ],
+        "value_aliases": [
+          "NNLS",
+          "Project",
+          "NNLS + Project"
+        ],
+        "default": "NNLS",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_non_negative": {
+            "operator": "index_true",
+            "index": 1
+          }
+        },
+        "tooltip": "S mode: NNLS uses non-negative solver; Project applies non-negative projection after solve; NNLS + Project does both."
+      },
+      {
+        "name": "constraint_cumsum_non_negative",
+        "label": "Cumsum Non-negative",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "2",
+        "item_labels": [
+          "C",
+          "S"
+        ],
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Apply cumulative-sum non-negativity along each profile vector."
+      },
+      {
+        "name": "constraint_zero_end_points",
+        "label": "Zero End Points",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "2",
+        "item_labels": [
+          "C",
+          "S"
+        ],
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Force profile endpoints toward zero by baseline subtraction."
+      },
+      {
+        "name": "constraint_zero_end_points_span",
+        "label": "Zero End Points Span",
+        "category": "Constraints",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Number of points averaged at each edge for zero-end correction.",
+        "visible_if": {
+          "constraint_zero_end_points": {
+            "operator": "any_true"
+          }
+        }
+      },
+      {
+        "name": "constraint_zero_cumsum_end_points",
+        "label": "Zero Cumsum End Points",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "2",
+        "item_labels": [
+          "C",
+          "S"
+        ],
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Center cumulative-sum segments to near zero, optionally using node boundaries."
+      },
+      {
+        "name": "constraint_zero_cumsum_nodes",
+        "label": "Zero Cumsum Nodes",
+        "category": "Constraints",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_zero_cumsum_end_points": {
+            "operator": "any_true"
+          }
+        },
+        "tooltip": "Optional 1-based node indices, e.g. 3,7,10"
+      },
+      {
+        "name": "constraint_normalize",
+        "label": "Normalize",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "2",
+        "item_labels": [
+          "C",
+          "S"
+        ],
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "ConstraintNorm in pyMCR."
+      },
+      {
+        "name": "constraint_cut_below",
+        "label": "Cut Below",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "2",
+        "item_labels": [
+          "C",
+          "S"
+        ],
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Set values below threshold to zero."
+      },
+      {
+        "name": "constraint_cut_below_value",
+        "label": "Cut Below Value",
+        "category": "Constraints",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.0",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Threshold used by Cut Below.",
+        "visible_if": {
+          "constraint_cut_below": {
+            "operator": "any_true"
+          }
+        }
+      },
+      {
+        "name": "constraint_cut_above",
+        "label": "Cut Above",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "2",
+        "item_labels": [
+          "C",
+          "S"
+        ],
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Set values above threshold to zero."
+      },
+      {
+        "name": "constraint_cut_above_value",
+        "label": "Cut Above Value",
+        "category": "Constraints",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Threshold used by Cut Above.",
+        "visible_if": {
+          "constraint_cut_above": {
+            "operator": "any_true"
+          }
+        }
+      },
+      {
+        "name": "constraint_compress_below",
+        "label": "Compress Below",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "2",
+        "item_labels": [
+          "C",
+          "S"
+        ],
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Clamp values below threshold up to the threshold value."
+      },
+      {
+        "name": "constraint_compress_below_value",
+        "label": "Compress Below Value",
+        "category": "Constraints",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.0",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Threshold used by Compress Below.",
+        "visible_if": {
+          "constraint_compress_below": {
+            "operator": "any_true"
+          }
+        }
+      },
+      {
+        "name": "constraint_compress_above",
+        "label": "Compress Above",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "2",
+        "item_labels": [
+          "C",
+          "S"
+        ],
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Clamp values above threshold down to the threshold value."
+      },
+      {
+        "name": "constraint_compress_above_value",
+        "label": "Compress Above Value",
+        "category": "Constraints",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Threshold used by Compress Above.",
+        "visible_if": {
+          "constraint_compress_above": {
+            "operator": "any_true"
+          }
+        }
+      },
+      {
+        "name": "constraint_replace_zeros",
+        "label": "Replace Zeros",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "2",
+        "item_labels": [
+          "C",
+          "S"
+        ],
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Replace zero-sum rows with a fallback one-hot profile."
+      },
+      {
+        "name": "constraint_replace_zeros_feature",
+        "label": "Replace Zeros Feature",
+        "category": "Constraints",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_replace_zeros": {
+            "operator": "any_true"
+          }
+        },
+        "tooltip": "1-based feature index used by ConstraintReplaceZeros."
+      },
+      {
+        "name": "constraint_replace_zeros_fval",
+        "label": "Replace Zeros F-Value",
+        "category": "Constraints",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Total magnitude assigned to replacement rows.",
+        "visible_if": {
+          "constraint_replace_zeros": {
+            "operator": "any_true"
+          }
+        }
+      },
+      {
+        "name": "constraint_planarize",
+        "label": "Planarize",
+        "category": "Constraints",
+        "widget": "checkbutton_list",
+        "count_source": "2",
+        "item_labels": [
+          "C",
+          "S"
+        ],
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Fit selected columns to a smooth plane over a 2D reshaped grid."
+      },
+      {
+        "name": "constraint_planarize_targets_c",
+        "label": "Planarize Targets (C)",
+        "category": "Constraints",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_planarize": {
+            "operator": "index_true",
+            "index": 0
+          }
+        },
+        "tooltip": "Optional 1-based column indices for C planarization."
+      },
+      {
+        "name": "constraint_planarize_shape_c",
+        "label": "Planarize Shape (C)",
+        "category": "Constraints",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_planarize": {
+            "operator": "index_true",
+            "index": 0
+          }
+        },
+        "tooltip": "rows,cols where rows*cols equals number of C rows in fit matrix."
+      },
+      {
+        "name": "constraint_planarize_targets_st",
+        "label": "Planarize Targets (S)",
+        "category": "Constraints",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_planarize": {
+            "operator": "index_true",
+            "index": 1
+          }
+        },
+        "tooltip": "Optional 1-based column indices for S planarization."
+      },
+      {
+        "name": "constraint_planarize_shape_st",
+        "label": "Planarize Shape (S)",
+        "category": "Constraints",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "constraint_planarize": {
+            "operator": "index_true",
+            "index": 1
+          }
+        },
+        "tooltip": "rows,cols where rows*cols equals number of S rows (components)."
+      },
+      {
+        "name": "constraint_planarize_use_vals_above",
+        "label": "Planarize Use Values Above",
+        "category": "Constraints",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Optional lower bound filter when fitting the plane.",
+        "visible_if": {
+          "constraint_planarize": {
+            "operator": "any_true"
+          }
+        }
+      },
+      {
+        "name": "constraint_planarize_use_vals_below",
+        "label": "Planarize Use Values Below",
+        "category": "Constraints",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Optional upper bound filter when fitting the plane.",
+        "visible_if": {
+          "constraint_planarize": {
+            "operator": "any_true"
+          }
+        }
+      },
+      {
+        "name": "constraint_planarize_lims_to_plane",
+        "label": "Planarize Limit To Plane",
+        "category": "Constraints",
+        "widget": "checkbutton",
+        "default": true,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Limit planarized values to optional above/below bounds.",
+        "visible_if": {
+          "constraint_planarize": {
+            "operator": "any_true"
+          }
+        }
+      },
+      {
+        "name": "constraint_planarize_scaler",
+        "label": "Planarize Scaler",
+        "category": "Constraints",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Optional explicit scaler used for planar fit coordinate magnitudes.",
+        "visible_if": {
+          "constraint_planarize": {
+            "operator": "any_true"
+          }
+        }
+      },
+      {
+        "name": "constraint_planarize_recalc_scaler",
+        "label": "Planarize Recalculate Scaler",
+        "category": "Constraints",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Recompute planarization scaler for each call instead of reusing it.",
+        "visible_if": {
+          "constraint_planarize": {
+            "operator": "any_true"
+          }
+        }
+      },
+      {
+        "name": "sweep_mode",
+        "label": "Sweep Components",
+        "category": "Model Parameters",
+        "widget": "checkbutton",
+        "default": false,
+        "required": false,
+        "tooltip": "Perform a component sweep by iteratively fitting models with different component counts aggregating results. Useful for generating scree plots.",
+        "input_type": "user"
+      },
+      {
+        "name": "component_range",
+        "label": "Component Range",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "sweep_mode": true
+        },
+        "tooltip": "Component counts to sweep when sweep mode is enabled. Examples: 2:6, 2-8, 2,3,4."
+      },
+      {
+        "name": "validation_processing",
+        "label": "Validation Processing",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "values": [
+          "batch",
+          "sample_by_sample"
+        ],
+        "value_aliases": [
+          "Batch",
+          "Sample by Sample"
+        ],
+        "default": "batch",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Batch: adds all validation/test samples at once. Sample by Sample: fits one model per validation/test sample."
+      },
+      {
+        "name": "aug_direction",
+        "label": "S Profile Direction",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "2",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "nway_flag": {
+            "operator": ">=",
+            "value": 2
+          }
+        },
+        "tooltip": "1-based index of the non-sample mode that maps to the S (spectral) axis. All other non-sample modes are unfolded into C rows."
+      },
+      {
+        "name": "c_aggregation_method",
+        "label": "C Aggregation Method",
+        "category": "Calibration",
+        "widget": "combobox",
+        "values": [
+          "area",
+          "max",
+          "min"
+        ],
+        "value_aliases": [
+          "Area (Integral)",
+          "Maximum Value",
+          "Minimum Value"
+        ],
+        "default": "area",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "nway_flag": {
+            "operator": ">=",
+            "value": 2
+          }
+        },
+        "tooltip": "Method used to aggregate concentration rows per sample when fitting augmented (multiway) data. Area: trapezoid integral; Max: maximum value; Min: minimum value."
+      },
+      {
+        "name": "mcr_component_y_mapping",
+        "label": "Component-Y Mapping",
+        "category": "Calibration",
+        "widget": "entry_list",
+        "count_source": "n_components",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "One entry per component: Y column index (1-based). Empty entry excludes that component. If all are empty, all valid component-to-Y combinations are evaluated automatically."
+      },
+      {
+        "name": "y_labels",
+        "label": "Y Labels",
+        "category": "Calibration",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "router",
+        "visible_if": false,
+        "tooltip": "Routed from upstream labels source; hidden in direct user setup."
+      },
+      {
+        "name": "cv_config",
+        "label": "Cross-Validation Config",
+        "category": "Cross-Validation",
+        "widget": "entry",
+        "type": "CVConfig",
+        "default": "",
+        "required": false,
+        "input_type": "router",
+        "visible_if": false,
+        "tooltip": "Routed from CV configuration step; hidden in direct user setup."
+      },
+      {
+        "name": "nway_flag",
+        "label": "Data Order",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "visible_if": {
+          "input_type": "user"
+        },
+        "input_type": "inherited"
+      },
+      {
+        "name": "cal_s_mask",
+        "label": "Calibration Sample Mask",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "visible_if": {
+          "input_type": "user"
+        },
+        "input_type": "routed"
+      },
+      {
+        "name": "val_s_mask",
+        "label": "Validation Sample Mask",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "visible_if": {
+          "input_type": "user"
+        },
+        "input_type": "routed"
+      }
+    ]
+  },
+  "analysis": {
+    "pages": [
+      {
+        "title": "MCR-ALS Deconvolution Report",
+        "layout": "fp",
+        "sections": [
+          {
+            "type": "text",
+            "config": {
+              "title": "MCR-ALS Text Report",
+              "text_template": "{report_text}",
+              "bindings": [
+                {
+                  "name": "report_text",
+                  "data_source": "mcr_als_report",
+                  "selector": {
+                    "mode": "value"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Sweep Scree",
+        "layout": "fd",
+        "condition": {
+          "parameter": "sweep_results",
+          "operator": "exists",
+          "value": true
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "marker": "o",
+              "x_axis": {
+                "data_source": "sweep_components",
+                "force_integer": true,
+                "label": "Components"
+              },
+              "y_axis": {
+                "data_source": "sweep_sfit",
+                "label": "sfit"
+              },
+              "title": "Sweep: sfit vs Components",
+              "show_origin": false
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "marker": "o",
+              "x_axis": {
+                "data_source": "sweep_components",
+                "force_integer": true,
+                "label": "Components"
+              },
+              "y_axis": {
+                "data_source": "sweep_explained_variance",
+                "label": "Explained Variance (%)"
+              },
+              "title": "Sweep: Explained Variance vs Components",
+              "show_origin": false
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "marker": "o",
+              "x_axis": {
+                "data_source": "sweep_components",
+                "force_integer": true,
+                "label": "Components"
+              },
+              "y_axis": {
+                "data_source": "sweep_n_iter",
+                "label": "Iterations"
+              },
+              "title": "Sweep: Iterations vs Components",
+              "show_origin": false
+            }
+          }
+        ]
+      },
+      {
+        "title": "C and S Profiles",
+        "layout": "ew",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {
+                "data_source": "concentration_row_axis",
+                "force_integer": true,
+                "label": "Unfolded Row Index"
+              },
+              "y_axis": {
+                "data_source": "concentrations_unfolded",
+                "label": "C (a.u.)"
+              },
+              "title": "C Profiles (Unfolded Rows)",
+              "show_origin": false,
+              "reference_lines": [
+                {
+                  "orientation": "vertical",
+                  "values": {
+                    "data_source": "sample_boundary_positions"
+                  },
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.7,
+                  "color": "#666666"
+                },
+                {
+                  "orientation": "vertical",
+                  "value": {
+                    "data_source": "cal_val_boundary_position"
+                  },
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.7,
+                  "color": "#cc0000"
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "condition": {
+              "parameter": "s_axis_vector",
+              "operator": "exists",
+              "value": true
+            },
+            "config": {
+              "graph_type": "line",
+              "x_axis": {
+                "data_source": "s_axis_vector",
+                "label": "s_axis_label"
+              },
+              "y_axis": {
+                "data_source": "s_profiles",
+                "label": "S (a.u.)"
+              },
+              "title": "S Profiles",
+              "show_origin": false
+            }
+          },
+          {
+            "type": "graph",
+            "condition": {
+              "parameter": "s_axis_vector",
+              "operator": "not_exists",
+              "value": true
+            },
+            "config": {
+              "graph_type": "line",
+              "x_axis": {
+                "data_source": "row_index",
+                "reference_source": "s_profiles",
+                "force_integer": true,
+                "label": "s_axis_label"
+              },
+              "y_axis": {
+                "data_source": "s_profiles",
+                "label": "S (a.u.)"
+              },
+              "title": "S Profiles",
+              "show_origin": false
+            }
+          }
+        ],
+        "condition": {
+          "parameter": "validation_processing",
+          "operator": "==",
+          "value": "batch"
+        }
+      },
+      {
+        "title": "C scores (Aggregated)",
+        "layout": "ew",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "C Scores (Component x Component)",
+              "show_grid": false,
+              "show_origin": true,
+              "show_labels": false,
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "c_scores",
+                    "axis_type": "linear",
+                    "axis_labels": "component_labels"
+                  },
+                  "y_axis": {
+                    "data_source": "c_scores",
+                    "axis_type": "linear",
+                    "axis_labels": "component_labels"
+                  },
+                  "class_labels": "class_data_cal",
+                  "point_labels_source": "smp_cal",
+                  "label": "Calibration"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "val_c_scores",
+                    "axis_type": "linear",
+                    "axis_labels": "component_labels"
+                  },
+                  "y_axis": {
+                    "data_source": "val_c_scores",
+                    "axis_type": "linear",
+                    "axis_labels": "component_labels"
+                  },
+                  "class_labels": "class_data_val",
+                  "point_labels_source": "smp_val",
+                  "label": "Validation"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "C-X",
+                  "dimension": 1,
+                  "axis": "x",
+                  "default": 0,
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "C-Y",
+                  "dimension": 1,
+                  "axis": "y",
+                  "default": 1,
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "flip_xy": true,
+              "y_axis": {
+                "data_source": "c_component_axis",
+                "force_integer": true,
+                "label": "Component"
+              },
+              "x_axis": {
+                "data_source": "c_sample_axis_full",
+                "force_integer": true,
+                "reverse_axis": true,
+                "label": "Sample"
+              },
+              "z_axis": {
+                "data_source": "c_scores_heatmap_full",
+                "label": "c_aggregation_label"
+              },
+              "title": "C Scores Heatmap (All Samples x Components)"
+            }
+          }
+        ],
+        "condition": {
+          "parameter": "validation_processing",
+          "operator": "==",
+          "value": "batch"
+        }
+      },
+      {
+        "title": "C Scores (SBS)",
+        "layout": "ew",
+        "condition": {
+          "all": [
+            {
+              "parameter": "validation_processing",
+              "operator": "==",
+              "value": "sample_by_sample"
+            },
+            {
+              "parameter": "sbs_component_labels",
+              "operator": "exists",
+              "value": true
+            }
+          ]
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "C Scores – Cal + Val Sample",
+              "show_grid": false,
+              "show_origin": true,
+              "show_labels": false,
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "sbs_c_scores",
+                    "axis_type": "linear",
+                    "axis_labels": "sbs_component_labels"
+                  },
+                  "y_axis": {
+                    "data_source": "sbs_c_scores",
+                    "axis_type": "linear",
+                    "axis_labels": "sbs_component_labels"
+                  },
+                  "point_labels_source": "smp_cal",
+                  "label": "Calibration"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "sbs_val_c_scores",
+                    "axis_type": "linear",
+                    "axis_labels": "sbs_component_labels"
+                  },
+                  "y_axis": {
+                    "data_source": "sbs_val_c_scores",
+                    "axis_type": "linear",
+                    "axis_labels": "sbs_component_labels"
+                  },
+                  "label": "Val Sample (this model)"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Val Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_mcr_val_sample"
+                },
+                {
+                  "name": "C-X",
+                  "dimension": 2,
+                  "axis": "x",
+                  "default": 0,
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "C-Y",
+                  "dimension": 2,
+                  "axis": "y",
+                  "default": 1,
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "flip_xy": true,
+              "y_axis": {
+                "data_source": "sbs_c_component_axis",
+                "force_integer": true,
+                "label": "Component"
+              },
+              "x_axis": {
+                "data_source": "sbs_c_sample_axis_full",
+                "force_integer": true,
+                "reverse_axis": true,
+                "label": "Cal Sample"
+              },
+              "z_axis": {
+                "data_source": "sbs_c_scores_heatmap_full",
+                "label": "C Score"
+              },
+              "title": "C Scores Heatmap (All Samples x Components)",
+              "data_slicing": [
+                {
+                  "name": "Val Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_mcr_val_sample"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "C and S Profiles (SBS)",
+        "layout": "ew",
+        "condition": {
+          "all": [
+            {
+              "parameter": "validation_processing",
+              "operator": "==",
+              "value": "sample_by_sample"
+            },
+            {
+              "parameter": "sbs_component_labels",
+              "operator": "exists",
+              "value": true
+            }
+          ]
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {
+                "data_source": "sbs_concentration_row_axis",
+                "force_integer": true,
+                "label": "Unfolded Row Index"
+              },
+              "y_axis": {
+                "data_source": "sbs_concentrations_unfolded",
+                "label": "C (a.u.)"
+              },
+              "title": "C Profiles (Unfolded Rows, Model for Val Sample)",
+              "show_origin": false,
+              "line_series_labels_source": "sbs_component_labels",
+              "reference_lines": [
+                {
+                  "orientation": "vertical",
+                  "values": {
+                    "data_source": "sbs_sample_boundary_positions"
+                  },
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.7,
+                  "color": "#666666"
+                },
+                {
+                  "orientation": "vertical",
+                  "value": {
+                    "data_source": "sbs_cal_val_boundary_position"
+                  },
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.7,
+                  "color": "#cc0000"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Val Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_mcr_profile_model"
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "condition": {
+              "parameter": "s_axis_vector",
+              "operator": "exists",
+              "value": true
+            },
+            "config": {
+              "graph_type": "line",
+              "x_axis": {
+                "data_source": "s_axis_vector",
+                "label": "s_axis_label"
+              },
+              "y_axis": {
+                "data_source": "sbs_s_profiles",
+                "label": "S (a.u.)"
+              },
+              "title": "S Profiles (Model for Val Sample)",
+              "show_origin": false,
+              "line_series_labels_source": "sbs_component_labels",
+              "data_slicing": [
+                {
+                  "name": "Val Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "show_navigation_menu": false,
+                  "nav_id": "sbs_mcr_profile_model"
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "condition": {
+              "parameter": "s_axis_vector",
+              "operator": "not_exists",
+              "value": true
+            },
+            "config": {
+              "graph_type": "line",
+              "x_axis": {
+                "data_source": "row_index",
+                "reference_source": "sbs_s_profiles",
+                "force_integer": true,
+                "label": "s_axis_label"
+              },
+              "y_axis": {
+                "data_source": "sbs_s_profiles",
+                "label": "S (a.u.)"
+              },
+              "title": "S Profiles (Model for Val Sample)",
+              "show_origin": false,
+              "line_series_labels_source": "sbs_component_labels",
+              "data_slicing": [
+                {
+                  "name": "Val Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "show_navigation_menu": false,
+                  "nav_id": "sbs_mcr_profile_model"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Component Stability (SBS)",
+        "layout": "fp",
+        "condition": {
+          "all": [
+            {
+              "parameter": "validation_processing",
+              "operator": "==",
+              "value": "sample_by_sample"
+            },
+            {
+              "parameter": "sbs_component_labels",
+              "operator": "exists",
+              "value": true
+            }
+          ]
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "x_axis": {
+                "data_source": "sbs_val_sample_axis",
+                "force_integer": true,
+                "label": "Validation Sample (Model j)"
+              },
+              "y_axis": {
+                "data_source": "sbs_val_sample_axis",
+                "force_integer": true,
+                "label": "Validation Sample (Model i)"
+              },
+              "z_axis": {
+                "data_source": "sbs_similarity_matrix",
+                "label": "Cosine Similarity (S Profiles)"
+              },
+              "title": "S Profile Cosine Similarity Between SBS Models",
+              "data_slicing": [
+                {
+                  "name": "Component",
+                  "dimension": 0,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_mcr_component"
+                }
+              ],
+              "colormap": "RdYlGn",
+              "vmin": -1.0,
+              "vmax": 1.0
+            }
+          }
+        ]
+      },
+      {
+        "title": "Prediction Tables",
+        "layout": "fd",
+        "condition": {
+          "all": [
+            {"parameter": "validation_processing","operator": "==","value": "batch"},
+            {"parameter": "Y_cal","operator": "exists"}]
+        },
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "title": "Calibration Predictions, References, and Error",
+              "row_label": "Sample",
+              "row_headers": "smp_cal",
+              "columns": [
+                {
+                  "data_source": "y_cal_pred_pairs",
+                  "name": "Predicted"
+                },
+                {
+                  "data_source": "y_cal_true_pairs",
+                  "name": "Reference"
+                },
+                {
+                  "data_source": "y_cal_error_pairs",
+                  "name": "Error"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Pairing",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "mcr_pairing"
+                }
+              ],
+              "variable_labels": "mcr_pairing_labels_by_dimension",
+              "pairing_labels_source": "mcr_pairing_labels",
+              "slice_title_source": "mcr_pair_y_titles",
+              "slice_title_dimension": 1,
+              "slice_title_prefix": "Y",
+              "decimal_places": 6,
+              "max_rows": 500
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Validation Predictions, References, and Error",
+              "row_label": "Sample",
+              "row_headers": "smp_val",
+              "columns": [
+                {
+                  "data_source": "y_val_pred_pairs",
+                  "name": "Predicted"
+                },
+                {
+                  "data_source": "y_val_true_pairs",
+                  "name": "Reference"
+                },
+                {
+                  "data_source": "y_val_error_pairs",
+                  "name": "Error"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Pairing",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "mcr_pairing"
+                }
+              ],
+              "variable_labels": "mcr_pairing_labels_by_dimension",
+              "pairing_labels_source": "mcr_pairing_labels",
+              "slice_title_source": "mcr_pair_y_titles",
+              "slice_title_dimension": 1,
+              "slice_title_prefix": "Y",
+              "decimal_places": 6,
+              "max_rows": 500
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "C Scores vs Reference Y",
+              "show_origin": false,
+              "show_labels": false,
+              "datasets": [
+                {
+                  "x_axis": {
+                      "data_source": "y_cal_true_pairs",
+                      "axis_type": "linear",
+                      "axis_labels": "mcr_pair_y_titles",
+                      "axis_labels_dimension": 1,
+                      "label_template": "$y_{{Ref}}$ ({label})"
+                  },
+                  "y_axis": {
+                      "data_source": "c_scores_cal_pairs",
+                      "axis_type": "linear",
+                      "axis_labels": "c_score_pair_labels",
+                      "axis_labels_dimension": 1
+                  },
+                  "point_labels_source": "smp_cal",
+                  "label": "Calibration"
+                },
+                {
+                  "x_axis": {
+                      "data_source": "y_val_effective_pairs",
+                      "axis_type": "linear",
+                      "axis_labels": "mcr_pair_y_titles",
+                      "axis_labels_dimension": 1,
+                      "label_template": "$y_{{Ref}}$ ({label})"
+                  },
+                  "y_axis": {
+                      "data_source": "c_scores_val_pairs",
+                      "axis_type": "linear",
+                      "axis_labels": "c_score_pair_labels",
+                      "axis_labels_dimension": 1
+                  },
+                  "point_labels_source": "smp_val",
+                  "label": "Validation"
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "path",
+                  "x": {
+                    "data_source": "cal_regression_line_x_pairs"
+                  },
+                  "y": {
+                    "data_source": "cal_regression_line_y_pairs"
+                  },
+                  "color": "red",
+                  "linestyle": "-",
+                  "linewidth": 1.5,
+                  "alpha": 0.85
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Pairing",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "mcr_pairing",
+                  "labels_source": "mcr_pairing_labels",
+                  "labels_dimension": 0
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Predicted vs Reference (Validation)",
+              "show_origin": false,
+              "show_labels": false,
+              "equal_scale": true,
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "y_val_true_pairs",
+                    "axis_type": "linear",
+                    "axis_labels": "mcr_pair_y_titles",
+                    "axis_labels_dimension": 1,
+                    "label_template": "$y_{{Ref}}$ ({label})"
+                  },
+                  "y_axis": {
+                    "data_source": "y_val_pred_pairs",
+                    "axis_type": "linear",
+                    "axis_labels": "mcr_pair_y_titles",
+                    "axis_labels_dimension": 1,
+                    "label_template": "$y_{{Pred}}$ ({label})"
+                  },
+                  "point_labels_source": "smp_val",
+                  "label": "Validation"
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "path",
+                  "x": "val_pred_ref_diag_x",
+                  "y": "val_pred_ref_diag_y",
+                  "color": "red",
+                  "linestyle": "-",
+                  "linewidth": 1.5,
+                  "alpha": 0.85
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Pairing",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "mcr_pairing",
+                  "labels_source": "mcr_pairing_labels",
+                  "labels_dimension": 0
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Prediction Tables (SBS)",
+        "layout": "fd",
+        "condition": {
+          "all": [
+            {
+              "parameter": "validation_processing",
+              "operator": "==",
+              "value": "sample_by_sample"
+            },
+            {
+              "parameter": "sbs_component_labels",
+              "operator": "exists",
+              "value": true
+            },
+            {"parameter": "Y_cal","operator": "exists"}
+          ]
+        },
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "title": "Calibration Predictions, References, and Error (Model for Val Sample)",
+              "row_label": "Cal Sample",
+              "row_headers": "smp_cal",
+              "columns": [
+                {
+                  "data_source": "sbs_y_cal_pred_pairs",
+                  "name": "Predicted"
+                },
+                {
+                  "data_source": "sbs_y_cal_true_pairs",
+                  "name": "Reference"
+                },
+                {
+                  "data_source": "sbs_y_cal_error_pairs",
+                  "name": "Error"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Val Sample (Model)",
+                  "dimension": 0,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_mcr_pred_val_sample",
+                  "labels_source": "smp_val",
+                  "labels_dimension": 0
+                },
+                {
+                  "name": "Pairing",
+                  "dimension": 2,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_mcr_pred_pairing",
+                  "labels_source": "mcr_pairing_labels",
+                  "labels_dimension": 0
+                }
+              ],
+              "slice_title_source": "mcr_pair_y_titles",
+              "slice_title_dimension": 1,
+              "slice_title_prefix": "Y",
+              "decimal_places": 6,
+              "max_rows": 500
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Validation Prediction, Reference, and Error (One Sample per Model)",
+              "row_label": "Val Sample",
+              "row_headers": "smp_val",
+              "columns": [
+                {
+                  "data_source": "y_val_pred_pairs",
+                  "name": "Predicted"
+                },
+                {
+                  "data_source": "y_val_true_pairs",
+                  "name": "Reference"
+                },
+                {
+                  "data_source": "y_val_error_pairs",
+                  "name": "Error"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Pairing",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_mcr_pred_pairing",
+                  "labels_source": "mcr_pairing_labels",
+                  "labels_dimension": 0
+                }
+              ],
+              "slice_title_source": "mcr_pair_y_titles",
+              "slice_title_dimension": 1,
+              "slice_title_prefix": "Y",
+              "decimal_places": 6,
+              "max_rows": 500
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "C Scores vs Reference Y (Model for Val Sample)",
+              "show_origin": false,
+              "show_labels": false,
+              "equal_scale": false,
+              "datasets": [
+                {
+                  "x_axis": {
+                      "data_source": "sbs_y_cal_true_pairs",
+                      "axis_type": "linear",
+                    "axis_labels": "mcr_pair_y_titles",
+                    "axis_labels_dimension": 2,
+                    "label_template": "$y_{{Ref}}$ ({label})"
+                  },
+                  "y_axis": {
+                      "data_source": "sbs_c_scores_cal_pairs",
+                      "axis_type": "linear",
+                      "axis_labels": "sbs_component_labels"
+                  },
+                  "point_labels_source": "smp_cal",
+                  "label": "Calibration"
+                },
+                {
+                  "x_axis": {
+                      "data_source": "sbs_y_val_effective_pairs",
+                      "axis_type": "linear",
+                    "axis_labels": "mcr_pair_y_titles",
+                    "axis_labels_dimension": 2,
+                    "label_template": "$y_{{Ref}}$ ({label})"
+                  },
+                  "y_axis": {
+                      "data_source": "sbs_c_scores_val_pairs",
+                      "axis_type": "linear",
+                      "axis_labels": "sbs_component_labels"
+                  },
+                  "label": "Val Sample (this model)"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Val Sample (Model)",
+                  "dimension": 0,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_mcr_pred_val_sample",
+                  "labels_source": "smp_val",
+                  "labels_dimension": 0
+                },
+                {
+                  "name": "Pairing",
+                  "dimension": 2,
+                  "axis": "x",
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_mcr_pred_pairing",
+                  "labels_source": "mcr_pairing_labels",
+                  "labels_dimension": 0
+                },
+                {
+                  "name": "Pairing",
+                  "dimension": 2,
+                  "axis": "y",
+                  "default": 0,
+                  "show_navigation_menu": false,
+                  "nav_id": "sbs_mcr_pred_pairing",
+                  "labels_source": "mcr_pairing_labels",
+                  "labels_dimension": 0
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "path",
+                  "x": {
+                    "data_source": "sbs_cal_regression_line_x_pairs"
+                  },
+                  "y": {
+                    "data_source": "sbs_cal_regression_line_y_pairs"
+                  },
+                  "color": "red",
+                  "linestyle": "-",
+                  "linewidth": 1.5,
+                  "alpha": 0.85
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Predicted vs Reference (All Val Samples)",
+              "show_origin": false,
+              "show_labels": false,
+              "equal_scale": true,
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "y_val_true_pairs",
+                    "axis_type": "linear",
+                    "axis_labels": "mcr_pair_y_titles",
+                    "axis_labels_dimension": 1,
+                    "label_template": "$y_{{Ref}}$ ({label})"
+                  },
+                  "y_axis": {
+                    "data_source": "y_val_pred_pairs",
+                    "axis_type": "linear",
+                    "axis_labels": "mcr_pair_y_titles",
+                    "axis_labels_dimension": 1,
+                    "label_template": "$y_{{Pred}}$ ({label})"
+                  },
+                  "point_labels_source": "smp_val",
+                  "label": "Validation"
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "path",
+                  "x": "val_pred_ref_diag_x",
+                  "y": "val_pred_ref_diag_y",
+                  "color": "red",
+                  "linestyle": "-",
+                  "linewidth": 1.5,
+                  "alpha": 0.85
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Pairing",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_mcr_pred_pairing",
+                  "labels_source": "mcr_pairing_labels",
+                  "labels_dimension": 0
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "EJCR",
+        "layout": "ew",
+        "condition": {
+          "all": [
+            {"parameter": "validation_processing","operator": "==","value": "batch"},
+            {"parameter": "Y_cal","operator": "exists"}]
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Calibration EJCR",
+              "show_origin": false,
+              "show_labels": false,
+              "confidence_ellipses": false,
+              "x_axis": {
+                "data_source": "ejcr_cal",
+                "nested_key": "fit_slope",
+                "label": "Slope"
+              },
+              "y_axis": {
+                "data_source": "ejcr_cal",
+                "nested_key": "fit_intercept",
+                "label": "Intercept"
+              },
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "ejcr_cal",
+                "nested_key": "fit_slope",
+                    "label": "Slope"
+                  },
+                  "y_axis": {
+                    "data_source": "ejcr_cal",
+                "nested_key": "fit_intercept",
+                    "label": "Intercept"
+                  },
+                  "label": "OLS Fit",
+                  "marker": "D"
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "custom_ellipsis",
+                  "ellipses_data": {
+                    "data_source": "ejcr_cal"
+                  },
+                  "label": "EJCR",
+                  "expand_limits": true
+                },
+                {
+                  "orientation": "vertical",
+                  "values": [1.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                },
+                {
+                  "orientation": "horizontal",
+                  "values": [0.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Pairing",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "mcr_pairing",
+                  "labels_source": "mcr_pairing_labels",
+                  "labels_dimension": 0
+                }
+              ]
+            },
+            "short_description": "Ellipsoidal joint confidence region (EJCR) for OLS slope and intercept of calibration predictions. The ideal point (slope=1, intercept=0) inside the ellipse indicates unbiased calibration."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Validation EJCR",
+              "show_origin": false,
+              "show_labels": false,
+              "confidence_ellipses": false,
+              "x_axis": {
+                "data_source": "ejcr_val",
+                "nested_key": "fit_slope",
+                "label": "Slope"
+              },
+              "y_axis": {
+                "data_source": "ejcr_val",
+                "nested_key": "fit_intercept",
+                "label": "Intercept"
+              },
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "ejcr_val",
+                "nested_key": "fit_slope",
+                    "label": "Slope"
+                  },
+                  "y_axis": {
+                    "data_source": "ejcr_val",
+                "nested_key": "fit_intercept",
+                    "label": "Intercept"
+                  },
+                  "label": "OLS Fit",
+                  "marker": "D"
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "custom_ellipsis",
+                  "ellipses_data": {
+                    "data_source": "ejcr_val"
+                  },
+                  "label": "EJCR",
+                  "expand_limits": true
+                },
+                {
+                  "orientation": "vertical",
+                  "values": [1.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                },
+                {
+                  "orientation": "horizontal",
+                  "values": [0.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Pairing",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "mcr_pairing",
+                  "labels_source": "mcr_pairing_labels",
+                  "labels_dimension": 0
+                }
+              ]
+            },
+            "short_description": "Ellipsoidal joint confidence region (EJCR) for OLS slope and intercept of validation predictions. The ideal point (slope=1, intercept=0) inside the ellipse indicates unbiased prediction."
+          }
+        ]
+      },
+      {
+        "title": "EJCR (SBS)",
+        "layout": "ew",
+        "condition": {
+          "all": [
+            {
+              "parameter": "validation_processing",
+              "operator": "==",
+              "value": "sample_by_sample"
+            },
+            {
+              "parameter": "sbs_component_labels",
+              "operator": "exists",
+              "value": true
+            },
+            {"parameter": "Y_cal","operator": "exists"}
+          ]
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Calibration EJCR (Model for Val Sample)",
+              "show_origin": false,
+              "show_labels": false,
+              "confidence_ellipses": false,
+              "x_axis": {
+                "data_source": "sbs_ejcr_cal",
+                "nested_key": "fit_slope",
+                "label": "Slope"
+              },
+              "y_axis": {
+                "data_source": "sbs_ejcr_cal",
+                "nested_key": "fit_intercept",
+                "label": "Intercept"
+              },
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "sbs_ejcr_cal",
+                "nested_key": "fit_slope",
+                    "label": "Slope"
+                  },
+                  "y_axis": {
+                    "data_source": "sbs_ejcr_cal",
+                "nested_key": "fit_intercept",
+                    "label": "Intercept"
+                  },
+                  "label": "OLS Fit",
+                  "marker": "D"
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "custom_ellipsis",
+                  "ellipses_data": {
+                    "data_source": "sbs_ejcr_cal"
+                  },
+                  "label": "EJCR",
+                  "expand_limits": true
+                },
+                {
+                  "orientation": "vertical",
+                  "values": [1.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                },
+                {
+                  "orientation": "horizontal",
+                  "values": [0.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Pairing",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_mcr_pred_pairing",
+                  "labels_source": "mcr_pairing_labels",
+                  "labels_dimension": 0
+                },
+                {
+                  "name": "Val Sample (Model)",
+                  "dimension": 2,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_mcr_pred_val_sample",
+                  "labels_source": "smp_val",
+                  "labels_dimension": 0
+                }
+              ]
+            },
+            "short_description": "EJCR for the calibration OLS fit of the MCR-ALS model built for each validation sample. Navigate by pairing and by validation sample (model index)."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Validation EJCR (Aggregated Over All Val Samples)",
+              "show_origin": false,
+              "show_labels": false,
+              "confidence_ellipses": false,
+              "x_axis": {
+                "data_source": "sbs_ejcr_val",
+                "nested_key": "fit_slope",
+                "label": "Slope"
+              },
+              "y_axis": {
+                "data_source": "sbs_ejcr_val",
+                "nested_key": "fit_intercept",
+                "label": "Intercept"
+              },
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "sbs_ejcr_val",
+                "nested_key": "fit_slope",
+                    "label": "Slope"
+                  },
+                  "y_axis": {
+                    "data_source": "sbs_ejcr_val",
+                "nested_key": "fit_intercept",
+                    "label": "Intercept"
+                  },
+                  "label": "OLS Fit",
+                  "marker": "D"
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "custom_ellipsis",
+                  "ellipses_data": {
+                    "data_source": "sbs_ejcr_val"
+                  },
+                  "label": "EJCR",
+                  "expand_limits": true
+                },
+                {
+                  "orientation": "vertical",
+                  "values": [1.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                },
+                {
+                  "orientation": "horizontal",
+                  "values": [0.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Pairing",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_mcr_pred_pairing",
+                  "labels_source": "mcr_pairing_labels",
+                  "labels_dimension": 0
+                }
+              ]
+            },
+            "short_description": "EJCR for the validation OLS fit, computed by aggregating all validation samples across SBS models. The ideal point (slope=1, intercept=0) inside the ellipse indicates unbiased prediction."
+          }
+        ]
+      }
+    ],
+    "current_page": 0
+  }
+}

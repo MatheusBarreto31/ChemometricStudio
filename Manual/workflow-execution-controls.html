@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Execution Controls - Workflow Guide - Chemometric Studio User Manual</title>
+  <link rel="stylesheet" href="assets/css/manual.css">
+</head>
+<body data-manual-page="workflow" data-manual-group="qa-workflow">
+  <div data-manual-header></div>
+
+  <main class="layout">
+    <aside class="manual-sidebar" data-manual-sidebar data-reveal></aside>
+
+    <div class="content-column">
+      <section class="panel" data-reveal>
+        <h1>Execution Controls</h1>
+        <p>Use execution controls to run all or part of your methodology and diagnose runtime behavior.</p>
+      </section>
+
+      <section class="panel" data-reveal>
+        <h2>Available Controls</h2>
+        <ul>
+          <li><strong>Run Model</strong>: executes the complete methodology.</li>
+          <li><strong>Run to here</strong>: executes up to the selected function instance.</li>
+          <li><strong>Timing Report</strong> (Tools menu): provides per-step runtime details after execution.</li>
+        </ul>
+      </section>
+
+      <section class="panel" data-reveal>
+        <h2>Recommended Use</h2>
+        <ol class="step-list">
+          <li>Run to here while building a pipeline to validate intermediate outputs.</li>
+          <li>Use full Run Model after parameter tuning is complete.</li>
+          <li>Open Timing Report to identify expensive preprocessing or model steps.</li>
+        </ol>
+      </section>
+    </div>
+  </main>
+
+  <footer data-manual-footer></footer>
+
+  <script src="assets/js/manual-common.js"></script>
+  <script src="assets/js/manual-shell.js"></script>
+  <script src="assets/js/manual.js"></script>
+</body>
+</html>

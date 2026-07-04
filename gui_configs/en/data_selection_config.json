@@ -1,0 +1,271 @@
+{
+  "display_name": "Data Selection",
+  "category": "1.Load Data",
+  "data_type": "all",
+  "input_aliases": {
+    "nway_flag": "Data Dimensionality",
+    "X_cal": "X Calibration Data",
+    "Y_cal": "Y Calibration Data",
+    "cal_s_mask": "Calibration Sample Mask",
+    "smp_cal": "Calibration Sample Labels",
+    "class_data_cal": "Calibration Class Data",
+    "cal_metadata": "Calibration Metadata",
+    "X_val": "X Validation Data",
+    "Y_val": "Y Validation Data",
+    "val_s_mask": "Validation Sample Mask",
+    "smp_val": "Validation Sample Labels",
+    "class_data_val": "Validation Class Data",
+    "val_metadata": "Validation Metadata",
+    "axis_n_info": "Axis Numeric Info",
+    "axis_t_info": "Axis Text Info",
+    "dim_labels": "Dimension Labels",
+    "sample_mode_cal": "Calibration Sample Mode",
+    "sample_values_cal": "Calibration Samples",
+    "sample_mode_val": "Validation Sample Mode",
+    "sample_values_val": "Validation Samples",
+    "variable_modes": "Variable Modes",
+    "variable_values": "Variables"
+  },
+  "output_aliases": {
+    "X_cal": "X Calibration Data",
+    "Y_cal": "Y Calibration Data",
+    "cal_s_mask": "Calibration Sample Mask",
+    "smp_cal": "Calibration Sample Labels",
+    "class_data_cal": "Calibration Class Data",
+    "cal_metadata": "Calibration Metadata",
+    "X_val": "X Validation Data",
+    "Y_val": "Y Validation Data",
+    "val_s_mask": "Validation Sample Mask",
+    "smp_val": "Validation Sample Labels",
+    "class_data_val": "Validation Class Data",
+    "val_metadata": "Validation Metadata",
+    "axis_n_info": "Axis Numeric Info",
+    "axis_t_info": "Axis Text Info"
+  },
+  "short_description": "Selects or removes samples and variables from calibration/validation datasets",
+  "long_description": "This step filters loaded data by samples and variables. Selection entries accept either numeric specs or text labels. Numeric specs support values, ranges, and stepped ranges such as '1:10', '200-250.5', and '15,6,28,60:2:90,1-10,91-5-101'. Text selectors support comma, tab, or semicolon separators.",
+  "setup": {
+    "categories": [
+      "Data Inputs",
+      "Sample Selection",
+      "Variable Selection"
+    ],
+    "layout": [
+      {
+        "name": "nway_flag",
+        "label": "Data Dimensionality",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": true,
+        "input_type": "inherited",
+        "tooltip": "Routed from upstream data loading step"
+      },
+      {
+        "name": "X_cal",
+        "label": "X Calibration Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": true,
+        "input_type": "routed",
+        "tooltip": "Routed calibration tensor/matrix"
+      },
+      {
+        "name": "Y_cal",
+        "label": "Y Calibration Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed"
+      },
+      {
+        "name": "cal_s_mask",
+        "label": "Calibration Sample Mask",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed"
+      },
+      {
+        "name": "smp_cal",
+        "label": "Calibration Sample Labels",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed"
+      },
+      {
+        "name": "class_data_cal",
+        "label": "Calibration Class Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed"
+      },
+      {
+        "name": "cal_metadata",
+        "label": "Calibration Metadata",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed"
+      },
+      {
+        "name": "X_val",
+        "label": "X Validation Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed"
+      },
+      {
+        "name": "Y_val",
+        "label": "Y Validation Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed"
+      },
+      {
+        "name": "val_s_mask",
+        "label": "Validation Sample Mask",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed"
+      },
+      {
+        "name": "smp_val",
+        "label": "Validation Sample Labels",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed"
+      },
+      {
+        "name": "class_data_val",
+        "label": "Validation Class Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed"
+      },
+      {
+        "name": "val_metadata",
+        "label": "Validation Metadata",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed"
+      },
+      {
+        "name": "axis_n_info",
+        "label": "Axis Numeric Info",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed"
+      },
+      {
+        "name": "axis_t_info",
+        "label": "Axis Text Info",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed"
+      },
+      {
+        "name": "dim_labels",
+        "label": "Dimension Labels",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "inherited",
+        "tooltip": "Optional labels used to name variable-selection directions"
+      },
+      {
+        "name": "sample_mode_cal",
+        "label": "Calibration/Training Selection Mode",
+        "category": "Sample Selection",
+        "widget": "combobox",
+        "values": [
+          "Select",
+          "Remove"
+        ],
+        "default": "Remove",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Select: keep specified samples. Remove: drop specified samples."
+      },
+      {
+        "name": "sample_values_cal",
+        "label": "Calibration/Training Samples",
+        "category": "Sample Selection",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Numeric or text selector list. Numeric accepts values/ranges/steps. Text supports comma, tab, or semicolon separators."
+      },
+      {
+        "name": "sample_mode_val",
+        "label": "Validation/Test Selection Mode",
+        "category": "Sample Selection",
+        "widget": "combobox",
+        "values": [
+          "Select",
+          "Remove"
+        ],
+        "default": "Remove",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Select: keep specified samples. Remove: drop specified samples."
+      },
+      {
+        "name": "sample_values_val",
+        "label": "Validation/Test Samples",
+        "category": "Sample Selection",
+        "widget": "entry",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Numeric or text selector list. Numeric accepts values/ranges/steps. Text supports comma, tab, or semicolon separators."
+      },
+      {
+        "name": "variable_modes",
+        "label": "Variable Selection Mode",
+        "category": "Variable Selection",
+        "widget": "combobox_list",
+        "count_source": "nway_flag",
+        "item_labels_source": "dim_labels",
+        "item_label_prefix": "Dimension",
+        "values": [
+          "Select",
+          "Remove"
+        ],
+        "default": "Remove",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "One mode per non-sample dimension."
+      },
+      {
+        "name": "variable_values",
+        "label": "Variables",
+        "category": "Variable Selection",
+        "widget": "entry_list",
+        "count_source": "nway_flag",
+        "item_labels_source": "dim_labels",
+        "item_label_prefix": "Dimension",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "tooltip": "One selector per non-sample dimension. Numeric compares against axis_n_info (or position index); text compares against axis_t_info."
+      }
+    ]
+  },
+  "analysis": {
+    "pages": [],
+    "current_page": 0
+  }
+}

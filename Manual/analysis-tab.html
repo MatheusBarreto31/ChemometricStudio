@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Analysis Tab - Chemometric Studio User Manual</title>
+  <link rel="stylesheet" href="assets/css/manual.css">
+</head>
+<body data-manual-page="analysis" data-manual-group="qa-analysis">
+  <div data-manual-header></div>
+
+  <main class="layout">
+    <aside class="manual-sidebar" data-manual-sidebar data-reveal></aside>
+
+    <div class="content-column">
+      <section class="panel" data-reveal>
+        <h1>Analysis Tab</h1>
+        <p>After running your workflow, the Analysis tab displays all model outputs organized by function. This is where you inspect results, verify calculations, explore data relationships, and prepare visualizations for reporting.</p>
+      </section>
+
+      <section class="panel" data-reveal>
+        <h2>What You'll Find</h2>
+        <ul>
+          <li><strong>Multiple pages</strong> — Multiple pages per analysis function in your workflow (PCA, PARAFAC, MCR-ALS, etc.).</li>
+          <li><strong>Structured sections</strong> — Each page displays results in a layout (split views or grids) with dedicated sections for different output types.</li>
+          <li><strong>Graphs and plots</strong> — Score plots, loadings, components, heatmaps, 3D surfaces, and more depending on the method.</li>
+          <li><strong>Tables and data</strong> — Numeric outputs, model coefficients, and validation metrics.</li>
+          <li><strong>Text annotations</strong> — Method descriptions and parameter summaries.</li>
+        </ul>
+      </section>
+
+      <section class="panel" data-reveal>
+        <h2>Navigation and Controls</h2>
+        <ul>
+          <li><strong>Page navigation</strong> — Use arrow buttons and dropdown selectors at the bottom to move between analysis pages or jump to a specific function's results.</li>
+          <li><strong>Section controls</strong> — Each section may have its own menus for selecting different outputs, adjusting data slices, or toggling visual options.</li>
+          <li><strong>Graph context options</strong> — When viewing graphs, you can adjust grid, axes, labels, confidence ellipses, colormaps, and axis scales using controls in the right-click menu.</li>
+        </ul>
+      </section>
+
+      <section class="panel" data-reveal>
+        <h2>Typical Workflow</h2>
+        <ol class="step-list">
+          <li>Click the <strong>Analysis</strong> tab after running your workflow.</li>
+          <li>Review each function's outputs page by page to verify calculations and model fit.</li>
+          <li>Use graph controls to adjust views and highlight important features or anomalies by clicking it (it will highlight all points with the same label across all graphs).</li>
+          <li>When satisfied with the results, move to the <strong>Report</strong> tab to curate and export findings.</li>
+        </ol>
+      </section>
+
+      <section class="panel" data-reveal>
+        <h2>Customizing Analysis Display</h2>
+        <p>Some analyses display predefined pages and sections as configured for that method. The layout adapts based on the model and available data. In certain cases, you may be able to add additional graphs or customize sections — check the function code and documentation for specifics.</p>
+      </section>
+    </div>
+  </main>
+
+  <footer data-manual-footer></footer>
+
+  <script src="assets/js/manual-common.js"></script>
+  <script src="assets/js/manual-shell.js"></script>
+  <script src="assets/js/manual.js"></script>
+</body>
+</html>

@@ -1,0 +1,78 @@
+{
+  "id": "sv_variant_manual",
+  "label": "Light Blue",
+  "base": "light",
+  "tcl_theme_name": "sv-light-blue",
+  "tcl_file": "light-blue/theme.tcl",
+  "description": "Light colour scheme derived from the Chemometric Studio HTML manual palette: steel-blue background, deep navy text, and vivid blue accents.",
+  "palette": {
+    "background": "#d8e7f5",
+    "foreground": "#10263d",
+    "selectBackground": "#007aff",
+    "selectForeground": "#ffffff",
+    "activeBackground": "#c4d9ee",
+    "activeForeground": "#10263d"
+  },
+  "styles": {
+    ".": {
+      "background": "#d8e7f5",
+      "foreground": "#10263d"
+    },
+    "TFrame": {
+      "background": "#d8e7f5"
+    },
+    "TLabel": {
+      "background": "#d8e7f5",
+      "foreground": "#10263d"
+    },
+    "TLabelframe": {
+      "background": "#d8e7f5",
+      "foreground": "#10263d"
+    },
+    "TLabelframe.Label": {
+      "background": "#d8e7f5",
+      "foreground": "#153c61"
+    },
+    "TEntry": {
+      "fieldbackground": "#ffffff",
+      "foreground": "#10263d",
+      "insertcolor": "#10263d",
+      "selectbackground": "#007aff",
+      "selectforeground": "#ffffff"
+    },
+    "TCombobox": {
+      "fieldbackground": "#ffffff",
+      "foreground": "#10263d",
+      "selectbackground": "#007aff",
+      "selectforeground": "#ffffff"
+    },
+    "TSpinbox": {
+      "fieldbackground": "#ffffff",
+      "foreground": "#10263d"
+    },
+    "Treeview": {
+      "background": "#edf4fb",
+      "foreground": "#10263d",
+      "fieldbackground": "#edf4fb"
+    },
+    "TNotebook": {
+      "background": "#d8e7f5"
+    },
+    "TNotebook.Tab": {
+      "background": "#c4d9ee",
+      "foreground": "#10263d"
+    },
+    "TScrollbar": {
+      "troughcolor": "#c4d9ee",
+      "background": "#8ab4d8"
+    },
+    "Execution.Horizontal.TProgressbar": {
+      "troughcolor": "#c4d9ee",
+      "background": "#1f5f90",
+      "bordercolor": "#b7d0e4",
+      "lightcolor": "#1f5f90",
+      "darkcolor": "#153c61",
+      "thickness": 12
+    }
+  }
+}

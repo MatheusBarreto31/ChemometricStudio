@@ -1,0 +1,50 @@
+{
+  "return_specs": {
+    "sfm2eem_transform": [
+      "X_cal",
+      "X_val",
+      "axis_n_info",
+      "axis_t_info",
+      "dim_labels"
+    ]
+  },
+  "input_specs": {
+    "sfm2eem_transform": [
+      "X_cal",
+      "X_val",
+      "S_dl",
+      "S_exc",
+      "Transpose",
+      "nway_flag",
+      "axis_n_info",
+      "axis_t_info",
+      "dim_labels",
+      "emission_axis_title"
+    ]
+  },
+  "import_map": {
+    "sfm2eem_transform": [
+      "chemometrics.sfm2eem_addon",
+      "sfm2eem_transform"
+    ]
+  },
+  "gui_listing": {
+    "sfm2eem_transform": {
+      "config_path": "gui_configs/sfm2eem_transform_config.json"
+    }
+  },
+  "parameter_types": {
+    "sfm2eem_transform": {
+      "X_cal": "ndarray",
+      "X_val": "ndarray",
+      "S_dl": "float",
+      "S_exc": "float",
+      "Transpose": "bool",
+      "nway_flag": "int",
+      "axis_n_info": "list",
+      "axis_t_info": "list",
+      "dim_labels": "list",
+      "emission_axis_title": "str"
+    }
+  }
+}

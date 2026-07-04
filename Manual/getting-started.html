@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Getting Started - Chemometric Studio User Manual</title>
+  <link rel="stylesheet" href="assets/css/manual.css">
+</head>
+<body data-manual-page="start" data-manual-group="qa-start">
+  <div data-manual-header></div>
+
+  <main class="layout">
+    <aside class="manual-sidebar" data-manual-sidebar data-reveal></aside>
+
+    <div class="content-column">
+      <section class="panel" id="install-run" data-reveal>
+        <h1>Install and Run</h1>
+        <p>Chemometric Studio is available as pre-built packages for Windows, macOS, and Linux, or you can run from source code for the latest development version.</p>
+
+        <h2>Option 1: Pre-built Packages (Recommended for Production Use)</h2>
+        <p>The releases contain stable, tested versions of the program. Visit our GitHub page at http://www.chemometricstudio.com to download the latest release for your platform.</p>
+
+        <h3>Windows</h3>
+        <ol class="step-list">
+          <li>Download the ZIP archive labeled <code>ChemometricStudio-*-Windows-*.zip</code></li>
+          <li>Extract the archive to your desired location.</li>
+          <li>Open <code>ChemometricStudio.exe</code> for the full specialized version, or <code>ChemometricStudioUser.exe</code> for the user-friendly simplified version.</li>
+        </ol>
+
+        <div style="margin-top: 2rem; margin-bottom: 1.5rem;"></div>
+
+        <h3>macOS</h3>
+        <ol class="step-list">
+          <li>Identify your processor:
+            <ul>
+              <li><strong>Apple Silicon (M1, M2, M3, etc.)</strong>: Download <code>ChemometricStudio-*-macOS-AppleSilicon-*.tar.gz</code></li>
+              <li><strong>Intel processor</strong>: Download <code>ChemometricStudio-*-macOS-Intel-*.tar.gz</code></li>
+            </ul>
+          </li>
+          <li>Extract the archive using Terminal or by double-clicking it.</li>
+          <li>Navigate to the extracted <code>ChemometricStudio</code> folder and double-click either <code>ChemometricStudio</code> for the full version or <code>ChemometricStudioUser</code> for the user version.</li>
+          <li><em>Note: On first run, you may need to grant permissions in System Preferences or use <code>chmod +x</code> to make the executable runnable.</em></li>
+        </ol>
+
+        <div style="margin-top: 2rem; margin-bottom: 1.5rem;"></div>
+
+        <h3>Linux</h3>
+        <p>Download the appropriate package format for your Linux distribution and architecture (x86_64 or ARM64).</p>
+
+        <div style="margin-top: 1.5rem; margin-bottom: 1rem;"></div>
+
+        <strong>Debian/Ubuntu-based systems</strong>
+        <ol class="step-list">
+          <li>Download <code>chemometricstudio-*.deb</code></li>
+          <li>Install using your package manager:
+            <pre><code>sudo dpkg -i chemometricstudio-*.deb</code></pre>
+          </li>
+          <li>Launch from your application menu, or run <code>ChemometricStudio</code> for the full version and <code>ChemometricStudioUser</code> for the user version.</li>
+        </ol>
+
+        <div style="margin-top: 1.5rem; margin-bottom: 1rem;"></div>
+
+        <strong>Red Hat/Fedora/CentOS-based systems</strong>
+        <ol class="step-list">
+          <li>Download <code>chemometricstudio-*.rpm</code></li>
+          <li>Install using your package manager:
+            <pre><code>sudo dnf install chemometricstudio-*.rpm</code></pre>
+            or for older systems:
+            <pre><code>sudo yum install chemometricstudio-*.rpm</code></pre>
+          </li>
+          <li>Launch from your application menu, or run <code>ChemometricStudio</code> for the full version and <code>ChemometricStudioUser</code> for the user version.</li>
+        </ol>
+
+        <div style="margin-top: 1.5rem; margin-bottom: 1rem;"></div>
+
+        <strong>Arch Linux</strong>
+        <ol class="step-list">
+          <li>Download <code>chemometricstudio-*.pkg.tar.zst</code></li>
+          <li>Install using pacman:
+            <pre><code>sudo pacman -U chemometricstudio-*.pkg.tar.zst</code></pre>
+          </li>
+          <li>Launch from your application menu, or run <code>ChemometricStudio</code> for the full version and <code>ChemometricStudioUser</code> for the user version.</li>
+        </ol>
+
+        <h2>Option 2: Run from Source Code (Bleeding Edge Development)</h2>
+        <p>For the latest development features (which may contain bugs), clone the source code and run directly using Python.</p>
+
+        <ol class="step-list">
+          <li>Clone the repository:
+            <pre><code>git clone https://github.com/your-org/chemometric-studio.git
+cd chemometric-studio</code></pre>
+          </li>
+          <li>Select your branch:
+            <ul>
+              <li><strong>main</strong>: More stable, periodically tested</li>
+              <li><strong>canary</strong>: Bleeding edge, latest features</li>
+            </ul>
+            <pre><code>git checkout main  # or git checkout canary</code></pre>
+          </li>
+          <li>Create and activate a Python environment:
+            <ul class="sub-list">
+              <li><strong>Windows</strong>:
+                <pre><code>python -m venv .venv
+.\.venv\Scripts\Activate.ps1</code></pre>
+              </li>
+              <li><strong>macOS/Linux</strong>:
+                <pre><code>python -m venv .venv
+source .venv/bin/activate</code></pre>
+              </li>
+            </ul>
+          </li>
+          <li>Install dependencies:
+            <pre><code>pip install -r requirements.txt</code></pre>
+          </li>
+          <li>Start the application:
+            <pre><code>python launcher.py</code></pre>
+          </li>
+        </ol>
+      </section>
+
+      <section class="grid" id="first-run" data-reveal>
+        <article class="panel">
+          <h2>First Pipeline in 5 Steps</h2>
+          <ol class="step-list">
+            <li>Open the <strong>Setup</strong> tab and add a data input function.</li>
+            <li>Add preprocessing and model functions to Methodology in execution order.</li>
+            <li>Select each function and fill required parameters (hover for help).</li>
+            <li>Click <strong>Run Model</strong> to execute the pipeline.</li>
+            <li>Open <strong>Analysis</strong> to inspect model outputs and create reports.</li>
+          </ol>
+        </article>
+        <aside class="panel alt">
+          <h2>Files You Will See</h2>
+          <ul>
+            <li><code>model.json</code>: generated pipeline definition.</li>
+            <li><code>model_log.txt</code>: model run logs.</li>
+            <li><code>error_log.txt</code>: error details from failed runs.</li>
+          </ul>
+        </aside>
+      </section>
+
+      <section class="panel" id="setup-overview" data-reveal>
+        <h2>Step 1: Learn the Main Work Area (Setup)</h2>
+        <p>This annotated screenshot highlights the controls you will use first.</p>
+        <div class="media-card">
+          <img src="assets/images/getting_started_1.png" alt="Setup interface overview with red callouts for tabs, function library, methodology list, task actions, and model execution controls.">
+        </div>
+        <ol class="step-list">
+          <li><strong>Main tabs</strong>: move between Setup, Analysis, Routing, and Report.</li>
+          <li><strong>Function Library</strong>: browse categories and add functions to your pipeline.</li>
+          <li><strong>List of Tasks</strong>: verify execution order before running.</li>
+          <li><strong>Task actions</strong>: reorder or remove functions from Methodology.</li>
+          <li><strong>Model execution and storage</strong>: run, load, and save your model.</li>
+        </ol>
+      </section>
+
+      <section class="panel" id="setup-configure" data-reveal>
+        <h2>Step 2: Configure Each Selected Function</h2>
+        <p>After adding functions, click each item in the Methodology list and complete its required inputs.</p>
+        <div class="media-card">
+          <img src="assets/images/getting_started_2.png" alt="Setup tab with red highlights showing selected methodology item and active configuration panel.">
+        </div>
+        <ul>
+          <li>The highlighted tab confirms you are in <strong>Setup</strong>.</li>
+          <li>The arrow points to the selected function instance in Methodology.</li>
+          <li>The right panel updates to show parameters for that selected function.</li>
+        </ul>
+        <div class="note">Tip: work from top to bottom in Methodology so upstream outputs are ready for downstream functions.</div>
+      </section>
+
+      <section class="panel" id="analysis-review" data-reveal>
+        <h2>Step 3: Review Outputs in Analysis</h2>
+        <p>Run your model, then switch to Analysis to inspect tables, plots, and navigation controls.</p>
+        <div class="media-card">
+          <img src="assets/images/getting_started_3.png" alt="Analysis tab with red callouts for tab selection, page controls, and navigation menus.">
+        </div>
+        <ul>
+          <li><strong>Analysis tab</strong>: opens calculated outputs for each function.</li>
+          <li><strong>Page controls</strong>: move through generated analysis pages.</li>
+          <li><strong>Navigation menus</strong>: browse multi-dimensional views and slices.</li>
+        </ul>
+      </section>
+
+      <section class="panel" id="next-steps" data-reveal>
+        <h2>Next Steps</h2>
+        <ul>
+          <li>Need custom data flow? Continue with <a href="workflow-routing.html">Routing Tab (Advanced)</a>.</li>
+          <li>Need assess outputs? Continue with <a href="analysis-reporting.html">Analysis and Reporting</a>.</li>
+          <li>Need guided model use for non-specialized users? Continue with <a href="user-gui.html">User GUI</a>.</li>
+          <li>Need exact parameter definitions? See <a href="functions-reference.html">Functions Reference</a>.</li>
+        </ul>
+      </section>
+    </div>
+  </main>
+
+  <footer data-manual-footer></footer>
+
+  <script src="assets/js/manual-common.js"></script>
+  <script src="assets/js/manual-shell.js"></script>
+  <script src="assets/js/manual.js"></script>
+</body>
+</html>

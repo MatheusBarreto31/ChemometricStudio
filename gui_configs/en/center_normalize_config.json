@@ -1,0 +1,306 @@
+{
+  "display_name": "Center & Scale",
+  "category": "2.Preprocessing",
+  "data_type": "all",
+  "input_aliases": {
+    "X_cal": "X Calibration",
+    "X_val": "X Validation",
+    "scaling_method": "Scaling Method",
+    "nway_flag": "Dimensionality"
+  },
+  "output_aliases": {
+    "X_cal": "X Cal (Processed)",
+    "X_val": "X Val (Processed)",
+    "was_scaled": "Scaling Applied"
+  },
+  "output_synonyms": {
+    "X_cal": ["X", "X_train"],
+    "X_val": ["X_test", "X_validation"]
+  },
+  "short_description": "Applies center/scaling preprocessing to spectroscopic data and reports whether scaling was applied",
+  "long_description": "Preprocessing step that applies one selectable centering/scaling method to improve model performance. Essential preparation for multivariate calibration methods.\n\nAvailable Methods:\n- None: pass-through (no scaling)\n- Center: subtracts calibration means\n- Autoscale: mean-centers and divides by calibration standard deviation (unit variance)\n- Robust Scaling: median-centers and divides by calibration interquartile range (IQR)\n- Frobenius Normalization: divides by calibration Frobenius norm\n- Range Scaling [0,1]: min-max scaling using calibration min/max\n- Range Scaling [-1,1]: min-max scaling mapped to [-1,1]\n- Variance Scaling: mean-centers and divides by calibration variance\n\nImportant:\n- Autoscale already includes centering\n- Validation/test data are always transformed using calibration/training statistics (never its own statistics)\n\nMultiway Data:\n- Works with 2D, 3D, and higher dimensional data\n- Axis-based statistics are computed along the sample axis used by this function",
+  "setup": {
+    "categories": ["Scaling Options", "Data Inputs", "Multiway Configuration"],
+    "layout": [
+      {
+        "name": "scaling_method",
+        "label": "Scaling Method",
+        "category": "Scaling Options",
+        "widget": "combobox",
+        "values": ["none", "center", "autoscale", "robust", "frobenius", "range_0_1", "range_-1_1", "variance"],
+        "value_aliases": ["None", "Center", "Autoscale", "Robust Scaling", "Frobenius Normalization", "Range Scaling [0,1]", "Range Scaling [-1,1]", "Variance Scaling"],
+        "default": "center",
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Choose which method will be used for scaling."
+      },
+      {
+        "name": "X_cal",
+        "label": "X Calibration Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": true,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed from previous function output"
+      },
+      {
+        "name": "X_val",
+        "label": "X Validation Data",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Routed from previous function output"
+      },
+      {
+        "name": "nway_flag",
+        "label": "Data Dimensionality",
+        "category": "Multiway Configuration",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": true,
+        "input_type": "inherited",
+        "visible_if": {"input_type": "user"},
+        "tooltip": "Automatically inherited from Load Data function"
+      }
+    ]
+  },
+  "analysis": {
+    "pages": [
+      {
+        "title": "Center & Normalize Comparison",
+        "layout": "ew",
+        "condition": {"parameter": "nway_flag", "operator": "==", "value": "1"},
+        "sections": [
+          {
+            "type": "graph",
+            "short_description": "Displays the input calibration spectra before preprocessing.",
+            "long_description": "Shows the original X calibration data exactly as it enters this step. Use this section to inspect baseline shifts, offsets, and variable-scale differences before centering and/or normalization are applied.",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "y_axis": {"data_source": "in.X_cal", "label": "Intensity"},
+              "title": "Original Spectra",
+              "class_labels": "class_data_cal",
+              "dimension_labels": "in.dim_labels"
+            }
+          },
+          {
+            "type": "graph",
+            "short_description": "Displays the processed calibration spectra after preprocessing.",
+            "long_description": "Shows the X calibration data after centering and/or normalization. Compare directly against the original spectra to verify that offsets are removed and scaling behavior matches expectations.",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "y_axis": {"data_source": "out.X_cal", "label": "Intensity"},
+              "title": "Processed Spectra",
+              "class_labels": "class_data_cal",
+              "dimension_labels": "in.dim_labels"
+            }
+          }
+        ]
+      },
+      {
+        "title": "Center & Normalize Comparison",
+        "layout": "ew",
+        "condition": {"parameter": "nway_flag", "operator": "==", "value": "2"},
+        "sections": [
+          {
+            "type": "graph",
+            "short_description": "Contour view of one selected sample before preprocessing.",
+            "long_description": "Displays a contour plot of the original multiway calibration data for the selected sample index. Use the sample navigation control to inspect spatial/spectral structure prior to preprocessing.",
+            "config": {
+              "graph_type": "contour",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 2, "label": "in.dim_labels", "l_index": 2},
+              "y_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "z_axis": {"data_source": "in.X_cal", "label": "Intensity"},
+              "title": "Original Spectra",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}]
+            }
+          },
+          {
+            "type": "graph",
+            "short_description": "Contour view of one selected sample after preprocessing.",
+            "long_description": "Displays a contour plot of the processed multiway calibration data for the selected sample index. Compare with the original contour to assess how centering/normalization affected signal distribution.",
+            "config": {
+              "graph_type": "contour",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 2, "label": "in.dim_labels", "l_index": 2},
+              "y_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "z_axis": {"data_source": "out.X_cal", "label": "Intensity"},
+              "title": "Processed Spectra",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}]
+            }
+          },
+          {"type": null},
+          {"type": null}
+        ]
+      },
+      {
+        "title": "Center & Normalize Comparison",
+        "layout": "ew",
+        "condition": {"parameter": "nway_flag", "operator": ">", "value": "2"},
+        "sections": [
+          {
+            "type": "graph",
+            "short_description": "Heatmap view of higher-dimensional input data before preprocessing.",
+            "long_description": "Displays the original calibration data as a heatmap for n-way datasets with dimensionality greater than 2. Use slicing and axis controls to inspect specific samples and dimension combinations before transformation.",
+            "config": {
+              "graph_type": "heatmap",
+              "aux_axis": {
+                "data_source": "in.axis_n_info",
+                "labels": "in.dim_labels"
+              },
+              "z_axis": {"data_source": "in.X_cal", "label": "Intensity"},
+              "title": "Original Spectra",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}],
+              "show_md_menu": true
+            }
+          },
+          {
+            "type": "graph",
+            "short_description": "Heatmap view of higher-dimensional data after preprocessing.",
+            "long_description": "Displays the processed calibration data as a heatmap for n-way datasets with dimensionality greater than 2. Compare with the original heatmap to validate the effect of centering/normalization across slices and dimensions.",
+            "config": {
+              "graph_type": "heatmap",
+              "aux_axis": {
+                "data_source": "in.axis_n_info",
+                "labels": "in.dim_labels"
+              },
+              "z_axis": {"data_source": "out.X_cal", "label": "Intensity"},
+              "title": "Processed Spectra",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}],
+              "show_md_menu": true
+            }
+          }
+        ]
+      },
+      {
+        "title": "Center & Normalize Comparison (Validation)",
+        "layout": "ew",
+        "condition": {"parameter": "nway_flag", "operator": "==", "value": "1"},
+        "sections": [
+          {
+            "type": "graph",
+            "short_description": "Displays the input validation spectra before preprocessing.",
+            "long_description": "Shows the original X validation data exactly as it enters this step. Use this section to inspect baseline shifts, offsets, and variable-scale differences before centering and/or normalization are applied.",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "y_axis": {"data_source": "in.X_val", "label": "Intensity"},
+              "title": "Original Validation",
+              "class_labels": "class_data_val",
+              "dimension_labels": "in.dim_labels"
+            }
+          },
+          {
+            "type": "graph",
+            "short_description": "Displays the processed validation spectra after preprocessing.",
+            "long_description": "Shows the X validation data after centering and/or normalization. Compare directly against the original spectra to verify that offsets are removed and scaling behavior matches expectations.",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "y_axis": {"data_source": "out.X_val", "label": "Intensity"},
+              "title": "Processed Validation",
+              "class_labels": "class_data_val",
+              "dimension_labels": "in.dim_labels"
+            }
+          }
+        ]
+      },
+      {
+        "title": "Center & Normalize Comparison (Validation)",
+        "layout": "ew",
+        "condition": {"parameter": "nway_flag", "operator": "==", "value": "2"},
+        "sections": [
+          {
+            "type": "graph",
+            "short_description": "Contour view of one selected validation sample before preprocessing.",
+            "long_description": "Displays a contour plot of the original multiway validation data for the selected sample index. Use the sample navigation control to inspect spatial/spectral structure prior to preprocessing.",
+            "config": {
+              "graph_type": "contour",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 2, "label": "in.dim_labels", "l_index": 2},
+              "y_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "z_axis": {"data_source": "in.X_val", "label": "Intensity"},
+              "title": "Original Validation",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}]
+            }
+          },
+          {
+            "type": "graph",
+            "short_description": "Contour view of one selected validation sample after preprocessing.",
+            "long_description": "Displays a contour plot of the processed multiway validation data for the selected sample index. Compare with the original contour to assess how centering/normalization affected signal distribution.",
+            "config": {
+              "graph_type": "contour",
+              "x_axis": {"data_source": "in.axis_n_info", "index": 2, "label": "in.dim_labels", "l_index": 2},
+              "y_axis": {"data_source": "in.axis_n_info", "index": 1, "label": "in.dim_labels", "l_index": 1},
+              "z_axis": {"data_source": "out.X_val", "label": "Intensity"},
+              "title": "Processed Validation",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}]
+            }
+          },
+          {"type": null},
+          {"type": null}
+        ]
+      },
+      {
+        "title": "Center & Normalize Comparison (Validation)",
+        "layout": "ew",
+        "condition": {"parameter": "nway_flag", "operator": ">", "value": "2"},
+        "sections": [
+          {
+            "type": "graph",
+            "short_description": "Heatmap view of higher-dimensional validation data before preprocessing.",
+            "long_description": "Displays the original validation data as a heatmap for n-way datasets with dimensionality greater than 2. Use slicing and axis controls to inspect specific samples and dimension combinations before transformation.",
+            "config": {
+              "graph_type": "heatmap",
+              "aux_axis": {
+                "data_source": "in.axis_n_info",
+                "labels": "in.dim_labels"
+              },
+              "z_axis": {"data_source": "in.X_val", "label": "Intensity"},
+              "title": "Original Validation",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}],
+              "show_md_menu": true
+            }
+          },
+          {
+            "type": "graph",
+            "short_description": "Heatmap view of higher-dimensional validation data after preprocessing.",
+            "long_description": "Displays the processed validation data as a heatmap for n-way datasets with dimensionality greater than 2. Compare with the original heatmap to validate the effect of centering/normalization across slices and dimensions.",
+            "config": {
+              "graph_type": "heatmap",
+              "aux_axis": {
+                "data_source": "in.axis_n_info",
+                "labels": "in.dim_labels"
+              },
+              "z_axis": {"data_source": "out.X_val", "label": "Intensity"},
+              "title": "Processed Validation",
+              "dimension_labels": "in.dim_labels",
+              "variable_labels": "in.axis_t_info",
+              "data_slicing": [{"name": "Sample", "dimension": 0, "default": 0, "axis": "z", "show_navigation_menu": true}],
+              "show_md_menu": true
+            }
+          }
+        ]
+      }
+    ],
+    "current_page": 0
+  }
+}

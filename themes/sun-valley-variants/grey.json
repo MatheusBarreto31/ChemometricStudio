@@ -1,0 +1,78 @@
+{
+  "id": "sv_variant_vista",
+  "label": "Grey",
+  "base": "light",
+  "tcl_theme_name": "sv-grey",
+  "tcl_file": "grey/theme.tcl",
+  "description": "Light colour scheme inspired by the Windows Vista Aero / Tk Vista theme: soft silver-blue surfaces, navy text, and classic Vista-blue selection highlights.",
+  "palette": {
+    "background": "#f0f0f0",
+    "foreground": "#000000",
+    "selectBackground": "#0078d7",
+    "selectForeground": "#ffffff",
+    "activeBackground": "#e0eef9",
+    "activeForeground": "#000000"
+  },
+  "styles": {
+    ".": {
+      "background": "#f0f0f0",
+      "foreground": "#000000"
+    },
+    "TFrame": {
+      "background": "#f0f0f0"
+    },
+    "TLabel": {
+      "background": "#f0f0f0",
+      "foreground": "#000000"
+    },
+    "TLabelframe": {
+      "background": "#f0f0f0",
+      "foreground": "#000000"
+    },
+    "TLabelframe.Label": {
+      "background": "#f0f0f0",
+      "foreground": "#000000"
+    },
+    "TEntry": {
+      "fieldbackground": "#ffffff",
+      "foreground": "#000000",
+      "insertcolor": "#000000",
+      "selectbackground": "#0078d7",
+      "selectforeground": "#ffffff"
+    },
+    "TCombobox": {
+      "fieldbackground": "#ffffff",
+      "foreground": "#000000",
+      "selectbackground": "#0078d7",
+      "selectforeground": "#ffffff"
+    },
+    "TSpinbox": {
+      "fieldbackground": "#ffffff",
+      "foreground": "#000000"
+    },
+    "Treeview": {
+      "background": "#ffffff",
+      "foreground": "#000000",
+      "fieldbackground": "#ffffff"
+    },
+    "TNotebook": {
+      "background": "#f0f0f0"
+    },
+    "TNotebook.Tab": {
+      "background": "#e0eef9",
+      "foreground": "#000000"
+    },
+    "TScrollbar": {
+      "troughcolor": "#f0f0f0",
+      "background": "#c8c8c8"
+    },
+    "Execution.Horizontal.TProgressbar": {
+      "troughcolor": "#f0f0f0",
+      "background": "#5a95c9",
+      "bordercolor": "#c6d5e5",
+      "lightcolor": "#7cb1de",
+      "darkcolor": "#5a95c9",
+      "thickness": 12
+    }
+  }
+}

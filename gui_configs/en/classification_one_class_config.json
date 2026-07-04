@@ -1,0 +1,1466 @@
+{
+  "display_name": "Classification (One-Class)",
+  "category": "6.Classification",
+  "data_type": "classification",
+  "input_aliases": {
+    "X_cal": "X Calibration",
+    "class_data_cal": "Class Calibration",
+    "X_val": "X Validation",
+    "class_data_val": "Class Validation",
+    "smp_cal": "Sample IDs Calibration",
+    "smp_val": "Sample IDs Validation",
+    "class_layer": "Class Layer",
+    "one_class_method": "One-Class Method",
+    "one_class_reference_class": "Reference Class",
+    "one_class_calibration_scope": "Calibration Scope",
+    "one_class_unknown_label": "Unknown Label",
+    "one_class_nu": "One-Class SVM Nu",
+    "one_class_gamma": "One-Class SVM Gamma",
+    "isolation_forest_n_estimators": "IForest Trees",
+    "isolation_forest_contamination": "Outlier Fraction",
+    "simca_n_components": "SIMCA Components",
+    "simca_confidence_level": "SIMCA Confidence",
+    "simca_limit_method": "SIMCA Limit Method",
+    "simca_decision_rule": "SIMCA Decision Rule",
+    "simca_scale_x": "SIMCA Scale X",
+    "dd_simca_lim_type": "DD-SIMCA Estimator",
+    "dd_simca_alpha": "DD-SIMCA Alpha",
+    "dd_simca_gamma": "DD-SIMCA Gamma",
+    "cv_config": "CV Configuration"
+  },
+  "output_aliases": {
+    "class_cal_pred": "Calibration Class Predictions",
+    "class_val_pred": "Validation Class Predictions",
+    "class_cv_pred": "CV Class Predictions",
+    "class_cal_true": "Calibration Class Reference",
+    "class_val_true": "Validation Class Reference",
+    "class_cal_prob": "Calibration Probabilities",
+    "class_val_prob": "Validation Probabilities",
+    "class_cv_prob": "CV Probabilities",
+    "inlier_cal_pred": "Calibration Inlier Flags",
+    "inlier_val_pred": "Validation Inlier Flags",
+    "dd_simca_class_cal": "DD-SIMCA Calibration Classification",
+    "dd_simca_class_val": "DD-SIMCA Validation Classification",
+    "one_class_score_cal": "Calibration One-Class Score",
+    "one_class_score_val": "Validation One-Class Score",
+    "simca_q_cal": "SIMCA Q (Calibration)",
+    "simca_q_val": "SIMCA Q (Validation)",
+    "simca_t2_cal": "SIMCA T2 (Calibration)",
+    "simca_t2_val": "SIMCA T2 (Validation)",
+    "simca_q_limit": "SIMCA Q Limit",
+    "simca_t2_limit": "SIMCA T2 Limit",
+    "dd_simca_h_intercept_alpha": "DD-SIMCA Alpha H Intercept",
+    "dd_simca_q_intercept_alpha": "DD-SIMCA Alpha Q Intercept",
+    "dd_simca_h_intercept_gamma": "DD-SIMCA Gamma H Intercept",
+    "dd_simca_q_intercept_gamma": "DD-SIMCA Gamma Q Intercept",
+    "metrics": "Metrics",
+    "calibration_table": "Calibration Table",
+    "validation_table": "Validation Table",
+    "confusion_matrices": "Confusion Matrices",
+    "probability_graph": "Probability/Score Graph Data"
+  },
+  "translation_keys": {
+    "dd_simca_tag_regular": "Regular",
+    "dd_simca_tag_extreme": "Extreme",
+    "dd_simca_tag_outlier": "Outlier"
+  },
+  "short_description": "One-class classification with reference-class filtering.",
+  "long_description": "Supports DD-SIMCA, SIMCA, One-Class SVM, Isolation Forest, Elliptic Envelope, and LOF (novelty). Converts inlier/outlier decisions into class predictions using Reference Class and Unknown Label. DD-SIMCA combines the Q and T² statistics into a single normalised distance criterion.",
+  "execution_report_specs": {
+    "messages": {},
+    "warnings": {},
+    "errors": {
+      "classification_one_class_invalid_simca_confidence": "SIMCA confidence is invalid. Provide a finite value strictly between 0 and 1."
+    }
+  },
+  "setup": {
+    "categories": [
+      "Model Parameters",
+      "Data Inputs"
+    ],
+    "layout": [
+      {
+        "name": "one_class_method",
+        "label": "One-Class Method",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "dd_simca",
+        "values": [
+          "simca",
+          "dd_simca",
+          "one_class_svm",
+          "isolation_forest",
+          "elliptic_envelope",
+          "lof"
+        ],
+        "value_aliases": [
+          "SIMCA",
+          "DD-SIMCA",
+          "One-Class SVM",
+          "Isolation Forest",
+          "Elliptic Envelope",
+          "Local Outlier Factor"
+        ],
+        "required": true,
+        "input_type": "user"
+      },
+      {
+        "name": "one_class_reference_class",
+        "label": "Reference Class",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "str",
+        "default": "1",
+        "required": false,
+        "input_type": "user"
+      },
+      {
+        "name": "one_class_calibration_scope",
+        "label": "Calibration Scope",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "auto_single_class",
+        "values": [
+          "auto_single_class",
+          "filter_by_reference_class",
+          "no_filter"
+        ],
+        "value_aliases": [
+          "Auto (single-class calibration)",
+          "Filter by Reference Class",
+          "No Filter"
+        ],
+        "required": false,
+        "input_type": "user"
+      },
+      {
+        "name": "one_class_unknown_label",
+        "label": "Unknown Label",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "str",
+        "default": "Other",
+        "required": false,
+        "input_type": "user"
+      },
+      {
+        "name": "simca_n_components",
+        "label": "SIMCA Components",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "3",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "one_class_method": [
+            "simca",
+            "dd_simca"
+          ]
+        }
+      },
+      {
+        "name": "simca_confidence_level",
+        "label": "SIMCA Confidence",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.95",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "one_class_method": "simca"
+        }
+      },
+      {
+        "name": "simca_limit_method",
+        "label": "SIMCA Limit Method",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "analytical",
+        "values": [
+          "analytical",
+          "empirical"
+        ],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "one_class_method": "simca"
+        }
+      },
+      {
+        "name": "simca_decision_rule",
+        "label": "SIMCA Decision Rule",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "both",
+        "values": [
+          "both",
+          "combined",
+          "q_only",
+          "t2_only"
+        ],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "one_class_method": "simca"
+        }
+      },
+      {
+        "name": "simca_combined_rule",
+        "label": "SIMCA Combined Metric",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "l1",
+        "values": [
+          "l1",
+          "l2"
+        ],
+        "value_aliases": [
+          "L1: q/q_limit + t2/t2_limit",
+          "L2: sqrt((q/q_limit)^2 + (t2/t2_limit)^2)"
+        ],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "one_class_method": "simca",
+          "simca_decision_rule": "combined"
+        }
+      },
+      {
+        "name": "simca_scale_x",
+        "label": "SIMCA Scale X",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "bool",
+        "default": "True",
+        "values": [
+          true,
+          false
+        ],
+        "value_aliases": [
+          "True",
+          "False"
+        ],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "one_class_method": [
+            "simca",
+            "dd_simca"
+          ]
+        }
+      },
+      {
+        "name": "dd_simca_lim_type",
+        "label": "DD-SIMCA Estimator",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "classic",
+        "values": [
+          "classic",
+          "robust"
+        ],
+        "value_aliases": [
+          "Classic (mean/variance)",
+          "Robust (median/IQR)"
+        ],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "one_class_method": "dd_simca"
+        }
+      },
+      {
+        "name": "dd_simca_alpha",
+        "label": "DD-SIMCA Alpha",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.05",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "one_class_method": "dd_simca"
+        }
+      },
+      {
+        "name": "dd_simca_gamma",
+        "label": "DD-SIMCA Gamma",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.05",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "one_class_method": "dd_simca"
+        }
+      },
+      {
+        "name": "one_class_nu",
+        "label": "One-Class SVM Nu",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.05",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "one_class_method": "one_class_svm"
+        }
+      },
+      {
+        "name": "one_class_gamma",
+        "label": "One-Class SVM Gamma",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.1",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "one_class_method": "one_class_svm"
+        }
+      },
+      {
+        "name": "isolation_forest_n_estimators",
+        "label": "IForest Trees",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "300",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "one_class_method": [
+            "isolation_forest",
+            "elliptic_envelope",
+            "lof"
+          ]
+        }
+      },
+      {
+        "name": "isolation_forest_contamination",
+        "label": "Outlier Fraction",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.05",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "one_class_method": [
+            "isolation_forest",
+            "elliptic_envelope",
+            "lof"
+          ]
+        }
+      },
+      {
+        "name": "class_layer",
+        "label": "Class Layer",
+        "category": "Data Inputs",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": false,
+        "input_type": "user"
+      },
+      {
+        "name": "X_cal",
+        "label": "X Calibration",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": true,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        }
+      },
+      {
+        "name": "class_data_cal",
+        "label": "Class Calibration",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": true,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        }
+      },
+      {
+        "name": "X_val",
+        "label": "X Validation",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        }
+      },
+      {
+        "name": "class_data_val",
+        "label": "Class Validation",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        }
+      },
+      {
+        "name": "smp_cal",
+        "label": "Sample IDs Calibration",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        }
+      },
+      {
+        "name": "smp_val",
+        "label": "Sample IDs Validation",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        }
+      },
+      {
+        "name": "cv_config",
+        "label": "CV Configuration",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        }
+      }
+    ]
+  },
+  "analysis": {
+    "pages": [
+      {
+        "title": "Performance Summary",
+        "layout": "ew",
+        "sections": [
+          {
+            "type": "text",
+            "config": {
+              "title": "Performance Report",
+              "text_template": "One-Class Classification Performance Report\n===========================================\nMethod:                {method}\nReference Class:       {ref_class}\nNon-Reference Label:   {unknown_label}\nFit Samples:           {fit_n}\n\nCalibration\n-----------\nSamples:               {n_cal}\nTrue Positives (TP):   {tp_cal}\nTrue Negatives (TN):   {tn_cal}\nFalse Positives (FP):  {fp_cal}\nFalse Negatives (FN):  {fn_cal}\nAccuracy:              {acc_cal}\nF1 (Macro):            {f1_cal}\nPrecision (Macro):     {prec_cal}\nRecall (Macro):        {rec_cal}\nInlier Rate:           {inlier_cal}\n\nValidation\n----------\nSamples:               {n_val}\nTrue Positives (TP):   {tp_val}\nTrue Negatives (TN):   {tn_val}\nFalse Positives (FP):  {fp_val}\nFalse Negatives (FN):  {fn_val}\nAccuracy:              {acc_val}\nF1 (Macro):            {f1_val}\nPrecision (Macro):     {prec_val}\nRecall (Macro):        {rec_val}\nInlier Rate:           {inlier_val}",
+              "bindings": [
+                {
+                  "name": "method",
+                  "data_source": "model",
+                  "nested_key": "model_type",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "ref_class",
+                  "data_source": "model",
+                  "nested_key": "reference_class",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "unknown_label",
+                  "data_source": "model",
+                  "nested_key": "class_labels",
+                  "selector": {
+                    "mode": "index",
+                    "index": 0
+                  }
+                },
+                {
+                  "name": "fit_n",
+                  "data_source": "model",
+                  "nested_key": "fit_sample_count",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "n_cal",
+                  "data_source": "metrics",
+                  "nested_key": "calibration.n_samples",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "tp_cal",
+                  "data_source": "confusion_matrices",
+                  "nested_key": "calibration.matrix.1.1",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "tn_cal",
+                  "data_source": "confusion_matrices",
+                  "nested_key": "calibration.matrix.0.0",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "fp_cal",
+                  "data_source": "confusion_matrices",
+                  "nested_key": "calibration.matrix.0.1",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "fn_cal",
+                  "data_source": "confusion_matrices",
+                  "nested_key": "calibration.matrix.1.0",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "acc_cal",
+                  "data_source": "metrics",
+                  "nested_key": "calibration.accuracy",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "f1_cal",
+                  "data_source": "metrics",
+                  "nested_key": "calibration.f1_macro",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "prec_cal",
+                  "data_source": "metrics",
+                  "nested_key": "calibration.precision_macro",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "rec_cal",
+                  "data_source": "metrics",
+                  "nested_key": "calibration.recall_macro",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "inlier_cal",
+                  "data_source": "metrics",
+                  "nested_key": "one_class.inlier_rate_calibration",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "n_val",
+                  "data_source": "metrics",
+                  "nested_key": "validation.n_samples",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "tp_val",
+                  "data_source": "confusion_matrices",
+                  "nested_key": "validation.matrix.1.1",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "tn_val",
+                  "data_source": "confusion_matrices",
+                  "nested_key": "validation.matrix.0.0",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "fp_val",
+                  "data_source": "confusion_matrices",
+                  "nested_key": "validation.matrix.0.1",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "fn_val",
+                  "data_source": "confusion_matrices",
+                  "nested_key": "validation.matrix.1.0",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "acc_val",
+                  "data_source": "metrics",
+                  "nested_key": "validation.accuracy",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "f1_val",
+                  "data_source": "metrics",
+                  "nested_key": "validation.f1_macro",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "prec_val",
+                  "data_source": "metrics",
+                  "nested_key": "validation.precision_macro",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "rec_val",
+                  "data_source": "metrics",
+                  "nested_key": "validation.recall_macro",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "inlier_val",
+                  "data_source": "metrics",
+                  "nested_key": "one_class.inlier_rate_validation",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                }
+              ]
+            },
+            "short_description": "One-class classification performance summary with sample counts and TP/TN/FP/FN breakdown."
+          },
+          {
+            "type": "text",
+            "condition": {
+              "parameter": "one_class_method",
+              "operator": "==",
+              "value": "simca"
+            },
+            "config": {
+              "title": "SIMCA Settings",
+              "text_template": "SIMCA Settings\n--------------\nConfidence Level:  {simca_conf}\nLimit Method:      {simca_limit}\nDecision Rule:     {simca_rule}\nCombined Metric:   {simca_combined}",
+              "bindings": [
+                {
+                  "name": "simca_conf",
+                  "data_source": "metrics",
+                  "nested_key": "one_class.simca_confidence_level",
+                  "value_format": ".4f",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "simca_limit",
+                  "data_source": "metrics",
+                  "nested_key": "one_class.simca_limit_method",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "simca_rule",
+                  "data_source": "metrics",
+                  "nested_key": "one_class.simca_decision_rule",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "simca_combined",
+                  "data_source": "metrics",
+                  "nested_key": "one_class.simca_combined_rule",
+                  "selector": {
+                    "mode": "value"
+                  }
+                }
+              ]
+            },
+            "short_description": "SIMCA-specific model configuration."
+          },
+          {
+            "type": "text",
+            "condition": {
+              "parameter": "one_class_method",
+              "operator": "==",
+              "value": "dd_simca"
+            },
+            "config": {
+              "title": "DD-SIMCA Settings",
+              "text_template": "DD-SIMCA Settings\n-----------------\nAlpha:             {dd_alpha}\nGamma:             {dd_gamma}\nEstimator Type:    {lim_type}",
+              "bindings": [
+                {
+                  "name": "dd_alpha",
+                  "data_source": "metrics",
+                  "nested_key": "one_class.dd_simca_alpha",
+                  "value_format": ".4f",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "dd_gamma",
+                  "data_source": "metrics",
+                  "nested_key": "one_class.dd_simca_gamma",
+                  "value_format": ".4f",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "lim_type",
+                  "data_source": "model",
+                  "nested_key": "simca.lim_type",
+                  "selector": {
+                    "mode": "value"
+                  }
+                }
+              ]
+            },
+            "short_description": "DD-SIMCA-specific model configuration."
+          }
+        ]
+      },
+      {
+        "title": "Confusion Matrices",
+        "layout": "fd",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "title": "Calibration Confusion Matrix",
+              "x_axis": {
+                "data_source": "confusion_matrices",
+                "nested_key": "calibration.labels",
+                "label": "Predicted"
+              },
+              "y_axis": {
+                "data_source": "confusion_matrices",
+                "nested_key": "calibration.labels",
+                "label": "Reference"
+              },
+              "z_axis": {
+                "data_source": "confusion_matrices",
+                "nested_key": "calibration.matrix"
+              },
+              "cmap": "Blues",
+              "annotate_heatmap": true
+            },
+            "short_description": "Confusion matrix for calibration set predictions."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "title": "CV Confusion Matrix",
+              "x_axis": {
+                "data_source": "confusion_matrices",
+                "nested_key": "cv.labels",
+                "label": "Predicted"
+              },
+              "y_axis": {
+                "data_source": "confusion_matrices",
+                "nested_key": "cv.labels",
+                "label": "Reference"
+              },
+              "z_axis": {
+                "data_source": "confusion_matrices",
+                "nested_key": "cv.matrix"
+              },
+              "cmap": "Blues",
+              "annotate_heatmap": true
+            },
+            "short_description": "Confusion matrix for cross-validation predictions (reflects training-set bias for one-class models)."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "title": "Validation Confusion Matrix",
+              "x_axis": {
+                "data_source": "confusion_matrices",
+                "nested_key": "validation.labels",
+                "label": "Predicted"
+              },
+              "y_axis": {
+                "data_source": "confusion_matrices",
+                "nested_key": "validation.labels",
+                "label": "Reference"
+              },
+              "z_axis": {
+                "data_source": "confusion_matrices",
+                "nested_key": "validation.matrix"
+              },
+              "cmap": "Blues",
+              "annotate_heatmap": true
+            },
+            "short_description": "Confusion matrix for validation set predictions."
+          },
+          {
+            "type": null
+          }
+        ]
+      },
+      {
+        "title": "Predictions",
+        "layout": "ns",
+        "sections": [
+          {
+            "type": "table",
+            "condition": {
+              "parameter": "one_class_method",
+              "operator": "==",
+              "value": "dd_simca"
+            },
+            "config": {
+              "title": "Calibration Predictions (DD-SIMCA)",
+              "row_headers": "smp_cal",
+              "columns": [
+                {
+                  "data_source": "class_cal_true",
+                  "name": "Reference"
+                },
+                {
+                  "data_source": "class_cal_pred",
+                  "name": "Predicted"
+                },
+                {
+                  "data_source": "dd_simca_class_cal",
+                  "name": "Classification"
+                },
+                {
+                  "data_source": "inlier_cal_pred",
+                  "name": "Inlier Flag"
+                },
+                {
+                  "data_source": "one_class_score_cal",
+                  "name": "Decision Score"
+                },
+                {
+                  "data_source": "class_cal_error",
+                  "name": "Error"
+                }
+              ],
+              "decimal_places": 4,
+              "max_rows": 500
+            },
+            "short_description": "Sample-level predictions, DD-SIMCA classification (regular/extreme/outlier), inlier flags, and decision scores for calibration."
+          },
+          {
+            "type": "table",
+            "condition": {
+              "parameter": "one_class_method",
+              "operator": "!=",
+              "value": "dd_simca"
+            },
+            "config": {
+              "title": "Calibration Predictions",
+              "row_headers": "smp_cal",
+              "columns": [
+                {
+                  "data_source": "class_cal_true",
+                  "name": "Reference"
+                },
+                {
+                  "data_source": "class_cal_pred",
+                  "name": "Predicted"
+                },
+                {
+                  "data_source": "inlier_cal_pred",
+                  "name": "Inlier Flag"
+                },
+                {
+                  "data_source": "one_class_score_cal",
+                  "name": "Decision Score"
+                },
+                {
+                  "data_source": "class_cal_error",
+                  "name": "Error"
+                }
+              ],
+              "decimal_places": 4,
+              "max_rows": 500
+            },
+            "short_description": "Sample-level predictions, inlier flags, and decision scores for the calibration set."
+          },
+          {
+            "type": "table",
+            "condition": {
+              "parameter": "one_class_method",
+              "operator": "==",
+              "value": "dd_simca"
+            },
+            "config": {
+              "title": "Validation Predictions (DD-SIMCA)",
+              "row_headers": "smp_val",
+              "columns": [
+                {
+                  "data_source": "class_val_true",
+                  "name": "Reference"
+                },
+                {
+                  "data_source": "class_val_pred",
+                  "name": "Predicted"
+                },
+                {
+                  "data_source": "dd_simca_class_val",
+                  "name": "Classification"
+                },
+                {
+                  "data_source": "inlier_val_pred",
+                  "name": "Inlier Flag"
+                },
+                {
+                  "data_source": "one_class_score_val",
+                  "name": "Decision Score"
+                },
+                {
+                  "data_source": "class_val_error",
+                  "name": "Error"
+                }
+              ],
+              "decimal_places": 4,
+              "max_rows": 500
+            },
+            "short_description": "Sample-level predictions, DD-SIMCA classification (regular/extreme/outlier), inlier flags, and decision scores for validation."
+          },
+          {
+            "type": "table",
+            "condition": {
+              "parameter": "one_class_method",
+              "operator": "!=",
+              "value": "dd_simca"
+            },
+            "config": {
+              "title": "Validation Predictions",
+              "row_headers": "smp_val",
+              "columns": [
+                {
+                  "data_source": "class_val_true",
+                  "name": "Reference"
+                },
+                {
+                  "data_source": "class_val_pred",
+                  "name": "Predicted"
+                },
+                {
+                  "data_source": "inlier_val_pred",
+                  "name": "Inlier Flag"
+                },
+                {
+                  "data_source": "one_class_score_val",
+                  "name": "Decision Score"
+                },
+                {
+                  "data_source": "class_val_error",
+                  "name": "Error"
+                }
+              ],
+              "decimal_places": 4,
+              "max_rows": 500
+            },
+            "short_description": "Sample-level predictions, inlier flags, and decision scores for the validation set."
+          }
+        ]
+      },
+      {
+        "title": "Decision Scores",
+        "layout": "ns",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Decision Score by Sample (Calibration)",
+              "x_axis": {
+                "data_source": "__index__",
+                "reference_source": "one_class_score_cal",
+                "label": "Sample Index"
+              },
+              "y_axis": {
+                "data_source": "one_class_score_cal",
+                "label": "Decision Score"
+              },
+              "show_grid": true,
+              "scatter_lines": [
+                {
+                  "orientation": "horizontal",
+                  "value": 0.0,
+                  "linestyle": "--",
+                  "linewidth": 1.5,
+                  "color": "#cc0000",
+                  "alpha": 0.8
+                }
+              ]
+            },
+            "short_description": "Decision score by sample for the calibration set. The dashed red line marks the decision boundary (0)."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Decision Score by Sample (Validation)",
+              "x_axis": {
+                "data_source": "__index__",
+                "reference_source": "one_class_score_val",
+                "label": "Sample Index"
+              },
+              "y_axis": {
+                "data_source": "one_class_score_val",
+                "label": "Decision Score"
+              },
+              "show_grid": true,
+              "scatter_lines": [
+                {
+                  "orientation": "horizontal",
+                  "value": 0.0,
+                  "linestyle": "--",
+                  "linewidth": 1.5,
+                  "color": "#cc0000",
+                  "alpha": 0.8
+                }
+              ]
+            },
+            "short_description": "Decision score by sample for the validation set. The dashed red line marks the decision boundary (0)."
+          }
+        ]
+      },
+      {
+        "title": "SIMCA Diagnostics",
+        "layout": "ew",
+        "condition": {
+          "parameter": "one_class_method",
+          "operator": "==",
+          "value": "simca"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Q vs T² (Calibration)",
+              "x_axis": {
+                "data_source": "simca_q_cal",
+                "axis_type": "log10",
+                "label": "Q (Orthogonal Distance)"
+              },
+              "y_axis": {
+                "data_source": "simca_t2_cal",
+                "axis_type": "log10",
+                "label": "T² (Score Distance)"
+              },
+              "class_labels": "class_cal_true",
+              "point_labels_source": "smp_cal",
+              "show_grid": true,
+              "scatter_lines": [
+                {
+                  "orientation": "vertical",
+                  "value": {
+                    "data_source": "simca_q_limit_active"
+                  },
+                  "linestyle": "--",
+                  "linewidth": 1.5,
+                  "color": "#cc0000",
+                  "alpha": 0.85
+                },
+                {
+                  "orientation": "horizontal",
+                  "value": {
+                    "data_source": "simca_t2_limit_active"
+                  },
+                  "linestyle": "--",
+                  "linewidth": 1.5,
+                  "color": "#0055cc",
+                  "alpha": 0.85
+                },
+                {
+                  "orientation": "path",
+                  "x": {
+                    "data_source": "simca_q_combined_path"
+                  },
+                  "y": {
+                    "data_source": "simca_t2_combined_path"
+                  },
+                  "linestyle": "--",
+                  "linewidth": 1.5,
+                  "color": "#cc0000",
+                  "alpha": 0.85
+                }
+              ]
+            },
+            "short_description": "Q (orthogonal) vs T² (score) scatter for calibration with perpendicular limit lines."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Q vs T² (Validation)",
+              "x_axis": {
+                "data_source": "simca_q_val",
+                "axis_type": "log10",
+                "label": "Q (Orthogonal Distance)"
+              },
+              "y_axis": {
+                "data_source": "simca_t2_val",
+                "axis_type": "log10",
+                "label": "T² (Score Distance)"
+              },
+              "class_labels": [
+                "class_val_true",
+                "class_val_pred"
+              ],
+              "point_labels_source": "smp_val",
+              "show_grid": true,
+              "scatter_lines": [
+                {
+                  "orientation": "vertical",
+                  "value": {
+                    "data_source": "simca_q_limit_active"
+                  },
+                  "linestyle": "--",
+                  "linewidth": 1.5,
+                  "color": "#cc0000",
+                  "alpha": 0.85
+                },
+                {
+                  "orientation": "horizontal",
+                  "value": {
+                    "data_source": "simca_t2_limit_active"
+                  },
+                  "linestyle": "--",
+                  "linewidth": 1.5,
+                  "color": "#0055cc",
+                  "alpha": 0.85
+                },
+                {
+                  "orientation": "path",
+                  "x": {
+                    "data_source": "simca_q_combined_path"
+                  },
+                  "y": {
+                    "data_source": "simca_t2_combined_path"
+                  },
+                  "linestyle": "--",
+                  "linewidth": 1.5,
+                  "color": "#cc0000",
+                  "alpha": 0.85
+                }
+              ]
+            },
+            "short_description": "Q (orthogonal) vs T² (score) scatter for validation with perpendicular limit lines."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Q (Orthogonal Distance) by Sample (Calibration)",
+              "x_axis": {
+                "data_source": "__index__",
+                "reference_source": "simca_q_cal",
+                "label": "Sample Index"
+              },
+              "y_axis": {
+                "data_source": "simca_q_cal",
+                "label": "Q (Orthogonal Distance)"
+              },
+              "show_grid": true,
+              "scatter_lines": [
+                {
+                  "orientation": "horizontal",
+                  "value": {
+                    "data_source": "simca_q_limit"
+                  },
+                  "linestyle": "--",
+                  "linewidth": 1.5,
+                  "color": "#cc0000",
+                  "alpha": 0.8
+                }
+              ]
+            },
+            "short_description": "Q (orthogonal distance) by sample for calibration. Dashed line: Q limit."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "T² (Score Distance) by Sample (Calibration)",
+              "x_axis": {
+                "data_source": "__index__",
+                "reference_source": "simca_t2_cal",
+                "label": "Sample Index"
+              },
+              "y_axis": {
+                "data_source": "simca_t2_cal",
+                "label": "T² (Score Distance)"
+              },
+              "show_grid": true,
+              "scatter_lines": [
+                {
+                  "orientation": "horizontal",
+                  "value": {
+                    "data_source": "simca_t2_limit"
+                  },
+                  "linestyle": "--",
+                  "linewidth": 1.5,
+                  "color": "#0055cc",
+                  "alpha": 0.8
+                }
+              ]
+            },
+            "short_description": "T² (score distance) by sample for calibration. Dashed line: T² limit."
+          }
+        ]
+      },
+      {
+        "title": "DD-SIMCA Diagnostics",
+        "layout": "ew",
+        "condition": {
+          "parameter": "one_class_method",
+          "operator": "==",
+          "value": "dd_simca"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Q vs H (Calibration)",
+              "x_axis": {
+                "data_source": "simca_q_cal",
+                "axis_type": "log10",
+                "label": "Q (Orthogonal Distance)"
+              },
+              "y_axis": {
+                "data_source": "simca_t2_cal",
+                "axis_type": "log10",
+                "label": "H (Score Distance)"
+              },
+              "class_labels": "class_cal_true",
+              "point_labels_source": "smp_cal",
+              "show_grid": true,
+              "scatter_lines": [
+                {
+                  "orientation": "path",
+                  "x": {
+                    "data_source": "dd_simca_q_path_alpha"
+                  },
+                  "y": {
+                    "data_source": "dd_simca_h_path_alpha"
+                  },
+                  "label": "$\\alpha$",
+                  "label_position": "start",
+                  "label_side": "above",
+                  "linestyle": "--",
+                  "linewidth": 1.5,
+                  "color": "#cc4400",
+                  "alpha": 0.85
+                },
+                {
+                  "orientation": "path",
+                  "x": {
+                    "data_source": "dd_simca_q_path_gamma"
+                  },
+                  "y": {
+                    "data_source": "dd_simca_h_path_gamma"
+                  },
+                  "label": "$\\gamma$",
+                  "label_position": "start",
+                  "label_side": "above",
+                  "linestyle": "--",
+                  "linewidth": 1.5,
+                  "color": "#cc0000",
+                  "alpha": 0.85
+                }
+              ]
+            },
+            "short_description": "Q (orthogonal) vs H (score) scatter for calibration with DD-SIMCA alpha and gamma boundaries."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Q vs H (Validation)",
+              "x_axis": {
+                "data_source": "simca_q_val",
+                "axis_type": "log10",
+                "label": "Q (Orthogonal Distance)"
+              },
+              "y_axis": {
+                "data_source": "simca_t2_val",
+                "axis_type": "log10",
+                "label": "H (Score Distance)"
+              },
+              "class_labels": [
+                "class_val_true",
+                "class_val_pred"
+              ],
+              "point_labels_source": "smp_val",
+              "show_grid": true,
+              "scatter_lines": [
+                {
+                  "orientation": "path",
+                  "x": {
+                    "data_source": "dd_simca_q_path_alpha"
+                  },
+                  "y": {
+                    "data_source": "dd_simca_h_path_alpha"
+                  },
+                  "label": "$\\alpha$",
+                  "label_position": "start",
+                  "label_side": "above",
+                  "linestyle": "--",
+                  "linewidth": 1.5,
+                  "color": "#cc4400",
+                  "alpha": 0.85
+                },
+                {
+                  "orientation": "path",
+                  "x": {
+                    "data_source": "dd_simca_q_path_gamma"
+                  },
+                  "y": {
+                    "data_source": "dd_simca_h_path_gamma"
+                  },
+                  "label": "$\\gamma$",
+                  "label_position": "start",
+                  "label_side": "above",
+                  "linestyle": "--",
+                  "linewidth": 1.5,
+                  "color": "#cc0000",
+                  "alpha": 0.85
+                }
+              ]
+            },
+            "short_description": "Q (orthogonal) vs H (score) scatter for validation with DD-SIMCA alpha and gamma boundaries."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Q (Orthogonal Distance) by Sample (Calibration)",
+              "x_axis": {
+                "data_source": "__index__",
+                "reference_source": "simca_q_cal",
+                "label": "Sample Index"
+              },
+              "y_axis": {
+                "data_source": "simca_q_cal",
+                "label": "Q (Orthogonal Distance)"
+              },
+              "show_grid": true,
+              "scatter_lines": [
+                {
+                  "orientation": "horizontal",
+                  "value": {
+                    "data_source": "dd_simca_q_intercept_alpha"
+                  },
+                  "label": "Alpha intercept",
+                  "linestyle": "--",
+                  "linewidth": 1.5,
+                  "color": "#cc0000",
+                  "alpha": 0.8
+                },
+                {
+                  "orientation": "horizontal",
+                  "value": {
+                    "data_source": "dd_simca_q_intercept_gamma"
+                  },
+                  "label": "Gamma intercept",
+                  "linestyle": "-.",
+                  "linewidth": 1.5,
+                  "color": "#0055cc",
+                  "alpha": 0.8
+                }
+              ]
+            },
+            "short_description": "Q (orthogonal distance) by sample for calibration with alpha and gamma DD-SIMCA intercepts."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "H (Score Distance) by Sample (Calibration)",
+              "x_axis": {
+                "data_source": "__index__",
+                "reference_source": "simca_t2_cal",
+                "label": "Sample Index"
+              },
+              "y_axis": {
+                "data_source": "simca_t2_cal",
+                "label": "H (Score Distance)"
+              },
+              "show_grid": true,
+              "scatter_lines": [
+                {
+                  "orientation": "horizontal",
+                  "value": {
+                    "data_source": "dd_simca_h_intercept_alpha"
+                  },
+                  "label": "Alpha intercept",
+                  "linestyle": "--",
+                  "linewidth": 1.5,
+                  "color": "#0055cc",
+                  "alpha": 0.8
+                },
+                {
+                  "orientation": "horizontal",
+                  "value": {
+                    "data_source": "dd_simca_h_intercept_gamma"
+                  },
+                  "label": "Gamma intercept",
+                  "linestyle": "-.",
+                  "linewidth": 1.5,
+                  "color": "#cc0000",
+                  "alpha": 0.8
+                }
+              ]
+            },
+            "short_description": "H (score distance) by sample for calibration with alpha and gamma DD-SIMCA intercepts."
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Routing Tab - Workflow Guide - Chemometric Studio User Manual</title>
+  <link rel="stylesheet" href="assets/css/manual.css">
+</head>
+<body data-manual-page="workflow" data-manual-group="qa-workflow">
+  <div data-manual-header></div>
+
+  <main class="layout">
+    <aside class="manual-sidebar" data-manual-sidebar data-reveal></aside>
+
+    <div class="content-column">
+      <section class="panel" data-reveal>
+        <h1>Routing Tab (Advanced)</h1>
+        <p><strong>Most users can skip this tab.</strong> Automatic routing already connects outputs to matching input names. Use Routing when you need explicit overrides.</p>
+        <ul>
+          <li>Override automatic routing behavior</li>
+          <li>Route outputs to non-obvious inputs</li>
+          <li>Debug complex workflows with parallel branches</li>
+        </ul>
+      </section>
+
+      <section class="panel" data-reveal>
+        <h2>Routing Tab Image</h2>
+        <div class="media-card">
+          <img src="assets/images/routing_tab.png" alt="Routing tab showing source and destination selectors, optional nested key field, and routing map links.">
+        </div>
+      </section>
+
+      <section class="panel" data-reveal>
+        <h2>How to Use Routing</h2>
+        <ol class="step-list">
+          <li>Open <strong>Routing</strong> after building your methodology in Setup.</li>
+          <li>In <strong>Output</strong>, select the source function instance.</li>
+          <li>In <strong>Input</strong>, select the destination function instance.</li>
+          <li>Click a source output chip, then click the destination input chip to create a link.</li>
+          <li>Verify that the connector line appears in the routing map.</li>
+          <li>Run the model and confirm the destination receives expected values.</li>
+        </ol>
+      </section>
+
+      <section class="panel" data-reveal>
+        <h2>Optional Source Nested Key</h2>
+        <p>Use this field when the source output is a dictionary and only one nested value should be routed.</p>
+        <ul>
+          <li>Example: <code>metrics.rmse</code> routes only the RMSE entry.</li>
+          <li>Leave it blank for top-level outputs like <strong>X_cal</strong> or <strong>X_val</strong>.</li>
+        </ul>
+      </section>
+
+      <section class="panel" data-reveal>
+        <h2>Passforward Notes</h2>
+        <ul>
+          <li>Passforward is configured per function in that function's JSON config.</li>
+          <li>The Setup tab shows a compact <strong>(PF)</strong> switch only for compatible functions.</li>
+          <li>When OFF, passforward outputs are not produced.</li>
+          <li>When ON, mapped passforward outputs become routable downstream.</li>
+        </ul>
+        <div class="note">If you reorder or remove functions in Setup, review Routing again to confirm links still point to the intended instances.</div>
+      </section>
+    </div>
+  </main>
+
+  <footer data-manual-footer></footer>
+
+  <script src="assets/js/manual-common.js"></script>
+  <script src="assets/js/manual-shell.js"></script>
+  <script src="assets/js/manual.js"></script>
+</body>
+</html>

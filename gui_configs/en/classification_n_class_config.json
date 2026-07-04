@@ -1,0 +1,1031 @@
+{
+  "display_name": "Classification (N-Class)",
+  "category": "6.Classification",
+  "data_type": "classification",
+  "input_aliases": {
+    "X_cal": "X Calibration",
+    "class_data_cal": "Class Calibration",
+    "X_val": "X Validation",
+    "class_data_val": "Class Validation",
+    "smp_cal": "Sample IDs Calibration",
+    "smp_val": "Sample IDs Validation",
+    "class_layer": "Class Layer",
+    "method": "Method",
+    "logistic_c": "Logistic C",
+    "logistic_max_iter": "Logistic Max Iterations",
+    "random_forest_n_estimators": "RF Trees",
+    "random_forest_max_depth": "RF Max Depth",
+    "random_forest_min_samples_leaf": "RF Min Samples Leaf",
+    "extra_trees_n_estimators": "ET Trees",
+    "extra_trees_max_depth": "ET Max Depth",
+    "extra_trees_min_samples_leaf": "ET Min Samples Leaf",
+    "svc_c": "SVC C",
+    "svc_gamma": "SVC Gamma",
+    "svc_kernel": "SVC Kernel",
+    "knn_n_neighbors": "KNN Neighbors",
+    "knn_distance": "KNN Distance",
+    "knn_minkowski_p": "KNN Minkowski p",
+    "pls_da_n_components": "PLS-DA Components",
+    "cv_config": "CV Configuration"
+  },
+  "output_aliases": {
+    "class_cal_pred": "Calibration Class Predictions",
+    "class_val_pred": "Validation Class Predictions",
+    "class_cv_pred": "CV Class Predictions",
+    "class_cal_true": "Calibration Class Reference",
+    "class_val_true": "Validation Class Reference",
+    "class_cal_prob": "Calibration Probabilities",
+    "class_val_prob": "Validation Probabilities",
+    "class_cv_prob": "CV Probabilities",
+    "metrics": "Metrics",
+    "cv_results": "CV Results",
+    "calibration_table": "Calibration Table",
+    "cv_table": "CV Table",
+    "validation_table": "Validation Table",
+    "confusion_matrices": "Confusion Matrices",
+    "probability_graph": "Probability Graph Data"
+  },
+  "short_description": "N-class classification with model-specific parameters.",
+  "long_description": "Supports Logistic Regression, Random Forest, Extra Trees, SVC, KNN, LDA, QDA, and PLS-DA. Emits prediction/probability outputs for calibration, CV, and validation with report-ready tables and graph payloads.",
+  "execution_report_specs": {
+    "messages": {},
+    "warnings": {},
+    "errors": {}
+  },
+  "setup": {
+    "categories": [
+      "Model Parameters",
+      "Data Inputs",
+      "Cross-Validation"
+    ],
+    "layout": [
+      {
+        "name": "method",
+        "label": "Method",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "logistic",
+        "values": [
+          "logistic",
+          "random_forest",
+          "extra_trees",
+          "svc",
+          "knn",
+          "lda",
+          "qda",
+          "pls_da"
+        ],
+        "value_aliases": [
+          "Logistic Regression",
+          "Random Forest",
+          "Extra Trees",
+          "Support Vector Classifier",
+          "K-Nearest Neighbors",
+          "Linear Discriminant Analysis",
+          "Quadratic Discriminant Analysis",
+          "PLS-DA"
+        ],
+        "required": true,
+        "input_type": "user"
+      },
+      {
+        "name": "logistic_c",
+        "label": "Logistic C",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "logistic"
+        }
+      },
+      {
+        "name": "logistic_max_iter",
+        "label": "Logistic Max Iterations",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "1000",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "logistic"
+        }
+      },
+      {
+        "name": "random_forest_n_estimators",
+        "label": "RF Trees",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "300",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "random_forest"
+        }
+      },
+      {
+        "name": "random_forest_max_depth",
+        "label": "RF Max Depth",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "random_forest"
+        }
+      },
+      {
+        "name": "random_forest_min_samples_leaf",
+        "label": "RF Min Samples Leaf",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "random_forest"
+        }
+      },
+      {
+        "name": "extra_trees_n_estimators",
+        "label": "ET Trees",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "300",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "extra_trees"
+        }
+      },
+      {
+        "name": "extra_trees_max_depth",
+        "label": "ET Max Depth",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "extra_trees"
+        }
+      },
+      {
+        "name": "extra_trees_min_samples_leaf",
+        "label": "ET Min Samples Leaf",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "extra_trees"
+        }
+      },
+      {
+        "name": "svc_c",
+        "label": "SVC C",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "svc"
+        }
+      },
+      {
+        "name": "svc_gamma",
+        "label": "SVC Gamma",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.1",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "svc"
+        }
+      },
+      {
+        "name": "svc_kernel",
+        "label": "SVC Kernel",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "rbf",
+        "values": [
+          "linear",
+          "rbf",
+          "poly",
+          "sigmoid"
+        ],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "svc"
+        }
+      },
+      {
+        "name": "knn_n_neighbors",
+        "label": "KNN Neighbors",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "5",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "knn"
+        }
+      },
+      {
+        "name": "knn_distance",
+        "label": "KNN Distance",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "euclidean",
+        "values": [
+          "euclidean",
+          "mahalanobis",
+          "manhattan",
+          "minkowski",
+          "chebyshev",
+          "chord"
+        ],
+        "value_aliases": [
+          "Euclidean",
+          "Mahalanobis",
+          "Manhattan",
+          "Minkowski",
+          "Chebyshev",
+          "Chord"
+        ],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "knn"
+        }
+      },
+      {
+        "name": "knn_minkowski_p",
+        "label": "KNN Minkowski p",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "3.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "knn",
+          "knn_distance": "minkowski"
+        }
+      },
+      {
+        "name": "pls_da_n_components",
+        "label": "PLS-DA Components",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "2",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "pls_da"
+        }
+      },
+      {
+        "name": "class_layer",
+        "label": "Class Layer",
+        "category": "Data Inputs",
+        "widget": "entry",
+        "type": "int",
+        "default": "1",
+        "required": false,
+        "input_type": "user"
+      },
+      {
+        "name": "X_cal",
+        "label": "X Calibration",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": true,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        }
+      },
+      {
+        "name": "class_data_cal",
+        "label": "Class Calibration",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": true,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        }
+      },
+      {
+        "name": "X_val",
+        "label": "X Validation",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        }
+      },
+      {
+        "name": "class_data_val",
+        "label": "Class Validation",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        }
+      },
+      {
+        "name": "smp_cal",
+        "label": "Sample IDs Calibration",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        }
+      },
+      {
+        "name": "smp_val",
+        "label": "Sample IDs Validation",
+        "category": "Data Inputs",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        }
+      },
+      {
+        "name": "cv_config",
+        "label": "CV Configuration",
+        "category": "Cross-Validation",
+        "widget": "data_input",
+        "required": false,
+        "input_type": "routed",
+        "visible_if": {
+          "input_type": "user"
+        }
+      }
+    ]
+  },
+  "analysis": {
+    "pages": [
+      {
+        "title": "Performance Summary",
+        "layout": "ew",
+        "sections": [
+          {
+            "type": "text",
+            "config": {
+              "title": "Performance Report",
+              "text_template": "Classification Performance Report\n==================================\nMethod: {method}\n\nCalibration\n-----------\nAccuracy:          {acc_cal}\nF1 (Macro):        {f1_cal}\nPrecision (Macro): {prec_cal}\nRecall (Macro):    {rec_cal}\nSamples:           {n_cal}\n\nCross-Validation\n----------------\nAccuracy:          {acc_cv}\nF1 (Macro):        {f1_cv}\nPrecision (Macro): {prec_cv}\nRecall (Macro):    {rec_cv}\n\nValidation\n----------\nAccuracy:          {acc_val}\nF1 (Macro):        {f1_val}\nPrecision (Macro): {prec_val}\nRecall (Macro):    {rec_val}\nSamples:           {n_val}",
+              "bindings": [
+                {
+                  "name": "method",
+                  "data_source": "model",
+                  "nested_key": "model_type",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "acc_cal",
+                  "data_source": "metrics",
+                  "nested_key": "calibration.accuracy",
+                  "value_format": ".4f",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "f1_cal",
+                  "data_source": "metrics",
+                  "nested_key": "calibration.f1_macro",
+                  "value_format": ".4f",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "prec_cal",
+                  "data_source": "metrics",
+                  "nested_key": "calibration.precision_macro",
+                  "value_format": ".4f",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "rec_cal",
+                  "data_source": "metrics",
+                  "nested_key": "calibration.recall_macro",
+                  "value_format": ".4f",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "n_cal",
+                  "data_source": "metrics",
+                  "nested_key": "calibration.n_samples",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "acc_cv",
+                  "data_source": "metrics",
+                  "nested_key": "cv.accuracy",
+                  "value_format": ".4f",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "f1_cv",
+                  "data_source": "metrics",
+                  "nested_key": "cv.f1_macro",
+                  "value_format": ".4f",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "prec_cv",
+                  "data_source": "metrics",
+                  "nested_key": "cv.precision_macro",
+                  "value_format": ".4f",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "rec_cv",
+                  "data_source": "metrics",
+                  "nested_key": "cv.recall_macro",
+                  "value_format": ".4f",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "acc_val",
+                  "data_source": "metrics",
+                  "nested_key": "validation.accuracy",
+                  "value_format": ".4f",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "f1_val",
+                  "data_source": "metrics",
+                  "nested_key": "validation.f1_macro",
+                  "value_format": ".4f",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "prec_val",
+                  "data_source": "metrics",
+                  "nested_key": "validation.precision_macro",
+                  "value_format": ".4f",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "rec_val",
+                  "data_source": "metrics",
+                  "nested_key": "validation.recall_macro",
+                  "value_format": ".4f",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "n_val",
+                  "data_source": "metrics",
+                  "nested_key": "validation.n_samples",
+                  "selector": {
+                    "mode": "value"
+                  }
+                }
+              ]
+            },
+            "short_description": "Displays classification performance metrics (accuracy, F1, precision, recall) for calibration, cross-validation, and validation sets."
+          },
+          {
+            "type": "text",
+            "condition": {
+              "parameter": "method",
+              "operator": "==",
+              "value": "logistic"
+            },
+            "config": {
+              "title": "Logistic Regression Details",
+              "text_template": "Logistic Regression\n-------------------\nFeatures:           {n_features}\nClasses:            {n_classes}\nRegularization C:   {logistic_c}\nMax Iterations:     {max_iter}",
+              "bindings": [
+                {
+                  "name": "n_features",
+                  "data_source": "model",
+                  "nested_key": "method_specific.logistic.n_features",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "n_classes",
+                  "data_source": "model",
+                  "nested_key": "method_specific.logistic.n_classes",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "logistic_c",
+                  "data_source": "model",
+                  "nested_key": "method_specific.logistic.C",
+                  "value_format": ".4g",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "max_iter",
+                  "data_source": "model",
+                  "nested_key": "method_specific.logistic.max_iter",
+                  "selector": { "mode": "value" }
+                }
+              ]
+            },
+            "short_description": "Logistic Regression model configuration: features, classes, regularization C, and max iterations."
+          },
+          {
+            "type": "text",
+            "condition": {
+              "any": [
+                { "parameter": "method", "operator": "==", "value": "random_forest" },
+                { "parameter": "method", "operator": "==", "value": "extra_trees" }
+              ]
+            },
+            "config": {
+              "title": "Ensemble Details",
+              "text_template": "Tree Ensemble\n--------------\nEstimators:        {n_estimators}\nInput Variables:   {n_features}\n\nSee the 'Feature Importances' page\nfor variable importance scores.",
+              "bindings": [
+                {
+                  "name": "n_estimators",
+                  "data_source": "model",
+                  "nested_key": "method_specific.tree_ensemble.n_estimators",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "n_features",
+                  "data_source": "model",
+                  "nested_key": "method_specific.tree_ensemble.n_features",
+                  "selector": { "mode": "value" }
+                }
+              ]
+            },
+            "short_description": "Tree ensemble summary: estimator count and number of input variables."
+          },
+          {
+            "type": "text",
+            "condition": {
+              "parameter": "method",
+              "operator": "==",
+              "value": "svc"
+            },
+            "config": {
+              "title": "SVC Details",
+              "text_template": "Support Vector Classifier\n--------------------------\nKernel:              {kernel}\nC:                   {svc_c}\nGamma:               {svc_gamma}\nSupport Vectors:     {n_sv}\nSVs per Class:       {n_sv_per_class}",
+              "bindings": [
+                {
+                  "name": "kernel",
+                  "data_source": "model",
+                  "nested_key": "method_specific.svc.kernel",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "svc_c",
+                  "data_source": "model",
+                  "nested_key": "method_specific.svc.C",
+                  "value_format": ".4g",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "svc_gamma",
+                  "data_source": "model",
+                  "nested_key": "method_specific.svc.gamma",
+                  "value_format": ".4g",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "n_sv",
+                  "data_source": "model",
+                  "nested_key": "method_specific.svc.n_support_vectors",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "n_sv_per_class",
+                  "data_source": "model",
+                  "nested_key": "method_specific.svc.n_support_per_class",
+                  "selector": { "mode": "value" }
+                }
+              ]
+            },
+            "short_description": "SVC model details: kernel, C, gamma, and support vector counts per class."
+          },
+          {
+            "type": "text",
+            "condition": {
+              "parameter": "method",
+              "operator": "==",
+              "value": "knn"
+            },
+            "config": {
+              "title": "KNN Details",
+              "text_template": "K-Nearest Neighbors\n--------------------\nNeighbors (k):     {k}\nDistance Metric:   {distance}\nMinkowski p:       {mink_p}",
+              "bindings": [
+                {
+                  "name": "k",
+                  "data_source": "model",
+                  "nested_key": "method_specific.knn.n_neighbors",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "distance",
+                  "data_source": "model",
+                  "nested_key": "method_specific.knn.distance",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "mink_p",
+                  "data_source": "model",
+                  "nested_key": "method_specific.knn.minkowski_p",
+                  "value_format": ".4g",
+                  "selector": { "mode": "value" }
+                }
+              ]
+            },
+            "short_description": "KNN model details: number of neighbors and distance metric."
+          },
+          {
+            "type": "text",
+            "condition": {
+              "parameter": "method",
+              "operator": "==",
+              "value": "lda"
+            },
+            "config": {
+              "title": "LDA Details",
+              "text_template": "Linear Discriminant Analysis\n-----------------------------\nDiscriminants:     {n_disc}\n\nSee the 'LDA Discriminants' page\nfor explained variance per discriminant.",
+              "bindings": [
+                {
+                  "name": "n_disc",
+                  "data_source": "model",
+                  "nested_key": "method_specific.lda.n_discriminants",
+                  "selector": { "mode": "value" }
+                }
+              ]
+            },
+            "short_description": "LDA summary: number of discriminants used."
+          },
+          {
+            "type": "text",
+            "condition": {
+              "parameter": "method",
+              "operator": "==",
+              "value": "qda"
+            },
+            "config": {
+              "title": "QDA Details",
+              "text_template": "Quadratic Discriminant Analysis\n--------------------------------\nClasses:         {n_classes}\nClass Priors:    {priors}",
+              "bindings": [
+                {
+                  "name": "n_classes",
+                  "data_source": "model",
+                  "nested_key": "method_specific.qda.n_classes",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "priors",
+                  "data_source": "model",
+                  "nested_key": "method_specific.qda.class_priors",
+                  "selector": { "mode": "value" }
+                }
+              ]
+            },
+            "short_description": "QDA class count and estimated prior probabilities."
+          },
+          {
+            "type": "text",
+            "condition": {
+              "parameter": "method",
+              "operator": "==",
+              "value": "pls_da"
+            },
+            "config": {
+              "title": "PLS-DA Details",
+              "text_template": "PLS Discriminant Analysis\n--------------------------\nLatent Variables:       {n_comp}\nX Variance (per LV):    {comp_var}",
+              "bindings": [
+                {
+                  "name": "n_comp",
+                  "data_source": "model",
+                  "nested_key": "method_specific.pls_da.n_components",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "comp_var",
+                  "data_source": "model",
+                  "nested_key": "method_specific.pls_da.component_x_variance_ratio",
+                  "selector": { "mode": "value" }
+                }
+              ]
+            },
+            "short_description": "PLS-DA details: number of latent variables and fraction of X variance captured per component."
+          }
+        ]
+      },
+      {
+        "title": "Feature Importances",
+        "condition": {
+          "any": [
+            { "parameter": "method", "operator": "==", "value": "random_forest" },
+            { "parameter": "method", "operator": "==", "value": "extra_trees" }
+          ]
+        },
+        "layout": "fp",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "bar",
+              "title": "Feature Importances",
+              "x_axis": {
+                "data_source": "__index__",
+                "reference_source": "model",
+                "reference_nested_key": "method_specific.tree_ensemble.feature_importances",
+                "label": "Variable Index"
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "method_specific.tree_ensemble.feature_importances",
+                "label": "Importance"
+              }
+            },
+            "short_description": "Variable importance scores from the fitted ensemble classifier (Random Forest or Extra Trees)."
+          }
+        ]
+      },
+      {
+        "title": "LDA Discriminants",
+        "condition": {
+          "parameter": "method",
+          "operator": "==",
+          "value": "lda"
+        },
+        "layout": "fp",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "bar",
+              "title": "Explained Variance by Discriminant",
+              "x_axis": {
+                "data_source": "__index__",
+                "reference_source": "model",
+                "reference_nested_key": "method_specific.lda.explained_variance_ratio",
+                "label": "Discriminant"
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "method_specific.lda.explained_variance_ratio",
+                "label": "Explained Variance Ratio"
+              }
+            },
+            "short_description": "Fraction of between-class variance explained by each linear discriminant."
+          }
+        ]
+      },
+      {
+        "title": "Confusion Matrices",
+        "layout": "fd",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "title": "Calibration Confusion Matrix",
+              "x_axis": {
+                "data_source": "confusion_matrices",
+                "nested_key": "calibration.labels",
+                "label": "Predicted"
+              },
+              "y_axis": {
+                "data_source": "confusion_matrices",
+                "nested_key": "calibration.labels",
+                "label": "Reference"
+              },
+              "z_axis": {
+                "data_source": "confusion_matrices",
+                "nested_key": "calibration.matrix"
+              },
+              "cmap": "Blues",
+              "annotate_heatmap": true
+            },
+            "short_description": "Confusion matrix for calibration set predictions."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "title": "CV Confusion Matrix",
+              "x_axis": {
+                "data_source": "confusion_matrices",
+                "nested_key": "cv.labels",
+                "label": "Predicted"
+              },
+              "y_axis": {
+                "data_source": "confusion_matrices",
+                "nested_key": "cv.labels",
+                "label": "Reference"
+              },
+              "z_axis": {
+                "data_source": "confusion_matrices",
+                "nested_key": "cv.matrix"
+              },
+              "cmap": "Blues",
+              "annotate_heatmap": true
+            },
+            "short_description": "Confusion matrix for cross-validation predictions."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "title": "Validation Confusion Matrix",
+              "x_axis": {
+                "data_source": "confusion_matrices",
+                "nested_key": "validation.labels",
+                "label": "Predicted"
+              },
+              "y_axis": {
+                "data_source": "confusion_matrices",
+                "nested_key": "validation.labels",
+                "label": "Reference"
+              },
+              "z_axis": {
+                "data_source": "confusion_matrices",
+                "nested_key": "validation.matrix"
+              },
+              "cmap": "Blues",
+              "annotate_heatmap": true
+            },
+            "short_description": "Confusion matrix for validation set predictions."
+          },
+          {
+            "type": null
+          }
+        ]
+      },
+      {
+        "title": "Predictions",
+        "layout": "ns",
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "title": "Calibration Predictions",
+              "row_headers": "smp_cal",
+              "columns": [
+                {
+                  "data_source": "class_cal_true",
+                  "name": "Reference"
+                },
+                {
+                  "data_source": "class_cal_pred",
+                  "name": "Predicted"
+                },
+                {
+                  "data_source": "class_cal_error",
+                  "name": "Error"
+                },
+                {
+                  "data_source": "class_cv_pred",
+                  "name": "Predicted (CV)"
+                },
+                {
+                  "data_source": "class_cv_error",
+                  "name": "Error (CV)"
+                }
+              ],
+              "decimal_places": 0,
+              "max_rows": 500
+            },
+            "short_description": "Sample-level predictions and errors for calibration and cross-validation."
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Validation Predictions",
+              "row_headers": "smp_val",
+              "columns": [
+                {
+                  "data_source": "class_val_true",
+                  "name": "Reference"
+                },
+                {
+                  "data_source": "class_val_pred",
+                  "name": "Predicted"
+                },
+                {
+                  "data_source": "class_val_error",
+                  "name": "Error"
+                }
+              ],
+              "decimal_places": 0,
+              "max_rows": 500
+            },
+            "short_description": "Sample-level predictions and errors for the validation set."
+          }
+        ]
+      },
+      {
+        "title": "Class Probabilities",
+        "layout": "ew",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "title": "Calibration Class Probabilities",
+              "x_axis": {
+                "data_source": "model",
+                "nested_key": "class_labels",
+                "label": "Class"
+              },
+              "y_axis": {
+                "data_source": "smp_cal",
+                "label": "Sample"
+              },
+              "z_axis": {
+                "data_source": "class_cal_prob",
+                "label": "Probability"
+              },
+              "cmap": "YlOrRd",
+              "annotate_heatmap": false
+            },
+            "short_description": "Heatmap of predicted class probabilities for all calibration samples."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "title": "Validation Class Probabilities",
+              "x_axis": {
+                "data_source": "model",
+                "nested_key": "class_labels",
+                "label": "Class"
+              },
+              "y_axis": {
+                "data_source": "smp_val",
+                "label": "Sample"
+              },
+              "z_axis": {
+                "data_source": "class_val_prob",
+                "label": "Probability"
+              },
+              "cmap": "YlOrRd",
+              "annotate_heatmap": false
+            },
+            "short_description": "Heatmap of predicted class probabilities for all validation samples."
+          }
+        ]
+      }
+    ]
+  }
+}

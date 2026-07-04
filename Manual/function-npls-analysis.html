@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>N-PLS / U-PLS Multiway Regression - Functions - Chemometric Studio User Manual</title>
+  <link rel="stylesheet" href="assets/css/manual.css">
+</head>
+<body data-manual-page="functions" data-manual-group="qa-functions">
+  <div data-manual-header></div>
+
+  <main class="layout">
+    <aside class="manual-sidebar" data-manual-sidebar data-reveal></aside>
+
+    <div class="content-column">
+      <section class="panel" data-reveal>
+        <h1>N-PLS / U-PLS Multiway Regression</h1>
+        <p><a href="functions-category-calibration.html">Calibration and Modeling</a></p>
+      </section>
+
+      <section class="function-card" data-reveal>
+        <h2 class="function-title">N-PLS / U-PLS Multiway Regression</h2>
+        <span class="function-category">Calibration</span>
+        <p><strong>Purpose:</strong> Build multiway calibration models using unfolded PLS (U-PLS) or CP-PLSR (N-PLS) with residual multilinearization for interferent handling.</p>
+
+        <div class="io-section">
+          <div class="io-title">Inputs:</div>
+          <ul class="io-list">
+            <li><strong>X_cal</strong>, <strong>Y_cal</strong> – Multiway calibration data (2D, 3D, or higher)</li>
+            <li><strong>X_val</strong>, <strong>Y_val</strong> – Optional validation data</li>
+            <li><strong>nway_flag</strong> – Data order (number of spatial modes)</li>
+            <li><strong>axis_n_info</strong>, <strong>dim_labels</strong> – Optional dimension metadata</li>
+          </ul>
+        </div>
+
+        <div class="io-section">
+          <div class="io-title">Outputs:</div>
+          <ul class="io-list">
+            <li><strong>y_cal_pred</strong>, <strong>y_val_pred</strong>, <strong>y_cv_pred</strong> – Predictions and cross-validation results</li>
+            <li><strong>model</strong> – Model metadata including factors, LV labels, and variance explained</li>
+            <li><strong>metrics</strong> – Per-response R² and RMSE for calibration, validation, and CV</li>
+            <li><strong>explained_variance_by_lv</strong> – X and Y variance decomposition per LV</li>
+            <li><strong>interferent_profiles</strong>, <strong>residual_diagnostics</strong> – Correction results when enabled</li>
+            <li><strong>lod_min/max</strong>, <strong>loq_min/max</strong>, <strong>sensitivity</strong> – Analytical figures of merit</li>
+          </ul>
+        </div>
+
+        <div class="io-section">
+          <div class="io-title">Key Parameters:</div>
+          <div class="param-group"><div class="param-name">multiway_method</div><div class="param-desc">Choose U-PLS (unfold to 2D) or N-PLS (CP-PLSR for true multiway)</div></div>
+          <div class="param-group"><div class="param-name">n_components</div><div class="param-desc">Number of latent variables</div></div>
+          <div class="param-group"><div class="param-name">multilinear_rank</div><div class="param-desc">Interferent rank for RBL (nway_flag=2) or Tucker-based (nway_flag≥3) residual correction; use 0 to disable</div></div>
+          <div class="param-group"><div class="param-name">pls_scale</div><div class="param-desc">Enable preprocessing scaling in U-PLS mode</div></div>
+          <div class="param-group"><div class="param-name">lod_confidence_level</div><div class="param-desc">Confidence level for LOD/LOQ calculation (default 0.95)</div></div>
+          <div class="param-group"><div class="param-name">lod_distribution</div><div class="param-desc">Distribution for LOD factor: Student's t or Normal</div></div>
+          <div class="param-group"><div class="param-name">cv_config</div><div class="param-desc">Optional cross-validation configuration; routed from CV Configuration function</div></div>
+        </div>
+
+        <div class="methodology">
+          <div class="methodology-title">Methodology:</div>
+          <p><strong>U-PLS (Unfolded PLS):</strong> Unfolds multiway X data into a 2D matrix and applies standard PLS. Efficient and commonly used; treats dimensions as features.</p>
+          <p><strong>N-PLS (CP-PLSR):</strong> Applies CP (PARAFAC) decomposition directly to multiway X, preserving tensor structure. Requires TensorLy; uses factor pairing for prediction.</p>
+          <p><strong>Residual Multilinearization:</strong> Applies RBL (Residual Bilinearization) for 2-way residuals or Tucker-based multilinear correction for 3-way+ residuals to handle structured interferents.</p>
+          <p><strong>Analytical Figures of Merit:</strong> Computes LOD, LOQ, and sensitivity from model residuals using confidence levels and selected distribution (Student's t or Normal).</p>
+        </div>
+
+        <div class="use-case">
+          <div class="use-case-title">When to Use:</div>
+          <ul>
+            <li><strong>U-PLS:</strong> For EEM, hyperspectral, or other multiway data when simplicity and speed are priorities</li>
+            <li><strong>N-PLS:</strong> When multiway structure is semantically important or when comparing CP-based methods</li>
+            <li>When dealing with structured interferents or drift; enable interferent rank &gt; 0</li>
+            <li>For multi-analyte problems; function supports multiple Y columns with per-response reporting</li>
+            <li>When analytical figures of merit (LOD/LOQ) are required</li>
+          </ul>
+        </div>
+
+        <div class="section-note">
+          <p><strong>Analysis Pages:</strong></p>
+          <ul>
+            <li><strong>Predictions</strong> – Calibration/validation scatter plots and prediction tables</li>
+            <li><strong>Performance Report</strong> – Summary metrics and per-response R²/RMSE</li>
+            <li><strong>Error Diagnostics</strong> – Sample-level error profiles and residual analysis</li>
+            <li><strong>Explained Variance</strong> – Scree plots and variance decomposition by LV</li>
+            <li><strong>LV Scores — U-PLS / N-PLS</strong> – Conditional pages showing LV scores, loadings, and mode factors (U-PLS only for loadings/weights; N-PLS only for mode factors)</li>
+            <li><strong>Interferent Profiles</strong> – Mode-resolved interferent factor visualization when correction is enabled</li>
+            <li><strong>Analytical Figures of Merit</strong> – LOD/LOQ and sensitivity per sample</li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer data-manual-footer></footer>
+
+  <script src="assets/js/manual-common.js"></script>
+  <script src="assets/js/manual-shell.js"></script>
+  <script src="assets/js/manual.js"></script>
+</body>
+</html>
