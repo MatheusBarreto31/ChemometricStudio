@@ -75,6 +75,70 @@ Guided behavior in User GUI:
 - Python 3.11+
 - Tkinter (bundled with standard Python installers on Windows)
 
+## Installation
+
+Install Chemometric Studio using the pre-built release packages.
+This is the easiest and recommended option for most users.
+
+1. Open the official download page: http://www.chemometricstudio.com
+2. Download the latest release for your operating system.
+3. Follow the platform-specific steps below.
+
+Windows:
+
+1. Download `ChemometricStudio-*-Windows-*-x86_64.zip`.
+2. Extract the archive to your desired location.
+3. Open `ChemometricStudio.exe` for the full interface, or `ChemometricStudioUser.exe` for the simplified interface.
+
+macOS:
+
+1. Identify your processor and download the matching package:
+	 - Apple Silicon (M1, M2, M3, ...): `ChemometricStudio-*-macOS.AppleSilicon-*-arm64.tar.gz`
+	 - Intel: `ChemometricStudio-*-macOS.Intel-*-x86_64.tar.gz`
+2. Extract the archive.
+3. Open the extracted `ChemometricStudio` folder and run `ChemometricStudio` (full interface) or `ChemometricStudioUser` (simplified interface).
+4. On first launch, you may need to allow the app in macOS Security & Privacy settings or run `chmod +x` on the executable.
+
+Linux:
+
+Release packages are available for both x86_64 and ARM64 architectures. Choose the package that matches your system.
+
+- Debian/Ubuntu:
+	1. Download `ChemometricStudio-*-Linux.Debian-based-*-<arch>.deb`.
+	2. Install with:
+
+```bash
+sudo dpkg -i ChemometricStudio-*-Linux.Debian-based-*-<arch>.deb
+```
+
+	3. Launch from your app menu, or run `ChemometricStudio` (full interface) / `ChemometricStudioUser` (simplified interface).
+
+- Fedora/RHEL/CentOS:
+	1. Download `ChemometricStudio-*-Linux.Fedora-*-<arch>.rpm`.
+	2. Install with:
+
+```bash
+sudo dnf install ChemometricStudio-*-Linux.Fedora-*-<arch>.rpm
+```
+
+	For older systems, use:
+
+```bash
+sudo yum install ChemometricStudio-*-Linux.Fedora-*-<arch>.rpm
+```
+
+	3. Launch from your app menu, or run `ChemometricStudio` / `ChemometricStudioUser`.
+
+- Arch Linux:
+	1. Download `ChemometricStudio-*-Linux.Arch-based-*-<arch>.pkg.tar.zst`.
+	2. Install with:
+
+```bash
+sudo pacman -U ChemometricStudio-*-Linux.Arch-based-*-<arch>.pkg.tar.zst
+```
+
+	3. Launch from your app menu, or run `ChemometricStudio` / `ChemometricStudioUser`.
+
 ## Installation (Source)
 
 Windows PowerShell:
