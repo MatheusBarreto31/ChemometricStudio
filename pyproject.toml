@@ -15,6 +15,7 @@ dependencies = [
     "pandas==3.0.1",
     "pyMCR==0.5.1",
     "sv-ttk==2.6.1",
+    "Pillow==12.3.0",
 ]
 
 [tool.poetry.scripts]
