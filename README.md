@@ -1,3 +1,4 @@
+![alt text](https://github.com/MatheusBarreto31/ChemometricStudio/blob/main/Graphics/SocialPreview.png)
 # Chemometric Studio
 
 Chemometric Studio is a desktop application for chemometric workflow design, execution, interpretation, and reporting.
