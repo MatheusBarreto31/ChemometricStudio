@@ -80,9 +80,8 @@ Guided behavior in User GUI:
 Install Chemometric Studio using the pre-built release packages.
 This is the easiest and recommended option for most users.
 
-1. Open the official download page: http://www.chemometricstudio.com
-2. Download the latest release for your operating system.
-3. Follow the platform-specific steps below.
+1. Download the latest release for your operating system.
+2. Follow the platform-specific steps below.
 
 Windows:
 
@@ -103,41 +102,44 @@ Linux:
 
 Release packages are available for both x86_64 and ARM64 architectures. Choose the package that matches your system.
 
-- Debian/Ubuntu:
-	1. Download `ChemometricStudio-*-Linux.Debian-based-*-<arch>.deb`.
-	2. Install with:
+Debian/Ubuntu:
+
+1. Download `ChemometricStudio-*-Linux.Debian-based-*-<arch>.deb`.
+2. Install with:
 
 ```bash
 sudo dpkg -i ChemometricStudio-*-Linux.Debian-based-*-<arch>.deb
 ```
 
-	3. Launch from your app menu, or run `ChemometricStudio` (full interface) / `ChemometricStudioUser` (simplified interface).
+3. Launch from your app menu, or run `ChemometricStudio` (full interface) or `ChemometricStudioUser` (simplified interface).
 
-- Fedora/RHEL/CentOS:
-	1. Download `ChemometricStudio-*-Linux.Fedora-*-<arch>.rpm`.
-	2. Install with:
+Fedora/RHEL/CentOS:
+
+1. Download `ChemometricStudio-*-Linux.Fedora-*-<arch>.rpm`.
+2. Install with:
 
 ```bash
 sudo dnf install ChemometricStudio-*-Linux.Fedora-*-<arch>.rpm
 ```
 
-	For older systems, use:
+For older systems, use:
 
 ```bash
 sudo yum install ChemometricStudio-*-Linux.Fedora-*-<arch>.rpm
 ```
 
-	3. Launch from your app menu, or run `ChemometricStudio` / `ChemometricStudioUser`.
+3. Launch from your app menu, or run `ChemometricStudio` or `ChemometricStudioUser`.
 
-- Arch Linux:
-	1. Download `ChemometricStudio-*-Linux.Arch-based-*-<arch>.pkg.tar.zst`.
-	2. Install with:
+Arch Linux:
+
+1. Download `ChemometricStudio-*-Linux.Arch-based-*-<arch>.pkg.tar.zst`.
+2. Install with:
 
 ```bash
 sudo pacman -U ChemometricStudio-*-Linux.Arch-based-*-<arch>.pkg.tar.zst
 ```
 
-	3. Launch from your app menu, or run `ChemometricStudio` / `ChemometricStudioUser`.
+3. Launch from your app menu, or run `ChemometricStudio` or `ChemometricStudioUser`.
 
 ## Installation (Source)
 
