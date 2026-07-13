@@ -458,8 +458,22 @@ def _apply_graph_display_options(ax, config: dict, use_3d: bool = False) -> None
         ax.grid(True)
 
     if config.get('show_origin', False) and not use_3d:
+        # Keep origin guides visual-only: draw them without expanding autoscaled
+        # data bounds or the current visible axis limits.
+        xlim_before = ax.get_xlim()
+        ylim_before = ax.get_ylim()
+
+        data_lim_snapshot = ax.dataLim.frozen()
+        data_lim_points = data_lim_snapshot.get_points()
+        has_real_data = not np.any(np.isinf(data_lim_points))
+
         ax.axhline(0, color='gray', linestyle='--', linewidth=1.0, alpha=0.7)
         ax.axvline(0, color='gray', linestyle='--', linewidth=1.0, alpha=0.7)
+
+        if has_real_data:
+            ax.dataLim.set_points(data_lim_points)
+        ax.set_xlim(xlim_before)
+        ax.set_ylim(ylim_before)
 
 
 def _apply_equal_scale(ax: Any, xlim: Tuple[float, float], ylim: Tuple[float, float]) -> None:
