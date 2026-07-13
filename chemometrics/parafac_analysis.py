@@ -1393,6 +1393,9 @@ def _single_fit_once(
         factors_for_output = [scores_a] + [np.asarray(f, dtype=float) for f in factors[1:]]
         reconstructed = cp_to_tensor((weights, factors_for_output))
         residual = np.asarray(X_filled[:n_cal_samples] - reconstructed, dtype=float)
+        _val_factors = [val_scores_a] + [np.asarray(f, dtype=float) for f in factors[1:]]
+        _reconstructed_val = cp_to_tensor((weights, _val_factors))
+        residual_val = np.asarray(X_filled[n_cal_samples:] - _reconstructed_val, dtype=float)
         observed = np.asarray(mask[:n_cal_samples], dtype=bool)
         X_metrics = np.asarray(X_filled[:n_cal_samples], dtype=float)
         core_factors = factors_for_output
@@ -1401,6 +1404,7 @@ def _single_fit_once(
         factors_for_output = [np.asarray(f, dtype=float) for f in factors]
         reconstructed = np.asarray(reconstructed_full, dtype=float)
         residual = np.asarray(X_filled - reconstructed, dtype=float)
+        residual_val = None
         observed = np.asarray(mask, dtype=bool)
         X_metrics = np.asarray(X_filled, dtype=float)
         core_factors = factors_for_output
@@ -1575,6 +1579,7 @@ def _single_fit_once(
         "weights": np.asarray(weights, dtype=float),
         "reconstructed": np.asarray(reconstructed, dtype=float),
         "residual": residual,
+        "residual_val": residual_val,
         "instrumental_profiles": inst_profiles,
         "metrics": metrics,
         "component_y_mapping": {str(k + 1): int(v + 1) for k, v in selected_component_y_mapping.items()},
@@ -2489,6 +2494,8 @@ def _sbs_parafac(
     raw_y_cal_pred: List[Optional[np.ndarray]] = []  # (n_cal, n_y)
     raw_cal_models: List[List[Dict[str, Any]]] = []  # per-model calibration models
     raw_fom: List[Optional[Dict[str, Any]]] = []      # per-model figures of merit
+    raw_residual_cal: List[Optional[np.ndarray]] = []  # (n_cal, n_b, n_c, ...)
+    raw_residual_val: List[Optional[np.ndarray]] = []  # (n_b, n_c, ...) — squeezed val sample
     first_auto_mapping: Optional[bool] = None
 
     common_kwargs = dict(
@@ -2541,6 +2548,8 @@ def _sbs_parafac(
             raw_y_cal_pred.append(None)
             raw_cal_models.append([])
             raw_fom.append(None)
+            raw_residual_cal.append(None)
+            raw_residual_val.append(None)
             continue
 
         # Cal scores: (n_cal, n_comp) — from the calibration partition only
@@ -2572,6 +2581,17 @@ def _sbs_parafac(
         raw_fom.append(r.get("metrics", {}).get("calibration", {}) or {})
         if first_auto_mapping is None:
             first_auto_mapping = bool(r.get("auto_mapping_used", False))
+
+        res = r.get("residual")
+        raw_residual_cal.append(np.asarray(res, dtype=float) if res is not None else None)
+
+        res_v = r.get("residual_val")
+        if res_v is not None:
+            res_v_arr = np.asarray(res_v, dtype=float)
+            # squeeze the leading sample dim (always 1 in SBS) to get (n_b, n_c, ...)
+            raw_residual_val.append(res_v_arr[0] if res_v_arr.ndim > 1 else res_v_arr)
+        else:
+            raw_residual_val.append(None)
 
         # y_val_pred from this SBS model: prediction for the single val sample
         yvp = r.get("y_val_pred")  # (1, n_y) or None
@@ -2780,6 +2800,28 @@ def _sbs_parafac(
     else:
         sbs_mpf_arr = None
 
+    # Residual tensor (cal): (n_val, n_cal, n_b, n_c, ...) or None if all failed
+    res_cal_valid = [x for x in raw_residual_cal if x is not None]
+    if res_cal_valid:
+        res_cal_shape = res_cal_valid[0].shape  # (n_cal, n_b, n_c, ...)
+        sbs_res_cal_arr = np.full((n_val,) + res_cal_shape, np.nan, dtype=float)
+        for i, res in enumerate(raw_residual_cal):
+            if res is not None:
+                sbs_res_cal_arr[i] = res
+    else:
+        sbs_res_cal_arr = None
+
+    # Residual tensor (val): (n_val, n_b, n_c, ...) or None if all failed
+    res_val_valid = [x for x in raw_residual_val if x is not None]
+    if res_val_valid:
+        res_val_shape = res_val_valid[0].shape  # (n_b, n_c, ...)
+        sbs_res_val_arr = np.full((n_val,) + res_val_shape, np.nan, dtype=float)
+        for i, res in enumerate(raw_residual_val):
+            if res is not None:
+                sbs_res_val_arr[i] = res
+    else:
+        sbs_res_val_arr = None
+
     # ------------------------------------------------------------------ #
     # Similarity matrix: (n_comp, n_val, n_val)                           #
     # ------------------------------------------------------------------ #
@@ -2942,6 +2984,8 @@ def _sbs_parafac(
         # dim 0 leaves a (n_comp,) vector for the A-scores heatmap y-axis.
         "sbs_mode_a_component_axis": np.tile(mode_a_component_axis, (n_val, 1)),
         "sbs_factor_labels": factor_labels,
+        "sbs_residual_cal": sbs_res_cal_arr,  # (n_val, n_cal, n_b, n_c, ...) or None
+        "sbs_residual_val": sbs_res_val_arr,  # (n_val, n_b, n_c, ...) or None
         "sbs_y_cal_pred": sbs_y_cal_pred_arr,          # (n_val, n_cal, n_y)
         "sbs_y_cal_true": sbs_y_cal_true_arr,           # (n_val, n_cal, n_y)
         "sbs_y_cal_error": sbs_y_cal_error_arr,         # (n_val, n_cal, n_y)
@@ -3255,6 +3299,7 @@ def parafac_analysis(
         "instrumental_profiles": result.get("instrumental_profiles"),
         "reconstructed": result.get("reconstructed"),
         "residual": result.get("residual"),
+        "residual_val": result.get("residual_val"),
         "metrics": result.get("metrics"),
         "calibration_models": result.get("calibration_models"),
         "component_y_mapping": result.get("component_y_mapping"),
@@ -3367,6 +3412,7 @@ def parafac_analysis(
         "sbs_y_cal_pred_pairs", "sbs_y_cal_true_pairs", "sbs_y_cal_error_pairs",
         "sbs_y_val_true_pairs", "sbs_y_val_pred_pairs", "sbs_y_val_effective_pairs", "sbs_y_val_error_pairs",
         "sbs_cal_regression_line_x_pairs", "sbs_cal_regression_line_y_pairs",
+        "sbs_residual_cal", "sbs_residual_val",
     ):
         output[_sbs_key] = None
 
@@ -3406,6 +3452,7 @@ def parafac_analysis(
             "sbs_mode_a_sample_axis", "sbs_mode_a_sample_axis_full", "sbs_mode_a_component_axis", "sbs_factor_labels",
             "sbs_y_cal_pred", "sbs_y_cal_true", "sbs_y_cal_error",
             "sbs_y_val_true", "sbs_y_val_pred",
+            "sbs_residual_cal", "sbs_residual_val",
         ):
             output[k] = sbs_out.get(k)
         output["auto_mapping_used"] = bool(sbs_out.get("auto_mapping_used", False))
@@ -3950,6 +3997,23 @@ def parafac_analysis(
         "sbs_ejcr_val": sbs_ejcr_val,
     })
 
+    # SBS instrumental profiles axis variables.
+    # sbs_instrumental_profiles has shape (n_val, n_comp, n_b, n_c, ...).
+    # The MD menu indexes into the axis list using the raw data dimension (2, 3, ...).
+    # We prepend axis_n_info[0] so that index k maps to axis_n_info[k-1]:
+    #   index 2 -> axis_n_info[1] = Mode B  (data dim 2 = n_b)
+    #   index 3 -> axis_n_info[2] = Mode C  (data dim 3 = n_c)  etc.
+    _raw_axis_n_info = output.get("axis_n_info")
+    _raw_dim_labels = output.get("dim_labels")
+    if isinstance(_raw_axis_n_info, (list, tuple)) and len(_raw_axis_n_info) >= 1:
+        output["sbs_ip_axis_n_info"] = [_raw_axis_n_info[0]] + list(_raw_axis_n_info)
+    else:
+        output["sbs_ip_axis_n_info"] = None
+    if isinstance(_raw_dim_labels, (list, tuple)) and len(_raw_dim_labels) >= 1:
+        output["sbs_ip_dim_labels"] = [_raw_dim_labels[0]] + list(_raw_dim_labels)
+    else:
+        output["sbs_ip_dim_labels"] = None
+
     return output
 
 
@@ -4053,6 +4117,11 @@ _PARAFAC_RETURN_ORDER: Tuple[str, ...] = (
     "ejcr_val",
     "sbs_ejcr_cal",
     "sbs_ejcr_val",
+    "sbs_ip_axis_n_info",
+    "sbs_ip_dim_labels",
+    "residual_val",
+    "sbs_residual_cal",
+    "sbs_residual_val",
 )
 
 

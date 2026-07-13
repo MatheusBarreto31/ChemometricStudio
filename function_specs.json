@@ -339,7 +339,12 @@
       "ejcr_cal",
       "ejcr_val",
       "sbs_ejcr_cal",
-      "sbs_ejcr_val"
+      "sbs_ejcr_val",
+      "sbs_ip_axis_n_info",
+      "sbs_ip_dim_labels",
+      "residual_val",
+      "sbs_residual_cal",
+      "sbs_residual_val"
     ],
     "mcr_als_analysis": [
       "c_scores",
@@ -436,7 +441,9 @@
       "ejcr_cal",
       "ejcr_val",
       "sbs_ejcr_cal",
-      "sbs_ejcr_val"
+      "sbs_ejcr_val",
+      "sbs_ip_axis_n_info",
+      "sbs_ip_dim_labels"
     ]
   },
   "input_specs": {

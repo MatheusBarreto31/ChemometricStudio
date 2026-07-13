@@ -105,7 +105,12 @@
     "sbs_mode_a_sample_axis": "SBS Mode A Sample Axis",
     "sbs_mode_a_sample_axis_full": "SBS Mode A Sample Axis (All Samples)",
     "sbs_mode_a_component_axis": "SBS Mode A Component Axis",
-    "sbs_factor_labels": "SBS Factor Labels"
+    "sbs_factor_labels": "SBS Factor Labels",
+    "sbs_ip_axis_n_info": "SBS Instrumental Profile Axis Vectors",
+    "sbs_ip_dim_labels": "SBS Instrumental Profile Dimension Labels",
+    "residual_val": "Validation Residual Tensor",
+    "sbs_residual_cal": "SBS Calibration Residual Tensor",
+    "sbs_residual_val": "SBS Validation Residual Tensor"
   },
   "passforward": {
     "compatible": true,
@@ -1181,6 +1186,10 @@
             "type": "graph",
             "config": {
               "graph_type": "heatmap",
+              "aux_axis": {
+                "data_source": "axis_n_info",
+                "labels": "dim_labels"
+              },
               "x_axis": {
                 "data_source": "axis_n_info",
                 "index": 2,
@@ -1255,6 +1264,97 @@
           "operator": "==",
           "value": "batch"
         }
+      },
+      {
+        "title": "Model Residues",
+        "layout": "ew",
+        "condition": {
+          "parameter": "validation_processing",
+          "operator": "==",
+          "value": "batch"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "aux_axis": {
+                "data_source": "axis_n_info",
+                "labels": "dim_labels"
+              },
+              "x_axis": {
+                "data_source": "axis_n_info",
+                "index": 2,
+                "label": "dim_labels",
+                "l_index": 2
+              },
+              "y_axis": {
+                "data_source": "axis_n_info",
+                "index": 1,
+                "label": "dim_labels",
+                "l_index": 1
+              },
+              "z_axis": {
+                "data_source": "residual",
+                "label": "Residual"
+              },
+              "title": "Calibration Residual (Per Sample)",
+              "dimension_labels": "dim_labels",
+              "data_slicing": [
+                {
+                  "name": "Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "axis": "z",
+                  "show_navigation_menu": true,
+                  "labels_source": "smp_cal",
+                  "labels_dimension": 0
+                }
+              ],
+              "show_md_menu": true
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "aux_axis": {
+                "data_source": "axis_n_info",
+                "labels": "dim_labels"
+              },
+              "x_axis": {
+                "data_source": "axis_n_info",
+                "index": 2,
+                "label": "dim_labels",
+                "l_index": 2
+              },
+              "y_axis": {
+                "data_source": "axis_n_info",
+                "index": 1,
+                "label": "dim_labels",
+                "l_index": 1
+              },
+              "z_axis": {
+                "data_source": "residual_val",
+                "label": "Residual"
+              },
+              "title": "Validation Residual (Per Sample)",
+              "dimension_labels": "dim_labels",
+              "data_slicing": [
+                {
+                  "name": "Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "axis": "z",
+                  "show_navigation_menu": true,
+                  "labels_source": "smp_val",
+                  "labels_dimension": 0
+                }
+              ],
+              "show_md_menu": true
+            }
+          }
+        ]
       },
       {
         "title": "A Scores (SBS)",
@@ -1500,24 +1600,28 @@
             "type": "graph",
             "config": {
               "graph_type": "heatmap",
+              "aux_axis": {
+                "data_source": "sbs_ip_axis_n_info",
+                "labels": "sbs_ip_dim_labels"
+              },
               "x_axis": {
-                "data_source": "axis_n_info",
-                "index": 2,
-                "label": "dim_labels",
-                "l_index": 2
+                "data_source": "sbs_ip_axis_n_info",
+                "index": 3,
+                "label": "sbs_ip_dim_labels",
+                "l_index": 3
               },
               "y_axis": {
-                "data_source": "axis_n_info",
-                "index": 1,
-                "label": "dim_labels",
-                "l_index": 1
+                "data_source": "sbs_ip_axis_n_info",
+                "index": 2,
+                "label": "sbs_ip_dim_labels",
+                "l_index": 2
               },
               "z_axis": {
                 "data_source": "sbs_instrumental_profiles",
                 "label": "Contribution"
               },
               "title": "Instrumental Profiles by Component (Model for Val Sample)",
-              "dimension_labels": "dim_labels",
+              "dimension_labels": "sbs_ip_dim_labels",
               "data_slicing": [
                 {
                   "name": "Val Sample",
@@ -1530,33 +1634,39 @@
                   "name": "Component",
                   "dimension": 1,
                   "default": 0,
+                  "axis": "z",
                   "show_navigation_menu": true
                 }
-              ]
+              ],
+              "show_md_menu": true
             }
           },
           {
             "type": "graph",
             "config": {
               "graph_type": "heatmap",
+              "aux_axis": {
+                "data_source": "sbs_ip_axis_n_info",
+                "labels": "sbs_ip_dim_labels"
+              },
               "x_axis": {
-                "data_source": "axis_n_info",
-                "index": 2,
-                "label": "dim_labels",
-                "l_index": 2
+                "data_source": "sbs_ip_axis_n_info",
+                "index": 3,
+                "label": "sbs_ip_dim_labels",
+                "l_index": 3
               },
               "y_axis": {
-                "data_source": "axis_n_info",
-                "index": 1,
-                "label": "dim_labels",
-                "l_index": 1
+                "data_source": "sbs_ip_axis_n_info",
+                "index": 2,
+                "label": "sbs_ip_dim_labels",
+                "l_index": 2
               },
               "z_axis": {
                 "data_source": "sbs_instrumental_profiles",
                 "label": "Contribution"
               },
               "title": "Instrumental Profiles by Component (Model for Val Sample)",
-              "dimension_labels": "dim_labels",
+              "dimension_labels": "sbs_ip_dim_labels",
               "data_slicing": [
                 {
                   "name": "Val Sample",
@@ -1569,9 +1679,121 @@
                   "name": "Component",
                   "dimension": 1,
                   "default": 1,
+                  "axis": "z",
                   "show_navigation_menu": true
                 }
-              ]
+              ],
+              "show_md_menu": true
+            }
+          }
+        ]
+      },
+      {
+        "title": "Model Residues (SBS)",
+        "layout": "ew",
+        "condition": {
+          "all": [
+            {
+              "parameter": "validation_processing",
+              "operator": "==",
+              "value": "sample_by_sample"
+            },
+            {
+              "parameter": "sbs_factor_labels",
+              "operator": "exists",
+              "value": true
+            }
+          ]
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "aux_axis": {
+                "data_source": "sbs_ip_axis_n_info",
+                "labels": "sbs_ip_dim_labels"
+              },
+              "x_axis": {
+                "data_source": "sbs_ip_axis_n_info",
+                "index": 3,
+                "label": "sbs_ip_dim_labels",
+                "l_index": 3
+              },
+              "y_axis": {
+                "data_source": "sbs_ip_axis_n_info",
+                "index": 2,
+                "label": "sbs_ip_dim_labels",
+                "l_index": 2
+              },
+              "z_axis": {
+                "data_source": "sbs_residual_cal",
+                "label": "Residual"
+              },
+              "title": "Calibration Residual (SBS, Per Sample)",
+              "dimension_labels": "sbs_ip_dim_labels",
+              "data_slicing": [
+                {
+                  "name": "Val Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_residual_val_sample",
+                  "labels_source": "smp_val",
+                  "labels_dimension": 0
+                },
+                {
+                  "name": "Cal Sample",
+                  "dimension": 1,
+                  "default": 0,
+                  "axis": "z",
+                  "show_navigation_menu": true,
+                  "labels_source": "smp_cal",
+                  "labels_dimension": 0
+                }
+              ],
+              "show_md_menu": true
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "aux_axis": {
+                "data_source": "axis_n_info",
+                "labels": "dim_labels"
+              },
+              "x_axis": {
+                "data_source": "axis_n_info",
+                "index": 2,
+                "label": "dim_labels",
+                "l_index": 2
+              },
+              "y_axis": {
+                "data_source": "axis_n_info",
+                "index": 1,
+                "label": "dim_labels",
+                "l_index": 1
+              },
+              "z_axis": {
+                "data_source": "sbs_residual_val",
+                "label": "Residual"
+              },
+              "title": "Validation Residual (SBS, Per Val Sample Model)",
+              "dimension_labels": "dim_labels",
+              "data_slicing": [
+                {
+                  "name": "Val Sample",
+                  "dimension": 0,
+                  "default": 0,
+                  "axis": "z",
+                  "show_navigation_menu": true,
+                  "nav_id": "sbs_residual_val_sample",
+                  "labels_source": "smp_val",
+                  "labels_dimension": 0
+                }
+              ],
+              "show_md_menu": true
             }
           }
         ]
