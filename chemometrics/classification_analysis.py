@@ -248,26 +248,61 @@ def _fit_closed_set_model(
     y_train: np.ndarray,
     logistic_c: float,
     logistic_max_iter: int,
+    logistic_solver: str,
+    logistic_class_weight: str,
     random_forest_n_estimators: int,
     random_forest_max_depth: int,
     random_forest_min_samples_leaf: int,
+    random_forest_criterion: str,
+    random_forest_max_features: str,
+    random_forest_class_weight: str,
+    random_forest_bootstrap: bool,
     extra_trees_n_estimators: int,
     extra_trees_max_depth: int,
     extra_trees_min_samples_leaf: int,
+    extra_trees_criterion: str,
+    extra_trees_max_features: str,
+    extra_trees_class_weight: str,
+    extra_trees_bootstrap: bool,
     svc_c: float,
     svc_gamma: float,
     svc_kernel: str,
+    svc_degree: int,
+    svc_coef0: float,
+    svc_class_weight: str,
+    svc_decision_function_shape: str,
     knn_n_neighbors: int,
     knn_distance: str,
     knn_minkowski_p: float,
+    knn_weights: str,
+    lda_solver: str,
+    lda_shrinkage: str,
+    qda_reg_param: float,
     pls_da_n_components: int,
+    pls_da_scale: bool,
 ) -> Dict[str, Any]:
     method = str(method).strip().lower()
 
     if method == "logistic":
+        solver = str(logistic_solver).strip().lower()
+        if solver not in ("lbfgs", "liblinear", "newton-cg", "newton-cholesky", "sag", "saga"):
+            raise ValueError(
+                "logistic_solver must be one of: 'lbfgs', 'liblinear', 'newton-cg', 'newton-cholesky', 'sag', 'saga'."
+            )
+
+        class_weight_raw = str(logistic_class_weight).strip().lower()
+        if class_weight_raw in ("", "none"):
+            class_weight = None
+        elif class_weight_raw == "balanced":
+            class_weight = "balanced"
+        else:
+            raise ValueError("logistic_class_weight must be one of: 'none', 'balanced'.")
+
         model = LogisticRegression(
             C=float(logistic_c),
             max_iter=max(100, int(logistic_max_iter)),
+            solver=solver,
+            class_weight=class_weight,
         )
         model.fit(X_train, y_train)
         return {"method": method, "model": model}
@@ -275,10 +310,37 @@ def _fit_closed_set_model(
     if method == "random_forest":
         max_depth = int(random_forest_max_depth)
         max_depth = None if max_depth <= 0 else max_depth
+
+        criterion = str(random_forest_criterion).strip().lower()
+        if criterion not in ("gini", "entropy", "log_loss"):
+            raise ValueError("random_forest_criterion must be one of: 'gini', 'entropy', 'log_loss'.")
+
+        max_features_raw = str(random_forest_max_features).strip().lower()
+        if max_features_raw in ("", "none"):
+            max_features = None
+        elif max_features_raw in ("sqrt", "log2"):
+            max_features = max_features_raw
+        else:
+            raise ValueError("random_forest_max_features must be one of: 'sqrt', 'log2', 'none'.")
+
+        class_weight_raw = str(random_forest_class_weight).strip().lower()
+        if class_weight_raw in ("", "none"):
+            class_weight = None
+        elif class_weight_raw in ("balanced", "balanced_subsample"):
+            class_weight = class_weight_raw
+        else:
+            raise ValueError(
+                "random_forest_class_weight must be one of: 'none', 'balanced', 'balanced_subsample'."
+            )
+
         model = RandomForestClassifier(
             n_estimators=max(10, int(random_forest_n_estimators)),
             max_depth=max_depth,
             min_samples_leaf=max(1, int(random_forest_min_samples_leaf)),
+            criterion=criterion,
+            max_features=max_features,
+            class_weight=class_weight,
+            bootstrap=bool(random_forest_bootstrap),
             random_state=42,
             n_jobs=-1,
         )
@@ -288,10 +350,37 @@ def _fit_closed_set_model(
     if method == "extra_trees":
         max_depth = int(extra_trees_max_depth)
         max_depth = None if max_depth <= 0 else max_depth
+
+        criterion = str(extra_trees_criterion).strip().lower()
+        if criterion not in ("gini", "entropy", "log_loss"):
+            raise ValueError("extra_trees_criterion must be one of: 'gini', 'entropy', 'log_loss'.")
+
+        max_features_raw = str(extra_trees_max_features).strip().lower()
+        if max_features_raw in ("", "none"):
+            max_features = None
+        elif max_features_raw in ("sqrt", "log2"):
+            max_features = max_features_raw
+        else:
+            raise ValueError("extra_trees_max_features must be one of: 'sqrt', 'log2', 'none'.")
+
+        class_weight_raw = str(extra_trees_class_weight).strip().lower()
+        if class_weight_raw in ("", "none"):
+            class_weight = None
+        elif class_weight_raw in ("balanced", "balanced_subsample"):
+            class_weight = class_weight_raw
+        else:
+            raise ValueError(
+                "extra_trees_class_weight must be one of: 'none', 'balanced', 'balanced_subsample'."
+            )
+
         model = ExtraTreesClassifier(
             n_estimators=max(10, int(extra_trees_n_estimators)),
             max_depth=max_depth,
             min_samples_leaf=max(1, int(extra_trees_min_samples_leaf)),
+            criterion=criterion,
+            max_features=max_features,
+            class_weight=class_weight,
+            bootstrap=bool(extra_trees_bootstrap),
             random_state=42,
             n_jobs=-1,
         )
@@ -299,10 +388,30 @@ def _fit_closed_set_model(
         return {"method": method, "model": model}
 
     if method == "svc":
+        kernel = str(svc_kernel).strip().lower()
+        if kernel not in ("linear", "rbf", "poly", "sigmoid"):
+            raise ValueError("svc_kernel must be one of: 'linear', 'rbf', 'poly', 'sigmoid'.")
+
+        decision_shape = str(svc_decision_function_shape).strip().lower()
+        if decision_shape not in ("ovr", "ovo"):
+            raise ValueError("svc_decision_function_shape must be one of: 'ovr', 'ovo'.")
+
+        class_weight_raw = str(svc_class_weight).strip().lower()
+        if class_weight_raw in ("", "none"):
+            class_weight = None
+        elif class_weight_raw == "balanced":
+            class_weight = "balanced"
+        else:
+            raise ValueError("svc_class_weight must be one of: 'none', 'balanced'.")
+
         model = SVC(
             C=float(svc_c),
             gamma=float(svc_gamma),
-            kernel=str(svc_kernel),
+            kernel=kernel,
+            degree=max(1, int(svc_degree)),
+            coef0=float(svc_coef0),
+            class_weight=class_weight,
+            decision_function_shape=decision_shape,
             probability=True,
         )
         model.fit(X_train, y_train)
@@ -311,9 +420,13 @@ def _fit_closed_set_model(
     if method == "knn":
         metric_name = str(knn_distance or "euclidean").strip().lower()
         n_neighbors = max(1, int(knn_n_neighbors))
+        weights_name = str(knn_weights or "uniform").strip().lower()
+        if weights_name not in ("uniform", "distance"):
+            raise ValueError("knn_weights must be one of: 'uniform', 'distance'.")
 
         knn_kwargs: Dict[str, Any] = {
             "n_neighbors": n_neighbors,
+            "weights": weights_name,
         }
 
         if metric_name == "euclidean":
@@ -350,12 +463,30 @@ def _fit_closed_set_model(
         return {"method": method, "model": model}
 
     if method == "lda":
-        model = LinearDiscriminantAnalysis()
+        solver = str(lda_solver).strip().lower()
+        if solver not in ("svd", "lsqr", "eigen"):
+            raise ValueError("lda_solver must be one of: 'svd', 'lsqr', 'eigen'.")
+
+        shrinkage_raw = str(lda_shrinkage).strip().lower()
+        if shrinkage_raw in ("", "none"):
+            shrinkage = None
+        elif shrinkage_raw == "auto":
+            shrinkage = "auto"
+        else:
+            raise ValueError("lda_shrinkage must be one of: 'none', 'auto'.")
+
+        if solver == "svd":
+            shrinkage = None
+
+        model = LinearDiscriminantAnalysis(solver=solver, shrinkage=shrinkage)
         model.fit(X_train, y_train)
         return {"method": method, "model": model}
 
     if method == "qda":
-        model = QuadraticDiscriminantAnalysis()
+        reg_param = float(qda_reg_param)
+        if not np.isfinite(reg_param) or reg_param < 0.0 or reg_param > 1.0:
+            raise ValueError("qda_reg_param must be between 0 and 1.")
+        model = QuadraticDiscriminantAnalysis(reg_param=reg_param)
         model.fit(X_train, y_train)
         return {"method": method, "model": model}
 
@@ -364,7 +495,7 @@ def _fit_closed_set_model(
         classes = np.unique(y_train)
         y_onehot = np.eye(classes.shape[0], dtype=float)[y_enc]
         n_comp = max(1, min(int(pls_da_n_components), X_train.shape[1], X_train.shape[0] - 1))
-        model = PLSRegression(n_components=n_comp)
+        model = PLSRegression(n_components=n_comp, scale=bool(pls_da_scale))
         model.fit(X_train, y_onehot)
         return {"method": method, "model": model, "classes": classes}
 
@@ -496,19 +627,38 @@ def classification_n_class(
     method: str = "logistic",
     logistic_c: float = 1.0,
     logistic_max_iter: int = 1000,
+    logistic_solver: str = "lbfgs",
+    logistic_class_weight: str = "none",
     random_forest_n_estimators: int = 300,
     random_forest_max_depth: int = 0,
     random_forest_min_samples_leaf: int = 1,
+    random_forest_criterion: str = "gini",
+    random_forest_max_features: str = "sqrt",
+    random_forest_class_weight: str = "none",
+    random_forest_bootstrap: bool = True,
     extra_trees_n_estimators: int = 300,
     extra_trees_max_depth: int = 0,
     extra_trees_min_samples_leaf: int = 1,
+    extra_trees_criterion: str = "gini",
+    extra_trees_max_features: str = "sqrt",
+    extra_trees_class_weight: str = "none",
+    extra_trees_bootstrap: bool = False,
     svc_c: float = 1.0,
     svc_gamma: float = 0.1,
     svc_kernel: str = "rbf",
+    svc_degree: int = 3,
+    svc_coef0: float = 0.0,
+    svc_class_weight: str = "none",
+    svc_decision_function_shape: str = "ovr",
     knn_n_neighbors: int = 5,
     knn_distance: str = "euclidean",
     knn_minkowski_p: float = 3.0,
+    knn_weights: str = "uniform",
+    lda_solver: str = "svd",
+    lda_shrinkage: str = "none",
+    qda_reg_param: float = 0.0,
     pls_da_n_components: int = 2,
+    pls_da_scale: bool = True,
     class_layer: int = 1,
     cv_config: Optional[Any] = None,
     **kwargs,
@@ -533,19 +683,38 @@ def classification_n_class(
     fit_kwargs = {
         "logistic_c": logistic_c,
         "logistic_max_iter": logistic_max_iter,
+        "logistic_solver": logistic_solver,
+        "logistic_class_weight": logistic_class_weight,
         "random_forest_n_estimators": random_forest_n_estimators,
         "random_forest_max_depth": random_forest_max_depth,
         "random_forest_min_samples_leaf": random_forest_min_samples_leaf,
+        "random_forest_criterion": random_forest_criterion,
+        "random_forest_max_features": random_forest_max_features,
+        "random_forest_class_weight": random_forest_class_weight,
+        "random_forest_bootstrap": random_forest_bootstrap,
         "extra_trees_n_estimators": extra_trees_n_estimators,
         "extra_trees_max_depth": extra_trees_max_depth,
         "extra_trees_min_samples_leaf": extra_trees_min_samples_leaf,
+        "extra_trees_criterion": extra_trees_criterion,
+        "extra_trees_max_features": extra_trees_max_features,
+        "extra_trees_class_weight": extra_trees_class_weight,
+        "extra_trees_bootstrap": extra_trees_bootstrap,
         "svc_c": svc_c,
         "svc_gamma": svc_gamma,
         "svc_kernel": svc_kernel,
+        "svc_degree": svc_degree,
+        "svc_coef0": svc_coef0,
+        "svc_class_weight": svc_class_weight,
+        "svc_decision_function_shape": svc_decision_function_shape,
         "knn_n_neighbors": knn_n_neighbors,
         "knn_distance": knn_distance,
         "knn_minkowski_p": knn_minkowski_p,
+        "knn_weights": knn_weights,
+        "lda_solver": lda_solver,
+        "lda_shrinkage": lda_shrinkage,
+        "qda_reg_param": qda_reg_param,
         "pls_da_n_components": pls_da_n_components,
+        "pls_da_scale": pls_da_scale,
     }
 
     model_info = _fit_closed_set_model(method=method, X_train=X_cal, y_train=y_cal, **fit_kwargs)
@@ -609,6 +778,8 @@ def classification_n_class(
             "n_classes": int(coef.shape[0]),
             "C": float(logistic_c),
             "max_iter": int(logistic_max_iter),
+            "solver": str(logistic_solver),
+            "class_weight": str(logistic_class_weight),
         }
 
     elif method_norm in ("random_forest", "extra_trees") and sklearn_model is not None and hasattr(sklearn_model, "feature_importances_"):
@@ -617,6 +788,12 @@ def classification_n_class(
             "feature_importances": fi.tolist(),
             "n_estimators": int(getattr(sklearn_model, "n_estimators", 0)),
             "n_features": int(fi.shape[0]),
+            "criterion": str(getattr(sklearn_model, "criterion", "")),
+            "max_features": str(getattr(sklearn_model, "max_features", "")),
+            "bootstrap": bool(getattr(sklearn_model, "bootstrap", False)),
+            "class_weight": str(
+                random_forest_class_weight if method_norm == "random_forest" else extra_trees_class_weight
+            ),
         }
 
     elif method_norm == "svc" and sklearn_model is not None and hasattr(sklearn_model, "n_support_"):
@@ -627,6 +804,10 @@ def classification_n_class(
             "kernel": str(svc_kernel),
             "C": float(svc_c),
             "gamma": float(svc_gamma),
+            "degree": int(max(1, svc_degree)),
+            "coef0": float(svc_coef0),
+            "class_weight": str(svc_class_weight),
+            "decision_function_shape": str(svc_decision_function_shape),
         }
 
     elif method_norm == "knn":
@@ -634,6 +815,7 @@ def classification_n_class(
             "n_neighbors": int(knn_n_neighbors),
             "distance": str(knn_distance),
             "minkowski_p": float(knn_minkowski_p) if str(knn_distance).strip().lower() == "minkowski" else None,
+            "weights": str(knn_weights),
         }
 
     elif method_norm == "lda" and sklearn_model is not None and hasattr(sklearn_model, "explained_variance_ratio_"):
@@ -641,6 +823,8 @@ def classification_n_class(
         method_specific_payload["lda"] = {
             "n_discriminants": int(evr.shape[0]),
             "explained_variance_ratio": evr.tolist(),
+            "solver": str(lda_solver),
+            "shrinkage": str(lda_shrinkage),
         }
 
     elif method_norm == "qda" and sklearn_model is not None and hasattr(sklearn_model, "priors_"):
@@ -648,11 +832,12 @@ def classification_n_class(
         method_specific_payload["qda"] = {
             "class_priors": priors.tolist(),
             "n_classes": int(priors.shape[0]),
+            "reg_param": float(qda_reg_param),
         }
 
     elif method_norm == "pls_da" and sklearn_model is not None:
         actual_n_comp = int(getattr(sklearn_model, "n_components", pls_da_n_components))
-        pls_specific: Dict[str, Any] = {"n_components": actual_n_comp}
+        pls_specific: Dict[str, Any] = {"n_components": actual_n_comp, "scale": bool(pls_da_scale)}
         if hasattr(sklearn_model, "x_scores_"):
             scores_pls = np.asarray(sklearn_model.x_scores_, dtype=float)
             total_var = float(np.sum(scores_pls ** 2))
@@ -1031,8 +1216,17 @@ def _fit_one_class_model(
     X_fit: np.ndarray,
     one_class_nu: float,
     one_class_gamma: float,
+    one_class_kernel: str,
+    one_class_degree: int,
+    one_class_coef0: float,
     isolation_forest_n_estimators: int,
     isolation_forest_contamination: float,
+    isolation_forest_max_samples: str,
+    isolation_forest_max_features: float,
+    isolation_forest_bootstrap: bool,
+    lof_n_neighbors: int,
+    elliptic_support_fraction: float,
+    elliptic_assume_centered: bool,
     simca_n_components: int,
     simca_confidence_level: float,
     simca_limit_method: str,
@@ -1047,15 +1241,40 @@ def _fit_one_class_model(
     X_fit = np.asarray(X_fit, dtype=float)
 
     if method == "one_class_svm":
-        model = OneClassSVM(nu=float(one_class_nu), gamma=float(one_class_gamma), kernel="rbf")
+        kernel = str(one_class_kernel).strip().lower()
+        if kernel not in ("linear", "rbf", "poly", "sigmoid"):
+            raise ValueError("one_class_kernel must be one of: 'linear', 'rbf', 'poly', 'sigmoid'.")
+        model = OneClassSVM(
+            nu=float(one_class_nu),
+            gamma=float(one_class_gamma),
+            kernel=kernel,
+            degree=max(1, int(one_class_degree)),
+            coef0=float(one_class_coef0),
+        )
         model.fit(X_fit)
         return {"method": method, "model": model}
 
     if method == "isolation_forest":
         contamination = min(0.5, max(1e-4, float(isolation_forest_contamination)))
+
+        max_samples_raw = str(isolation_forest_max_samples).strip().lower()
+        if max_samples_raw in ("", "auto"):
+            max_samples = "auto"
+        elif max_samples_raw == "all":
+            max_samples = 1.0
+        else:
+            raise ValueError("isolation_forest_max_samples must be one of: 'auto', 'all'.")
+
+        max_features = float(isolation_forest_max_features)
+        if not np.isfinite(max_features) or max_features <= 0.0 or max_features > 1.0:
+            raise ValueError("isolation_forest_max_features must be in the range (0, 1].")
+
         model = IsolationForest(
             n_estimators=max(20, int(isolation_forest_n_estimators)),
             contamination=contamination,
+            max_samples=max_samples,
+            max_features=max_features,
+            bootstrap=bool(isolation_forest_bootstrap),
             random_state=42,
         )
         model.fit(X_fit)
@@ -1063,13 +1282,23 @@ def _fit_one_class_model(
 
     if method == "elliptic_envelope":
         contamination = min(0.5, max(1e-4, float(isolation_forest_contamination)))
-        model = EllipticEnvelope(contamination=contamination, random_state=42)
+        support_fraction_value = float(elliptic_support_fraction)
+        support_fraction = None if support_fraction_value <= 0.0 else support_fraction_value
+        if support_fraction is not None and (not np.isfinite(support_fraction) or support_fraction > 1.0):
+            raise ValueError("elliptic_support_fraction must be in the range (0, 1], or 0 for automatic.")
+        model = EllipticEnvelope(
+            contamination=contamination,
+            support_fraction=support_fraction,
+            assume_centered=bool(elliptic_assume_centered),
+            random_state=42,
+        )
         model.fit(X_fit)
         return {"method": method, "model": model}
 
     if method == "lof":
         contamination = min(0.5, max(1e-4, float(isolation_forest_contamination)))
-        model = LocalOutlierFactor(novelty=True, contamination=contamination)
+        n_neighbors = max(2, int(lof_n_neighbors))
+        model = LocalOutlierFactor(novelty=True, contamination=contamination, n_neighbors=n_neighbors)
         model.fit(X_fit)
         return {"method": method, "model": model}
 
@@ -1261,13 +1490,22 @@ def classification_one_class(
     class_data_val: Optional[Any] = None,
     smp_cal: Optional[Any] = None,
     smp_val: Optional[Any] = None,
-    one_class_method: str = "simca",
+    one_class_method: str = "dd_simca",
     one_class_reference_class: Any = 1,
     one_class_unknown_label: str = "Other",
     one_class_nu: float = 0.05,
     one_class_gamma: float = 0.1,
+    one_class_kernel: str = "rbf",
+    one_class_degree: int = 3,
+    one_class_coef0: float = 0.0,
     isolation_forest_n_estimators: int = 300,
     isolation_forest_contamination: float = 0.05,
+    isolation_forest_max_samples: str = "auto",
+    isolation_forest_max_features: float = 1.0,
+    isolation_forest_bootstrap: bool = False,
+    lof_n_neighbors: int = 20,
+    elliptic_support_fraction: float = 0.0,
+    elliptic_assume_centered: bool = False,
     simca_n_components: int = 3,
     simca_confidence_level: float = 0.95,
     simca_limit_method: str = "analytical",
@@ -1305,8 +1543,17 @@ def classification_one_class(
         X_fit=X_fit,
         one_class_nu=one_class_nu,
         one_class_gamma=one_class_gamma,
+        one_class_kernel=one_class_kernel,
+        one_class_degree=one_class_degree,
+        one_class_coef0=one_class_coef0,
         isolation_forest_n_estimators=isolation_forest_n_estimators,
         isolation_forest_contamination=isolation_forest_contamination,
+        isolation_forest_max_samples=isolation_forest_max_samples,
+        isolation_forest_max_features=isolation_forest_max_features,
+        isolation_forest_bootstrap=isolation_forest_bootstrap,
+        lof_n_neighbors=lof_n_neighbors,
+        elliptic_support_fraction=elliptic_support_fraction,
+        elliptic_assume_centered=elliptic_assume_centered,
         simca_n_components=simca_n_components,
         simca_confidence_level=simca_confidence_level,
         simca_limit_method=simca_limit_method,
@@ -1336,8 +1583,17 @@ def classification_one_class(
         _oc_fit_kwargs = {
             "one_class_nu": one_class_nu,
             "one_class_gamma": one_class_gamma,
+            "one_class_kernel": one_class_kernel,
+            "one_class_degree": one_class_degree,
+            "one_class_coef0": one_class_coef0,
             "isolation_forest_n_estimators": isolation_forest_n_estimators,
             "isolation_forest_contamination": isolation_forest_contamination,
+            "isolation_forest_max_samples": isolation_forest_max_samples,
+            "isolation_forest_max_features": isolation_forest_max_features,
+            "isolation_forest_bootstrap": isolation_forest_bootstrap,
+            "lof_n_neighbors": lof_n_neighbors,
+            "elliptic_support_fraction": elliptic_support_fraction,
+            "elliptic_assume_centered": elliptic_assume_centered,
             "simca_n_components": simca_n_components,
             "simca_confidence_level": simca_confidence_level,
             "simca_limit_method": simca_limit_method,
@@ -1508,6 +1764,9 @@ def classification_one_class(
                 "visible": method_norm == "one_class_svm",
                 "nu": float(one_class_nu) if method_norm == "one_class_svm" else None,
                 "gamma": float(one_class_gamma) if method_norm == "one_class_svm" else None,
+                "kernel": str(one_class_kernel) if method_norm == "one_class_svm" else None,
+                "degree": int(max(1, one_class_degree)) if method_norm == "one_class_svm" else None,
+                "coef0": float(one_class_coef0) if method_norm == "one_class_svm" else None,
                 "decision_scores_cal": score_cal.tolist() if method_norm == "one_class_svm" and score_cal is not None else None,
                 "decision_scores_val": score_val.tolist() if method_norm == "one_class_svm" and score_val is not None else None,
             },
@@ -1515,18 +1774,26 @@ def classification_one_class(
                 "visible": method_norm == "isolation_forest",
                 "n_estimators": int(isolation_forest_n_estimators) if method_norm == "isolation_forest" else None,
                 "contamination": float(isolation_forest_contamination) if method_norm == "isolation_forest" else None,
+                "max_samples": str(isolation_forest_max_samples) if method_norm == "isolation_forest" else None,
+                "max_features": float(isolation_forest_max_features) if method_norm == "isolation_forest" else None,
+                "bootstrap": bool(isolation_forest_bootstrap) if method_norm == "isolation_forest" else None,
                 "decision_scores_cal": score_cal.tolist() if method_norm == "isolation_forest" and score_cal is not None else None,
                 "decision_scores_val": score_val.tolist() if method_norm == "isolation_forest" and score_val is not None else None,
             },
             "elliptic_envelope": {
                 "visible": method_norm == "elliptic_envelope",
                 "contamination": float(isolation_forest_contamination) if method_norm == "elliptic_envelope" else None,
+                "support_fraction": (
+                    None if float(elliptic_support_fraction) <= 0.0 else float(elliptic_support_fraction)
+                ) if method_norm == "elliptic_envelope" else None,
+                "assume_centered": bool(elliptic_assume_centered) if method_norm == "elliptic_envelope" else None,
                 "decision_scores_cal": score_cal.tolist() if method_norm == "elliptic_envelope" and score_cal is not None else None,
                 "decision_scores_val": score_val.tolist() if method_norm == "elliptic_envelope" and score_val is not None else None,
             },
             "lof": {
                 "visible": method_norm == "lof",
                 "contamination": float(isolation_forest_contamination) if method_norm == "lof" else None,
+                "n_neighbors": int(max(2, lof_n_neighbors)) if method_norm == "lof" else None,
                 "decision_scores_cal": score_cal.tolist() if method_norm == "lof" and score_cal is not None else None,
                 "decision_scores_val": score_val.tolist() if method_norm == "lof" and score_val is not None else None,
             },

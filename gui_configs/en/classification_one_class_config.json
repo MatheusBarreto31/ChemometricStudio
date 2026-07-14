@@ -15,12 +15,22 @@
     "one_class_unknown_label": "Unknown Label",
     "one_class_nu": "One-Class SVM Nu",
     "one_class_gamma": "One-Class SVM Gamma",
+    "one_class_kernel": "One-Class SVM Kernel",
+    "one_class_degree": "One-Class SVM Degree",
+    "one_class_coef0": "One-Class SVM Coef0",
     "isolation_forest_n_estimators": "IForest Trees",
     "isolation_forest_contamination": "Outlier Fraction",
+    "isolation_forest_max_samples": "IForest Max Samples",
+    "isolation_forest_max_features": "IForest Max Features",
+    "isolation_forest_bootstrap": "IForest Bootstrap",
+    "lof_n_neighbors": "LOF Neighbors",
+    "elliptic_support_fraction": "Elliptic Support Fraction",
+    "elliptic_assume_centered": "Elliptic Assume Centered",
     "simca_n_components": "SIMCA Components",
     "simca_confidence_level": "SIMCA Confidence",
     "simca_limit_method": "SIMCA Limit Method",
     "simca_decision_rule": "SIMCA Decision Rule",
+    "simca_combined_rule": "SIMCA Combined Metric",
     "simca_scale_x": "SIMCA Scale X",
     "dd_simca_lim_type": "DD-SIMCA Estimator",
     "dd_simca_alpha": "DD-SIMCA Alpha",
@@ -311,6 +321,59 @@
         }
       },
       {
+        "name": "one_class_kernel",
+        "label": "One-Class SVM Kernel",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "rbf",
+        "values": [
+          "linear",
+          "rbf",
+          "poly",
+          "sigmoid"
+        ],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "one_class_method": "one_class_svm"
+        },
+        "tooltip": "Kernel used by One-Class SVM"
+      },
+      {
+        "name": "one_class_degree",
+        "label": "One-Class SVM Degree",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "3",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "one_class_method": "one_class_svm",
+          "one_class_kernel": "poly"
+        },
+        "tooltip": "Polynomial degree for One-Class SVM when using poly kernel"
+      },
+      {
+        "name": "one_class_coef0",
+        "label": "One-Class SVM Coef0",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "one_class_method": "one_class_svm",
+          "one_class_kernel": [
+            "poly",
+            "sigmoid"
+          ]
+        },
+        "tooltip": "Independent term for poly and sigmoid One-Class SVM kernels"
+      },
+      {
         "name": "isolation_forest_n_estimators",
         "label": "IForest Trees",
         "category": "Model Parameters",
@@ -320,11 +383,7 @@
         "required": false,
         "input_type": "user",
         "visible_if": {
-          "one_class_method": [
-            "isolation_forest",
-            "elliptic_envelope",
-            "lof"
-          ]
+          "one_class_method": "isolation_forest"
         }
       },
       {
@@ -343,6 +402,98 @@
             "lof"
           ]
         }
+      },
+      {
+        "name": "isolation_forest_max_samples",
+        "label": "IForest Max Samples",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "auto",
+        "values": [
+          "auto",
+          "all"
+        ],
+        "value_aliases": [
+          "Auto",
+          "All Samples"
+        ],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "one_class_method": "isolation_forest"
+        },
+        "tooltip": "Subsample size per tree: auto uses sklearn default, all uses the full fit set"
+      },
+      {
+        "name": "isolation_forest_max_features",
+        "label": "IForest Max Features",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "one_class_method": "isolation_forest"
+        },
+        "tooltip": "Fraction of variables used to train each tree (0 to 1]"
+      },
+      {
+        "name": "isolation_forest_bootstrap",
+        "label": "IForest Bootstrap",
+        "category": "Model Parameters",
+        "widget": "checkbutton",
+        "type": "bool",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "one_class_method": "isolation_forest"
+        },
+        "tooltip": "Enable bootstrap sampling when growing trees"
+      },
+      {
+        "name": "lof_n_neighbors",
+        "label": "LOF Neighbors",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "20",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "one_class_method": "lof"
+        },
+        "tooltip": "Number of neighbors used by Local Outlier Factor"
+      },
+      {
+        "name": "elliptic_support_fraction",
+        "label": "Elliptic Support Fraction",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "one_class_method": "elliptic_envelope"
+        },
+        "tooltip": "Robust support fraction in (0,1]; use 0 for automatic selection"
+      },
+      {
+        "name": "elliptic_assume_centered",
+        "label": "Elliptic Assume Centered",
+        "category": "Model Parameters",
+        "widget": "checkbutton",
+        "type": "bool",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "one_class_method": "elliptic_envelope"
+        },
+        "tooltip": "Assume data is centered before robust covariance estimation"
       },
       {
         "name": "class_layer",

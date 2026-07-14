@@ -13,19 +13,38 @@
     "method": "Method",
     "logistic_c": "Logistic C",
     "logistic_max_iter": "Logistic Max Iterations",
+    "logistic_solver": "Logistic Solver",
+    "logistic_class_weight": "Logistic Class Weight",
     "random_forest_n_estimators": "RF Trees",
     "random_forest_max_depth": "RF Max Depth",
     "random_forest_min_samples_leaf": "RF Min Samples Leaf",
+    "random_forest_criterion": "RF Criterion",
+    "random_forest_max_features": "RF Max Features",
+    "random_forest_class_weight": "RF Class Weight",
+    "random_forest_bootstrap": "RF Bootstrap",
     "extra_trees_n_estimators": "ET Trees",
     "extra_trees_max_depth": "ET Max Depth",
     "extra_trees_min_samples_leaf": "ET Min Samples Leaf",
+    "extra_trees_criterion": "ET Criterion",
+    "extra_trees_max_features": "ET Max Features",
+    "extra_trees_class_weight": "ET Class Weight",
+    "extra_trees_bootstrap": "ET Bootstrap",
     "svc_c": "SVC C",
     "svc_gamma": "SVC Gamma",
     "svc_kernel": "SVC Kernel",
+    "svc_degree": "SVC Degree",
+    "svc_coef0": "SVC Coef0",
+    "svc_class_weight": "SVC Class Weight",
+    "svc_decision_function_shape": "SVC Decision Shape",
     "knn_n_neighbors": "KNN Neighbors",
     "knn_distance": "KNN Distance",
     "knn_minkowski_p": "KNN Minkowski p",
+    "knn_weights": "KNN Weights",
+    "lda_solver": "LDA Solver",
+    "lda_shrinkage": "LDA Shrinkage",
+    "qda_reg_param": "QDA Reg Param",
     "pls_da_n_components": "PLS-DA Components",
+    "pls_da_scale": "PLS-DA Scale X",
     "cv_config": "CV Configuration"
   },
   "output_aliases": {
@@ -116,6 +135,58 @@
         }
       },
       {
+        "name": "logistic_solver",
+        "label": "Logistic Solver",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "lbfgs",
+        "values": [
+          "lbfgs",
+          "liblinear",
+          "newton-cg",
+          "newton-cholesky",
+          "sag",
+          "saga"
+        ],
+        "value_aliases": [
+          "L-BFGS (recommended default)",
+          "LIBLINEAR (small datasets)",
+          "Newton-CG",
+          "Newton-Cholesky",
+          "SAG (large datasets)",
+          "SAGA (supports L1/Elastic-Net)"
+        ],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "logistic"
+        },
+        "tooltip": "Optimization algorithm for Logistic Regression"
+      },
+      {
+        "name": "logistic_class_weight",
+        "label": "Logistic Class Weight",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "none",
+        "values": [
+          "none",
+          "balanced"
+        ],
+        "value_aliases": [
+          "None",
+          "Balanced"
+        ],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "logistic"
+        },
+        "tooltip": "Use balanced to weight classes inversely by frequency"
+      },
+      {
         "name": "random_forest_n_estimators",
         "label": "RF Trees",
         "category": "Model Parameters",
@@ -155,6 +226,92 @@
         }
       },
       {
+        "name": "random_forest_criterion",
+        "label": "RF Criterion",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "gini",
+        "values": [
+          "gini",
+          "entropy",
+          "log_loss"
+        ],
+        "value_aliases": [
+          "Gini Impurity",
+          "Entropy (Information Gain)",
+          "Log Loss"
+        ],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "random_forest"
+        },
+        "tooltip": "Function to measure split quality in each tree"
+      },
+      {
+        "name": "random_forest_max_features",
+        "label": "RF Max Features",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "sqrt",
+        "values": [
+          "sqrt",
+          "log2",
+          "none"
+        ],
+        "value_aliases": [
+          "Sqrt(number of features)",
+          "Log2(number of features)",
+          "All features"
+        ],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "random_forest"
+        },
+        "tooltip": "Number of features considered when looking for best split"
+      },
+      {
+        "name": "random_forest_class_weight",
+        "label": "RF Class Weight",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "none",
+        "values": [
+          "none",
+          "balanced",
+          "balanced_subsample"
+        ],
+        "value_aliases": [
+          "None",
+          "Balanced",
+          "Balanced per Bootstrap Sample"
+        ],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "random_forest"
+        },
+        "tooltip": "Class weighting strategy for Random Forest"
+      },
+      {
+        "name": "random_forest_bootstrap",
+        "label": "RF Bootstrap",
+        "category": "Model Parameters",
+        "widget": "checkbutton",
+        "type": "bool",
+        "default": true,
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "random_forest"
+        },
+        "tooltip": "Enable bootstrap sampling when building trees"
+      },
+      {
         "name": "extra_trees_n_estimators",
         "label": "ET Trees",
         "category": "Model Parameters",
@@ -192,6 +349,92 @@
         "visible_if": {
           "method": "extra_trees"
         }
+      },
+      {
+        "name": "extra_trees_criterion",
+        "label": "ET Criterion",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "gini",
+        "values": [
+          "gini",
+          "entropy",
+          "log_loss"
+        ],
+        "value_aliases": [
+          "Gini Impurity",
+          "Entropy (Information Gain)",
+          "Log Loss"
+        ],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "extra_trees"
+        },
+        "tooltip": "Function to measure split quality in each extra tree"
+      },
+      {
+        "name": "extra_trees_max_features",
+        "label": "ET Max Features",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "sqrt",
+        "values": [
+          "sqrt",
+          "log2",
+          "none"
+        ],
+        "value_aliases": [
+          "Sqrt(number of features)",
+          "Log2(number of features)",
+          "All features"
+        ],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "extra_trees"
+        },
+        "tooltip": "Number of features considered when looking for best split"
+      },
+      {
+        "name": "extra_trees_class_weight",
+        "label": "ET Class Weight",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "none",
+        "values": [
+          "none",
+          "balanced",
+          "balanced_subsample"
+        ],
+        "value_aliases": [
+          "None",
+          "Balanced",
+          "Balanced per Bootstrap Sample"
+        ],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "extra_trees"
+        },
+        "tooltip": "Class weighting strategy for Extra Trees"
+      },
+      {
+        "name": "extra_trees_bootstrap",
+        "label": "ET Bootstrap",
+        "category": "Model Parameters",
+        "widget": "checkbutton",
+        "type": "bool",
+        "default": false,
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "extra_trees"
+        },
+        "tooltip": "Enable bootstrap sampling when building extra trees"
       },
       {
         "name": "svc_c",
@@ -239,6 +482,83 @@
         }
       },
       {
+        "name": "svc_degree",
+        "label": "SVC Degree",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "3",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "svc",
+          "svc_kernel": "poly"
+        },
+        "tooltip": "Polynomial degree for SVC when using the poly kernel"
+      },
+      {
+        "name": "svc_coef0",
+        "label": "SVC Coef0",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "svc",
+          "svc_kernel": [
+            "poly",
+            "sigmoid"
+          ]
+        },
+        "tooltip": "Independent term for poly and sigmoid SVC kernels"
+      },
+      {
+        "name": "svc_class_weight",
+        "label": "SVC Class Weight",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "none",
+        "values": [
+          "none",
+          "balanced"
+        ],
+        "value_aliases": [
+          "None",
+          "Balanced"
+        ],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "svc"
+        },
+        "tooltip": "Use balanced to weight classes inversely by frequency"
+      },
+      {
+        "name": "svc_decision_function_shape",
+        "label": "SVC Decision Shape",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "ovr",
+        "values": [
+          "ovr",
+          "ovo"
+        ],
+        "value_aliases": [
+          "One-vs-Rest",
+          "One-vs-One"
+        ],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "svc"
+        },
+        "tooltip": "Multiclass strategy for decision function: one-vs-rest or one-vs-one"
+      },
+      {
         "name": "knn_n_neighbors",
         "label": "KNN Neighbors",
         "category": "Model Parameters",
@@ -250,6 +570,28 @@
         "visible_if": {
           "method": "knn"
         }
+      },
+      {
+        "name": "knn_weights",
+        "label": "KNN Weights",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "uniform",
+        "values": [
+          "uniform",
+          "distance"
+        ],
+        "value_aliases": [
+          "Uniform (equal weight)",
+          "Distance (nearer neighbors weigh more)"
+        ],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "knn"
+        },
+        "tooltip": "Uniform weights all neighbors equally; distance weighs nearer neighbors more"
       },
       {
         "name": "knn_distance",
@@ -295,6 +637,70 @@
         }
       },
       {
+        "name": "lda_solver",
+        "label": "LDA Solver",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "svd",
+        "values": [
+          "svd",
+          "lsqr",
+          "eigen"
+        ],
+        "value_aliases": [
+          "SVD (recommended default)",
+          "LSQR (supports shrinkage)",
+          "Eigen (supports shrinkage)"
+        ],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "lda"
+        },
+        "tooltip": "Solver used for Linear Discriminant Analysis"
+      },
+      {
+        "name": "lda_shrinkage",
+        "label": "LDA Shrinkage",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "none",
+        "values": [
+          "none",
+          "auto"
+        ],
+        "value_aliases": [
+          "None",
+          "Auto"
+        ],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "lda",
+          "lda_solver": [
+            "lsqr",
+            "eigen"
+          ]
+        },
+        "tooltip": "Shrinkage setting for LDA covariance estimation"
+      },
+      {
+        "name": "qda_reg_param",
+        "label": "QDA Reg Param",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "0.0",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "qda"
+        },
+        "tooltip": "Regularization parameter for QDA between 0 and 1"
+      },
+      {
         "name": "pls_da_n_components",
         "label": "PLS-DA Components",
         "category": "Model Parameters",
@@ -306,6 +712,20 @@
         "visible_if": {
           "method": "pls_da"
         }
+      },
+      {
+        "name": "pls_da_scale",
+        "label": "PLS-DA Scale X",
+        "category": "Model Parameters",
+        "widget": "checkbutton",
+        "type": "bool",
+        "default": true,
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "method": "pls_da"
+        },
+        "tooltip": "Enable standard scaling of X variables inside PLS-DA"
       },
       {
         "name": "class_layer",
@@ -553,7 +973,7 @@
             },
             "config": {
               "title": "Logistic Regression Details",
-              "text_template": "Logistic Regression\n-------------------\nFeatures:           {n_features}\nClasses:            {n_classes}\nRegularization C:   {logistic_c}\nMax Iterations:     {max_iter}",
+              "text_template": "Logistic Regression\n-------------------\nFeatures:           {n_features}\nClasses:            {n_classes}\nRegularization C:   {logistic_c}\nMax Iterations:     {max_iter}\nSolver:             {solver}\nClass Weight:       {class_weight}",
               "bindings": [
                 {
                   "name": "n_features",
@@ -579,6 +999,18 @@
                   "data_source": "model",
                   "nested_key": "method_specific.logistic.max_iter",
                   "selector": { "mode": "value" }
+                },
+                {
+                  "name": "solver",
+                  "data_source": "model",
+                  "nested_key": "method_specific.logistic.solver",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "class_weight",
+                  "data_source": "model",
+                  "nested_key": "method_specific.logistic.class_weight",
+                  "selector": { "mode": "value" }
                 }
               ]
             },
@@ -594,7 +1026,7 @@
             },
             "config": {
               "title": "Ensemble Details",
-              "text_template": "Tree Ensemble\n--------------\nEstimators:        {n_estimators}\nInput Variables:   {n_features}\n\nSee the 'Feature Importances' page\nfor variable importance scores.",
+              "text_template": "Tree Ensemble\n--------------\nEstimators:        {n_estimators}\nInput Variables:   {n_features}\nCriterion:         {criterion}\nMax Features:      {max_features}\nClass Weight:      {class_weight}\nBootstrap:         {bootstrap}\n\nSee the 'Feature Importances' page\nfor variable importance scores.",
               "bindings": [
                 {
                   "name": "n_estimators",
@@ -606,6 +1038,30 @@
                   "name": "n_features",
                   "data_source": "model",
                   "nested_key": "method_specific.tree_ensemble.n_features",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "criterion",
+                  "data_source": "model",
+                  "nested_key": "method_specific.tree_ensemble.criterion",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "max_features",
+                  "data_source": "model",
+                  "nested_key": "method_specific.tree_ensemble.max_features",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "class_weight",
+                  "data_source": "model",
+                  "nested_key": "method_specific.tree_ensemble.class_weight",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "bootstrap",
+                  "data_source": "model",
+                  "nested_key": "method_specific.tree_ensemble.bootstrap",
                   "selector": { "mode": "value" }
                 }
               ]
@@ -621,7 +1077,7 @@
             },
             "config": {
               "title": "SVC Details",
-              "text_template": "Support Vector Classifier\n--------------------------\nKernel:              {kernel}\nC:                   {svc_c}\nGamma:               {svc_gamma}\nSupport Vectors:     {n_sv}\nSVs per Class:       {n_sv_per_class}",
+              "text_template": "Support Vector Classifier\n--------------------------\nKernel:              {kernel}\nC:                   {svc_c}\nGamma:               {svc_gamma}\nDegree:              {svc_degree}\nCoef0:               {svc_coef0}\nClass Weight:        {svc_class_weight}\nDecision Shape:      {svc_decision_shape}\nSupport Vectors:     {n_sv}\nSVs per Class:       {n_sv_per_class}",
               "bindings": [
                 {
                   "name": "kernel",
@@ -641,6 +1097,31 @@
                   "data_source": "model",
                   "nested_key": "method_specific.svc.gamma",
                   "value_format": ".4g",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "svc_degree",
+                  "data_source": "model",
+                  "nested_key": "method_specific.svc.degree",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "svc_coef0",
+                  "data_source": "model",
+                  "nested_key": "method_specific.svc.coef0",
+                  "value_format": ".4g",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "svc_class_weight",
+                  "data_source": "model",
+                  "nested_key": "method_specific.svc.class_weight",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "svc_decision_shape",
+                  "data_source": "model",
+                  "nested_key": "method_specific.svc.decision_function_shape",
                   "selector": { "mode": "value" }
                 },
                 {
@@ -668,12 +1149,18 @@
             },
             "config": {
               "title": "KNN Details",
-              "text_template": "K-Nearest Neighbors\n--------------------\nNeighbors (k):     {k}\nDistance Metric:   {distance}\nMinkowski p:       {mink_p}",
+              "text_template": "K-Nearest Neighbors\n--------------------\nNeighbors (k):     {k}\nWeights:           {weights}\nDistance Metric:   {distance}\nMinkowski p:       {mink_p}",
               "bindings": [
                 {
                   "name": "k",
                   "data_source": "model",
                   "nested_key": "method_specific.knn.n_neighbors",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "weights",
+                  "data_source": "model",
+                  "nested_key": "method_specific.knn.weights",
                   "selector": { "mode": "value" }
                 },
                 {
@@ -702,12 +1189,24 @@
             },
             "config": {
               "title": "LDA Details",
-              "text_template": "Linear Discriminant Analysis\n-----------------------------\nDiscriminants:     {n_disc}\n\nSee the 'LDA Discriminants' page\nfor explained variance per discriminant.",
+              "text_template": "Linear Discriminant Analysis\n-----------------------------\nDiscriminants:     {n_disc}\nSolver:            {solver}\nShrinkage:         {shrinkage}\n\nSee the 'LDA Discriminants' page\nfor explained variance per discriminant.",
               "bindings": [
                 {
                   "name": "n_disc",
                   "data_source": "model",
                   "nested_key": "method_specific.lda.n_discriminants",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "solver",
+                  "data_source": "model",
+                  "nested_key": "method_specific.lda.solver",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "shrinkage",
+                  "data_source": "model",
+                  "nested_key": "method_specific.lda.shrinkage",
                   "selector": { "mode": "value" }
                 }
               ]
@@ -723,7 +1222,7 @@
             },
             "config": {
               "title": "QDA Details",
-              "text_template": "Quadratic Discriminant Analysis\n--------------------------------\nClasses:         {n_classes}\nClass Priors:    {priors}",
+              "text_template": "Quadratic Discriminant Analysis\n--------------------------------\nClasses:         {n_classes}\nClass Priors:    {priors}\nReg Param:       {reg_param}",
               "bindings": [
                 {
                   "name": "n_classes",
@@ -735,6 +1234,13 @@
                   "name": "priors",
                   "data_source": "model",
                   "nested_key": "method_specific.qda.class_priors",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "reg_param",
+                  "data_source": "model",
+                  "nested_key": "method_specific.qda.reg_param",
+                  "value_format": ".4g",
                   "selector": { "mode": "value" }
                 }
               ]
@@ -750,12 +1256,18 @@
             },
             "config": {
               "title": "PLS-DA Details",
-              "text_template": "PLS Discriminant Analysis\n--------------------------\nLatent Variables:       {n_comp}\nX Variance (per LV):    {comp_var}",
+              "text_template": "PLS Discriminant Analysis\n--------------------------\nLatent Variables:       {n_comp}\nScale X:                {scale_x}\nX Variance (per LV):    {comp_var}",
               "bindings": [
                 {
                   "name": "n_comp",
                   "data_source": "model",
                   "nested_key": "method_specific.pls_da.n_components",
+                  "selector": { "mode": "value" }
+                },
+                {
+                  "name": "scale_x",
+                  "data_source": "model",
+                  "nested_key": "method_specific.pls_da.scale",
                   "selector": { "mode": "value" }
                 },
                 {
