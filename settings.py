@@ -17,7 +17,7 @@ class SettingsManager:
         "graph_font_scale": 1.0,
         "display_splashscreen": True,
         "import_loading_mode": "eager",
-        "categories_start_collapsed": False
+        "categories_start_collapsed": True
     }
     
     def __init__(self, settings_dir: Optional[Path] = None):

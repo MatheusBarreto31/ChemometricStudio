@@ -202,7 +202,7 @@ Pinned in `requirements.txt`:
 - ddsimca==1.0.3
 - prcv==1.2.1
 - sv-ttk==2.6.1
-- Pillow
+- Pillow==12.3.0
 
 ## User Manual
 
