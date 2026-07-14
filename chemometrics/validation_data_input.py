@@ -39,10 +39,10 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
         cal_s_mask: Optional calibration sample mask routed from load_data (optional)
         validation_mode: "Create Validation Set" or "Load External Validation Set"
         createVal: (deprecated) If True, create validation from calibration; if False, load validation separately
-        creationMethod: Method for creating validation ('random', 'stratified_random', 'kennard_stone', 'file')
+        creationMethod: Method for creating validation ('random', 'stratified_random', 'kennard_stone', 'stratified_kennard_stone', 'file')
         calProportion: Proportion of samples for calibration (0-1)
         random_seed: Seed for reproducible random selection (for 'random'/'stratified_random' methods)
-        stratify_layer: 1-based column index of class data used for stratification (for 'stratified_random'; defaults to 1)
+        stratify_layer: 1-based column index of class data used for stratification (for 'stratified_random'/'stratified_kennard_stone'; defaults to 1)
         selection_file: Path to file with 1s/2s for cal/val selection (for 'file' method)
         X_val_path, Y_val_path, val_labels_path: Paths to external validation files
         d_specs, data_path, etc.: Parameters for load_data if loading external validation
@@ -141,6 +141,15 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
             cal_indices, _ = next(sss.split(X_cal, y_strat))
         elif creationMethod == 'kennard_stone':
             cal_indices = _kennard_stone_selection(X_cal, n_cal)
+        elif creationMethod == 'stratified_kennard_stone':
+            if class_data_cal is None:
+                raise ValueError("stratified_kennard_stone requires class_data_cal to be provided")
+            cal_indices = _stratified_kennard_stone_selection(
+                X_cal=X_cal,
+                class_data=class_data_cal,
+                n_select=n_cal,
+                stratify_layer=stratify_layer,
+            )
         elif creationMethod == 'file':
             if selection_file is None:
                 raise ValueError("selection_file required for 'file' creationMethod")
@@ -229,6 +238,61 @@ def _kennard_stone_selection(X: np.ndarray, n_select: int) -> np.ndarray:
         remaining.remove(next_idx)
 
     return np.array(selected)
+
+
+def _stratified_kennard_stone_selection(
+    X_cal: np.ndarray,
+    class_data: List[Any],
+    n_select: int,
+    stratify_layer: Optional[int] = None,
+) -> np.ndarray:
+    """Select samples using class-wise Kennard-Stone while preserving class proportions."""
+    if n_select <= 0:
+        return np.array([], dtype=int)
+
+    n_samples = X_cal.shape[0]
+    if n_select >= n_samples:
+        return np.arange(n_samples, dtype=int)
+
+    arr = np.asarray(class_data, dtype=object)
+    layer_idx = max(0, int(stratify_layer or 1) - 1)
+    if arr.ndim >= 2:
+        if layer_idx >= arr.shape[1]:
+            layer_idx = arr.shape[1] - 1
+        y_strat = arr[:, layer_idx].reshape(-1)
+    else:
+        y_strat = arr.reshape(-1)
+
+    classes, inverse, counts = np.unique(y_strat, return_inverse=True, return_counts=True)
+
+    # Allocate per-class quotas proportional to class frequencies.
+    raw_targets = counts.astype(float) * (float(n_select) / float(n_samples))
+    class_targets = np.floor(raw_targets).astype(int)
+    remainder = int(n_select - np.sum(class_targets))
+
+    if remainder > 0:
+        fractional = raw_targets - class_targets
+        order = np.argsort(-fractional)
+        for idx in order:
+            if remainder <= 0:
+                break
+            if class_targets[idx] < counts[idx]:
+                class_targets[idx] += 1
+                remainder -= 1
+
+    selected_global: List[int] = []
+    for class_idx, _ in enumerate(classes):
+        target = int(class_targets[class_idx])
+        if target <= 0:
+            continue
+        class_member_indices = np.where(inverse == class_idx)[0]
+        if target >= class_member_indices.size:
+            selected_global.extend(class_member_indices.tolist())
+            continue
+        local_selected = _kennard_stone_selection(X_cal[class_member_indices], target)
+        selected_global.extend(class_member_indices[local_selected].tolist())
+
+    return np.array(selected_global, dtype=int)
 
 
 def _load_selection_from_file(filepath: str, n_samples: int) -> np.ndarray:

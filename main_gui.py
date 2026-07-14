@@ -2001,10 +2001,20 @@ class ChemometricsGUI:
                 model_labels = []
 
         ref_label = str(model_payload.get('reference_class', '')).strip()
+        model_type_label = str(model_payload.get('model_type', '')).strip().lower()
+
+        one_class_model_types = {
+            'simca',
+            'dd_simca',
+            'one_class_svm',
+            'isolation_forest',
+            'elliptic_envelope',
+            'lof',
+        }
 
         is_one_class_payload = bool(
             ref_label
-            and str(model_payload.get('calibration_scope', '')).strip() != ''
+            and model_type_label in one_class_model_types
         )
 
         if is_one_class_payload:
@@ -4866,6 +4876,41 @@ class ChemometricsGUI:
         if removed_any:
             self._apply_methodology_row_highlights()
 
+    def _clear_methodology_highlight_source_until(self, source: str, stop_idx: Optional[int] = None) -> None:
+        """Clear a highlight source up to an optional methodology index (inclusive)."""
+        source_key = str(source or "")
+        if not source_key:
+            return
+
+        if not self.methodology_list:
+            return
+
+        if stop_idx is None:
+            max_idx = len(self.methodology_list) - 1
+        else:
+            try:
+                max_idx = int(stop_idx)
+            except (TypeError, ValueError):
+                return
+            if max_idx < 0:
+                return
+            max_idx = min(max_idx, len(self.methodology_list) - 1)
+
+        removed_any = False
+        for idx in range(0, max_idx + 1):
+            instance_alias = self.methodology_list[idx]
+            source_map = self.methodology_row_highlights.get(instance_alias, {})
+            if source_key in source_map:
+                source_map.pop(source_key, None)
+                removed_any = True
+                if source_map:
+                    self.methodology_row_highlights[instance_alias] = source_map
+                else:
+                    self.methodology_row_highlights.pop(instance_alias, None)
+
+        if removed_any:
+            self._apply_methodology_row_highlights()
+
     def _highlight_methodology_from_execution_report(self, execution_report: Optional[Dict[str, Any]]) -> None:
         if not isinstance(execution_report, dict):
             return
@@ -6862,7 +6907,16 @@ class ChemometricsGUI:
         self._sync_upstream_linked_inputs(instance_alias)
         
         func_config = self.function_configs[instance_alias]
-        locked_params = self._get_swept_param_locks_for_index(self.selected_function_idx)
+        swept_locked_params = self._get_swept_param_locks_for_index(self.selected_function_idx)
+        ensemble_locked_params = self._get_ensemble_param_locks_for_index(self.selected_function_idx)
+        locked_params = set(swept_locked_params) | set(ensemble_locked_params)
+
+        def _get_lock_reason_text(param_name: str) -> str:
+            if param_name in swept_locked_params:
+                return "Swept by loop"
+            if param_name in ensemble_locked_params:
+                return "Controlled by Ensemble Start"
+            return "Locked"
         
         # Store widgets for visibility control
         visible_widgets = {}
@@ -6970,7 +7024,7 @@ class ChemometricsGUI:
 
                 if name in locked_params:
                     entry.configure(state="disabled")
-                    lock_label = ttk.Label(input_container, text="Swept by loop", font=("Arial", 8, "italic"))
+                    lock_label = ttk.Label(input_container, text=_get_lock_reason_text(name), font=("Arial", 8, "italic"))
                     lock_label.pack(anchor=tk.W, padx=20, pady=(0, 2))
                 
                 widget_data["widget"] = entry
@@ -7058,7 +7112,7 @@ class ChemometricsGUI:
 
                 if name in locked_params:
                     combo.configure(state="disabled")
-                    lock_label = ttk.Label(input_container, text="Swept by loop", font=("Arial", 8, "italic"))
+                    lock_label = ttk.Label(input_container, text=_get_lock_reason_text(name), font=("Arial", 8, "italic"))
                     lock_label.pack(anchor=tk.W, padx=20, pady=(0, 2))
                 
                 widget_data["widget"] = combo
@@ -7078,7 +7132,7 @@ class ChemometricsGUI:
 
                 if name in locked_params:
                     check.configure(state="disabled")
-                    lock_label = ttk.Label(input_container, text="Swept by loop", font=("Arial", 8, "italic"))
+                    lock_label = ttk.Label(input_container, text=_get_lock_reason_text(name), font=("Arial", 8, "italic"))
                     lock_label.pack(anchor=tk.W, padx=20, pady=(0, 2))
                 
                 widget_data["widget"] = check
@@ -7119,7 +7173,7 @@ class ChemometricsGUI:
                 if name in locked_params:
                     for _var, _actual, chk_widget in check_vars:
                         chk_widget.configure(state="disabled")
-                    lock_label = ttk.Label(input_container, text="Swept by loop", font=("Arial", 8, "italic"))
+                    lock_label = ttk.Label(input_container, text=_get_lock_reason_text(name), font=("Arial", 8, "italic"))
                     lock_label.pack(anchor=tk.W, padx=20, pady=(0, 2))
 
                 # Avoid clearing persisted checklist values when dynamic options are not yet available.
@@ -7581,6 +7635,53 @@ class ChemometricsGUI:
             target_alias, target_param = sweep_target.split('.', 1)
             if target_alias == target_instance and target_param:
                 locked.add(target_param)
+
+        return locked
+
+    def _get_ensemble_param_locks_for_index(self, target_idx: Optional[int]) -> set:
+        """Return parameter names controlled by enclosing ensemble settings for given function index."""
+        locked = set()
+        if target_idx is None or target_idx < 0 or target_idx >= len(self.methodology_list):
+            return locked
+
+        target_base_alias = self.function_base_aliases[target_idx]
+        if target_base_alias != "classification_one_class":
+            return locked
+
+        ensemble_stack: List[int] = []
+        for idx in range(target_idx + 1):
+            base_alias = self.function_base_aliases[idx]
+            if base_alias == "workflow_ensemble_start":
+                ensemble_stack.append(idx)
+            elif base_alias == "workflow_ensemble_end" and ensemble_stack:
+                ensemble_stack.pop()
+
+        # Inner-most enclosing ensemble takes precedence.
+        for ensemble_idx in reversed(ensemble_stack):
+            ensemble_instance = self.methodology_list[ensemble_idx]
+            ensemble_cfg = self.function_configs.get(ensemble_instance, {})
+            ensemble_task_type = str(ensemble_cfg.get("ensemble_task_type", "regression") or "regression").strip().lower()
+            if ensemble_task_type != "classification":
+                continue
+
+            ref_class = ensemble_cfg.get("one_class_reference_class", "")
+            if ref_class is None or str(ref_class).strip() == "":
+                ref_lock = False
+            else:
+                ref_lock = True
+
+            unknown_label = ensemble_cfg.get("one_class_unknown_label", "")
+            if unknown_label is None or str(unknown_label).strip() == "":
+                unknown_lock = False
+            else:
+                unknown_lock = True
+
+            if ref_lock:
+                locked.add("one_class_reference_class")
+            if unknown_lock:
+                locked.add("one_class_unknown_label")
+            if ref_lock or unknown_lock:
+                break
 
         return locked
 
@@ -17070,6 +17171,9 @@ Count:
             
             stop_at_idx = self.methodology_list.index(instance_alias)
 
+            # Reset stale execution-report highlights only for the run scope.
+            self._clear_methodology_highlight_source_until("execution_report", stop_idx=stop_at_idx)
+
             self._begin_execution_progress(
                 total_steps=stop_at_idx + 2,
                 mode_label=self.language_manager.translate("ui.buttons.run_to_here", "Run to here")
@@ -19647,6 +19751,9 @@ Count:
         
         # Clear any cached execution results and graphs to ensure fresh data
         self._clear_execution_cache()
+
+        # Reset stale execution-report highlights for the full methodology run.
+        self._clear_methodology_highlight_source_until("execution_report")
         
         if not self._generate_model_json():
             return

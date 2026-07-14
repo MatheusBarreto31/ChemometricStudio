@@ -796,6 +796,34 @@ def analyst_main(
                 continue
         return parsed
 
+    def _prepare_ensemble_weights(
+        parsed_weights: List[float],
+        member_count: int,
+        require_weighted: bool,
+    ) -> np.ndarray:
+        """Build and validate member weights used by weighted ensemble methods."""
+        if member_count <= 0:
+            return np.asarray([], dtype=float)
+
+        if not require_weighted:
+            return np.ones(member_count, dtype=float)
+
+        if not parsed_weights:
+            return np.ones(member_count, dtype=float)
+
+        weights = np.asarray(parsed_weights, dtype=float)
+        if weights.shape[0] != member_count:
+            raise ValueError(
+                f"Weighted ensemble expects {member_count} weight(s), received {weights.shape[0]}"
+            )
+        if not np.all(np.isfinite(weights)):
+            raise ValueError("Ensemble weights must be finite numeric values")
+        if np.any(weights < 0):
+            raise ValueError("Ensemble weights must be non-negative")
+        if np.allclose(np.sum(weights), 0.0):
+            raise ValueError("Ensemble weights cannot all be zero")
+        return weights
+
     def _resolve_control_params(
         instance_alias: str,
         base_params: Dict[str, Any],
@@ -1020,9 +1048,11 @@ def analyst_main(
             if method not in ("majority_vote", "weighted_vote"):
                 method = "majority_vote"
 
-            weights = np.asarray(parsed_weights, dtype=float) if parsed_weights else np.ones(len(member_labels), dtype=float)
-            if weights.shape[0] != len(member_labels) or np.allclose(np.sum(weights), 0.0):
-                weights = np.ones(len(member_labels), dtype=float)
+            weights = _prepare_ensemble_weights(
+                parsed_weights=parsed_weights,
+                member_count=len(member_labels),
+                require_weighted=(method == "weighted_vote"),
+            )
 
             # Soft voting: average (optionally weighted) probability matrices and take argmax.
             # Falls back to hard voting if probability arrays are unavailable.
@@ -1055,9 +1085,11 @@ def analyst_main(
             return np.median(stacked, axis=0)
 
         if method == "weighted_mean":
-            weights = np.asarray(parsed_weights, dtype=float) if parsed_weights else np.ones(stacked.shape[0], dtype=float)
-            if weights.shape[0] != stacked.shape[0] or np.allclose(np.sum(weights), 0.0):
-                weights = np.ones(stacked.shape[0], dtype=float)
+            weights = _prepare_ensemble_weights(
+                parsed_weights=parsed_weights,
+                member_count=stacked.shape[0],
+                require_weighted=True,
+            )
             return np.tensordot(weights, stacked, axes=(0, 0)) / np.sum(weights)
 
         return np.mean(stacked, axis=0)
@@ -1082,7 +1114,9 @@ def analyst_main(
                 range_start=range_start,
                 range_end=range_end,
             )
-            if not found_prediction:
+            # Treat explicit None payloads as unavailable predictions (for example,
+            # class_cv_pred when CV is disabled on the member function).
+            if not found_prediction or prediction_value is None:
                 return None, None, None
 
             uses_validation_ids = "_val" in prediction_key
@@ -1211,6 +1245,65 @@ def analyst_main(
         ref_ids = np.asarray(reference_sample_ids) if reference_sample_ids is not None else None
         return aligned_arrays, common_class_labels, ref_ids
 
+    def _find_members_missing_probability_outputs(
+        prob_key: str,
+        member_output_snapshots: List[Dict[str, Dict[str, Any]]],
+        member_ranges: List[Tuple[int, int]],
+    ) -> List[int]:
+        missing_members: List[int] = []
+        for member_position, snapshot in enumerate(member_output_snapshots, start=1):
+            range_start, range_end = member_ranges[member_position - 1]
+            proba_value, found_proba, _ = _find_latest_output_value(
+                output_key=prob_key,
+                nested_key='',
+                current_outputs=snapshot,
+                range_start=range_start,
+                range_end=range_end,
+            )
+            labels_value, found_labels, _ = _find_latest_output_value(
+                output_key='model',
+                nested_key='class_labels',
+                current_outputs=snapshot,
+                range_start=range_start,
+                range_end=range_end,
+            )
+            if (not found_proba) or (proba_value is None) or (not found_labels) or (labels_value is None):
+                missing_members.append(member_position)
+        return missing_members
+
+    def _aggregate_member_probabilities(
+        aggregation_method: str,
+        prob_arrays: List[np.ndarray],
+        common_class_labels: List[str],
+        parsed_weights: List[float],
+    ) -> Tuple[np.ndarray, np.ndarray, int, List[str]]:
+        """Aggregate class-probability matrices and return probabilities + labels + tie count."""
+        if not prob_arrays:
+            raise ValueError("No member probability arrays available for aggregation")
+
+        method = str(aggregation_method or "majority_vote").lower()
+        if method not in ("majority_vote", "weighted_vote"):
+            method = "majority_vote"
+
+        sample_count = int(prob_arrays[0].shape[0])
+        n_common = len(common_class_labels)
+        weights = _prepare_ensemble_weights(
+            parsed_weights=parsed_weights,
+            member_count=len(prob_arrays),
+            require_weighted=(method == "weighted_vote"),
+        )
+
+        accumulated = np.zeros((sample_count, n_common), dtype=float)
+        for member_idx, proba in enumerate(prob_arrays):
+            w = float(weights[member_idx]) if method == "weighted_vote" else 1.0
+            accumulated += w * np.asarray(proba, dtype=float)
+
+        best_indices = np.argmax(accumulated, axis=1)
+        labels = np.asarray([common_class_labels[i] for i in best_indices], dtype=object)
+        max_vals = np.max(accumulated, axis=1, keepdims=True)
+        tie_count = int(np.sum(np.sum(np.isclose(accumulated, max_vals), axis=1) > 1))
+        return accumulated, labels, tie_count, list(common_class_labels)
+
     def _execute_regular_function(entry: Dict[str, Any], current_outputs: Dict[str, Dict[str, Any]]):
         nonlocal executed_steps
 
@@ -1257,6 +1350,16 @@ def analyst_main(
                         nested_suffix = f".{src_nested_key}" if src_nested_key else ""
                         print(f"  Routed {src_alias}.{src_param}{nested_suffix} -> {dst_param}")
                         break
+
+        # Enforce ensemble-level one-class reference class for one-class member functions.
+        if base_alias == "classification_one_class" and ensemble_stack_context:
+            active_ensemble_context = ensemble_stack_context[-1]
+            ensemble_ref_class = active_ensemble_context.get('one_class_reference_class')
+            ensemble_unknown_label = active_ensemble_context.get('one_class_unknown_label')
+            if ensemble_ref_class is not None and str(ensemble_ref_class).strip() != "":
+                params['one_class_reference_class'] = ensemble_ref_class
+            if ensemble_unknown_label is not None and str(ensemble_unknown_label).strip() != "":
+                params['one_class_unknown_label'] = ensemble_unknown_label
 
         params = _fill_missing_required_params(base_alias, params)
         params = _inject_translation_keys(base_alias, params)
@@ -1569,6 +1672,9 @@ def analyst_main(
                 provided_smp_val = ensemble_params.get('smp_val', None)
                 provided_x_cal = ensemble_params.get('X_cal', None)
                 provided_x_val = ensemble_params.get('X_val', None)
+                provided_cv_config = ensemble_params.get('cv_config', None)
+                ensemble_one_class_reference_class = ensemble_params.get('one_class_reference_class', None)
+                ensemble_one_class_unknown_label = ensemble_params.get('one_class_unknown_label', None)
                 parsed_weights = _parse_weights(ensemble_params.get('weights', ''))
                 stacking_use_passthrough = bool(ensemble_params.get('stacking_use_passthrough', False))
                 try:
@@ -1696,7 +1802,10 @@ def analyst_main(
                 current_ensemble_id = ensemble_counter
                 ensemble_stack_context.append({
                     'ensemble_id': current_ensemble_id,
-                    'member': 0
+                    'member': 0,
+                    'ensemble_instance_alias': ensemble_instance_alias,
+                    'one_class_reference_class': ensemble_one_class_reference_class,
+                    'one_class_unknown_label': ensemble_one_class_unknown_label,
                 })
 
                 print(f"\nExecuting ensemble block ({len(member_ranges)} member(s), task={ensemble_task_type}, method={aggregation_method})")
@@ -1705,6 +1814,91 @@ def analyst_main(
                     member_outputs = copy.deepcopy(baseline_outputs)
                     _execute_range(range_start, range_end, member_outputs)
                     member_output_snapshots.append(member_outputs)
+
+                # Enforce homogeneous classification family across ensemble members.
+                # Mixed one-class + n-class ensembles are blocked for now.
+                one_class_ensemble_active = False
+                one_class_resolved_ref_label: Optional[str] = None
+                one_class_resolved_unknown_label: Optional[str] = None
+                if ensemble_task_type == 'classification':
+                    _one_class_model_types = {
+                        'simca',
+                        'dd_simca',
+                        'one_class_svm',
+                        'isolation_forest',
+                        'elliptic_envelope',
+                        'lof',
+                    }
+                    _member_family_records: List[Dict[str, Any]] = []
+
+                    for _member_position, ((_range_start, _range_end), _snapshot) in enumerate(
+                        zip(member_ranges, member_output_snapshots), start=1
+                    ):
+                        _family_candidates: set = set()
+                        for _list_idx in range(_range_start, _range_end + 1):
+                            _member_base_alias = functions_list[_list_idx]['base_alias']
+                            if _member_base_alias == 'classification_one_class':
+                                _family_candidates.add('one_class')
+                            elif _member_base_alias == 'classification_n_class':
+                                _family_candidates.add('n_class')
+
+                        if len(_family_candidates) > 1:
+                            _err_text = 'ensemble_mixed_classification_families_not_supported'
+                            _append_execution_report_entry(
+                                instance_alias=ensemble_instance_alias,
+                                base_alias=base_alias,
+                                level='error',
+                                code='ensemble_mixed_classification_families_not_supported',
+                                text=_err_text,
+                                source='workflow_control',
+                                details={
+                                    'member_position': _member_position,
+                                    'member_families': sorted(list(_family_candidates)),
+                                },
+                            )
+                            raise ValueError(_err_text)
+
+                        _member_family: Optional[str] = next(iter(_family_candidates), None)
+                        if _member_family is None:
+                            _model_type_value, _found_model_type, _ = _find_latest_output_value(
+                                output_key='model',
+                                nested_key='model_type',
+                                current_outputs=_snapshot,
+                                range_start=_range_start,
+                                range_end=_range_end,
+                            )
+                            if _found_model_type and _model_type_value is not None:
+                                _model_type_text = str(_model_type_value).strip().lower()
+                                _member_family = (
+                                    'one_class'
+                                    if _model_type_text in _one_class_model_types
+                                    else 'n_class'
+                                )
+
+                        if _member_family is not None:
+                            _member_family_records.append(
+                                {
+                                    'member_position': _member_position,
+                                    'family': _member_family,
+                                }
+                            )
+
+                    _family_set = {record.get('family') for record in _member_family_records if record.get('family')}
+                    if len(_family_set) > 1:
+                        _err_text = 'ensemble_mixed_classification_families_not_supported'
+                        _append_execution_report_entry(
+                            instance_alias=ensemble_instance_alias,
+                            base_alias=base_alias,
+                            level='error',
+                            code='ensemble_mixed_classification_families_not_supported',
+                            text=_err_text,
+                            source='workflow_control',
+                            details={
+                                'member_families': _member_family_records,
+                            },
+                        )
+                        raise ValueError(_err_text)
+                    one_class_ensemble_active = (_family_set == {'one_class'})
 
                 y_cal_true_value = None
                 y_val_true_value = None
@@ -1776,6 +1970,70 @@ def analyst_main(
                     if not _m1_smp_val_found:
                         _member1_smp_val = None
 
+                classification_cv_available = True
+                classification_cv_missing_members: List[int] = []
+                regression_cv_available = True
+                regression_cv_missing_members: List[int] = []
+                if ensemble_task_type == 'classification' and aggregation_method != 'stacking':
+                    for _chk_pos, (_chk_snap, (_chk_rstart, _chk_rend)) in enumerate(
+                        zip(member_output_snapshots, member_ranges), start=1
+                    ):
+                        _chk_cv_val, _chk_cv_found, _ = _find_latest_output_value(
+                            output_key='class_cv_pred',
+                            nested_key='',
+                            current_outputs=_chk_snap,
+                            range_start=_chk_rstart,
+                            range_end=_chk_rend,
+                        )
+                        if (not _chk_cv_found) or (_chk_cv_val is None):
+                            classification_cv_available = False
+                            classification_cv_missing_members.append(_chk_pos)
+
+                    if not classification_cv_available:
+                        _warn_txt = "ensemble_classification_cv_predictions_missing"
+                        _append_execution_report_entry(
+                            instance_alias=ensemble_instance_alias,
+                            base_alias=base_alias,
+                            level='warning',
+                            code='ensemble_classification_cv_predictions_missing',
+                            text=_warn_txt,
+                            source='workflow_control',
+                            details={
+                                'missing_members': classification_cv_missing_members,
+                                'prediction_key': 'class_cv_pred',
+                            },
+                        )
+
+                if ensemble_task_type != 'classification' and aggregation_method != 'stacking':
+                    for _chk_pos, (_chk_snap, (_chk_rstart, _chk_rend)) in enumerate(
+                        zip(member_output_snapshots, member_ranges), start=1
+                    ):
+                        _chk_cv_val, _chk_cv_found, _ = _find_latest_output_value(
+                            output_key='y_cv_pred',
+                            nested_key='',
+                            current_outputs=_chk_snap,
+                            range_start=_chk_rstart,
+                            range_end=_chk_rend,
+                        )
+                        if (not _chk_cv_found) or (_chk_cv_val is None):
+                            regression_cv_available = False
+                            regression_cv_missing_members.append(_chk_pos)
+
+                    if not regression_cv_available:
+                        _warn_txt = "ensemble_regression_cv_predictions_missing"
+                        _append_execution_report_entry(
+                            instance_alias=ensemble_instance_alias,
+                            base_alias=base_alias,
+                            level='warning',
+                            code='ensemble_regression_cv_predictions_missing',
+                            text=_warn_txt,
+                            source='workflow_control',
+                            details={
+                                'missing_members': regression_cv_missing_members,
+                                'prediction_key': 'y_cv_pred',
+                            },
+                        )
+
                 if aggregation_method == 'stacking':
                     prediction_keys = (
                         ['class_cal_pred', 'class_val_pred']
@@ -1784,9 +2042,17 @@ def analyst_main(
                     )
                 else:
                     prediction_keys = (
-                        ['class_cal_pred', 'class_val_pred', 'class_cv_pred']
+                        (
+                            ['class_cal_pred', 'class_val_pred', 'class_cv_pred']
+                            if classification_cv_available
+                            else ['class_cal_pred', 'class_val_pred']
+                        )
                         if ensemble_task_type == 'classification'
-                        else ['y_cal_pred', 'y_val_pred', 'y_cv_pred']
+                        else (
+                            ['y_cal_pred', 'y_val_pred', 'y_cv_pred']
+                            if regression_cv_available
+                            else ['y_cal_pred', 'y_val_pred']
+                        )
                     )
 
                 if ensemble_task_type == 'classification' and class_cal_true_value is None:
@@ -1801,6 +2067,12 @@ def analyst_main(
                     )
 
                 aggregated_predictions: Dict[str, Optional[np.ndarray]] = {key: None for key in prediction_keys}
+                aggregated_class_probabilities: Dict[str, Optional[np.ndarray]] = {
+                    'class_cal_prob': None,
+                    'class_cv_prob': None,
+                    'class_val_prob': None,
+                }
+                aggregated_probability_labels: Optional[List[str]] = None
                 sample_ids_for_target: Dict[str, Optional[np.ndarray]] = {
                     'smp_cal': None,
                     'smp_val': None,
@@ -1811,6 +2083,94 @@ def analyst_main(
                 # ── pre-fit stacking meta-model once before the prediction loop ──
                 _stacking_fitted_state: Optional[Dict[str, Any]] = None
                 if aggregation_method == 'stacking':
+                    try:
+                        from chemometrics.cv_pipeline import CVConfig as _EnsembleCVConfig, CVPipeline as _EnsembleCVPipeline
+                    except Exception:
+                        _EnsembleCVConfig = None  # type: ignore
+                        _EnsembleCVPipeline = None  # type: ignore
+
+                    def _coerce_ensemble_cv_config(cv_config_value: Optional[Any]) -> Optional[Any]:
+                        if cv_config_value is not None and isinstance(cv_config_value, dict) and 'cv_config' in cv_config_value:
+                            cv_config_value = cv_config_value['cv_config']
+
+                        if cv_config_value is None:
+                            return None
+
+                        if _EnsembleCVConfig is not None and isinstance(cv_config_value, _EnsembleCVConfig):
+                            return cv_config_value
+
+                        if isinstance(cv_config_value, dict) and _EnsembleCVConfig is not None:
+                            try:
+                                return _EnsembleCVConfig.from_dict(cv_config_value)
+                            except Exception:
+                                return None
+
+                        return None
+
+                    def _build_stacking_meta_splits(
+                        X_meta: np.ndarray,
+                        y_meta: np.ndarray,
+                        task_type: str,
+                        cv_cfg: Any,
+                    ) -> List[Tuple[np.ndarray, np.ndarray]]:
+                        strategy = str(getattr(cv_cfg, 'cv_strategy', '') or '').strip().lower()
+                        splits = None
+
+                        if _EnsembleCVPipeline is not None:
+                            try:
+                                pipeline = _EnsembleCVPipeline(cv_cfg)
+                                y_for_split = y_meta if (task_type == 'classification' and strategy == 'stratified_kfold') else None
+                                splits = list(pipeline.splitter.get_splits(X_meta, y_for_split))
+                            except Exception:
+                                splits = None
+
+                        if splits is None:
+                            n_splits = max(2, int(getattr(cv_cfg, 'n_splits', 5)))
+                            shuffle = bool(getattr(cv_cfg, 'shuffle', False))
+                            random_state = getattr(cv_cfg, 'random_state', None)
+                            if task_type == 'classification':
+                                from sklearn.model_selection import StratifiedKFold
+                                splitter = StratifiedKFold(
+                                    n_splits=n_splits,
+                                    shuffle=shuffle,
+                                    random_state=random_state if shuffle else None,
+                                )
+                                splits = list(splitter.split(X_meta, y_meta))
+                            else:
+                                from sklearn.model_selection import KFold
+                                splitter = KFold(
+                                    n_splits=n_splits,
+                                    shuffle=shuffle,
+                                    random_state=random_state if shuffle else None,
+                                )
+                                splits = list(splitter.split(X_meta))
+
+                        return [(np.asarray(tr), np.asarray(te)) for tr, te in splits]
+
+                    _stacking_effective_cv = _coerce_ensemble_cv_config(provided_cv_config)
+                    if _stacking_effective_cv is None:
+                        _err_txt = 'stacking_requires_cv_config'
+                        _append_execution_report_entry(
+                            instance_alias=ensemble_instance_alias,
+                            base_alias=base_alias,
+                            level='error',
+                            code='stacking_requires_cv_config',
+                            text=_err_txt,
+                            source='workflow_control',
+                        )
+                        raise ValueError(_err_txt)
+                    if not bool(getattr(_stacking_effective_cv, 'is_enabled', lambda: False)()):
+                        _err_txt = 'stacking_requires_cv_enabled'
+                        _append_execution_report_entry(
+                            instance_alias=ensemble_instance_alias,
+                            base_alias=base_alias,
+                            level='error',
+                            code='stacking_requires_cv_enabled',
+                            text=_err_txt,
+                            source='workflow_control',
+                        )
+                        raise ValueError(_err_txt)
+
                     _stk_train_key = 'class_cv_pred' if ensemble_task_type == 'classification' else 'y_cv_pred'
                     _stk_train_true = (
                         class_cal_true_value if ensemble_task_type == 'classification' else y_cal_true_value
@@ -2028,13 +2388,31 @@ def analyst_main(
                                 f"{stacking_classification_model}. Supported: logistic, random_forest, "
                                 "extra_trees, bagging, adaboost, gradient_boosting, hist_gradient_boosting"
                             )
-                        _stk_clf.fit(_stk_X_train, np.asarray(_stk_train_true).reshape(-1))
+                        from sklearn.base import clone as _sk_clone
+                        _stk_y_train = np.asarray(_stk_train_true).reshape(-1)
+                        _stk_meta_splits = _build_stacking_meta_splits(
+                            X_meta=np.asarray(_stk_X_train),
+                            y_meta=_stk_y_train,
+                            task_type='classification',
+                            cv_cfg=_stacking_effective_cv,
+                        )
+                        _stk_meta_oof_pred = np.empty(_stk_y_train.shape[0], dtype=object)
+                        for _tr_idx, _te_idx in _stk_meta_splits:
+                            _stk_fold_clf = _sk_clone(_stk_clf)
+                            _stk_fold_clf.fit(_stk_X_train[_tr_idx], _stk_y_train[_tr_idx])
+                            _stk_meta_oof_pred[_te_idx] = np.asarray(
+                                _stk_fold_clf.predict(_stk_X_train[_te_idx]),
+                                dtype=object,
+                            )
+
+                        _stk_clf.fit(_stk_X_train, _stk_y_train)
                         _stacking_fitted_state = {
                             'type': 'classification',
                             'clf': _stk_clf,
                             'encoder': _stk_encoder,
                             'src_ids_cal': _stk_src_ids_cal,
                             'X_train': _stk_X_train,
+                            'meta_oof_pred': _stk_meta_oof_pred,
                             'train_ref_ids': _stk_train_ref_ids,
                             'use_probabilities': classification_use_probabilities,
                             'common_class_labels': _stk_common_clf_labels,
@@ -2145,12 +2523,30 @@ def analyst_main(
                                 f"{stacking_regression_model}. Supported: linear, ridge, random_forest, "
                                 "extra_trees, bagging, adaboost, gradient_boosting, hist_gradient_boosting"
                             )
-                        _stk_reg.fit(_stk_X_train, np.asarray(_stk_train_true).reshape(-1).astype(float))
+                        from sklearn.base import clone as _sk_clone
+                        _stk_y_train = np.asarray(_stk_train_true).reshape(-1).astype(float)
+                        _stk_meta_splits = _build_stacking_meta_splits(
+                            X_meta=np.asarray(_stk_X_train),
+                            y_meta=_stk_y_train,
+                            task_type='regression',
+                            cv_cfg=_stacking_effective_cv,
+                        )
+                        _stk_meta_oof_pred = np.full(_stk_y_train.shape[0], np.nan, dtype=float)
+                        for _tr_idx, _te_idx in _stk_meta_splits:
+                            _stk_fold_reg = _sk_clone(_stk_reg)
+                            _stk_fold_reg.fit(_stk_X_train[_tr_idx], _stk_y_train[_tr_idx])
+                            _stk_meta_oof_pred[_te_idx] = np.asarray(
+                                _stk_fold_reg.predict(_stk_X_train[_te_idx]),
+                                dtype=float,
+                            ).reshape(-1)
+
+                        _stk_reg.fit(_stk_X_train, _stk_y_train)
                         _stacking_fitted_state = {
                             'type': 'regression',
                             'reg': _stk_reg,
                             'src_ids_cal': _stk_src_ids_cal,
                             'X_train': _stk_X_train,
+                            'meta_oof_pred': _stk_meta_oof_pred,
                             'train_ref_ids': _stk_train_ref_ids,
                         }
 
@@ -2188,7 +2584,25 @@ def analyst_main(
                             provided_smp_val=provided_smp_val,
                         )
                         _proba_arrays_for_agg, _common_labels_for_agg, _ = _prob_agg_result
-                        # If collection failed (member has no proba), fall back to hard-label voting.
+                        if _proba_arrays_for_agg is None:
+                            _missing_prob_members = _find_members_missing_probability_outputs(
+                                prob_key=_prob_agg_key,
+                                member_output_snapshots=member_output_snapshots,
+                                member_ranges=member_ranges,
+                            )
+                            _append_execution_report_entry(
+                                instance_alias=ensemble_instance_alias,
+                                base_alias=base_alias,
+                                level='warning',
+                                code='ensemble_classification_probability_fallback_to_hard_vote',
+                                text='ensemble_classification_probability_fallback_to_hard_vote',
+                                source='workflow_control',
+                                details={
+                                    'prediction_key': prediction_key,
+                                    'requested_probability_key': _prob_agg_key,
+                                    'missing_members': _missing_prob_members,
+                                },
+                            )
 
                     if aggregation_method == 'stacking':
                         if _stacking_fitted_state is None:
@@ -2279,6 +2693,18 @@ def analyst_main(
                             aggregated_predictions[prediction_key] = np.asarray(
                                 _stacking_fitted_state['clf'].predict(X_pred), dtype=object
                             )
+                            if ensemble_task_type == 'classification' and hasattr(_stacking_fitted_state['clf'], 'predict_proba'):
+                                try:
+                                    _stk_prob = np.asarray(_stacking_fitted_state['clf'].predict_proba(X_pred), dtype=float)
+                                    _stk_labels = [str(v) for v in np.asarray(_stacking_fitted_state['clf'].classes_, dtype=object).reshape(-1).tolist()]
+                                    _prob_out_key = (
+                                        'class_val_prob' if '_val' in prediction_key else 'class_cal_prob'
+                                    )
+                                    aggregated_class_probabilities[_prob_out_key] = _stk_prob
+                                    if aggregated_probability_labels is None:
+                                        aggregated_probability_labels = _stk_labels
+                                except Exception:
+                                    pass
                         else:
                             X_pred = np.hstack(
                                 [np.asarray(pred).reshape(-1, 1).astype(float) for pred in member_prediction_arrays]
@@ -2314,25 +2740,61 @@ def analyst_main(
                                 _stacking_fitted_state['reg'].predict(X_pred), dtype=float
                             )
                     else:
-                        aggregated_predictions[prediction_key] = _aggregate_member_predictions(
-                            task_type=ensemble_task_type,
-                            aggregation_method=aggregation_method,
-                            aligned_predictions=member_prediction_arrays,
-                            parsed_weights=parsed_weights,
-                            y_true=None,
-                            stacking_regression_model=stacking_regression_model,
-                            stacking_regression_alpha=stacking_regression_alpha,
-                            stacking_classification_model=stacking_classification_model,
-                            stacking_classification_c=stacking_classification_c,
-                            stacking_classification_max_iter=stacking_classification_max_iter,
-                            stacking_fit_intercept=(
-                                stacking_classification_fit_intercept
-                                if ensemble_task_type == 'classification'
-                                else stacking_regression_fit_intercept
-                            ),
-                            prob_arrays=_proba_arrays_for_agg,
-                            common_class_labels=_common_labels_for_agg,
-                        )
+                        if (
+                            ensemble_task_type == 'classification'
+                            and classification_use_probabilities
+                            and _proba_arrays_for_agg is not None
+                            and _common_labels_for_agg is not None
+                        ):
+                            _agg_prob, _agg_pred, _tie_count, _agg_labels = _aggregate_member_probabilities(
+                                aggregation_method=aggregation_method,
+                                prob_arrays=_proba_arrays_for_agg,
+                                common_class_labels=_common_labels_for_agg,
+                                parsed_weights=parsed_weights,
+                            )
+                            aggregated_predictions[prediction_key] = _agg_pred
+                            _prob_out_key = (
+                                'class_val_prob' if '_val' in prediction_key
+                                else 'class_cv_prob' if '_cv' in prediction_key
+                                else 'class_cal_prob'
+                            )
+                            aggregated_class_probabilities[_prob_out_key] = _agg_prob
+                            if aggregated_probability_labels is None:
+                                aggregated_probability_labels = _agg_labels
+                            if _tie_count > 0:
+                                _append_execution_report_entry(
+                                    instance_alias=ensemble_instance_alias,
+                                    base_alias=base_alias,
+                                    level='warning',
+                                    code='ensemble_classification_probability_ties_resolved_by_label_order',
+                                    text='ensemble_classification_probability_ties_resolved_by_label_order',
+                                    source='workflow_control',
+                                    details={
+                                        'prediction_key': prediction_key,
+                                        'tie_count': _tie_count,
+                                        'tie_break_rule': 'argmax over sorted class labels',
+                                    },
+                                )
+                        else:
+                            aggregated_predictions[prediction_key] = _aggregate_member_predictions(
+                                task_type=ensemble_task_type,
+                                aggregation_method=aggregation_method,
+                                aligned_predictions=member_prediction_arrays,
+                                parsed_weights=parsed_weights,
+                                y_true=None,
+                                stacking_regression_model=stacking_regression_model,
+                                stacking_regression_alpha=stacking_regression_alpha,
+                                stacking_classification_model=stacking_classification_model,
+                                stacking_classification_c=stacking_classification_c,
+                                stacking_classification_max_iter=stacking_classification_max_iter,
+                                stacking_fit_intercept=(
+                                    stacking_classification_fit_intercept
+                                    if ensemble_task_type == 'classification'
+                                    else stacking_regression_fit_intercept
+                                ),
+                                prob_arrays=_proba_arrays_for_agg,
+                                common_class_labels=_common_labels_for_agg,
+                            )
 
                     member_sources_by_key[prediction_key] = member_sources
 
@@ -2343,36 +2805,21 @@ def analyst_main(
                             sample_ids_for_target['smp_cal'] = np.asarray(reference_sample_ids)
 
                 # ── stacking OOF (CV) ensemble output ───────────────────────────
-                # The member functions already produced per-member OOF predictions
-                # (y_cv_pred / class_cv_pred). Those were collected into _stk_X_train
-                # and used to fit the meta-model. Applying the fitted meta-model back
-                # to that same OOF matrix gives an unbiased ensemble-level CV estimate
-                # at no extra cost — no base-model re-execution needed.
-                #
-                # y_cal_pred is left as-is from the prediction loop above: it is the
-                # meta-model applied to each member's in-sample base predictions and is
-                # used for display only (self-prediction), not for any further modelling.
+                # Build ensemble-level CV output from meta-model OOF predictions
+                # generated with the routed CV configuration.
                 if aggregation_method == 'stacking' and _stacking_fitted_state is not None:
-                    _stk_X_oof = _stacking_fitted_state.get('X_train')
-                    if _stk_X_oof is not None:
+                    _stk_meta_oof_pred = _stacking_fitted_state.get('meta_oof_pred')
+                    if _stk_meta_oof_pred is not None:
                         try:
                             _cv_out_key = (
                                 'class_cv_pred'
                                 if ensemble_task_type == 'classification'
                                 else 'y_cv_pred'
                             )
-                            if ensemble_task_type == 'classification':
-                                # _stk_X_oof is already the OHE-encoded matrix (output of
-                                # encoder.fit_transform), so feed it directly to the classifier.
-                                aggregated_predictions[_cv_out_key] = np.asarray(
-                                    _stacking_fitted_state['clf'].predict(_stk_X_oof),
-                                    dtype=object,
-                                )
-                            else:
-                                aggregated_predictions[_cv_out_key] = np.asarray(
-                                    _stacking_fitted_state['reg'].predict(_stk_X_oof),
-                                    dtype=float,
-                                )
+                            aggregated_predictions[_cv_out_key] = np.asarray(
+                                _stk_meta_oof_pred,
+                                dtype=object if ensemble_task_type == 'classification' else float,
+                            )
                         except Exception:
                             pass
 
@@ -2418,6 +2865,107 @@ def analyst_main(
                         except Exception:
                             pass
 
+                # For one-class ensembles, remap reference labels to binary
+                # {reference_class, unknown_label} before metrics/errors/confusion.
+                if ensemble_task_type == 'classification' and one_class_ensemble_active:
+                    _resolved_ref_label: Optional[str] = None
+                    _resolved_unknown_label: Optional[str] = None
+
+                    # Build ordered unique labels from ensemble truth arrays.
+                    _ordered_unique_labels: List[str] = []
+                    _seen_one_class_labels: Dict[str, int] = {}
+                    for _truth_arr in (class_cal_true_value, class_val_true_value):
+                        if _truth_arr is None:
+                            continue
+                        for _v in np.asarray(_truth_arr, dtype=object).reshape(-1).tolist():
+                            _s = str(_v)
+                            if _s not in _seen_one_class_labels:
+                                _seen_one_class_labels[_s] = 1
+                                _ordered_unique_labels.append(_s)
+
+                    def _resolve_one_class_reference_label(_ref_input: Any, _ordered_labels: List[str]) -> Optional[str]:
+                        if not _ordered_labels:
+                            return None
+
+                        if _ref_input is None or str(_ref_input).strip() == '':
+                            return _ordered_labels[0]
+
+                        _ref_text = str(_ref_input).strip()
+
+                        def _is_int_text(_text: str) -> bool:
+                            try:
+                                _parsed = float(_text)
+                            except Exception:
+                                return False
+                            return abs(_parsed - round(_parsed)) < 1e-12
+
+                        _labels_numeric = True
+                        for _lbl in _ordered_labels:
+                            try:
+                                float(str(_lbl).strip())
+                            except Exception:
+                                _labels_numeric = False
+                                break
+
+                        if _is_int_text(_ref_text):
+                            _ref_int = int(round(float(_ref_text)))
+                            if _labels_numeric:
+                                for _lbl in _ordered_labels:
+                                    try:
+                                        if abs(float(str(_lbl).strip()) - float(_ref_int)) < 1e-12:
+                                            return _lbl
+                                    except Exception:
+                                        continue
+                                return _ref_text
+
+                            _idx = _ref_int - 1
+                            if 0 <= _idx < len(_ordered_labels):
+                                return _ordered_labels[_idx]
+                            raise ValueError(
+                                f"Reference class index {_ref_int} is out of range (valid range: 1-{len(_ordered_labels)})."
+                            )
+
+                        return _ref_text
+
+                    _resolved_ref_label = _resolve_one_class_reference_label(
+                        ensemble_one_class_reference_class,
+                        _ordered_unique_labels,
+                    )
+
+                    if _resolved_ref_label is None and member_output_snapshots:
+                        _snapshot_first = member_output_snapshots[0]
+                        _range_start_first, _range_end_first = member_ranges[0]
+                        _ref_val, _ref_found, _ = _find_latest_output_value(
+                            output_key='model',
+                            nested_key='reference_class',
+                            current_outputs=_snapshot_first,
+                            range_start=_range_start_first,
+                            range_end=_range_end_first,
+                        )
+                        if _ref_found and _ref_val is not None and str(_ref_val).strip() != '':
+                            _resolved_ref_label = str(_ref_val).strip()
+
+                    if _resolved_ref_label is not None and _ordered_unique_labels and _resolved_ref_label not in _ordered_unique_labels:
+                        raise ValueError("No calibration samples found for one_class_reference_class.")
+
+                    if ensemble_one_class_unknown_label is not None and str(ensemble_one_class_unknown_label).strip() != '':
+                        _resolved_unknown_label = str(ensemble_one_class_unknown_label).strip()
+                    else:
+                        _resolved_unknown_label = 'Other'
+
+                    if _resolved_ref_label is not None:
+                        def _remap_one_class_truth(_arr: Any) -> Optional[np.ndarray]:
+                            if _arr is None:
+                                return None
+                            _a = np.asarray(_arr, dtype=object).reshape(-1)
+                            _as_str = np.asarray([str(v) for v in _a], dtype=object)
+                            return np.where(_as_str == _resolved_ref_label, _resolved_ref_label, _resolved_unknown_label).astype(object)
+
+                        class_cal_true_value = _remap_one_class_truth(class_cal_true_value)
+                        class_val_true_value = _remap_one_class_truth(class_val_true_value)
+                        one_class_resolved_ref_label = _resolved_ref_label
+                        one_class_resolved_unknown_label = _resolved_unknown_label
+
                 # Choose a concise source list for UI (prefer validation, then CV, then calibration)
                 preferred_source_keys = ['y_val_pred', 'y_cv_pred', 'y_cal_pred']
                 if ensemble_task_type == 'classification':
@@ -2445,6 +2993,9 @@ def analyst_main(
                 class_cal_pred_agg = aggregated_predictions.get('class_cal_pred')
                 class_cv_pred_agg = aggregated_predictions.get('class_cv_pred')
                 class_val_pred_agg = aggregated_predictions.get('class_val_pred')
+                class_cal_prob_agg = aggregated_class_probabilities.get('class_cal_prob')
+                class_cv_prob_agg = aggregated_class_probabilities.get('class_cv_prob')
+                class_val_prob_agg = aggregated_class_probabilities.get('class_val_prob')
 
                 # ── per-member prediction matrices (aligned, samples × members) ──
                 cal_pred_key = 'class_cal_pred' if ensemble_task_type == 'classification' else 'y_cal_pred'
@@ -2586,6 +3137,11 @@ def analyst_main(
                                 if _s not in _seen_labels:
                                     _seen_labels[_s] = 1
                     class_labels_ens = sorted(_seen_labels.keys())
+                    if one_class_ensemble_active:
+                        _one_class_ref = one_class_resolved_ref_label
+                        _one_class_unknown = one_class_resolved_unknown_label
+                        if _one_class_ref is not None and _one_class_unknown is not None:
+                            class_labels_ens = [_one_class_unknown, _one_class_ref]
                     confusion_matrices_ens = {
                         'calibration': _ens_build_confusion(class_cal_true_value, class_cal_pred_agg, class_labels_ens),
                         'cv': _ens_build_confusion(class_cal_true_value, class_cv_pred_agg, class_labels_ens),
@@ -2709,6 +3265,10 @@ def analyst_main(
                     'class_cv_pred': class_cv_pred_agg,
                     'class_cal_true': class_cal_true_value,
                     'class_val_true': class_val_true_value,
+                    'class_cal_prob': class_cal_prob_agg,
+                    'class_cv_prob': class_cv_prob_agg,
+                    'class_val_prob': class_val_prob_agg,
+                    'class_probability_labels': aggregated_probability_labels,
                     'class_data_cal': class_cal_true_value,
                     'class_data_val': class_val_true_value,
                     'class_cal_error': class_cal_error_ens,

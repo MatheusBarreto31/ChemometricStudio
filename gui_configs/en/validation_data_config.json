@@ -54,7 +54,7 @@
     "val_s_mask": ["validation_sample_mask", "test_sample_mask"]
   },
   "short_description": "Creates or loads validation/test data for model assessment",
-  "long_description": "Validation/testing data is essential for unbiased assessment of model performance. This step creates validation sets by splitting calibration data or loads external validation data.\n\nCreating Validation Sets from Calibration Data:\n\n1. Random Splitting\n   - Randomly selects samples for validation\n   - Fastest and simplest approach\n   - Suitable for large, diverse datasets\n   - May not ensure representative distribution\n\n2. Stratified Random Splitting\n   - Random selection that preserves class proportions in both sets\n   - Requires class data to be available\n   - Use the Stratification Class Layer to choose which class column to stratify on\n\n3. Kennard-Stone Algorithm\n   - Selects samples that span the data space\n   - Ensures good representation of data range\n   - Better for small or clustered datasets\n   - More computationally expensive\n\n4. File-Based Selection\n   - Uses external index file for sample selection\n   - Allows custom selection criteria\n   - Requires pre-prepared selection file\n\nCalibration Proportion:\n- Typical value: 0.7 (70% calibration, 30% validation)\n- Larger sets: can use 0.8-0.9 for better calibration\n- Smaller datasets: may use 0.6-0.7 for more validation samples\n\nLoading External Validation Sets:\n- Load completely independent validation data\n- Useful for temporal or spatial validation\n- Provides most realistic performance estimate\n- Separate X and Y files required\n- Optional sample labels file\n\nBest Practices:\n- Validation set should be independent of calibration\n- Ensure both sets cover similar data ranges\n- Document how validation sets were selected\n- Use appropriate set size for statistical reliability\n\nUsage:\n- Create internal set OR load external set\n- Both can be used simultaneously for comprehensive validation\n- Settings applied automatically during model building.",
+  "long_description": "Validation/testing data is essential for unbiased assessment of model performance. This step creates validation sets by splitting calibration data or loads external validation data.\n\nCreating Validation Sets from Calibration Data:\n\n1. Random Splitting\n   - Randomly selects samples for validation\n   - Fastest and simplest approach\n   - Suitable for large, diverse datasets\n   - May not ensure representative distribution\n\n2. Stratified Random Splitting\n   - Random selection that preserves class proportions in both sets\n   - Requires class data to be available\n   - Use the Stratification Class Layer to choose which class column to stratify on\n\n3. Kennard-Stone Algorithm\n   - Selects samples that span the data space\n   - Ensures good representation of data range\n   - Better for small or clustered datasets\n   - More computationally expensive\n\n4. Stratified Kennard-Stone\n   - Applies Kennard-Stone class by class\n   - Preserves class proportions while maximizing spread within each class\n   - Requires class data to be available\n   - Use the Stratification Class Layer to choose which class column to stratify on\n\n5. File-Based Selection\n   - Uses external index file for sample selection\n   - Allows custom selection criteria\n   - Requires pre-prepared selection file\n\nCalibration Proportion:\n- Typical value: 0.7 (70% calibration, 30% validation)\n- Larger sets: can use 0.8-0.9 for better calibration\n- Smaller datasets: may use 0.6-0.7 for more validation samples\n\nLoading External Validation Sets:\n- Load completely independent validation data\n- Useful for temporal or spatial validation\n- Provides most realistic performance estimate\n- Separate X and Y files required\n- Optional sample labels file\n\nBest Practices:\n- Validation set should be independent of calibration\n- Ensure both sets cover similar data ranges\n- Document how validation sets were selected\n- Use appropriate set size for statistical reliability\n\nUsage:\n- Create internal set OR load external set\n- Both can be used simultaneously for comprehensive validation\n- Settings applied automatically during model building.",
   "setup": {
     "categories": ["Validation Mode", "Creation Settings", "External Data Files", "Data Inputs", "Data Format"],
     "layout": [
@@ -75,8 +75,8 @@
         "label": "Creation Method",
         "category": "Creation Settings",
         "widget": "combobox",
-        "values": ["random", "stratified_random", "kennard_stone", "file"],
-        "value_aliases": ["Random Splitting", "Stratified Random Splitting", "Kennard-Stone Algorithm", "File-Based Selection"],
+        "values": ["random", "stratified_random", "kennard_stone", "stratified_kennard_stone", "file"],
+        "value_aliases": ["Random Splitting", "Stratified Random Splitting", "Kennard-Stone Algorithm", "Stratified Kennard-Stone", "File-Based Selection"],
         "default": "random",
         "required": true,
         "input_type": "user",
@@ -93,7 +93,7 @@
         "required": true,
         "input_type": "user",
         "tooltip": "Fraction of data for calibration (0.7 = 70% cal, 30% val)",
-        "visible_if": {"validation_mode": "Create", "creationMethod": ["random", "stratified_random", "kennard_stone"]}
+        "visible_if": {"validation_mode": "Create", "creationMethod": ["random", "stratified_random", "kennard_stone", "stratified_kennard_stone"]}
       },
       {
         "name": "random_seed",
@@ -116,7 +116,7 @@
         "required": false,
         "input_type": "user",
         "tooltip": "1-based column index of the class data matrix used for stratification (1 = first class layer)",
-        "visible_if": {"validation_mode": "Create", "creationMethod": "stratified_random"}
+        "visible_if": {"validation_mode": "Create", "creationMethod": ["stratified_random", "stratified_kennard_stone"]}
       },
       {
         "name": "selection_file",

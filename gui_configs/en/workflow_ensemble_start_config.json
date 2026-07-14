@@ -14,7 +14,7 @@
     "class_data_cal": "Calibration Class Labels",
     "class_data_val": "Validation Class Labels",
     "one_class_reference_class": "One-Class Reference Class",
-    "one_class_calibration_scope": "One-Class Calibration Scope",
+    "one_class_unknown_label": "One-Class Unknown Label",
     "cv_config": "CV Configuration",
     "stacking_use_passthrough": "Stacking Passthrough",
     "stacking_n_jobs": "Stacking Parallel Jobs",
@@ -41,6 +41,10 @@
     "class_cal_pred": "Ensemble Calibration Class Prediction",
     "class_val_pred": "Ensemble Validation Class Prediction",
     "class_cv_pred": "Ensemble CV Class Prediction",
+    "class_cal_prob": "Ensemble Calibration Class Probabilities",
+    "class_val_prob": "Ensemble Validation Class Probabilities",
+    "class_cv_prob": "Ensemble CV Class Probabilities",
+    "class_probability_labels": "Probability Column Labels",
     "class_cal_true": "Calibration Class Reference",
     "class_val_true": "Validation Class Reference",
     "smp_cal": "Calibration Sample IDs",
@@ -60,9 +64,18 @@
   "short_description": "Start an ensemble wrapper block.",
   "long_description": "Functions between Ensemble Start and Ensemble End are treated as independent ensemble members separated by Ensemble Member markers. Member predictions are aligned by sample IDs and then aggregated according to task type and aggregation method.",
   "execution_report_specs": {
-    "messages": {},
-    "warnings": {},
+    "messages": {
+      "ensemble_one_class_reference_class_enforced": "Ensemble Start enforced One-Class Reference Class on enclosed one-class member functions.",
+      "ensemble_one_class_unknown_label_enforced": "Ensemble Start enforced One-Class Unknown Label on enclosed one-class member functions."
+    },
+    "warnings": {
+      "ensemble_classification_cv_predictions_missing": "Some ensemble members did not produce cross-validated class predictions ('class_cv_pred'). Ensemble cross-validation aggregation was skipped. Enable CV on all member functions to include ensemble CV outputs.",
+      "ensemble_regression_cv_predictions_missing": "Some ensemble members did not produce cross-validated predictions ('y_cv_pred'). Ensemble cross-validation aggregation was skipped. Enable CV on all member functions to include ensemble CV outputs.",
+      "ensemble_classification_probability_fallback_to_hard_vote": "Classification input type is set to Probabilities, but one or more members did not provide required probability outputs/class labels. Ensemble fell back to hard class voting for the affected prediction target.",
+      "ensemble_classification_probability_ties_resolved_by_label_order": "Soft-voting probability ties were detected. Ties are resolved by argmax on sorted class labels."
+    },
     "errors": {
+      "ensemble_mixed_classification_families_not_supported": "Mixed one-class and n-class members are not supported in the same classification ensemble block. Use only one family per ensemble.",
       "stacking_requires_cv_config": "Stacking requires a routed CV Configuration on Ensemble Start.",
       "stacking_requires_cv_enabled": "Stacking requires CV Configuration with use_cv enabled on Ensemble Start."
     }
@@ -76,7 +89,7 @@
         "category": "Ensemble",
         "widget": "combobox",
         "values": ["regression", "classification"],
-        "value_aliases": ["Regression", "$X.Classification"],
+        "value_aliases": ["Regression", "Classification"],
         "default": "regression",
         "required": true,
         "input_type": "user",
@@ -134,17 +147,16 @@
         "tooltip": "Optional class label used by one-class methods as the accepted/reference class"
       },
       {
-        "name": "one_class_calibration_scope",
-        "label": "One-Class Calibration Scope",
+        "name": "one_class_unknown_label",
+        "label": "One-Class Unknown Label",
         "category": "Ensemble",
-        "widget": "combobox",
-        "values": ["auto_single_class", "filter_by_reference_class", "no_filter"],
-        "value_aliases": ["Auto (Use Single-Class Calibration)", "Filter by Reference Class", "Do Not Filter"],
-        "default": "auto_single_class",
+        "widget": "entry",
+        "type": "str",
+        "default": "Other",
         "required": false,
         "input_type": "user",
         "visible_if": {"ensemble_task_type": "classification"},
-        "tooltip": "Future one-class behavior: auto uses calibration when it already has one class; filter uses One-Class Reference Class"
+        "tooltip": "Optional unknown/outlier label enforced across one-class members to keep label space consistent"
       },
       {
         "name": "smp_cal",

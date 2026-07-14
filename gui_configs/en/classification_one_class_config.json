@@ -12,7 +12,6 @@
     "class_layer": "Class Layer",
     "one_class_method": "One-Class Method",
     "one_class_reference_class": "Reference Class",
-    "one_class_calibration_scope": "Calibration Scope",
     "one_class_unknown_label": "Unknown Label",
     "one_class_nu": "One-Class SVM Nu",
     "one_class_gamma": "One-Class SVM Gamma",
@@ -47,6 +46,8 @@
     "simca_q_val": "SIMCA Q (Validation)",
     "simca_t2_cal": "SIMCA T2 (Calibration)",
     "simca_t2_val": "SIMCA T2 (Validation)",
+    "simca_q_cv": "SIMCA Q (Cross-Validation)",
+    "simca_t2_cv": "SIMCA T2 (Cross-Validation)",
     "simca_q_limit": "SIMCA Q Limit",
     "simca_t2_limit": "SIMCA T2 Limit",
     "dd_simca_h_intercept_alpha": "DD-SIMCA Alpha H Intercept",
@@ -112,26 +113,6 @@
         "widget": "entry",
         "type": "str",
         "default": "1",
-        "required": false,
-        "input_type": "user"
-      },
-      {
-        "name": "one_class_calibration_scope",
-        "label": "Calibration Scope",
-        "category": "Model Parameters",
-        "widget": "combobox",
-        "type": "str",
-        "default": "auto_single_class",
-        "values": [
-          "auto_single_class",
-          "filter_by_reference_class",
-          "no_filter"
-        ],
-        "value_aliases": [
-          "Auto (single-class calibration)",
-          "Filter by Reference Class",
-          "No Filter"
-        ],
         "required": false,
         "input_type": "user"
       },
@@ -1081,18 +1062,38 @@
             "config": {
               "graph_type": "scatter",
               "title": "Q vs T² (Calibration)",
-              "x_axis": {
-                "data_source": "simca_q_cal",
-                "axis_type": "log10",
-                "label": "Q (Orthogonal Distance)"
-              },
-              "y_axis": {
-                "data_source": "simca_t2_cal",
-                "axis_type": "log10",
-                "label": "T² (Score Distance)"
-              },
-              "class_labels": "class_cal_true",
-              "point_labels_source": "smp_cal",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "simca_q_cal",
+                    "axis_type": "log10",
+                    "label": "Q (Orthogonal Distance)"
+                  },
+                  "y_axis": {
+                    "data_source": "simca_t2_cal",
+                    "axis_type": "log10",
+                    "label": "T² (Score Distance)"
+                  },
+                  "class_labels": "class_cal_true",
+                  "point_labels_source": "smp_cal",
+                  "label": "Calibration"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "simca_q_cv",
+                    "axis_type": "log10",
+                    "label": "Q (Orthogonal Distance)"
+                  },
+                  "y_axis": {
+                    "data_source": "simca_t2_cv",
+                    "axis_type": "log10",
+                    "label": "T² (Score Distance)"
+                  },
+                  "class_labels": "class_cal_true",
+                  "point_labels_source": "smp_cal",
+                  "label": "Cross-Validation"
+                }
+              ],
               "show_grid": true,
               "scatter_lines": [
                 {
@@ -1267,18 +1268,38 @@
             "config": {
               "graph_type": "scatter",
               "title": "Q vs H (Calibration)",
-              "x_axis": {
-                "data_source": "simca_q_cal",
-                "axis_type": "log10",
-                "label": "Q (Orthogonal Distance)"
-              },
-              "y_axis": {
-                "data_source": "simca_t2_cal",
-                "axis_type": "log10",
-                "label": "H (Score Distance)"
-              },
-              "class_labels": "class_cal_true",
-              "point_labels_source": "smp_cal",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "simca_q_cal",
+                    "axis_type": "log10",
+                    "label": "Q (Orthogonal Distance)"
+                  },
+                  "y_axis": {
+                    "data_source": "simca_t2_cal",
+                    "axis_type": "log10",
+                    "label": "H (Score Distance)"
+                  },
+                  "class_labels": "class_cal_true",
+                  "point_labels_source": "smp_cal",
+                  "label": "Calibration"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "simca_q_cv",
+                    "axis_type": "log10",
+                    "label": "Q (Orthogonal Distance)"
+                  },
+                  "y_axis": {
+                    "data_source": "simca_t2_cv",
+                    "axis_type": "log10",
+                    "label": "H (Score Distance)"
+                  },
+                  "class_labels": "class_cal_true",
+                  "point_labels_source": "smp_cal",
+                  "label": "Cross-Validation"
+                }
+              ],
               "show_grid": true,
               "scatter_lines": [
                 {

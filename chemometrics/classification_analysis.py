@@ -1122,7 +1122,6 @@ def _predict_one_class_model(
 def _resolve_one_class_fit_mask(
     labels: np.ndarray,
     one_class_reference_class: Any,
-    one_class_calibration_scope: str,
 ) -> Tuple[np.ndarray, str]:
     """Resolve the reference-class mask and name.
 
@@ -1138,7 +1137,6 @@ def _resolve_one_class_fit_mask(
     labels = np.asarray(labels, dtype=object).reshape(-1)
     # String-normalised view used for all comparisons (avoids int vs "1" mismatches).
     labels_str = np.asarray([str(v) for v in labels])
-    scope = str(one_class_calibration_scope or "auto_single_class").strip().lower()
 
     # Determine whether all label values are numeric.
     _is_numeric = all(
@@ -1181,17 +1179,6 @@ def _resolve_one_class_fit_mask(
         return ref_str
 
     unique = np.unique(labels_str)
-
-    if scope == "no_filter":
-        reference = _resolve_ref(one_class_reference_class)
-        return np.ones(labels.shape[0], dtype=bool), reference
-
-    if scope == "filter_by_reference_class":
-        reference = _resolve_ref(one_class_reference_class)
-        mask = labels_str == reference
-        if not np.any(mask):
-            raise ValueError("No calibration samples found for one_class_reference_class.")
-        return mask, reference
 
     if unique.shape[0] == 1:
         return np.ones(labels.shape[0], dtype=bool), str(unique[0])
@@ -1276,7 +1263,6 @@ def classification_one_class(
     smp_val: Optional[Any] = None,
     one_class_method: str = "simca",
     one_class_reference_class: Any = 1,
-    one_class_calibration_scope: str = "auto_single_class",
     one_class_unknown_label: str = "Other",
     one_class_nu: float = 0.05,
     one_class_gamma: float = 0.1,
@@ -1308,7 +1294,6 @@ def classification_one_class(
     fit_mask, reference_class = _resolve_one_class_fit_mask(
         labels=y_cal,
         one_class_reference_class=one_class_reference_class,
-        one_class_calibration_scope=one_class_calibration_scope,
     )
 
     X_fit = np.asarray(X_cal[fit_mask], dtype=float)
@@ -1551,7 +1536,6 @@ def classification_one_class(
     model_payload = {
         "model_type": method_norm,
         "reference_class": str(reference_class),
-        "calibration_scope": str(one_class_calibration_scope),
         "fit_sample_count": int(X_fit.shape[0]),
         "class_labels": class_labels,
         "simca": {
@@ -1708,6 +1692,8 @@ def classification_one_class(
         np.asarray(simca_q_val, dtype=float) if simca_q_val is not None else None,
         np.asarray(simca_t2_cal, dtype=float) if simca_t2_cal is not None else None,
         np.asarray(simca_t2_val, dtype=float) if simca_t2_val is not None else None,
+        np.asarray(simca_q_cv, dtype=float) if simca_q_cv is not None else None,
+        np.asarray(simca_t2_cv, dtype=float) if simca_t2_cv is not None else None,
         simca_q_limit,
         simca_t2_limit,
         simca_q_limit_active,
