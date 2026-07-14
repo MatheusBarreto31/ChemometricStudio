@@ -201,7 +201,7 @@
         "category": "Model Parameters",
         "widget": "entry",
         "type": "int",
-        "default": "500",
+        "default": "3000",
         "required": true,
         "input_type": "user",
         "tooltip": "Maximum number of iterations for the fitting algorithm."

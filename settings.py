@@ -16,7 +16,7 @@ class SettingsManager:
         "qualitative_colormap": "tab10",
         "graph_font_scale": 1.0,
         "display_splashscreen": True,
-        "import_loading_mode": "lazy",
+        "import_loading_mode": "eager",
         "categories_start_collapsed": False
     }
     
