@@ -5649,7 +5649,15 @@ class ChemometricsGUI:
         gui_listing = FUNCTION_SPECS.get("gui_listing", {})
         category_tree: Dict[str, Any] = {"children": {}, "functions": []}
 
+        hidden_library_aliases = {
+            "workflow_loop_end",
+            "workflow_parallel_end",
+            "workflow_ensemble_end",
+        }
+
         for func_alias in gui_listing.keys():
+            if func_alias in hidden_library_aliases:
+                continue
             config = self.gui_configs.get(func_alias, {})
             parsed_path = self._parse_category_path(config.get("category", "Uncategorized"))
 
@@ -5772,29 +5780,42 @@ class ChemometricsGUI:
     
     def _add_to_methodology(self, func_alias: str):
         """Add function to methodology list (with duplicate handling using function aliasing)."""
-        config = self.gui_configs.get(func_alias, {})
-        display_name = config.get("display_name", func_alias)
-        
-        # Count existing instances of this function
+        wrapper_templates = {
+            "workflow_loop_start": ["workflow_loop_start", "workflow_loop_end"],
+            "workflow_loop_end": ["workflow_loop_start", "workflow_loop_end"],
+            "workflow_parallel_start": ["workflow_parallel_start", "workflow_parallel_branch", "workflow_parallel_end"],
+            "workflow_parallel_end": ["workflow_parallel_start", "workflow_parallel_branch", "workflow_parallel_end"],
+            "workflow_ensemble_start": ["workflow_ensemble_start", "workflow_ensemble_member", "workflow_ensemble_end"],
+            "workflow_ensemble_end": ["workflow_ensemble_start", "workflow_ensemble_member", "workflow_ensemble_end"],
+        }
+
+        aliases_to_add = wrapper_templates.get(func_alias, [func_alias])
+        first_added_idx: Optional[int] = None
+
+        for alias in aliases_to_add:
+            new_func_idx = self._append_methodology_item(alias)
+            if first_added_idx is None:
+                first_added_idx = new_func_idx
+
+            # Auto-create routing for inputs that match previous outputs
+            self._auto_create_routing(new_func_idx, alias)
+
+        if first_added_idx is not None:
+            self._refresh_methodology_listbox(selected_idx=first_added_idx)
+
+    def _append_methodology_item(self, func_alias: str) -> int:
+        """Append one methodology item and return its new index."""
         existing_count = self.function_base_aliases.count(func_alias)
-        
-        # Create unique instance alias for this function
+
         if existing_count > 0:
             instance_alias = f"{func_alias}#{existing_count + 1}"
-            item_name = f"{display_name} #{existing_count + 1}"
         else:
             instance_alias = func_alias
-            item_name = display_name
-        
+
         self.methodology_list.append(instance_alias)
         self.function_base_aliases.append(func_alias)
-        self.function_configs[instance_alias] = {}  # Initialize config for this instance
-        
-        new_func_idx = len(self.methodology_list) - 1
-        self._refresh_methodology_listbox(selected_idx=new_func_idx)
-        
-        # Auto-create routing for inputs that match previous outputs
-        self._auto_create_routing(new_func_idx, func_alias)
+        self.function_configs[instance_alias] = {}
+        return len(self.methodology_list) - 1
 
     def _is_workflow_control(self, base_alias: str) -> bool:
         return base_alias in self.workflow_control_aliases
@@ -6344,37 +6365,11 @@ class ChemometricsGUI:
     def _remove_from_methodology(self):
         """Remove selected item from methodology."""
         idx = self._get_active_methodology_index()
-        if idx is not None:
-            instance_alias = self.methodology_list.pop(idx)
-            self.function_base_aliases.pop(idx)
-            self._remove_instance_persistent_state(instance_alias)
-            
-            # Remove routing lines involving this index
-            keys_to_remove = [key for key in self.routing_lines.keys() 
-                            if isinstance(key, tuple) and (key[0] == idx or key[2] == idx)]
-            for key in keys_to_remove:
-                del self.routing_lines[key]
-            
-            # Update indices in remaining routing lines
-            for key in list(self.routing_lines.keys()):
-                if isinstance(key, tuple):
-                    src_idx, src_param, dst_idx, dst_param = key
-                    # Decrement indices that are > removed idx
-                    new_src_idx = src_idx - 1 if src_idx > idx else src_idx
-                    new_dst_idx = dst_idx - 1 if dst_idx > idx else dst_idx
-                    if new_src_idx != src_idx or new_dst_idx != dst_idx:
-                        old_key = key
-                        new_key = (new_src_idx, src_param, new_dst_idx, dst_param)
-                        self.routing_lines[new_key] = self.routing_lines.pop(old_key)
-                        # Update internal indices in the routing info
-                        self.routing_lines[new_key]["src_idx"] = new_src_idx
-                        self.routing_lines[new_key]["dst_idx"] = new_dst_idx
+        if idx is None:
+            return
 
-            self._recalculate_auto_routing()
-            
-            self.selected_function_idx = None
-            self._refresh_methodology_listbox()
-            self._clear_tab()
+        start_idx, end_idx = self._get_wrapper_deletion_range(idx)
+        self._remove_methodology_range(start_idx, end_idx)
     
     def _clear_methodology(self):
         """Clear all methodology items."""
@@ -7599,6 +7594,88 @@ class ChemometricsGUI:
                 if depth == 0:
                     return idx
         return -1
+
+    def _find_matching_control_start(self, end_idx: int, start_alias: str, end_alias: str) -> int:
+        depth = 0
+        for idx in range(end_idx, -1, -1):
+            base_alias = self.function_base_aliases[idx]
+            if base_alias == end_alias:
+                depth += 1
+            elif base_alias == start_alias:
+                depth -= 1
+                if depth == 0:
+                    return idx
+        return -1
+
+    def _get_wrapper_deletion_range(self, idx: int) -> Tuple[int, int]:
+        """Return [start_idx, end_idx] to remove for control wrappers or single item."""
+        if idx < 0 or idx >= len(self.function_base_aliases):
+            return idx, idx
+
+        base_alias = self.function_base_aliases[idx]
+
+        wrapper_pairs = {
+            "workflow_loop_start": ("workflow_loop_start", "workflow_loop_end"),
+            "workflow_loop_end": ("workflow_loop_start", "workflow_loop_end"),
+            "workflow_parallel_start": ("workflow_parallel_start", "workflow_parallel_end"),
+            "workflow_parallel_end": ("workflow_parallel_start", "workflow_parallel_end"),
+            "workflow_ensemble_start": ("workflow_ensemble_start", "workflow_ensemble_end"),
+            "workflow_ensemble_end": ("workflow_ensemble_start", "workflow_ensemble_end"),
+        }
+
+        pair = wrapper_pairs.get(base_alias)
+        if pair is None:
+            return idx, idx
+
+        start_alias, end_alias = pair
+        if base_alias == start_alias:
+            start_idx = idx
+            end_idx = self._find_matching_control_end(start_idx, start_alias, end_alias)
+            if end_idx >= 0:
+                return start_idx, end_idx
+            return idx, idx
+
+        end_idx = idx
+        start_idx = self._find_matching_control_start(end_idx, start_alias, end_alias)
+        if start_idx >= 0:
+            return start_idx, end_idx
+        return idx, idx
+
+    def _remove_methodology_range(self, start_idx: int, end_idx: int):
+        """Remove an inclusive methodology range while preserving routing consistency."""
+        item_count = len(self.methodology_list)
+        if item_count == 0:
+            return
+
+        start_idx = max(0, int(start_idx))
+        end_idx = min(item_count - 1, int(end_idx))
+        if start_idx > end_idx:
+            return
+
+        removed_aliases = self.methodology_list[start_idx:end_idx + 1]
+        removed_indices = set(range(start_idx, end_idx + 1))
+
+        keep_indices = [idx for idx in range(item_count) if idx not in removed_indices]
+        old_to_new_idx = {old_idx: new_idx for new_idx, old_idx in enumerate(keep_indices)}
+
+        self.methodology_list = [self.methodology_list[idx] for idx in keep_indices]
+        self.function_base_aliases = [self.function_base_aliases[idx] for idx in keep_indices]
+
+        for instance_alias in removed_aliases:
+            self._remove_instance_persistent_state(instance_alias)
+
+        self._remap_routing_indices(old_to_new_idx)
+        self._recalculate_auto_routing()
+
+        if self.methodology_list:
+            selected_idx = min(start_idx, len(self.methodology_list) - 1)
+            self.selected_function_idx = selected_idx
+            self._refresh_methodology_listbox(selected_idx=selected_idx)
+        else:
+            self.selected_function_idx = None
+            self._refresh_methodology_listbox()
+
+        self._clear_tab()
 
     def _get_loop_body_indices(self, loop_start_idx: int) -> List[int]:
         loop_end_idx = self._find_matching_control_end(loop_start_idx, "workflow_loop_start", "workflow_loop_end")
