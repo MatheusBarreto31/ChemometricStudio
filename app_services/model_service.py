@@ -144,6 +144,7 @@ def build_model_payload(
     addon_registry: Mapping[str, Any],
     app_version: str,
     is_passforward_enabled: Callable[[str, Optional[str]], bool],
+    function_display_name_overrides: Optional[Mapping[str, str]] = None,
     analysis_data: Optional[Mapping[str, Any]] = None,
     serialize_analysis_data: Optional[Callable[[], Dict[str, Any]]] = None,
     report_data: Optional[Mapping[str, Any]] = None,
@@ -157,13 +158,14 @@ def build_model_payload(
     )
 
     functions_array: List[Dict[str, Any]] = []
+    display_name_overrides = function_display_name_overrides or {}
     for idx, instance_alias in enumerate(methodology_list):
         base_alias = function_base_aliases[idx]
         params = all_function_params.get(instance_alias, {})
         func_config = gui_configs.get(base_alias, {})
         field_index = _build_layout_field_index(func_config)
-        display_name = func_config.get("display_name", base_alias)
         passforward_enabled = is_passforward_enabled(instance_alias, base_alias)
+        display_name_override = str(display_name_overrides.get(instance_alias, "") or "").strip()
 
         processed_params: Dict[str, Any] = {}
         params_with_types: Dict[str, str] = {}
@@ -186,16 +188,17 @@ def build_model_payload(
 
             params_with_types[key] = func_types.get(key, "str")
 
-        functions_array.append(
-            {
-                "instance_alias": instance_alias,
-                "base_alias": base_alias,
-                "display_name": display_name,
-                "parameters": processed_params,
-                "parameter_types": params_with_types,
-                "passforward": {"enabled": passforward_enabled},
-            }
-        )
+        function_entry: Dict[str, Any] = {
+            "instance_alias": instance_alias,
+            "base_alias": base_alias,
+            "parameters": processed_params,
+            "parameter_types": params_with_types,
+            "passforward": {"enabled": passforward_enabled},
+        }
+        if display_name_override:
+            function_entry["display_name_override"] = display_name_override
+
+        functions_array.append(function_entry)
 
     routing_array: List[Dict[str, Any]] = []
     for key, conn_info in routing_lines.items():

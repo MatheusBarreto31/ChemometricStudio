@@ -555,6 +555,7 @@ class ChemometricsGUI:
         # Data structures
         self.methodology_list: List[str] = []  # [instance_alias, instance_alias, ...] where instance_alias handles duplicates
         self.function_base_aliases: List[str] = []  # [base_func_alias, base_func_alias, ...] stores the original function alias for each instance
+        self.function_display_name_overrides: Dict[str, str] = {}  # {instance_alias: user_display_name}
         self.function_configs: Dict[str, Dict[str, Any]] = {}  # {instance_alias: {param: value}}
         self.routing_lines: Dict[Tuple, str] = {}  # {(src_idx, src_output, dst_idx, dst_input): routing_info}
         self.selected_function_idx: Optional[int] = None  # Index in methodology_list
@@ -4513,13 +4514,7 @@ class ChemometricsGUI:
                 if stop_alias in self.methodology_list:
                     idx = self.methodology_list.index(stop_alias)
                     base_alias = self.function_base_aliases[idx] if idx < len(self.function_base_aliases) else stop_alias
-                    config = self.gui_configs.get(base_alias, {})
-                    config_display_name = config.get("display_name", base_alias)
-                    existing_count = self.methodology_list[:idx].count(base_alias)
-                    if existing_count > 0:
-                        stop_alias_display = f"{config_display_name} #{existing_count + 1}"
-                    else:
-                        stop_alias_display = config_display_name
+                    stop_alias_display = self._get_instance_display_name(stop_alias, base_alias)
                 else:
                     stop_alias_display = stop_alias
             else:
@@ -4536,17 +4531,7 @@ class ChemometricsGUI:
             for idx, function_entry in enumerate(function_timings, start=1):
                 instance_alias = function_entry.get('instance_alias', '')
                 base_alias = function_entry.get('base_alias', '')
-                
-                # Look up configured display name for this function
-                config = self.gui_configs.get(base_alias, {})
-                config_display_name = config.get("display_name", base_alias)
-                
-                # Count previous instances of this base alias for suffix
-                existing_count = self.methodology_list[:self.methodology_list.index(instance_alias)].count(base_alias) if instance_alias in self.methodology_list else 0
-                if existing_count > 0:
-                    display_name = f"{config_display_name} #{existing_count + 1}"
-                else:
-                    display_name = config_display_name
+                display_name = self._get_instance_display_name(instance_alias, base_alias)
                 
                 lines.append(f"{idx:>2}. {display_name}: {self._format_execution_seconds(function_entry.get('execution_time', 0.0))}")
         else:
@@ -4968,9 +4953,53 @@ class ChemometricsGUI:
 
         return fallback_text
 
-    def _get_instance_display_name(self, instance_alias: str, base_alias: str) -> str:
+    def _can_edit_function_display_name(self) -> bool:
+        """Whether this GUI mode allows editing function display names."""
+        return True
+
+    def _prune_function_display_name_overrides(self):
+        """Remove display-name overrides that no longer map to live instances."""
+        if not isinstance(getattr(self, "function_display_name_overrides", None), dict):
+            self.function_display_name_overrides = {}
+            return
+
+        valid_aliases = set(self.methodology_list)
+        for instance_alias in list(self.function_display_name_overrides.keys()):
+            if instance_alias not in valid_aliases:
+                self.function_display_name_overrides.pop(instance_alias, None)
+
+    def _get_instance_base_display_name(self, instance_alias: str, base_alias: str) -> str:
+        """Resolve unsuffixed display name for one methodology instance."""
+        override = str(self.function_display_name_overrides.get(instance_alias, "") or "").strip()
+        if override:
+            return override
+
         config = self.gui_configs.get(base_alias, {})
-        config_display_name = config.get("display_name", base_alias)
+        return str(config.get("display_name", base_alias) or base_alias)
+
+    def _set_instance_base_display_name(self, instance_alias: str, base_alias: str, display_name: str):
+        """Persist or clear a per-instance display-name override."""
+        if not instance_alias:
+            return
+
+        default_display_name = str(
+            self.gui_configs.get(base_alias, {}).get("display_name", base_alias) or base_alias
+        ).strip()
+        normalized = str(display_name or "").strip()
+
+        if not normalized or normalized == default_display_name:
+            self.function_display_name_overrides.pop(instance_alias, None)
+            return
+
+        self.function_display_name_overrides[instance_alias] = normalized
+
+    def _get_instance_display_name(self, instance_alias: str, base_alias: str) -> str:
+        override = str(self.function_display_name_overrides.get(instance_alias, "") or "").strip()
+        if override:
+            # User-renamed display aliases intentionally replace duplicate numbering.
+            return override
+
+        config_display_name = self._get_instance_base_display_name(instance_alias, base_alias)
         if instance_alias in self.methodology_list:
             idx = self.methodology_list.index(instance_alias)
             existing_count = self.function_base_aliases[:idx].count(base_alias)
@@ -5987,11 +6016,7 @@ class ChemometricsGUI:
     def _get_methodology_item_display(self, idx: int, depth: int) -> str:
         instance_alias = self.methodology_list[idx]
         base_alias = self.function_base_aliases[idx]
-        config = self.gui_configs.get(base_alias, {})
-        display_name = config.get("display_name", base_alias)
-        existing_count = self.function_base_aliases[:idx].count(base_alias)
-        if existing_count > 0:
-            display_name = f"{display_name} #{existing_count + 1}"
+        display_name = self._get_instance_display_name(instance_alias, base_alias)
 
         if base_alias == "workflow_loop_start":
             text = f"┌ {display_name}"
@@ -6019,6 +6044,8 @@ class ChemometricsGUI:
         """Rebuild methodology list display with workflow indentation."""
         if not hasattr(self, "methodology_listbox"):
             return
+
+        self._prune_function_display_name_overrides()
 
         self.methodology_listbox.delete(0, tk.END)
         depth = 0
@@ -6310,6 +6337,7 @@ class ChemometricsGUI:
 
         # Setup/runtime configuration for the removed instance.
         self.function_configs.pop(instance_alias, None)
+        self.function_display_name_overrides.pop(instance_alias, None)
 
         # Analysis structures and caches for the removed instance.
         if hasattr(self, 'analysis_data') and isinstance(self.analysis_data, dict):
@@ -6631,17 +6659,13 @@ class ChemometricsGUI:
             if instance_alias and instance_alias in self.methodology_list:
                 idx = self.methodology_list.index(instance_alias)
                 resolved_base_alias = self.function_base_aliases[idx] if idx < len(self.function_base_aliases) else base_alias
-                config = self.gui_configs.get(resolved_base_alias, {})
-                display_name = config.get("display_name", resolved_base_alias or instance_alias)
-
-                # Match methodology naming for duplicates
-                duplicate_count = self.function_base_aliases[:idx].count(resolved_base_alias)
-                if duplicate_count > 0:
-                    display_name = f"{display_name} #{duplicate_count + 1}"
+                display_name = self._get_instance_display_name(instance_alias, resolved_base_alias)
             else:
                 resolved_base_alias = base_alias
-                config = self.gui_configs.get(resolved_base_alias, {}) if resolved_base_alias else {}
-                display_name = config.get("display_name", resolved_base_alias or instance_alias)
+                if resolved_base_alias:
+                    display_name = self._get_instance_base_display_name(instance_alias, resolved_base_alias)
+                else:
+                    display_name = instance_alias
 
             if base_alias == "__lazy_loading__":
                 display_name = self.language_manager.translate(
@@ -6746,7 +6770,7 @@ class ChemometricsGUI:
         
         # Get config for this function (use base alias to get UI config)
         config = self.gui_configs.get(base_alias, {})
-        display_name = config.get("display_name", base_alias)
+        display_name = self._get_instance_base_display_name(instance_alias, base_alias)
         
         # Create title frame with help button
         title_frame = ttk.Frame(self.tab_content_frame)
@@ -6769,6 +6793,22 @@ class ChemometricsGUI:
                                command=lambda: self._show_help_popup(display_name, short_desc, long_desc))
             help_btn.pack(side=tk.LEFT, padx=5)
             Tooltip(help_btn, short_desc if short_desc else "Click for more information")
+
+        if self._can_edit_function_display_name():
+            edit_btn = ttk.Button(
+                title_frame,
+                text="✎",
+                width=2,
+                command=lambda a=instance_alias, b=base_alias: self._show_edit_display_name_popup(a, b),
+            )
+            edit_btn.pack(side=tk.LEFT, padx=(0, 5))
+            Tooltip(
+                edit_btn,
+                self.language_manager.translate(
+                    "tooltips.edit_function_display_name",
+                    "Edit function display name"
+                )
+            )
 
         passforward_cfg = self._get_passforward_config(base_alias)
         if passforward_cfg:
@@ -8223,6 +8263,95 @@ class ChemometricsGUI:
         # Close button
         close_btn = ttk.Button(popup, text=self.language_manager.translate("ui.buttons.close", "Close"), command=popup.destroy)
         close_btn.pack(pady=10)
+
+    def _show_edit_display_name_popup(self, instance_alias: str, base_alias: str):
+        """Show a small modal popup to edit one function display name override."""
+        if instance_alias not in self.methodology_list:
+            return
+
+        popup = tk.Toplevel(self.root)
+        popup.transient(self.root)
+        popup.grab_set()
+        popup.resizable(False, False)
+        popup.title(self.language_manager.translate("ui.dialogs.rename_function_display_name", "Rename Function"))
+        _set_window_icon(popup, "Info")
+
+        container = ttk.Frame(popup, padding=12)
+        container.pack(fill=tk.BOTH, expand=True)
+
+        label = ttk.Label(
+            container,
+            text=self.language_manager.translate("ui.labels.function_display_name", "Display name"),
+        )
+        label.pack(anchor="w", pady=(0, 6))
+
+        default_display_name = str(
+            self.gui_configs.get(base_alias, {}).get("display_name", base_alias) or base_alias
+        ).strip()
+
+        entry_var = tk.StringVar(value=self._get_instance_base_display_name(instance_alias, base_alias))
+        entry_row = ttk.Frame(container)
+        entry_row.pack(fill=tk.X)
+
+        entry = ttk.Entry(entry_row, textvariable=entry_var, width=42)
+        entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        reset_btn = ttk.Button(
+            entry_row,
+            text="↻",
+            width=2,
+            command=lambda: entry_var.set(default_display_name),
+        )
+        reset_btn.pack(side=tk.LEFT, padx=(6, 0))
+
+        button_row = ttk.Frame(container)
+        button_row.pack(pady=(12, 0))
+
+        def _confirm():
+            self._set_instance_base_display_name(instance_alias, base_alias, entry_var.get())
+            self._refresh_methodology_listbox(selected_idx=self.selected_function_idx)
+
+            if self.current_tab == "setup":
+                self._show_setup_tab()
+            elif self.current_tab == "analysis":
+                self._show_analysis_tab()
+            elif self.current_tab == "routing":
+                self._show_routing_tab()
+
+            popup.destroy()
+
+        ok_btn = ttk.Button(
+            button_row,
+            text=self.language_manager.translate("ui.buttons.ok", "OK"),
+            command=_confirm,
+            width=10,
+        )
+        ok_btn.pack(side=tk.LEFT, padx=(6, 0))
+
+        cancel_btn = ttk.Button(
+            button_row,
+            text=self.language_manager.translate("ui.buttons.cancel", "Cancel"),
+            command=popup.destroy,
+            width=10,
+        )
+        cancel_btn.pack(side=tk.LEFT)
+
+        popup.bind("<Return>", lambda _event: _confirm())
+        popup.bind("<Escape>", lambda _event: popup.destroy())
+
+        popup.update_idletasks()
+        width = popup.winfo_reqwidth()
+        height = popup.winfo_reqheight()
+        root_x = self.root.winfo_rootx()
+        root_y = self.root.winfo_rooty()
+        root_w = self.root.winfo_width()
+        root_h = self.root.winfo_height()
+        x = root_x + max(0, (root_w - width) // 2)
+        y = root_y + max(0, (root_h - height) // 2)
+        popup.geometry(f"{width}x{height}+{x}+{y}")
+
+        entry.focus_set()
+        entry.selection_range(0, tk.END)
     
     def _update_field_visibility(self, func_alias: str, visible_widgets: Dict, category_headers: Dict = None):
         """Update visibility of fields based on visible_if conditions and hide empty categories."""
@@ -9042,8 +9171,7 @@ class ChemometricsGUI:
             base_alias = self.function_base_aliases[idx]
             if self._is_workflow_control(base_alias):
                 continue
-            func_config = self.gui_configs.get(base_alias, {})
-            display_name = func_config.get("display_name", base_alias)
+            display_name = self._get_instance_base_display_name(instance_alias, base_alias)
             
             # Show index for duplicate functions
             if self.function_base_aliases.count(base_alias) > 1:
@@ -9319,10 +9447,8 @@ class ChemometricsGUI:
             dst_instance = self.methodology_list[dst_idx]
             src_base = self.function_base_aliases[src_idx]
             dst_base = self.function_base_aliases[dst_idx]
-            src_func_config = self.gui_configs.get(src_base, {})
-            dst_func_config = self.gui_configs.get(dst_base, {})
-            src_display = src_func_config.get("display_name", src_base)
-            dst_display = dst_func_config.get("display_name", dst_base)
+            src_display = self._get_instance_base_display_name(src_instance, src_base)
+            dst_display = self._get_instance_base_display_name(dst_instance, dst_base)
             
             self.routing_lines[key] = {
                 "src_idx": src_idx,
@@ -9709,8 +9835,7 @@ class ChemometricsGUI:
         control_frame.pack(fill=tk.X, padx=10, pady=10)
         
         # Get function display name
-        config = self.gui_configs.get(base_alias, {})
-        display_name = config.get("display_name", base_alias)
+        display_name = self._get_instance_base_display_name(instance_alias, base_alias)
         
         title = ttk.Label(
             control_frame,
@@ -19118,6 +19243,7 @@ Count:
                 addon_registry=self.addon_registry,
                 app_version=_get_application_version("1.0"),
                 is_passforward_enabled=self._is_passforward_enabled,
+                function_display_name_overrides=self.function_display_name_overrides,
                 analysis_data=getattr(self, 'analysis_data', None),
                 serialize_analysis_data=self._serialize_analysis_data,
                 report_data=getattr(self, 'report_data', None),
@@ -19763,6 +19889,7 @@ Count:
         
         self.methodology_list = []
         self.function_base_aliases = []
+        self.function_display_name_overrides = {}
         self.function_configs = {}
         self.routing_lines = {}
         # Reset analysis_data completely when loading a new model
@@ -19830,6 +19957,7 @@ Count:
             base_alias = func_entry.get('base_alias', '')
             params = func_entry.get('parameters', {}).copy()
             passforward_entry = func_entry.get('passforward', {})
+            display_name_override = str(func_entry.get('display_name_override', '') or '').strip()
             source_metadata_overrides: Dict[str, Dict[str, Any]] = {}
             
             self.methodology_list.append(instance_alias)
@@ -19861,6 +19989,9 @@ Count:
             passforward_enabled = bool(loaded_passforward or legacy_passforward)
             if self._is_passforward_compatible(base_alias):
                 params["__passforward_enabled__"] = passforward_enabled
+
+            if display_name_override:
+                self.function_display_name_overrides[instance_alias] = display_name_override
             
             self.function_configs[instance_alias] = params
         

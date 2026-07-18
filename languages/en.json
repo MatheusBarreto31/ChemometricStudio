@@ -134,6 +134,7 @@
       "new_page": "New Page",
       "multi_dim_slicing": "Multi-Dimensional Slicing (4D+)",
       "dimension_combination": "Dimension Combination:"
+      ,"function_display_name": "Display name"
       ,"target_section": "Target Section",
       "graph_type": "Graph Type",
       "graph_title": "Graph Title",
@@ -274,7 +275,8 @@
       "model_method_only": "Model Method Only",
       "save_pdf_report": "Save PDF Report",
       "timing_report": "Timing Report",
-      "execution_report": "Execution Report"
+      "execution_report": "Execution Report",
+      "rename_function_display_name": "Rename Function"
     },
     "messages": {
       "no_methodology": "No functions selected. Please add functions to your methodology.",
@@ -588,6 +590,7 @@
     "add_function": "Click to add this function to your methodology",
     "remove_function": "Click to remove the selected function",
     "configure_routing": "Set up data connections between functions",
-    "run_analysis": "Execute the configured analysis pipeline"
+    "run_analysis": "Execute the configured analysis pipeline",
+    "edit_function_display_name": "Edit function display name"
   }
 }

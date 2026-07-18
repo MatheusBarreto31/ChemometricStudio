@@ -44,6 +44,10 @@ class UserChemometricsGUI(ChemometricsGUI):
         self._guided_progress_var: Optional[tk.StringVar] = None
         super().__init__(root)
 
+    def _can_edit_function_display_name(self) -> bool:
+        """Hide display-name editing controls in user mode."""
+        return False
+
     def _refresh_ui_text(self):
         """Refresh all visible text while preserving state in user mode."""
         self._load_gui_configs()

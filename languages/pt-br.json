@@ -134,6 +134,7 @@
       "new_page": "Nova Página",
       "multi_dim_slicing": "Fatiamento Multidimensional (4D+)",
       "dimension_combination": "Combinação de Dimensões:"
+      ,"function_display_name": "Nome de exibição"
       ,"target_section": "Seção de Destino",
       "graph_type": "Tipo de Gráfico",
       "graph_title": "Título do Gráfico",
@@ -274,7 +275,8 @@
       "model_method_only": "Método do Modelo Apenas",
       "save_pdf_report": "Salvar Relatório em PDF",
       "timing_report": "Relatório de Tempo",
-      "execution_report": "Relatório de Execução"
+      "execution_report": "Relatório de Execução",
+      "rename_function_display_name": "Renomear Função"
     },
     "messages": {
       "no_methodology": "Nenhuma função selecionada. Por favor, adicione funções à sua metodologia.",
@@ -588,6 +590,7 @@
     "add_function": "Clique para adicionar esta função à sua metodologia",
     "remove_function": "Clique para remover a função selecionada",
     "configure_routing": "Configure as conexões de dados entre as funções",
-    "run_analysis": "Execute o pipeline de análise configurado"
+    "run_analysis": "Execute o pipeline de análise configurado",
+    "edit_function_display_name": "Editar nome de exibição da função"
   }
 }
