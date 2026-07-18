@@ -53,7 +53,7 @@ on:
       - "v*"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   # All builds are 64-bit binaries (Windows x64, macOS Intel/ARM x64, Linux x86_64/ARM64)
@@ -102,15 +102,23 @@ jobs:
       - name: Package (zip)
         shell: pwsh
         run: |
-          $name = "ChemometricStudio-${{ steps.meta.outputs.version }}-Windows-${{ steps.meta.outputs.short_sha }}-x86_64.zip"
+          $name = "ChemometricStudio-v${{ steps.meta.outputs.version }}-Windows-${{ steps.meta.outputs.short_sha }}-x86_64.zip"
           Compress-Archive -Path dist/ChemometricStudio/* -DestinationPath $name -Force
 
-      - name: Upload artifact
+      - name: Upload workflow artifact
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         uses: actions/upload-artifact@v6
         with:
-          name: ChemometricStudio-${{ steps.meta.outputs.version }}-Windows-x86_64
-          path: ChemometricStudio-${{ steps.meta.outputs.version }}-Windows-${{ steps.meta.outputs.short_sha }}-x86_64.zip
+          name: ChemometricStudio-v${{ steps.meta.outputs.version }}-Windows-x86_64
+          path: ChemometricStudio-v${{ steps.meta.outputs.version }}-Windows-${{ steps.meta.outputs.short_sha }}-x86_64.zip
+          compression-level: 0
           if-no-files-found: error
+
+      - name: Upload release asset
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ChemometricStudio-v${{ steps.meta.outputs.version }}-Windows-${{ steps.meta.outputs.short_sha }}-x86_64.zip
 
   build-macos-intel:
     name: macOS Intel
@@ -155,15 +163,23 @@ jobs:
       - name: Package (tar.gz)
         shell: bash
         run: |
-          NAME="ChemometricStudio-${{ steps.meta.outputs.version }}-macOS.Intel-${{ steps.meta.outputs.short_sha }}-x86_64.tar.gz"
+          NAME="ChemometricStudio-v${{ steps.meta.outputs.version }}-macOS.Intel-${{ steps.meta.outputs.short_sha }}-x86_64.tar.gz"
           tar -czf "$NAME" -C dist ChemometricStudio
 
-      - name: Upload artifact
+      - name: Upload workflow artifact
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         uses: actions/upload-artifact@v6
         with:
-          name: ChemometricStudio-${{ steps.meta.outputs.version }}-macOS.Intel-x86_64
-          path: ChemometricStudio-${{ steps.meta.outputs.version }}-macOS.Intel-${{ steps.meta.outputs.short_sha }}-x86_64.tar.gz
+          name: ChemometricStudio-v${{ steps.meta.outputs.version }}-macOS.Intel-x86_64
+          path: ChemometricStudio-v${{ steps.meta.outputs.version }}-macOS.Intel-${{ steps.meta.outputs.short_sha }}-x86_64.tar.gz
+          compression-level: 0
           if-no-files-found: error
+
+      - name: Upload release asset
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ChemometricStudio-v${{ steps.meta.outputs.version }}-macOS.Intel-${{ steps.meta.outputs.short_sha }}-x86_64.tar.gz
 
   build-macos-arm:
     name: macOS Apple Silicon
@@ -208,15 +224,23 @@ jobs:
       - name: Package (tar.gz)
         shell: bash
         run: |
-          NAME="ChemometricStudio-${{ steps.meta.outputs.version }}-macOS.AppleSilicon-${{ steps.meta.outputs.short_sha }}-arm64.tar.gz"
+          NAME="ChemometricStudio-v${{ steps.meta.outputs.version }}-macOS.AppleSilicon-${{ steps.meta.outputs.short_sha }}-arm64.tar.gz"
           tar -czf "$NAME" -C dist ChemometricStudio
 
-      - name: Upload artifact
+      - name: Upload workflow artifact
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         uses: actions/upload-artifact@v6
         with:
-          name: ChemometricStudio-${{ steps.meta.outputs.version }}-macOS.AppleSilicon-arm64
-          path: ChemometricStudio-${{ steps.meta.outputs.version }}-macOS.AppleSilicon-${{ steps.meta.outputs.short_sha }}-arm64.tar.gz
+          name: ChemometricStudio-v${{ steps.meta.outputs.version }}-macOS.AppleSilicon-arm64
+          path: ChemometricStudio-v${{ steps.meta.outputs.version }}-macOS.AppleSilicon-${{ steps.meta.outputs.short_sha }}-arm64.tar.gz
+          compression-level: 0
           if-no-files-found: error
+
+      - name: Upload release asset
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ChemometricStudio-v${{ steps.meta.outputs.version }}-macOS.AppleSilicon-${{ steps.meta.outputs.short_sha }}-arm64.tar.gz
 
   build-linux-x86:
     name: Linux x86_64
@@ -317,13 +341,13 @@ jobs:
             if [ -f "$f" ]; then
               case "$f" in
                 *.pkg.tar.zst)
-                  newname="ChemometricStudio-${PACKAGE_VERSION}-Linux.Arch-based-${SHORT_SHA}-${FILE_ARCH}.pkg.tar.zst"
+                  newname="ChemometricStudio-v${PACKAGE_VERSION}-Linux.Arch-based-${SHORT_SHA}-${FILE_ARCH}.pkg.tar.zst"
                   ;;
                 *.deb)
-                  newname="ChemometricStudio-${PACKAGE_VERSION}-Linux.Debian-based-${SHORT_SHA}-${FILE_ARCH}.deb"
+                  newname="ChemometricStudio-v${PACKAGE_VERSION}-Linux.Debian-based-${SHORT_SHA}-${FILE_ARCH}.deb"
                   ;;
                 *.rpm)
-                  newname="ChemometricStudio-${PACKAGE_VERSION}-Linux.Fedora-${SHORT_SHA}-${FILE_ARCH}.rpm"
+                  newname="ChemometricStudio-v${PACKAGE_VERSION}-Linux.Fedora-${SHORT_SHA}-${FILE_ARCH}.rpm"
                   ;;
                 *)
                   echo "Skipping unsupported package format: $f"
@@ -369,12 +393,20 @@ jobs:
                 ;;
             esac
           done
-      - name: Upload artifact
+      - name: Upload workflow artifact
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         uses: actions/upload-artifact@v6
         with:
-          name: ChemometricStudio-${{ steps.meta.outputs.package_version }}-Linux-packages-x86_64
+          name: ChemometricStudio-v${{ steps.meta.outputs.package_version }}-Linux-packages-x86_64
           path: linux-packages/*
+          compression-level: 0
           if-no-files-found: error
+
+      - name: Upload release assets
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        uses: softprops/action-gh-release@v2
+        with:
+          files: linux-packages/*
 
   build-linux-arm64:
     name: Linux ARM64
@@ -470,13 +502,13 @@ jobs:
                 [ -f "$f" ] || continue
                 case "$f" in
                   *.pkg.tar.zst)
-                    newname="ChemometricStudio-${PACKAGE_VERSION}-Linux.Arch-based-${SHORT_SHA}-${FILE_ARCH}.pkg.tar.zst"
+                    newname="ChemometricStudio-v${PACKAGE_VERSION}-Linux.Arch-based-${SHORT_SHA}-${FILE_ARCH}.pkg.tar.zst"
                     ;;
                   *.deb)
-                    newname="ChemometricStudio-${PACKAGE_VERSION}-Linux.Debian-based-${SHORT_SHA}-${FILE_ARCH}.deb"
+                    newname="ChemometricStudio-v${PACKAGE_VERSION}-Linux.Debian-based-${SHORT_SHA}-${FILE_ARCH}.deb"
                     ;;
                   *.rpm)
-                    newname="ChemometricStudio-${PACKAGE_VERSION}-Linux.Fedora-${SHORT_SHA}-${FILE_ARCH}.rpm"
+                    newname="ChemometricStudio-v${PACKAGE_VERSION}-Linux.Fedora-${SHORT_SHA}-${FILE_ARCH}.rpm"
                     ;;
                   *)
                     echo "Skipping unsupported package format: $f"
@@ -516,10 +548,18 @@ jobs:
                 esac
               done
             '
-      - name: Upload artifact
+      - name: Upload workflow artifact
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         uses: actions/upload-artifact@v6
         with:
-          name: ChemometricStudio-${{ steps.meta.outputs.package_version }}-Linux-packages-ARM64
+          name: ChemometricStudio-v${{ steps.meta.outputs.package_version }}-Linux-packages-ARM64
           path: linux-packages/*
+          compression-level: 0
           if-no-files-found: error
+
+      - name: Upload release assets
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        uses: softprops/action-gh-release@v2
+        with:
+          files: linux-packages/*
 
