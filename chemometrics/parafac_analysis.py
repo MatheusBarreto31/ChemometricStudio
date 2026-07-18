@@ -2108,7 +2108,25 @@ def _build_component_pair_prediction_outputs(
             # limits so the line spans the full calibration x-axis range.
             x1 = x2 = np.nan
             y1 = y2 = np.nan
-            if comp_1based in model_lookup:
+            if y_cal_true_pairs is not None and pair_idx < y_cal_true_pairs.shape[1]:
+                ref_col = np.asarray(y_cal_true_pairs[:, pair_idx], dtype=float)
+                valid_xy = np.isfinite(ref_col) & np.isfinite(score_col)
+                if int(np.count_nonzero(valid_xy)) >= 2:
+                    fit_xy = _fit_linear_1d(ref_col[valid_xy], score_col[valid_xy])
+                    b0_xy = _safe_float(fit_xy.get("intercept"), default=np.nan)
+                    b1_xy = _safe_float(fit_xy.get("slope"), default=np.nan)
+                    if np.isfinite(b0_xy) and np.isfinite(b1_xy):
+                        ref_valid = ref_col[valid_xy]
+                        ref_min = float(np.nanmin(ref_valid))
+                        ref_max = float(np.nanmax(ref_valid))
+                        ref_span = ref_max - ref_min if ref_max > ref_min else 1.0
+                        ref_buf = ref_span * 0.05
+                        x1 = ref_min - ref_buf
+                        x2 = ref_max + ref_buf
+                        y1 = b0_xy + b1_xy * x1
+                        y2 = b0_xy + b1_xy * x2
+
+            if (not (np.isfinite(x1) and np.isfinite(x2) and np.isfinite(y1) and np.isfinite(y2))) and comp_1based in model_lookup:
                 intercept, slope = model_lookup[comp_1based]
                 if (
                     y_cal_true_pairs is not None
@@ -2301,6 +2319,369 @@ def _build_unified_prediction_matrices(
         "y_cal_error": unified_cal_error,
         "y_val_error": unified_val_error,
     }
+
+
+def _build_sweep_model_outputs(
+    sweep_model_results: Sequence[Dict[str, Any]],
+    sweep_ranks: Sequence[int],
+    axis_n_info: Optional[Any],
+    dim_labels: Optional[Any],
+    y_labels: Optional[Sequence[str]],
+    y_cal_true: Any,
+    y_val_true: Any,
+) -> Dict[str, Any]:
+    """Pack sweep (one model per F) outputs for analysis-page navigation."""
+    out: Dict[str, Any] = {
+        "sweep_model_axis": None,
+        "sweep_model_labels": None,
+        "sweep_factor_labels": None,
+        "sweep_mode_a_component_axis": None,
+        "sweep_mode_a_sample_axis_full": None,
+        "sweep_scores_mode_a": None,
+        "sweep_val_scores_mode_a": None,
+        "sweep_scores_mode_a_heatmap_full": None,
+        "sweep_mode_profile_axes_full_a": None,
+        "sweep_mode_profile_factors_full_a": None,
+        "sweep_mode_profile_mode_labels": None,
+        "sweep_mode_profile_y_titles": None,
+        "sweep_mode_profile_navigation_labels_by_dimension": None,
+        "sweep_instrumental_profiles": None,
+        "sweep_residual": None,
+        "sweep_residual_val": None,
+        "sweep_parafac_pair_components": None,
+        "sweep_parafac_pair_y_columns": None,
+        "sweep_parafac_pair_y_titles": None,
+        "sweep_parafac_pair_y_titles_by_model": None,
+        "sweep_parafac_pairing_labels": None,
+        "sweep_parafac_pairing_labels_by_model": None,
+        "sweep_parafac_pairing_labels_by_dimension": None,
+        "sweep_y_cal_pred_pairs": None,
+        "sweep_y_cal_true_pairs": None,
+        "sweep_y_cal_error_pairs": None,
+        "sweep_y_val_pred_pairs": None,
+        "sweep_y_val_true_pairs": None,
+        "sweep_y_val_error_pairs": None,
+        "sweep_a_scores_cal_pairs": None,
+        "sweep_a_scores_val_pairs": None,
+        "sweep_y_val_effective_pairs": None,
+        "sweep_cal_regression_line_x_pairs": None,
+        "sweep_cal_regression_line_y_pairs": None,
+        "sweep_val_pred_ref_diag_extent": None,
+        "sweep_val_pred_ref_diag_x": None,
+        "sweep_val_pred_ref_diag_y": None,
+    }
+
+    models = [m for m in sweep_model_results if isinstance(m, dict)]
+    if not models:
+        return out
+
+    n_models = len(models)
+    ranks = [int(r) for r in sweep_ranks[:n_models]]
+    if len(ranks) < n_models:
+        ranks.extend(list(range(1, n_models + 1))[len(ranks):])
+
+    out["sweep_model_axis"] = np.arange(1, n_models + 1, dtype=float)
+    out["sweep_model_labels"] = [f"F={r}" for r in ranks]
+
+    cal_scores = [m.get("scores_mode_a") for m in models]
+    cal_shapes = [arr.shape for arr in cal_scores if isinstance(arr, np.ndarray) and arr.ndim == 2]
+    if cal_shapes:
+        n_cal = int(max(shape[0] for shape in cal_shapes))
+        max_comp = int(max(shape[1] for shape in cal_shapes))
+        out["sweep_factor_labels"] = [f"F{i + 1}" for i in range(max_comp)]
+        out["sweep_mode_a_component_axis"] = np.arange(1, max_comp + 1, dtype=float)
+
+        sweep_scores = np.full((n_models, n_cal, max_comp), np.nan, dtype=float)
+        for model_idx, arr in enumerate(cal_scores):
+            if not isinstance(arr, np.ndarray) or arr.ndim != 2:
+                continue
+            rc = min(n_cal, int(arr.shape[0]))
+            cc = min(max_comp, int(arr.shape[1]))
+            sweep_scores[model_idx, :rc, :cc] = np.nan_to_num(np.asarray(arr[:rc, :cc], dtype=float), nan=0.0)
+        out["sweep_scores_mode_a"] = sweep_scores
+
+        val_scores = [m.get("val_scores_mode_a") for m in models]
+        val_shapes = [arr.shape for arr in val_scores if isinstance(arr, np.ndarray) and arr.ndim == 2]
+        n_val = int(max(shape[0] for shape in val_shapes)) if val_shapes else 0
+        if n_val > 0:
+            sweep_val = np.full((n_models, n_val, max_comp), np.nan, dtype=float)
+            for model_idx, arr in enumerate(val_scores):
+                if not isinstance(arr, np.ndarray) or arr.ndim != 2:
+                    continue
+                rc = min(n_val, int(arr.shape[0]))
+                cc = min(max_comp, int(arr.shape[1]))
+                sweep_val[model_idx, :rc, :cc] = np.nan_to_num(np.asarray(arr[:rc, :cc], dtype=float), nan=0.0)
+            out["sweep_val_scores_mode_a"] = sweep_val
+
+        n_full = n_cal + n_val
+        heat = np.full((n_models, max_comp, n_full), np.nan, dtype=float)
+        for model_idx in range(n_models):
+            cal = out["sweep_scores_mode_a"][model_idx, :, :] if isinstance(out.get("sweep_scores_mode_a"), np.ndarray) else None
+            if not isinstance(cal, np.ndarray):
+                continue
+            full = cal
+            if isinstance(out.get("sweep_val_scores_mode_a"), np.ndarray):
+                full = np.vstack([full, out["sweep_val_scores_mode_a"][model_idx, :, :]])
+            heat[model_idx, :, :full.shape[0]] = np.asarray(full, dtype=float).T
+        # Keep heatmap finite even when models have different rank lengths;
+        # some renderers treat NaN-padded tensors as fully invalid.
+        out["sweep_scores_mode_a_heatmap_full"] = np.nan_to_num(heat, nan=0.0)
+        out["sweep_mode_a_sample_axis_full"] = np.arange(1, n_full + 1, dtype=float)
+
+    profile_payloads: List[Dict[str, Any]] = []
+    for model in models:
+        payload = _build_mode_profile_outputs(
+            factors=model.get("factors"),
+            axis_n_info=axis_n_info,
+            dim_labels=dim_labels,
+        )
+        payload.update(
+            _build_mode_profile_outputs_with_full_a(
+                mode_profile_axes=payload.get("mode_profile_axes"),
+                mode_profile_factors=payload.get("mode_profile_factors"),
+                scores_mode_a=model.get("scores_mode_a"),
+                val_scores_mode_a=model.get("val_scores_mode_a"),
+            )
+        )
+        profile_payloads.append(payload)
+
+    profile_axes = [p.get("mode_profile_axes_full_a") for p in profile_payloads]
+    profile_factors = [p.get("mode_profile_factors_full_a") for p in profile_payloads]
+    valid_axes = [a for a in profile_axes if isinstance(a, np.ndarray) and a.ndim == 2]
+    valid_factors = [f for f in profile_factors if isinstance(f, np.ndarray) and f.ndim == 3]
+    if valid_axes and valid_factors:
+        max_modes = int(max(a.shape[0] for a in valid_axes))
+        max_len = int(max(a.shape[1] for a in valid_axes))
+        max_comp = int(max(f.shape[1] for f in valid_factors))
+        axes_tensor = np.full((n_models, max_modes, max_len), np.nan, dtype=float)
+        factors_tensor = np.full((n_models, max_modes, max_comp, max_len), np.nan, dtype=float)
+
+        for model_idx, payload in enumerate(profile_payloads):
+            ax = payload.get("mode_profile_axes_full_a")
+            fa = payload.get("mode_profile_factors_full_a")
+            if isinstance(ax, np.ndarray) and ax.ndim == 2:
+                m = min(max_modes, int(ax.shape[0]))
+                l = min(max_len, int(ax.shape[1]))
+                axes_tensor[model_idx, :m, :l] = np.asarray(ax[:m, :l], dtype=float)
+            if isinstance(fa, np.ndarray) and fa.ndim == 3:
+                m = min(max_modes, int(fa.shape[0]))
+                c = min(max_comp, int(fa.shape[1]))
+                l = min(max_len, int(fa.shape[2]))
+                factors_tensor[model_idx, :m, :c, :l] = np.asarray(fa[:m, :c, :l], dtype=float)
+
+        out["sweep_mode_profile_axes_full_a"] = axes_tensor
+        out["sweep_mode_profile_factors_full_a"] = factors_tensor
+        out["sweep_mode_profile_mode_labels"] = list(profile_payloads[0].get("mode_profile_mode_labels") or [])
+        out["sweep_mode_profile_y_titles"] = list(profile_payloads[0].get("mode_profile_y_titles") or [])
+        out["sweep_mode_profile_navigation_labels_by_dimension"] = [
+            out.get("sweep_mode_profile_mode_labels") or [],
+            out.get("sweep_factor_labels") or [],
+        ]
+
+    for source_key, target_key in (
+        ("instrumental_profiles", "sweep_instrumental_profiles"),
+        ("residual", "sweep_residual"),
+        ("residual_val", "sweep_residual_val"),
+    ):
+        arrays = [m.get(source_key) for m in models]
+        valid = [a for a in arrays if isinstance(a, np.ndarray)]
+        if not valid:
+            continue
+        if source_key == "instrumental_profiles":
+            valid_inst = [a for a in valid if isinstance(a, np.ndarray) and a.ndim >= 2]
+            if not valid_inst:
+                continue
+            max_comp = int(max(a.shape[0] for a in valid_inst))
+            max_tail = tuple(int(max(a.shape[d] for a in valid_inst)) for d in range(1, valid_inst[0].ndim))
+            stack = np.full((n_models, max_comp) + max_tail, np.nan, dtype=float)
+            for i, arr in enumerate(arrays):
+                if not isinstance(arr, np.ndarray) or arr.ndim != len(max_tail) + 1:
+                    continue
+                comp_len = int(min(max_comp, arr.shape[0]))
+                tail_lens = tuple(int(min(max_tail[d - 1], arr.shape[d])) for d in range(1, arr.ndim))
+                dst_slices = (i, slice(0, comp_len)) + tuple(slice(0, ln) for ln in tail_lens)
+                src_slices = (slice(0, comp_len),) + tuple(slice(0, ln) for ln in tail_lens)
+                stack[dst_slices] = np.asarray(arr[src_slices], dtype=float)
+            out[target_key] = stack
+            continue
+        base_shape = valid[0].shape
+        stack = np.full((n_models,) + base_shape, np.nan, dtype=float)
+        for i, arr in enumerate(arrays):
+            if isinstance(arr, np.ndarray) and arr.shape == base_shape:
+                stack[i, ...] = np.asarray(arr, dtype=float)
+        out[target_key] = stack
+
+    y_cal_arr = _as_2d_y(y_cal_true)
+    y_val_arr = _as_2d_y(y_val_true)
+    pair_payloads: List[Dict[str, Any]] = []
+    max_pair_component = 0
+    default_y_by_component: Dict[int, int] = {}
+    for model in models:
+        p = _build_component_pair_prediction_outputs(
+            component_y_mapping=model.get("component_y_mapping"),
+            y_labels=y_labels,
+            y_cal_true=y_cal_arr,
+            y_val_true=y_val_arr,
+            scores_mode_a=model.get("scores_mode_a"),
+            val_scores_mode_a=model.get("val_scores_mode_a"),
+            calibration_models=model.get("calibration_models"),
+        )
+        pair_payloads.append(p)
+        comp = p.get("parafac_pair_components")
+        ycol = p.get("parafac_pair_y_columns")
+        if isinstance(comp, np.ndarray) and isinstance(ycol, np.ndarray):
+            for j in range(min(comp.size, ycol.size)):
+                comp_1 = int(comp[j])
+                y_1 = int(ycol[j])
+                if comp_1 < 1:
+                    continue
+                max_pair_component = max(max_pair_component, comp_1)
+                if comp_1 not in default_y_by_component and y_1 >= 1:
+                    default_y_by_component[comp_1] = y_1
+
+    if max_pair_component <= 0:
+        return out
+
+    n_pairs = int(max_pair_component)
+    out["sweep_parafac_pair_components"] = np.arange(1, n_pairs + 1, dtype=int)
+    out["sweep_parafac_pair_y_columns"] = np.asarray(
+        [int(default_y_by_component.get(comp_1, 0)) for comp_1 in range(1, n_pairs + 1)],
+        dtype=int,
+    )
+
+    labels_seq = list(y_labels) if y_labels is not None else []
+    y_titles: List[str] = []
+    pair_labels: List[str] = []
+    for comp_1 in range(1, n_pairs + 1):
+        y_1 = int(default_y_by_component.get(comp_1, 0))
+        y_title = f"Y{y_1}" if y_1 >= 1 else "Unmapped"
+        y_idx = y_1 - 1
+        if 0 <= y_idx < len(labels_seq):
+            label_text = str(labels_seq[y_idx]).strip()
+            if label_text:
+                y_title = label_text
+        y_titles.append(y_title)
+        if y_1 >= 1:
+            pair_labels.append(f"F{comp_1} -> {y_title} (Y{y_1})")
+        else:
+            pair_labels.append(f"F{comp_1}")
+    out["sweep_parafac_pair_y_titles"] = y_titles
+    out["sweep_parafac_pairing_labels"] = pair_labels
+    out["sweep_parafac_pair_y_titles_by_model"] = [list(y_titles) for _ in range(n_models)]
+    out["sweep_parafac_pairing_labels_by_model"] = [list(pair_labels) for _ in range(n_models)]
+    out["sweep_parafac_pairing_labels_by_dimension"] = [
+        out.get("sweep_model_labels") or [],
+        [],
+        pair_labels,
+    ]
+
+    n_cal = int(y_cal_arr.shape[0]) if isinstance(y_cal_arr, np.ndarray) else 0
+    n_val = int(y_val_arr.shape[0]) if isinstance(y_val_arr, np.ndarray) else 0
+
+    def _alloc(rows: int) -> Optional[np.ndarray]:
+        return np.full((n_models, rows, n_pairs), np.nan, dtype=float) if rows > 0 else None
+
+    out["sweep_y_cal_pred_pairs"] = _alloc(n_cal)
+    out["sweep_y_cal_true_pairs"] = _alloc(n_cal)
+    out["sweep_y_cal_error_pairs"] = _alloc(n_cal)
+    out["sweep_y_val_pred_pairs"] = _alloc(n_val)
+    out["sweep_y_val_true_pairs"] = _alloc(n_val)
+    out["sweep_y_val_error_pairs"] = _alloc(n_val)
+    out["sweep_a_scores_cal_pairs"] = _alloc(n_cal)
+    out["sweep_a_scores_val_pairs"] = _alloc(n_val)
+    out["sweep_y_val_effective_pairs"] = _alloc(n_val)
+    out["sweep_cal_regression_line_x_pairs"] = np.full((n_models, 2, n_pairs), np.nan, dtype=float)
+    out["sweep_cal_regression_line_y_pairs"] = np.full((n_models, 2, n_pairs), np.nan, dtype=float)
+    out["sweep_val_pred_ref_diag_extent"] = np.full((n_models, n_pairs), np.nan, dtype=float)
+    out["sweep_val_pred_ref_diag_x"] = np.full((n_models, 2, n_pairs), np.nan, dtype=float)
+    out["sweep_val_pred_ref_diag_y"] = np.full((n_models, 2, n_pairs), np.nan, dtype=float)
+
+    def _copy_matrix(src: Any, dst_key: str, model_idx: int, idx_map: Dict[int, int]) -> None:
+        dst = out.get(dst_key)
+        if not isinstance(dst, np.ndarray) or not isinstance(src, np.ndarray) or src.ndim != 2:
+            return
+        r = min(dst.shape[1], src.shape[0])
+        for g, l in idx_map.items():
+            if l < src.shape[1]:
+                dst[model_idx, :r, g] = np.asarray(src[:r, l], dtype=float)
+
+    for model_idx, payload in enumerate(pair_payloads):
+        comp = payload.get("parafac_pair_components")
+        ycol = payload.get("parafac_pair_y_columns")
+        if not isinstance(comp, np.ndarray):
+            continue
+        idx_map: Dict[int, int] = {}
+        for local_idx in range(int(comp.size)):
+            comp_1 = int(comp[local_idx])
+            if 1 <= comp_1 <= n_pairs:
+                idx_map[comp_1 - 1] = int(local_idx)
+
+        # Build model-specific pairing labels/titles so sweep pages reflect the
+        # currently selected model mapping instead of a global first-seen mapping.
+        model_titles: List[str] = []
+        model_pair_labels: List[str] = []
+        y_by_component: Dict[int, int] = {}
+        if isinstance(ycol, np.ndarray):
+            for local_idx in range(min(int(comp.size), int(ycol.size))):
+                comp_1 = int(comp[local_idx])
+                y_1 = int(ycol[local_idx])
+                if comp_1 >= 1 and y_1 >= 1 and comp_1 not in y_by_component:
+                    y_by_component[comp_1] = y_1
+        for comp_1 in range(1, n_pairs + 1):
+            y_1 = int(y_by_component.get(comp_1, 0))
+            y_title = f"Y{y_1}" if y_1 >= 1 else "Unmapped"
+            y_idx = y_1 - 1
+            if 0 <= y_idx < len(labels_seq):
+                label_text = str(labels_seq[y_idx]).strip()
+                if label_text:
+                    y_title = label_text
+            model_titles.append(y_title)
+            if y_1 >= 1:
+                model_pair_labels.append(f"F{comp_1} -> {y_title} (Y{y_1})")
+            else:
+                model_pair_labels.append(f"F{comp_1}")
+        if isinstance(out.get("sweep_parafac_pair_y_titles_by_model"), list) and model_idx < len(out["sweep_parafac_pair_y_titles_by_model"]):
+            out["sweep_parafac_pair_y_titles_by_model"][model_idx] = model_titles
+        if isinstance(out.get("sweep_parafac_pairing_labels_by_model"), list) and model_idx < len(out["sweep_parafac_pairing_labels_by_model"]):
+            out["sweep_parafac_pairing_labels_by_model"][model_idx] = model_pair_labels
+
+        _copy_matrix(payload.get("y_cal_pred_pairs"), "sweep_y_cal_pred_pairs", model_idx, idx_map)
+        _copy_matrix(payload.get("y_cal_true_pairs"), "sweep_y_cal_true_pairs", model_idx, idx_map)
+        _copy_matrix(payload.get("y_cal_error_pairs"), "sweep_y_cal_error_pairs", model_idx, idx_map)
+        _copy_matrix(payload.get("y_val_pred_pairs"), "sweep_y_val_pred_pairs", model_idx, idx_map)
+        _copy_matrix(payload.get("y_val_true_pairs"), "sweep_y_val_true_pairs", model_idx, idx_map)
+        _copy_matrix(payload.get("y_val_error_pairs"), "sweep_y_val_error_pairs", model_idx, idx_map)
+        _copy_matrix(payload.get("a_scores_cal_pairs"), "sweep_a_scores_cal_pairs", model_idx, idx_map)
+        _copy_matrix(payload.get("a_scores_val_pairs"), "sweep_a_scores_val_pairs", model_idx, idx_map)
+        _copy_matrix(payload.get("y_val_effective_pairs"), "sweep_y_val_effective_pairs", model_idx, idx_map)
+
+        line_x = payload.get("cal_regression_line_x_pairs")
+        line_y = payload.get("cal_regression_line_y_pairs")
+        if isinstance(line_x, np.ndarray) and isinstance(line_y, np.ndarray) and line_x.ndim == 2 and line_y.ndim == 2:
+            for g, l in idx_map.items():
+                if l < line_x.shape[1] and l < line_y.shape[1]:
+                    out["sweep_cal_regression_line_x_pairs"][model_idx, :, g] = line_x[:, l]
+                    out["sweep_cal_regression_line_y_pairs"][model_idx, :, g] = line_y[:, l]
+
+        yt = payload.get("y_val_true_pairs")
+        yp = payload.get("y_val_pred_pairs")
+        if isinstance(yt, np.ndarray) and isinstance(yp, np.ndarray) and yt.ndim == 2 and yp.ndim == 2:
+            for g, l in idx_map.items():
+                if l >= yt.shape[1] or l >= yp.shape[1]:
+                    continue
+                vals = np.concatenate([
+                    np.asarray(yt[:, l], dtype=float).reshape(-1),
+                    np.asarray(yp[:, l], dtype=float).reshape(-1),
+                ])
+                finite = vals[np.isfinite(vals)]
+                if finite.size <= 0:
+                    continue
+                extent = float(np.max(np.abs(finite))) * 1.15 + 1e-6
+                out["sweep_val_pred_ref_diag_extent"][model_idx, g] = extent
+                out["sweep_val_pred_ref_diag_x"][model_idx, :, g] = np.array([-extent, extent], dtype=float)
+                out["sweep_val_pred_ref_diag_y"][model_idx, :, g] = np.array([-extent, extent], dtype=float)
+
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -3043,7 +3424,7 @@ def parafac_analysis(
     profile_paths: Optional[Any] = None,
     profile_usage: Optional[Any] = None,
     orient_mostly_negative_pairs: Any = True,
-    sweep_mode: bool = False,
+    sweep_mode: Any = False,
     component_range: str = "",
     component_y_mapping: Any = "",
     cv_config: Optional[Any] = None,
@@ -3112,6 +3493,32 @@ def parafac_analysis(
         and X_val is not None
         and np.asarray(X_val).shape[0] > 0
     )
+    def _normalize_sweep_mode(value: Any) -> str:
+        if isinstance(value, bool):
+            return "on" if value else "off"
+        text = str(value).strip().lower().replace("-", " ")
+        if text in {"", "off", "false", "0", "no"}:
+            return "off"
+        if text in {"stats", "stats only", "stats_only", "statistics", "statistics only"}:
+            return "stats_only"
+        if text in {"on", "true", "1", "yes", "full"}:
+            return "on"
+        return "on" if _safe_bool(value, default=False) else "off"
+
+    sweep_mode_normalized = _normalize_sweep_mode(sweep_mode)
+    run_sweep_stats = sweep_mode_normalized in {"stats_only", "on"}
+    run_sweep_models = sweep_mode_normalized == "on"
+
+    if use_sbs and run_sweep_stats:
+        emit_execution_warning(
+            code="parafac_sweep_sbs_incompatible",
+            text=(
+                "Sweep mode and Sample-by-Sample validation cannot be used together. "
+                "Falling back to Batch validation processing for sweep execution."
+            ),
+        )
+        use_sbs = False
+
     if use_sbs and bool(kwargs.get('__passforward_enabled__', False)):
         emit_execution_warning(
             code="parafac_sbs_passforward_fallback_batch",
@@ -3124,32 +3531,14 @@ def parafac_analysis(
 
     effective_validation_processing = "sample_by_sample" if use_sbs else "batch"
 
-    run_sweep = bool(sweep_mode)
-    if use_sbs and run_sweep:
-        emit_execution_warning(
-            code="parafac_sbs_sweep_first_layer",
-            text=(
-                "Sweep mode in Sample-by-Sample validation uses only the first SBS model "
-                "(first validation sample) as sweep reference."
-            ),
-        )
-    sweep_x_val = np.asarray(X_val, dtype=float)[0:1] if (use_sbs and X_val is not None) else X_val
-    sweep_y_val = None
-    if use_sbs and Y_val is not None:
-        yv_arr = np.asarray(Y_val, dtype=float)
-        if yv_arr.ndim == 1:
-            sweep_y_val = yv_arr[0:1]
-        elif yv_arr.ndim >= 2 and yv_arr.shape[0] > 0:
-            sweep_y_val = yv_arr[0:1, ...]
-        else:
-            sweep_y_val = None
-
     # Sweep mode
     sweep_results: List[Dict[str, Any]] = []
+    sweep_model_results: List[Dict[str, Any]] = []
+    sweep_ranks: List[int] = []
     selected_rank = int(n_components)
     result: Dict[str, Any] = {}
 
-    if run_sweep:
+    if run_sweep_stats:
         values = parse_numeric_spec(component_range)
         if len(values) == 1:
             try:
@@ -3167,8 +3556,8 @@ def parafac_analysis(
                 X_cal=X_arr,
                 Y_cal=Y_cal,
                 n_components=rk,
-                X_val=sweep_x_val,
-                Y_val=sweep_y_val,
+                X_val=X_val,
+                Y_val=Y_val,
                 nway_flag=nway_flag,
                 init_method=init_method,
                 max_iter=max_iter,
@@ -3187,7 +3576,7 @@ def parafac_analysis(
                 profile_paths=path_list,
                 profile_usage=usage_list,
                 component_y_mapping=component_y_mapping,
-                emit_missing_solver_notice=not bool(run_sweep),
+                emit_missing_solver_notice=not bool(run_sweep_stats),
             )
             m = fit["metrics"]["calibration"]
             item = {
@@ -3199,6 +3588,9 @@ def parafac_analysis(
                 "n_iter": int(_safe_float(m.get("n_iter"))),
             }
             sweep_results.append(item)
+            if run_sweep_models:
+                sweep_model_results.append(fit)
+                sweep_ranks.append(int(rk))
 
         # Sweep is reporting-only: keep final model rank equal to the user-specified n_components.
         selected_rank = int(n_components)
@@ -3227,7 +3619,7 @@ def parafac_analysis(
                 profile_paths=path_list,
                 profile_usage=usage_list,
                 component_y_mapping=component_y_mapping,
-                emit_missing_solver_notice=not bool(run_sweep),
+                emit_missing_solver_notice=not bool(run_sweep_stats),
             )
     else:
         if not use_sbs:
@@ -3263,7 +3655,7 @@ def parafac_analysis(
             rank=selected_rank,
             metrics=result.get("metrics", {}),
             mapping={int(k) - 1: int(v) - 1 for k, v in result.get("component_y_mapping", {}).items()},
-            sweep_results=sweep_results if run_sweep else None,
+            sweep_results=sweep_results if run_sweep_stats else None,
             y_labels=y_labels_resolved,
             auto_mapping_used=bool(result.get("auto_mapping_used", False)),
             validation_processing=effective_validation_processing.replace("_", " ").title(),
@@ -3305,7 +3697,7 @@ def parafac_analysis(
         "component_y_mapping": result.get("component_y_mapping"),
         "reference_angles": result.get("reference_angles"),
         "parafac_report": report_text,
-        "sweep_results": sweep_results if run_sweep else None,
+        "sweep_results": sweep_results if run_sweep_stats else None,
         "selected_n_components": int(selected_rank),
         "axis_n_info": axis_n_info,
         "dim_labels": dim_labels,
@@ -3323,6 +3715,19 @@ def parafac_analysis(
 
     if output.get("y_cv_error") is None and output.get("y_cv_pred") is not None and output.get("y_cal_true") is not None:
         output["y_cv_error"] = np.asarray(output["y_cal_true"], dtype=float) - np.asarray(output["y_cv_pred"], dtype=float)
+
+    if run_sweep_models and sweep_model_results:
+        output.update(
+            _build_sweep_model_outputs(
+                sweep_model_results=sweep_model_results,
+                sweep_ranks=sweep_ranks,
+                axis_n_info=axis_n_info,
+                dim_labels=dim_labels,
+                y_labels=y_labels_resolved,
+                y_cal_true=output.get("y_cal_true"),
+                y_val_true=output.get("y_val_true"),
+            )
+        )
 
     if not use_sbs:
         pair_outputs = _build_component_pair_prediction_outputs(
@@ -3369,7 +3774,7 @@ def parafac_analysis(
     else:
         output.setdefault("factor_labels", None)
 
-    if sweep_results:
+    if run_sweep_stats and sweep_results:
         sweep_items = [item for item in sweep_results if isinstance(item, dict)]
         if sweep_items:
             output["sweep_F"] = np.asarray([_safe_float(item.get("n_components")) for item in sweep_items], dtype=float)
@@ -3752,21 +4157,28 @@ def parafac_analysis(
                     _x1 = _x2 = np.nan
                     _y1 = _y2 = np.nan
                     if (
+                        not (np.isfinite(_x1) and np.isfinite(_x2) and np.isfinite(_y1) and np.isfinite(_y2))
+                        and
                         isinstance(_sbs_y_cal_true_pairs, np.ndarray)
                         and _sbs_y_cal_true_pairs.ndim == 3
                         and _pair_idx < _sbs_y_cal_true_pairs.shape[2]
                     ):
                         _ref_col = _sbs_y_cal_true_pairs[_val_idx, :, _pair_idx]
-                        _finite_ref = np.isfinite(_ref_col)
-                        if np.any(_finite_ref):
-                            _ref_min = float(np.nanmin(_ref_col[_finite_ref]))
-                            _ref_max = float(np.nanmax(_ref_col[_finite_ref]))
-                            _ref_span = _ref_max - _ref_min if _ref_max > _ref_min else 1.0
-                            _ref_buf = _ref_span * 0.05
-                            _x1 = _ref_min - _ref_buf
-                            _x2 = _ref_max + _ref_buf
-                            _y1 = (_x1 - _intercept) / _slope
-                            _y2 = (_x2 - _intercept) / _slope
+                        _valid_xy = np.isfinite(_ref_col) & np.isfinite(_col)
+                        if int(np.count_nonzero(_valid_xy)) >= 2:
+                            _fit_xy = _fit_linear_1d(_ref_col[_valid_xy], _col[_valid_xy])
+                            _b0_xy = _safe_float(_fit_xy.get("intercept"), default=np.nan)
+                            _b1_xy = _safe_float(_fit_xy.get("slope"), default=np.nan)
+                            if np.isfinite(_b0_xy) and np.isfinite(_b1_xy):
+                                _ref_valid = _ref_col[_valid_xy]
+                                _ref_min = float(np.nanmin(_ref_valid))
+                                _ref_max = float(np.nanmax(_ref_valid))
+                                _ref_span = _ref_max - _ref_min if _ref_max > _ref_min else 1.0
+                                _ref_buf = _ref_span * 0.05
+                                _x1 = _ref_min - _ref_buf
+                                _x2 = _ref_max + _ref_buf
+                                _y1 = _b0_xy + _b1_xy * _x1
+                                _y2 = _b0_xy + _b1_xy * _x2
 
                     if not (np.isfinite(_x1) and np.isfinite(_x2) and np.isfinite(_y1) and np.isfinite(_y2)):
                         _score_min = float(np.nanmin(_col[_finite]))
@@ -4014,6 +4426,62 @@ def parafac_analysis(
     else:
         output["sbs_ip_dim_labels"] = None
 
+    # Sweep instrumental/residual pages share the same MD indexing behavior as SBS pages.
+    _sweep_profiles = output.get("sweep_instrumental_profiles")
+    if isinstance(_sweep_profiles, np.ndarray):
+        # Match the SBS strategy for MD-menu axis/label variables.
+        if isinstance(_raw_axis_n_info, (list, tuple)) and len(_raw_axis_n_info) >= 1:
+            output["sweep_ip_axis_n_info"] = [_raw_axis_n_info[0]] + list(_raw_axis_n_info)
+        else:
+            output["sweep_ip_axis_n_info"] = None
+        if isinstance(_raw_dim_labels, (list, tuple)) and len(_raw_dim_labels) >= 1:
+            output["sweep_ip_dim_labels"] = [_raw_dim_labels[0]] + list(_raw_dim_labels)
+        else:
+            output["sweep_ip_dim_labels"] = None
+    else:
+        output["sweep_ip_axis_n_info"] = None
+        output["sweep_ip_dim_labels"] = None
+
+    # Sweep EJCR payloads for per-model + pairing navigation.
+    output["sweep_ejcr_cal"] = None
+    output["sweep_ejcr_val"] = None
+    try:
+        _sw_cal_true = output.get("sweep_y_cal_true_pairs")
+        _sw_cal_pred = output.get("sweep_y_cal_pred_pairs")
+        _sw_val_true = output.get("sweep_y_val_true_pairs")
+        _sw_val_pred = output.get("sweep_y_val_pred_pairs")
+        if (
+            isinstance(_sw_cal_true, np.ndarray)
+            and isinstance(_sw_cal_pred, np.ndarray)
+            and _sw_cal_true.ndim == 3
+            and _sw_cal_pred.ndim == 3
+            and _sw_cal_true.shape == _sw_cal_pred.shape
+        ):
+            _sw_n_models = int(_sw_cal_true.shape[0])
+            _sw_n_pairs = int(_sw_cal_true.shape[2])
+            if _sw_n_models > 0 and _sw_n_pairs > 0:
+                sweep_ejcr_cal = _new_packed_ejcr("steelblue", (_sw_n_models, _sw_n_pairs))
+                sweep_ejcr_val = _new_packed_ejcr("darkorange", (_sw_n_models, _sw_n_pairs))
+
+                for _m in range(_sw_n_models):
+                    for _p in range(_sw_n_pairs):
+                        _fill_packed(_sw_cal_true[_m, :, _p], _sw_cal_pred[_m, :, _p], sweep_ejcr_cal, (_m, _p))
+                        if (
+                            isinstance(_sw_val_true, np.ndarray)
+                            and isinstance(_sw_val_pred, np.ndarray)
+                            and _sw_val_true.ndim == 3
+                            and _sw_val_pred.ndim == 3
+                            and _sw_val_true.shape == _sw_val_pred.shape
+                            and _m < _sw_val_true.shape[0]
+                            and _p < _sw_val_true.shape[2]
+                        ):
+                            _fill_packed(_sw_val_true[_m, :, _p], _sw_val_pred[_m, :, _p], sweep_ejcr_val, (_m, _p))
+
+                output["sweep_ejcr_cal"] = sweep_ejcr_cal
+                output["sweep_ejcr_val"] = sweep_ejcr_val
+    except Exception:
+        pass
+
     return output
 
 
@@ -4119,9 +4587,50 @@ _PARAFAC_RETURN_ORDER: Tuple[str, ...] = (
     "sbs_ejcr_val",
     "sbs_ip_axis_n_info",
     "sbs_ip_dim_labels",
+    "sweep_ip_axis_n_info",
+    "sweep_ip_dim_labels",
     "residual_val",
     "sbs_residual_cal",
     "sbs_residual_val",
+    "sweep_model_axis",
+    "sweep_model_labels",
+    "sweep_factor_labels",
+    "sweep_mode_a_component_axis",
+    "sweep_mode_a_sample_axis_full",
+    "sweep_scores_mode_a",
+    "sweep_val_scores_mode_a",
+    "sweep_scores_mode_a_heatmap_full",
+    "sweep_mode_profile_axes_full_a",
+    "sweep_mode_profile_factors_full_a",
+    "sweep_mode_profile_mode_labels",
+    "sweep_mode_profile_y_titles",
+    "sweep_mode_profile_navigation_labels_by_dimension",
+    "sweep_instrumental_profiles",
+    "sweep_residual",
+    "sweep_residual_val",
+    "sweep_parafac_pair_components",
+    "sweep_parafac_pair_y_columns",
+    "sweep_parafac_pair_y_titles",
+    "sweep_parafac_pair_y_titles_by_model",
+    "sweep_parafac_pairing_labels",
+    "sweep_parafac_pairing_labels_by_model",
+    "sweep_parafac_pairing_labels_by_dimension",
+    "sweep_y_cal_pred_pairs",
+    "sweep_y_cal_true_pairs",
+    "sweep_y_cal_error_pairs",
+    "sweep_y_val_pred_pairs",
+    "sweep_y_val_true_pairs",
+    "sweep_y_val_error_pairs",
+    "sweep_a_scores_cal_pairs",
+    "sweep_a_scores_val_pairs",
+    "sweep_y_val_effective_pairs",
+    "sweep_cal_regression_line_x_pairs",
+    "sweep_cal_regression_line_y_pairs",
+    "sweep_val_pred_ref_diag_extent",
+    "sweep_val_pred_ref_diag_x",
+    "sweep_val_pred_ref_diag_y",
+    "sweep_ejcr_cal",
+    "sweep_ejcr_val",
 )
 
 

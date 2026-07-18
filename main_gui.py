@@ -11373,26 +11373,51 @@ class ChemometricsGUI:
             # Resolve effective index: prefer explicit axis_index, then fall back to
             # slice_indices[axis_labels_dimension] for general (non-axis) slice navigation.
             effective_index = axis_index
+            axis_labels_dimension = axis_config.get('axis_labels_dimension')
             if effective_index is None and slice_indices is not None:
-                dim = axis_config.get('axis_labels_dimension')
-                if dim is not None:
-                    effective_index = slice_indices.get(dim)
+                if axis_labels_dimension is not None:
+                    effective_index = slice_indices.get(axis_labels_dimension)
             if effective_index is not None:
                 # axis_labels points to a variable containing an array of labels
                 # Use helper to support nested dictionary access
                 labels_data = self._get_data_from_source(outputs, axis_labels_config, axis_labels_nested)
                 if labels_data is not None:
-                    if isinstance(labels_data, (list, np.ndarray)):
+                    resolved = None
+                    index_dims = axis_config.get('axis_labels_index_dimensions')
+                    if isinstance(index_dims, (list, tuple)) and len(index_dims) > 0 and isinstance(slice_indices, dict):
+                        try:
+                            cursor = labels_data
+                            for dim_id_raw in index_dims:
+                                dim_id = int(dim_id_raw)
+                                if axis_labels_dimension is not None and dim_id == int(axis_labels_dimension):
+                                    idx_value = int(effective_index)
+                                else:
+                                    idx_value = int(slice_indices.get(dim_id, 0))
+                                if isinstance(cursor, np.ndarray):
+                                    cursor = cursor[idx_value]
+                                elif isinstance(cursor, (list, tuple)):
+                                    cursor = cursor[idx_value]
+                                else:
+                                    cursor = None
+                                    break
+                            if cursor is not None and not isinstance(cursor, (list, tuple, np.ndarray)):
+                                resolved = str(cursor)
+                        except Exception:
+                            resolved = None
+
+                    if resolved is None and isinstance(labels_data, (list, np.ndarray)):
                         try:
                             resolved = str(labels_data[effective_index])
-                            if label_template:
-                                result = label_template.replace('{label}', resolved)
-                                result = result.replace('{nav_idx}', str(effective_index + 1))
-                                result = result.replace('{nav_idx0}', str(effective_index))
-                                return result
-                            return resolved
                         except (IndexError, TypeError):
-                            pass
+                            resolved = None
+
+                    if resolved is not None:
+                        if label_template:
+                            result = label_template.replace('{label}', resolved)
+                            result = result.replace('{nav_idx}', str(effective_index + 1))
+                            result = result.replace('{nav_idx0}', str(effective_index))
+                            return result
+                        return resolved
 
         label_config = axis_config.get('label')
         if not label_config:
@@ -11490,6 +11515,65 @@ class ChemometricsGUI:
             except (IndexError, TypeError):
                 return fallback_label
         return fallback_label
+
+    def _get_variable_label_with_indices(
+        self,
+        outputs: dict,
+        var_name: Any,
+        dimension: int,
+        index: int,
+        indices: Optional[dict] = None,
+        index_dimensions: Optional[Any] = None,
+        fallback: bool = True,
+    ) -> Optional[str]:
+        """Resolve variable labels with optional multidimensional index mapping.
+
+        When ``index_dimensions`` is provided (e.g., [0, 2]), this method walks
+        the labels tensor using current slice indices for all mapped dimensions,
+        replacing the target ``dimension`` with ``index``.
+        """
+        fallback_label = f"V{index + 1}" if fallback else None
+
+        if not isinstance(index_dimensions, (list, tuple)) or len(index_dimensions) == 0:
+            return self._get_variable_label(outputs, var_name, dimension, index, fallback=fallback)
+
+        try:
+            if isinstance(var_name, dict):
+                data_source = var_name.get('data_source')
+                nested_key = var_name.get('nested_key')
+                if not data_source:
+                    return fallback_label
+                data = self._get_data_from_source(outputs, data_source, nested_key)
+            elif isinstance(var_name, str):
+                if var_name not in outputs:
+                    return fallback_label
+                data = outputs[var_name]
+            else:
+                return fallback_label
+        except Exception:
+            return fallback_label
+
+        if data is None:
+            return fallback_label
+
+        try:
+            cursor = data
+            indices = indices if isinstance(indices, dict) else {}
+            for dim_id_raw in index_dimensions:
+                dim_id = int(dim_id_raw)
+                idx_value = int(index) if dim_id == int(dimension) else int(indices.get(dim_id, 0))
+                if isinstance(cursor, np.ndarray):
+                    cursor = cursor[idx_value]
+                elif isinstance(cursor, (list, tuple)):
+                    cursor = cursor[idx_value]
+                else:
+                    return fallback_label
+
+            if isinstance(cursor, (list, tuple, np.ndarray)):
+                return fallback_label
+            return str(cursor) if cursor is not None else fallback_label
+        except Exception:
+            return fallback_label
     
     def _get_dimension_labels(self, outputs: dict, config: dict) -> dict:
         """Get dimension labels from config or outputs.
@@ -12950,6 +13034,7 @@ class ChemometricsGUI:
                     nav_id = self._normalize_navigation_id(nav_item)
                     nav_labels_source = nav_item.get('labels_source')
                     nav_labels_dimension = nav_item.get('labels_dimension', None)
+                    nav_labels_index_dimensions = nav_item.get('labels_index_dimensions')
                 else:
                     # Old format: just a string
                     axis_name = nav_item
@@ -12958,6 +13043,7 @@ class ChemometricsGUI:
                     nav_id = None
                     nav_labels_source = None
                     nav_labels_dimension = None
+                    nav_labels_index_dimensions = None
                 
                 # Skip if navigation is disabled
                 if not show_nav:
@@ -13012,7 +13098,14 @@ class ChemometricsGUI:
                 var_labels_config = nav_labels_source if nav_labels_source else config.get('variable_labels')
                 if var_labels_config:
                     label_dim = int(nav_labels_dimension) if nav_labels_dimension is not None else int(dimension)
-                    var_label_text = self._get_variable_label(outputs, var_labels_config, label_dim, current_index)
+                    var_label_text = self._get_variable_label_with_indices(
+                        outputs,
+                        var_labels_config,
+                        label_dim,
+                        current_index,
+                        indices=indices,
+                        index_dimensions=nav_labels_index_dimensions,
+                    )
                     if var_label_text:
                         var_label = ttk.Label(axis_frame, text=f"[{var_label_text}]", foreground="gray")
                         var_label.pack(side=tk.LEFT, padx=5)
@@ -13020,7 +13113,12 @@ class ChemometricsGUI:
                             if not hasattr(self, '_var_labels'):
                                 self._var_labels = {}
                             var_label_key = (instance_alias, section_id, dimension, axis_name, None)
-                            self._var_labels[var_label_key] = (var_label, var_labels_config, label_dim)
+                            self._var_labels[var_label_key] = (
+                                var_label,
+                                var_labels_config,
+                                label_dim,
+                                nav_labels_index_dimensions,
+                            )
                 
                 # Store reference for updates
                 if include_widget_refs:
@@ -13149,10 +13247,18 @@ class ChemometricsGUI:
                             stale_var_keys.append(key)
                             continue
                         var_label, var_labels_config, dim = var_tuple[0], var_tuple[1], var_tuple[2]
+                        index_dims = var_tuple[3] if len(var_tuple) > 3 else None
                         if not var_label.winfo_exists():
                             stale_var_keys.append(key)
                             continue
-                        var_label_text = self._get_variable_label(outputs, var_labels_config, dim, new_idx)
+                        var_label_text = self._get_variable_label_with_indices(
+                            outputs,
+                            var_labels_config,
+                            dim,
+                            new_idx,
+                            indices=indices,
+                            index_dimensions=index_dims,
+                        )
                         if var_label_text:
                             var_label.config(text=f"[{var_label_text}]")
                         else:
@@ -13418,16 +13524,37 @@ class ChemometricsGUI:
             values = self._get_data_from_source(outputs, source)
             if values is None:
                 return ""
-            arr = np.asarray(values).reshape(-1).tolist()
-            if not arr:
-                return ""
-
             dim = int(config.get('slice_title_dimension', 1))
             idx = int(indices.get(dim, 0)) if isinstance(indices, dict) else 0
-            if idx < 0 or idx >= len(arr):
-                return ""
+            token = ""
 
-            token = str(arr[idx]).strip()
+            index_dims = config.get('slice_title_index_dimensions')
+            if isinstance(index_dims, (list, tuple)) and len(index_dims) > 0 and isinstance(indices, dict):
+                try:
+                    cursor = values
+                    for dim_id_raw in index_dims:
+                        dim_id = int(dim_id_raw)
+                        idx_value = idx if dim_id == dim else int(indices.get(dim_id, 0))
+                        if isinstance(cursor, np.ndarray):
+                            cursor = cursor[idx_value]
+                        elif isinstance(cursor, (list, tuple)):
+                            cursor = cursor[idx_value]
+                        else:
+                            cursor = None
+                            break
+                    if cursor is not None and not isinstance(cursor, (list, tuple, np.ndarray)):
+                        token = str(cursor).strip()
+                except Exception:
+                    token = ""
+
+            if not token:
+                arr = np.asarray(values).reshape(-1).tolist()
+                if not arr:
+                    return ""
+                if idx < 0 or idx >= len(arr):
+                    return ""
+                token = str(arr[idx]).strip()
+
             if not token:
                 return ""
             prefix = str(config.get('slice_title_prefix', '')).strip()
@@ -15007,10 +15134,29 @@ Count:
                         stale_var_keys.append(key)
                         continue
                     var_label, var_labels_config, dim = var_tuple[0], var_tuple[1], var_tuple[2]
+                    index_dims = var_tuple[3] if len(var_tuple) > 3 else None
                     if not var_label.winfo_exists():
                         stale_var_keys.append(key)
                         continue
-                    var_label_text = self._get_variable_label(outputs, var_labels_config, dim, new_index)
+                    state_indices = {}
+                    try:
+                        state_indices = (
+                            self.analysis_data
+                            .get(instance_alias, {})
+                            .get('table_slices', {})
+                            .get(section_id, {})
+                            .get('indices', {})
+                        )
+                    except Exception:
+                        state_indices = {}
+                    var_label_text = self._get_variable_label_with_indices(
+                        outputs,
+                        var_labels_config,
+                        dim,
+                        new_index,
+                        indices=state_indices,
+                        index_dimensions=index_dims,
+                    )
                     if var_label_text:
                         var_label.config(text=f"[{var_label_text}]")
                     else:

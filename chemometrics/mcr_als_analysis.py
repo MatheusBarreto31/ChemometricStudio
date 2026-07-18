@@ -1148,7 +1148,25 @@ def _build_pair_outputs(
             # limits so the line spans the full calibration x-axis range.
             x1 = x2 = np.nan
             y1 = y2 = np.nan
-            if comp_1 in model_lookup:
+            if y_cal_true_pairs is not None and pi < y_cal_true_pairs.shape[1]:
+                ref_col = np.asarray(y_cal_true_pairs[:, pi], dtype=float)
+                valid_xy = np.isfinite(ref_col) & np.isfinite(score_col)
+                if int(np.count_nonzero(valid_xy)) >= 2:
+                    fit_xy = _fit_linear_1d(ref_col[valid_xy], score_col[valid_xy])
+                    b0_xy = _safe_float(fit_xy.get("intercept"), default=np.nan)
+                    b1_xy = _safe_float(fit_xy.get("slope"), default=np.nan)
+                    if np.isfinite(b0_xy) and np.isfinite(b1_xy):
+                        ref_valid = ref_col[valid_xy]
+                        ref_min = float(np.nanmin(ref_valid))
+                        ref_max = float(np.nanmax(ref_valid))
+                        ref_span = ref_max - ref_min if ref_max > ref_min else 1.0
+                        ref_buf = ref_span * 0.05
+                        x1 = ref_min - ref_buf
+                        x2 = ref_max + ref_buf
+                        y1 = b0_xy + b1_xy * x1
+                        y2 = b0_xy + b1_xy * x2
+
+            if (not (np.isfinite(x1) and np.isfinite(x2) and np.isfinite(y1) and np.isfinite(y2))) and comp_1 in model_lookup:
                 intercept, slope = model_lookup[comp_1]
                 if (
                     y_cal_true_pairs is not None
@@ -3169,21 +3187,28 @@ def mcr_als_analysis(
                     _x1 = _x2 = np.nan
                     _y1 = _y2 = np.nan
                     if (
+                        not (np.isfinite(_x1) and np.isfinite(_x2) and np.isfinite(_y1) and np.isfinite(_y2))
+                        and
                         isinstance(_sbs_y_cal_true_pairs, np.ndarray)
                         and _sbs_y_cal_true_pairs.ndim == 3
                         and _pair_idx < _sbs_y_cal_true_pairs.shape[2]
                     ):
                         _ref_col = _sbs_y_cal_true_pairs[_val_idx, :, _pair_idx]
-                        _finite_ref = np.isfinite(_ref_col)
-                        if np.any(_finite_ref):
-                            _ref_min = float(np.nanmin(_ref_col[_finite_ref]))
-                            _ref_max = float(np.nanmax(_ref_col[_finite_ref]))
-                            _ref_span = _ref_max - _ref_min if _ref_max > _ref_min else 1.0
-                            _ref_buf = _ref_span * 0.05
-                            _x1 = _ref_min - _ref_buf
-                            _x2 = _ref_max + _ref_buf
-                            _y1 = (_x1 - _intercept) / _slope
-                            _y2 = (_x2 - _intercept) / _slope
+                        _valid_xy = np.isfinite(_ref_col) & np.isfinite(_col)
+                        if int(np.count_nonzero(_valid_xy)) >= 2:
+                            _fit_xy = _fit_linear_1d(_ref_col[_valid_xy], _col[_valid_xy])
+                            _b0_xy = _safe_float(_fit_xy.get("intercept"), default=np.nan)
+                            _b1_xy = _safe_float(_fit_xy.get("slope"), default=np.nan)
+                            if np.isfinite(_b0_xy) and np.isfinite(_b1_xy):
+                                _ref_valid = _ref_col[_valid_xy]
+                                _ref_min = float(np.nanmin(_ref_valid))
+                                _ref_max = float(np.nanmax(_ref_valid))
+                                _ref_span = _ref_max - _ref_min if _ref_max > _ref_min else 1.0
+                                _ref_buf = _ref_span * 0.05
+                                _x1 = _ref_min - _ref_buf
+                                _x2 = _ref_max + _ref_buf
+                                _y1 = _b0_xy + _b1_xy * _x1
+                                _y2 = _b0_xy + _b1_xy * _x2
 
                     if not (np.isfinite(_x1) and np.isfinite(_x2) and np.isfinite(_y1) and np.isfinite(_y2)):
                         _score_min = float(np.nanmin(_col[_finite]))
