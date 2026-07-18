@@ -238,6 +238,12 @@ def extract_axis_data(outputs: Mapping[str, Any], axis_config: Mapping[str, Any]
                     pass
 
     if not is_list_source and isinstance(indices, dict) and indices:
+        # Do not apply shared slice indices to true 1D axis vectors.
+        # Those vectors usually define full plot axes (e.g., heatmap sample/factor axes),
+        # and slicing dim 0 would collapse them to a scalar and break shape matching.
+        if data.ndim <= 1:
+            return data
+
         index_list = []
         for dim in range(data.ndim):
             if dim in indices:

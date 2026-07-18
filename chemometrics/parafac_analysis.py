@@ -2423,9 +2423,7 @@ def _build_sweep_model_outputs(
             if isinstance(out.get("sweep_val_scores_mode_a"), np.ndarray):
                 full = np.vstack([full, out["sweep_val_scores_mode_a"][model_idx, :, :]])
             heat[model_idx, :, :full.shape[0]] = np.asarray(full, dtype=float).T
-        # Keep heatmap finite even when models have different rank lengths;
-        # some renderers treat NaN-padded tensors as fully invalid.
-        out["sweep_scores_mode_a_heatmap_full"] = np.nan_to_num(heat, nan=0.0)
+        out["sweep_scores_mode_a_heatmap_full"] = heat
         out["sweep_mode_a_sample_axis_full"] = np.arange(1, n_full + 1, dtype=float)
 
     profile_payloads: List[Dict[str, Any]] = []
