@@ -1488,53 +1488,47 @@
       },
       {
         "title": "Class Probabilities",
-        "layout": "ew",
+        "layout": "ns",
         "sections": [
           {
             "type": "graph",
             "config": {
-              "graph_type": "heatmap",
-              "title": "Calibration Class Probabilities",
+              "graph_type": "bar",
+              "title": "Calibration Class Probabilities by Sample",
               "x_axis": {
-                "data_source": "model",
-                "nested_key": "class_labels",
-                "label": "Class"
-              },
-              "y_axis": {
                 "data_source": "smp_cal",
                 "label": "Sample"
               },
-              "z_axis": {
+              "y_axis": {
                 "data_source": "class_cal_prob",
                 "label": "Probability"
               },
-              "cmap": "YlOrRd",
-              "annotate_heatmap": false
+              "z_axis": {
+                "data_source": "model",
+                "nested_key": "class_labels"
+              }
             },
-            "short_description": "Heatmap of predicted class probabilities for all calibration samples."
+            "short_description": "Clustered bars per calibration sample, with one bar per class probability."
           },
           {
             "type": "graph",
             "config": {
-              "graph_type": "heatmap",
-              "title": "Validation Class Probabilities",
+              "graph_type": "bar",
+              "title": "Validation Class Probabilities by Sample",
               "x_axis": {
-                "data_source": "model",
-                "nested_key": "class_labels",
-                "label": "Class"
-              },
-              "y_axis": {
                 "data_source": "smp_val",
                 "label": "Sample"
               },
-              "z_axis": {
+              "y_axis": {
                 "data_source": "class_val_prob",
                 "label": "Probability"
               },
-              "cmap": "YlOrRd",
-              "annotate_heatmap": false
+              "z_axis": {
+                "data_source": "model",
+                "nested_key": "class_labels"
+              }
             },
-            "short_description": "Heatmap of predicted class probabilities for all validation samples."
+            "short_description": "Clustered bars per validation sample, with one bar per class probability."
           }
         ]
       }

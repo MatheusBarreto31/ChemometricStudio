@@ -1138,6 +1138,83 @@
         ]
       },
       {
+        "title": "Class Probabilities",
+        "layout": "ns",
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "bar",
+              "title": "Calibration Reference-Class Probability by Sample",
+              "x_axis": {
+                "data_source": "smp_cal",
+                "label": "Sample"
+              },
+              "y_axis": {
+                "data_source": "class_cal_prob",
+                "label": "Probability"
+              },
+              "z_axis": {
+                "data_source": "model",
+                "nested_key": "class_labels"
+              },
+              "class_labels": "class_cal_true",
+              "bar_column_index": 1,
+              "bar_series_label_source": "model",
+              "bar_series_label_nested_key": "reference_class",
+              "scatter_lines": [
+                {
+                  "orientation": "horizontal",
+                  "value": 0.5,
+                  "linestyle": "--",
+                  "linewidth": 1.5,
+                  "color": "#cc0000",
+                  "alpha": 0.85
+                }
+              ]
+            },
+            "short_description": "Bar chart of calibration probability of belonging to the reference class for each sample."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "bar",
+              "title": "Validation Reference-Class Probability by Sample",
+              "x_axis": {
+                "data_source": "smp_val",
+                "label": "Sample"
+              },
+              "y_axis": {
+                "data_source": "class_val_prob",
+                "label": "Probability"
+              },
+              "z_axis": {
+                "data_source": "model",
+                "nested_key": "class_labels"
+              },
+              "class_labels": [
+                "class_val_true",
+                "class_val_pred"
+              ],
+              "bar_column_index": 1,
+              "bar_series_label_source": "model",
+              "bar_series_label_nested_key": "reference_class",
+              "scatter_lines": [
+                {
+                  "orientation": "horizontal",
+                  "value": 0.5,
+                  "linestyle": "--",
+                  "linewidth": 1.5,
+                  "color": "#cc0000",
+                  "alpha": 0.85
+                }
+              ]
+            },
+            "short_description": "Bar chart of validation probability of belonging to the reference class for each sample."
+          }
+        ]
+      },
+      {
         "title": "Decision Scores",
         "layout": "ns",
         "sections": [

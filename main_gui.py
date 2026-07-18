@@ -1269,7 +1269,7 @@ class ChemometricsGUI:
         if option_key == 'equal_scale':
             return normalized_type == 'scatter' and not is_scatter_3d
         if option_key == 'cmap':
-            return normalized_type in {'line', 'scatter', 'heatmap', '3d_surf', 'contour'}
+            return normalized_type in {'line', 'scatter', 'bar', 'heatmap', '3d_surf', 'contour'}
         if option_key == 'use_wireframe':
             return normalized_type == '3d_surf'
         if option_key == 'contour_filled':
@@ -2473,7 +2473,7 @@ class ChemometricsGUI:
             qualitative_data = colormaps_data.get("qualitative", [])
             cmap_menu = tk.Menu(menu, tearoff=0)
             normalized_cmap_graph = str(graph_type or '').strip().lower()
-            use_qualitative_cmaps = normalized_cmap_graph in {'line', 'scatter'}
+            use_qualitative_cmaps = normalized_cmap_graph in {'line', 'scatter', 'bar'}
             default_token = '__default__'
             current_cmap = str(config.get('cmap', default_token))
             cmap_var = tk.StringVar(value=current_cmap)
@@ -3067,6 +3067,139 @@ class ChemometricsGUI:
                     menu=class_colormaps_menu
                 )
                 item_count += 1
+
+        if str(graph_type).strip().lower() == 'bar':
+            legend_menu = tk.Menu(menu, tearoff=0)
+
+            default_suffix = " " + self.language_manager.translate('menu.default_tag', '(default)')
+
+            raw_show_mode = str(config.get('legend_show_mode', '')).strip().lower()
+            if raw_show_mode not in {'auto', 'yes', 'no'}:
+                legacy_show_legend = config.get('show_legend')
+                if isinstance(legacy_show_legend, bool):
+                    raw_show_mode = 'yes' if legacy_show_legend else 'no'
+                else:
+                    raw_show_mode = 'auto'
+
+            show_mode_var = tk.StringVar(value=raw_show_mode)
+            _keep_var_ref(show_mode_var)
+
+            def _set_bar_legend_show_mode(value: str) -> None:
+                self._update_graph_section_config_option(
+                    instance_alias,
+                    section_id,
+                    'legend_show_mode',
+                    str(value),
+                    popup_refresh_callback=popup_refresh_callback,
+                    refresh_analysis=True
+                )
+
+            show_menu = tk.Menu(legend_menu, tearoff=0)
+            show_menu.add_radiobutton(
+                label=self.language_manager.translate('menu.graph_context.legend_show_auto', 'Auto') + default_suffix,
+                variable=show_mode_var,
+                value='auto',
+                command=lambda: _set_bar_legend_show_mode('auto')
+            )
+            show_menu.add_radiobutton(
+                label=self.language_manager.translate('menu.graph_context.legend_show_yes', 'Yes'),
+                variable=show_mode_var,
+                value='yes',
+                command=lambda: _set_bar_legend_show_mode('yes')
+            )
+            show_menu.add_radiobutton(
+                label=self.language_manager.translate('menu.graph_context.legend_show_no', 'No'),
+                variable=show_mode_var,
+                value='no',
+                command=lambda: _set_bar_legend_show_mode('no')
+            )
+            legend_menu.add_cascade(
+                label=self.language_manager.translate('menu.graph_context.legend_show', 'Show Legend'),
+                menu=show_menu
+            )
+
+            raw_position = str(config.get('legend_position', 'auto')).strip().lower()
+            if raw_position not in {'auto', 'nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'}:
+                raw_position = 'auto'
+
+            raw_location = str(config.get('legend_location', 'inside')).strip().lower()
+            if raw_location not in {'inside', 'outside'}:
+                raw_location = 'inside'
+
+            legend_position_root_menu = tk.Menu(legend_menu, tearoff=0)
+            legend_position_menu = tk.Menu(legend_position_root_menu, tearoff=0)
+            legend_location_menu = tk.Menu(legend_position_root_menu, tearoff=0)
+
+            legend_position_var = tk.StringVar(value=raw_position)
+            legend_location_var = tk.StringVar(value=raw_location)
+            _keep_var_ref(legend_position_var)
+            _keep_var_ref(legend_location_var)
+
+            def _set_bar_legend_position(value: str) -> None:
+                self._update_graph_section_config_option(
+                    instance_alias,
+                    section_id,
+                    'legend_position',
+                    str(value),
+                    popup_refresh_callback=popup_refresh_callback,
+                    refresh_analysis=True
+                )
+
+            def _set_bar_legend_location(value: str) -> None:
+                self._update_graph_section_config_option(
+                    instance_alias,
+                    section_id,
+                    'legend_location',
+                    str(value),
+                    popup_refresh_callback=popup_refresh_callback,
+                    refresh_analysis=True
+                )
+
+            legend_position_specs = [
+                ('auto', self.language_manager.translate('menu.graph_context.legend_show_auto', 'Auto') + default_suffix),
+                ('nw', 'NW'), ('n', 'N'), ('ne', 'NE'), ('e', 'E'), ('se', 'SE'), ('s', 'S'), ('sw', 'SW'), ('w', 'W'),
+            ]
+
+            for position_value, position_label in legend_position_specs:
+                legend_position_menu.add_radiobutton(
+                    label=position_label,
+                    variable=legend_position_var,
+                    value=position_value,
+                    command=lambda v=position_value: _set_bar_legend_position(v)
+                )
+
+            legend_location_menu.add_radiobutton(
+                label=self.language_manager.translate('menu.graph_context.legend_location_inside', 'Inside') + default_suffix,
+                variable=legend_location_var,
+                value='inside',
+                command=lambda: _set_bar_legend_location('inside')
+            )
+            legend_location_menu.add_radiobutton(
+                label=self.language_manager.translate('menu.graph_context.legend_location_outside', 'Outside'),
+                variable=legend_location_var,
+                value='outside',
+                command=lambda: _set_bar_legend_location('outside')
+            )
+
+            legend_position_root_menu.add_cascade(
+                label=self.language_manager.translate('menu.graph_context.legend_position_value', 'Position'),
+                menu=legend_position_menu
+            )
+            legend_position_root_menu.add_cascade(
+                label=self.language_manager.translate('menu.graph_context.legend_location', 'Location'),
+                menu=legend_location_menu
+            )
+
+            legend_menu.add_cascade(
+                label=self.language_manager.translate('menu.graph_context.legend_position_root', 'Position'),
+                menu=legend_position_root_menu
+            )
+
+            menu.add_cascade(
+                label=self.language_manager.translate('menu.graph_context.legend', 'Legend'),
+                menu=legend_menu
+            )
+            item_count += 1
 
         if str(graph_type).strip().lower() == 'line':
             legend_menu = tk.Menu(menu, tearoff=0)
@@ -12529,8 +12662,52 @@ class ChemometricsGUI:
 
             normalized_graph_type = str(graph_type).strip().lower()
 
-            if normalized_graph_type in {'scatter', 'line'}:
-                render_config['scatter_reference_lines'] = self._resolve_scatter_reference_lines(config, outputs, slice_indices=line_slice_indices)
+            if normalized_graph_type == 'bar':
+                bar_series_label_source = config.get('bar_series_label_source')
+                bar_series_label_nested_key = config.get('bar_series_label_nested_key')
+                if isinstance(bar_series_label_source, str) and bar_series_label_source.strip():
+                    resolved_bar_series_label = self._get_data_from_source(
+                        outputs,
+                        bar_series_label_source,
+                        bar_series_label_nested_key if isinstance(bar_series_label_nested_key, str) else None,
+                    )
+                    if resolved_bar_series_label is not None:
+                        try:
+                            arr = np.asarray(resolved_bar_series_label, dtype=object).reshape(-1)
+                            if arr.size > 0:
+                                render_config['bar_series_label'] = str(arr[0])
+                        except Exception:
+                            render_config['bar_series_label'] = str(resolved_bar_series_label)
+
+                if 'bar_series_label' in render_config and str(render_config.get('bar_series_label', '')).strip() != '':
+                    render_config.pop('bar_series_index', None)
+
+                bar_class_source = config.get('class_labels')
+                if bar_class_source is not None:
+                    bar_class_raw = self._get_data_from_source(outputs, bar_class_source)
+                    if isinstance(bar_class_raw, (list, np.ndarray)):
+                        normalized_bar_class = self._normalize_class_labels_for_plot(bar_class_raw)
+                        if normalized_bar_class is not None:
+                            render_config['bar_class_data'] = normalized_bar_class
+
+                model_payload = outputs.get('model') if isinstance(outputs, dict) else None
+                if isinstance(model_payload, dict):
+                    ordered_labels = self._build_class_value_order_effective(outputs, model_payload)
+                    if ordered_labels:
+                        render_config['class_value_order_effective'] = ordered_labels
+
+            if normalized_graph_type in {'scatter', 'line', 'bar'}:
+                resolved_lines = self._resolve_scatter_reference_lines(config, outputs, slice_indices=line_slice_indices)
+                if normalized_graph_type == 'bar' and isinstance(resolved_lines, list):
+                    filtered_lines = []
+                    for entry in resolved_lines:
+                        if not isinstance(entry, dict):
+                            continue
+                        token = str(entry.get('orientation', entry.get('type', entry.get('mode', '')))).strip().lower()
+                        if token in {'vertical', 'horizontal'}:
+                            filtered_lines.append(entry)
+                    resolved_lines = filtered_lines
+                render_config['scatter_reference_lines'] = resolved_lines
 
             if normalized_graph_type in {'scatter', 'line'}:
                 if normalized_graph_type == 'scatter':
@@ -12593,8 +12770,18 @@ class ChemometricsGUI:
                             except Exception:
                                 pass
 
-            if normalized_graph_type in {'scatter', 'line'}:
-                render_config['scatter_reference_lines'] = self._resolve_scatter_reference_lines(config, outputs, slice_indices=line_slice_indices)
+            if normalized_graph_type in {'scatter', 'line', 'bar'}:
+                resolved_lines = self._resolve_scatter_reference_lines(config, outputs, slice_indices=line_slice_indices)
+                if normalized_graph_type == 'bar' and isinstance(resolved_lines, list):
+                    filtered_lines = []
+                    for entry in resolved_lines:
+                        if not isinstance(entry, dict):
+                            continue
+                        token = str(entry.get('orientation', entry.get('type', entry.get('mode', '')))).strip().lower()
+                        if token in {'vertical', 'horizontal'}:
+                            filtered_lines.append(entry)
+                    resolved_lines = filtered_lines
+                render_config['scatter_reference_lines'] = resolved_lines
             
             # Render graph using graph_renderer module
             graph_renderer = self._get_graph_renderer()
@@ -16550,8 +16737,52 @@ Count:
 
             normalized_graph_type = str(graph_type).strip().lower()
 
-            if normalized_graph_type in {'scatter', 'line'}:
-                render_config['scatter_reference_lines'] = self._resolve_scatter_reference_lines(config, outputs, slice_indices=line_slice_indices)
+            if normalized_graph_type == 'bar':
+                bar_series_label_source = config.get('bar_series_label_source')
+                bar_series_label_nested_key = config.get('bar_series_label_nested_key')
+                if isinstance(bar_series_label_source, str) and bar_series_label_source.strip():
+                    resolved_bar_series_label = self._get_data_from_source(
+                        outputs,
+                        bar_series_label_source,
+                        bar_series_label_nested_key if isinstance(bar_series_label_nested_key, str) else None,
+                    )
+                    if resolved_bar_series_label is not None:
+                        try:
+                            arr = np.asarray(resolved_bar_series_label, dtype=object).reshape(-1)
+                            if arr.size > 0:
+                                render_config['bar_series_label'] = str(arr[0])
+                        except Exception:
+                            render_config['bar_series_label'] = str(resolved_bar_series_label)
+
+                if 'bar_series_label' in render_config and str(render_config.get('bar_series_label', '')).strip() != '':
+                    render_config.pop('bar_series_index', None)
+
+                bar_class_source = config.get('class_labels')
+                if bar_class_source is not None:
+                    bar_class_raw = self._get_data_from_source(outputs, bar_class_source)
+                    if isinstance(bar_class_raw, (list, np.ndarray)):
+                        normalized_bar_class = self._normalize_class_labels_for_plot(bar_class_raw)
+                        if normalized_bar_class is not None:
+                            render_config['bar_class_data'] = normalized_bar_class
+
+                model_payload = outputs.get('model') if isinstance(outputs, dict) else None
+                if isinstance(model_payload, dict):
+                    ordered_labels = self._build_class_value_order_effective(outputs, model_payload)
+                    if ordered_labels:
+                        render_config['class_value_order_effective'] = ordered_labels
+
+            if normalized_graph_type in {'scatter', 'line', 'bar'}:
+                resolved_lines = self._resolve_scatter_reference_lines(config, outputs, slice_indices=line_slice_indices)
+                if normalized_graph_type == 'bar' and isinstance(resolved_lines, list):
+                    filtered_lines = []
+                    for entry in resolved_lines:
+                        if not isinstance(entry, dict):
+                            continue
+                        token = str(entry.get('orientation', entry.get('type', entry.get('mode', '')))).strip().lower()
+                        if token in {'vertical', 'horizontal'}:
+                            filtered_lines.append(entry)
+                    resolved_lines = filtered_lines
+                render_config['scatter_reference_lines'] = resolved_lines
 
             if normalized_graph_type in {'scatter', 'line'}:
                 if normalized_graph_type == 'scatter':

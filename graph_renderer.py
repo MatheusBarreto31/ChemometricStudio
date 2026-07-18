@@ -279,7 +279,7 @@ def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarr
     
     # Set default colormap in config if not already set (allows JSON configs to override)
     if 'cmap' not in config:
-        config['cmap'] = qualitative_cmap if str(graph_type).strip().lower() in {'line', 'scatter'} else default_cmap
+        config['cmap'] = qualitative_cmap if str(graph_type).strip().lower() in {'line', 'scatter', 'bar'} else default_cmap
     
     # Check if z_axis is defined for 3D scatter or 3d_surf
     z_axis_config = config.get('z_axis', {})
@@ -299,7 +299,7 @@ def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarr
 
         _render_line(ax, x_data, y_data, config, datasets, qualitative_cmap)
     elif graph_type == 'bar':
-        _render_bar(ax, x_data, y_data, config)
+        _render_bar(ax, x_data, y_data, z_data, config)
     elif graph_type == 'histogram':
         _render_histogram(ax, y_data, config)
     elif graph_type == 'heatmap':
@@ -332,7 +332,7 @@ def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarr
 
     _apply_axis_direction_options(ax, config, use_3d=use_3d)
 
-    if str(graph_type).strip().lower() in {'scatter', 'line'} and not use_3d:
+    if str(graph_type).strip().lower() in {'scatter', 'line', 'bar'} and not use_3d:
         _render_scatter_reference_lines(ax, config)
 
     # Apply axis scale (log10/log2/ln) AFTER all drawing so that ax.plot() calls
@@ -2795,16 +2795,290 @@ def _render_line_multi_dataset(ax, datasets: List[Dict[str, Any]], config: dict,
 
 
 def _render_bar(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],
-               config: dict) -> None:
-    """Render a bar plot."""
-    if x_data is not None and y_data is not None:
-        if isinstance(x_data, np.ndarray) and x_data.ndim == 1:
-            ax.bar(range(len(y_data)), y_data)
-            ax.set_ylabel(config.get('y_axis', {}).get('label', 'Value'))
+               z_data: Optional[np.ndarray], config: dict) -> None:
+    """Render a bar plot.
+
+    Supports both:
+      - 1D y_data: classic single-series bar plot
+      - 2D y_data (n_samples x n_series): grouped/clustered bars per sample
+    """
+    if y_data is None:
+        return
+
+    try:
+        y_arr = np.asarray(y_data)
+    except Exception:
+        return
+
+    cmap_name = str(config.get('cmap', 'viridis'))
+    try:
+        cmap_obj = cm.get_cmap(cmap_name)
+    except Exception:
+        cmap_obj = cm.get_cmap('viridis')
+
+    def _bar_colors(n_colors: int) -> List[Any]:
+        if n_colors <= 0:
+            return []
+        if hasattr(cmap_obj, 'colors') and getattr(cmap_obj, 'colors', None):
+            palette = [mcolors.to_rgba(c) for c in list(cmap_obj.colors)]
+            return [palette[i % len(palette)] for i in range(n_colors)]
+        denom = max(1, n_colors - 1)
+        return [cmap_obj(i / denom) for i in range(n_colors)]
+
+    def _class_color_mapping(values: np.ndarray) -> Dict[str, Any]:
+        values_arr = np.asarray(values, dtype=object).reshape(-1)
+        unique_vals = [v for v in np.unique(values_arr)]
+        if hasattr(cmap_obj, 'colors') and getattr(cmap_obj, 'colors', None):
+            palette = [mcolors.to_rgba(c) for c in list(cmap_obj.colors)]
         else:
-            ax.bar(x_data, y_data)
-            ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
-            ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+            n_sample = max(10, int(getattr(cmap_obj, 'N', 10) or 10))
+            palette = [mcolors.to_rgba(cmap_obj(i / max(1, n_sample - 1))) for i in range(n_sample)]
+
+        preferred_order_cfg = config.get('class_value_order_effective')
+        preferred_order = [str(v) for v in preferred_order_cfg] if isinstance(preferred_order_cfg, (list, tuple)) else []
+        leftovers = [v for v in unique_vals if str(v) not in preferred_order]
+
+        mapping: Dict[str, Any] = {}
+        for val in unique_vals:
+            value_str = str(val)
+            if value_str in preferred_order:
+                palette_idx = preferred_order.index(value_str)
+            else:
+                palette_idx = len(preferred_order) + leftovers.index(val)
+            mapping[value_str] = palette[palette_idx % len(palette)]
+        return mapping
+
+    legend_color_mapping: Dict[str, Any] = {}
+
+    def _bar_class_colors(n_items: int) -> Optional[List[Any]]:
+        if n_items <= 0:
+            return None
+        raw_classes = config.get('bar_class_data', config.get('class_labels'))
+        if raw_classes is None:
+            return None
+        try:
+            class_arr = np.asarray(raw_classes, dtype=object).reshape(-1)
+        except Exception:
+            return None
+        if class_arr.size <= 0:
+            return None
+        n = min(int(class_arr.size), int(n_items))
+        class_arr = class_arr[:n]
+        color_map = _class_color_mapping(class_arr)
+        return [color_map.get(str(v), _bar_colors(1)[0]) for v in class_arr.tolist()]
+
+    if y_arr.ndim == 2:
+        n_samples, n_series = int(y_arr.shape[0]), int(y_arr.shape[1])
+        if n_samples <= 0 or n_series <= 0:
+            return
+
+        x_positions = np.arange(n_samples, dtype=float)
+
+        x_labels: Optional[List[str]] = None
+        if x_data is not None:
+            try:
+                x_arr = np.asarray(x_data, dtype=object).reshape(-1)
+                if x_arr.size > 0:
+                    n_label = min(int(x_arr.size), n_samples)
+                    x_labels = [str(v) for v in x_arr[:n_label].tolist()]
+                    if n_label < n_samples:
+                        x_labels.extend([str(i + 1) for i in range(n_label, n_samples)])
+            except Exception:
+                x_labels = None
+
+        series_labels: List[str] = []
+        if z_data is not None:
+            try:
+                z_arr = np.asarray(z_data, dtype=object).reshape(-1)
+                if z_arr.size > 0:
+                    series_labels = [str(v) for v in z_arr[:n_series].tolist()]
+            except Exception:
+                series_labels = []
+        if len(series_labels) < n_series:
+            for idx in range(len(series_labels), n_series):
+                series_labels.append(f'Class {idx + 1}')
+
+        # Optional selector for 2D bar matrices: render only one series/column.
+        # Explicit selectors (preferred):
+        #   - bar_column_index: integer column index
+        #   - bar_column_label: exact match against resolved series labels
+        # Backward-compatible aliases:
+        #   - bar_series_index
+        #   - bar_series_label
+        selected_series_indices = list(range(n_series))
+        selected_by_index = False
+
+        raw_series_index = config.get('bar_column_index', config.get('bar_series_index'))
+        if raw_series_index is not None:
+            try:
+                idx = int(raw_series_index)
+                if idx < 0:
+                    idx += n_series
+                if 0 <= idx < n_series:
+                    selected_series_indices = [idx]
+                    selected_by_index = True
+            except Exception:
+                pass
+
+        if not selected_by_index:
+            raw_series_label = config.get('bar_column_label', config.get('bar_series_label'))
+            if raw_series_label is not None:
+                wanted = str(raw_series_label).strip()
+                if wanted:
+                    for idx, lbl in enumerate(series_labels):
+                        if str(lbl) == wanted:
+                            selected_series_indices = [idx]
+                            break
+
+        n_selected = len(selected_series_indices)
+        if n_selected <= 0:
+            return
+
+        group_width = _coerce_float(config.get('bar_group_width', 0.8))
+        if group_width is None:
+            group_width = 0.8
+        group_width = float(np.clip(group_width, 0.05, 0.95))
+        bar_width = group_width / float(max(1, n_selected))
+        offsets = (np.arange(n_selected, dtype=float) - (n_selected - 1) / 2.0) * bar_width
+
+        colors = _bar_colors(max(n_selected, n_series))
+        class_colors = _bar_class_colors(n_samples) if n_selected == 1 else None
+        if class_colors is not None and n_selected == 1:
+            try:
+                raw_classes = np.asarray(config.get('bar_class_data', config.get('class_labels')), dtype=object).reshape(-1)
+                n_map = min(int(raw_classes.size), n_samples)
+                if n_map > 0:
+                    legend_color_mapping = _class_color_mapping(raw_classes[:n_map])
+            except Exception:
+                legend_color_mapping = {}
+
+        for plot_pos, series_idx in enumerate(selected_series_indices):
+            y_col = np.asarray(y_arr[:, series_idx], dtype=float)
+            valid = np.isfinite(y_col)
+            if not np.any(valid):
+                continue
+            bar_color: Any = colors[plot_pos]
+            if class_colors is not None and len(class_colors) >= n_samples:
+                bar_color = [class_colors[i] for i, ok in enumerate(valid.tolist()) if ok]
+            ax.bar(
+                x_positions[valid] + offsets[plot_pos],
+                y_col[valid],
+                width=bar_width * 0.95,
+                label=series_labels[series_idx],
+                color=bar_color,
+            )
+
+        ax.set_xticks(x_positions)
+        if x_labels is not None:
+            ax.set_xticklabels(x_labels)
+            if len(x_labels) > 12:
+                for tick_label in ax.get_xticklabels():
+                    tick_label.set_rotation(45)
+                    tick_label.set_horizontalalignment('right')
+                    tick_label.set_rotation_mode('anchor')
+
+        ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+        ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+        if n_selected > 1:
+            ax.legend(fontsize='small')
+        elif legend_color_mapping:
+            legend_show_mode = _normalize_scatter_legend_show_mode(config)
+            legend_elements_cfg = config.get('legend_elements', {}) if isinstance(config.get('legend_elements'), dict) else {}
+            show_color = bool(legend_elements_cfg.get('color', True))
+            if legend_show_mode != 'no' and show_color:
+                from matplotlib.lines import Line2D
+
+                handles: List[Any] = []
+                labels: List[str] = []
+                for cls, rgba in legend_color_mapping.items():
+                    handles.append(
+                        Line2D([0], [0], marker='s', color='none', markerfacecolor=rgba,
+                               markeredgecolor='darkgray', markersize=7, linewidth=0)
+                    )
+                    labels.append(str(cls))
+                if handles:
+                    legend_place_kwargs = _get_scatter_legend_placement(config)
+                    ax.legend(handles, labels, fontsize='small', framealpha=0.8, **legend_place_kwargs)
+        return
+
+    y_1d = np.asarray(y_arr).reshape(-1)
+    if y_1d.size == 0:
+        return
+    single_color = _bar_colors(1)[0]
+    class_colors_1d = None
+
+    if x_data is not None:
+        try:
+            x_arr = np.asarray(x_data, dtype=object).reshape(-1)
+        except Exception:
+            x_arr = np.asarray([], dtype=object)
+
+        if x_arr.size > 0:
+            n = min(int(x_arr.size), int(y_1d.size))
+            x_arr = x_arr[:n]
+            y_1d = y_1d[:n]
+            class_colors_1d = _bar_class_colors(n)
+            try:
+                raw_classes = np.asarray(config.get('bar_class_data', config.get('class_labels')), dtype=object).reshape(-1)
+                n_map = min(int(raw_classes.size), n)
+                if n_map > 0:
+                    legend_color_mapping = _class_color_mapping(raw_classes[:n_map])
+            except Exception:
+                legend_color_mapping = {}
+
+            try:
+                x_numeric = np.asarray(x_arr, dtype=float)
+                if np.all(np.isfinite(x_numeric)):
+                    ax.bar(x_numeric, y_1d, color=class_colors_1d if class_colors_1d is not None else single_color)
+                else:
+                    raise ValueError
+            except Exception:
+                pos = np.arange(n)
+                ax.bar(pos, y_1d, color=class_colors_1d if class_colors_1d is not None else single_color)
+                ax.set_xticks(pos)
+                ax.set_xticklabels([str(v) for v in x_arr.tolist()])
+        else:
+            class_colors_1d = _bar_class_colors(int(y_1d.size))
+            try:
+                raw_classes = np.asarray(config.get('bar_class_data', config.get('class_labels')), dtype=object).reshape(-1)
+                n_map = min(int(raw_classes.size), int(y_1d.size))
+                if n_map > 0:
+                    legend_color_mapping = _class_color_mapping(raw_classes[:n_map])
+            except Exception:
+                legend_color_mapping = {}
+            ax.bar(np.arange(int(y_1d.size)), y_1d, color=class_colors_1d if class_colors_1d is not None else single_color)
+    else:
+        class_colors_1d = _bar_class_colors(int(y_1d.size))
+        try:
+            raw_classes = np.asarray(config.get('bar_class_data', config.get('class_labels')), dtype=object).reshape(-1)
+            n_map = min(int(raw_classes.size), int(y_1d.size))
+            if n_map > 0:
+                legend_color_mapping = _class_color_mapping(raw_classes[:n_map])
+        except Exception:
+            legend_color_mapping = {}
+        ax.bar(np.arange(int(y_1d.size)), y_1d, color=class_colors_1d if class_colors_1d is not None else single_color)
+
+    ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+    ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+
+    if legend_color_mapping:
+        legend_show_mode = _normalize_scatter_legend_show_mode(config)
+        legend_elements_cfg = config.get('legend_elements', {}) if isinstance(config.get('legend_elements'), dict) else {}
+        show_color = bool(legend_elements_cfg.get('color', True))
+        if legend_show_mode != 'no' and show_color:
+            from matplotlib.lines import Line2D
+
+            handles: List[Any] = []
+            labels: List[str] = []
+            for cls, rgba in legend_color_mapping.items():
+                handles.append(
+                    Line2D([0], [0], marker='s', color='none', markerfacecolor=rgba,
+                           markeredgecolor='darkgray', markersize=7, linewidth=0)
+                )
+                labels.append(str(cls))
+            if handles:
+                legend_place_kwargs = _get_scatter_legend_placement(config)
+                ax.legend(handles, labels, fontsize='small', framealpha=0.8, **legend_place_kwargs)
 
 
 def _render_histogram(ax, y_data: Optional[np.ndarray], config: dict) -> None:

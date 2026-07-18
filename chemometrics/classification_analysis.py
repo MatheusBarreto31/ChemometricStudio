@@ -1618,18 +1618,127 @@ def classification_one_class(
         class_cv_pred = None
 
     # Build two-class probabilities [Unknown, Reference].
-    def _to_proba(score: Optional[np.ndarray]) -> Optional[np.ndarray]:
+    # We map scores through a sigmoid around the decision boundary (score=0),
+    # and infer score direction from predicted inlier/outlier labels so that
+    # higher mapped probability always means "more likely reference class".
+    def _to_proba(score: Optional[np.ndarray], pred_inlier: Optional[np.ndarray]) -> Optional[np.ndarray]:
         if score is None:
             return None
+
         s = np.asarray(score, dtype=float).reshape(-1)
-        scale = float(np.std(s)) if s.size > 1 else 1.0
-        scale = 1.0 if scale <= 1e-12 else scale
-        p_ref = _safe_sigmoid(s / scale)
+        if s.size == 0:
+            return None
+
+        finite = np.isfinite(s)
+        if not np.any(finite):
+            return None
+
+        s_work = s.copy()
+        direction = 1.0
+
+        if pred_inlier is not None:
+            try:
+                pred = np.asarray(pred_inlier, dtype=int).reshape(-1)
+                n = min(pred.shape[0], s_work.shape[0])
+                if n > 0:
+                    s_eval = s_work[:n]
+                    p_eval = pred[:n]
+                    eval_finite = np.isfinite(s_eval)
+                    inlier_scores = s_eval[(p_eval == 1) & eval_finite]
+                    outlier_scores = s_eval[(p_eval == -1) & eval_finite]
+                    if inlier_scores.size > 0 and outlier_scores.size > 0:
+                        if float(np.median(inlier_scores)) < float(np.median(outlier_scores)):
+                            direction = -1.0
+                    elif inlier_scores.size > 0:
+                        # If every predicted point is inlier, orient scores so inliers
+                        # lie on the positive side of the decision boundary.
+                        if float(np.median(inlier_scores)) < 0.0:
+                            direction = -1.0
+                    elif outlier_scores.size > 0:
+                        # If every predicted point is outlier, orient scores so outliers
+                        # lie on the negative side of the decision boundary.
+                        if float(np.median(outlier_scores)) > 0.0:
+                            direction = -1.0
+            except Exception:
+                direction = 1.0
+
+        s_work = direction * s_work
+
+        finite_scores = s_work[np.isfinite(s_work)]
+        if finite_scores.size == 0:
+            return None
+
+        # Calibrate each side of the boundary separately so extreme negative tails
+        # do not flatten the inlier-side probabilities.
+        pos_scores = np.array([], dtype=float)
+        neg_scores = np.array([], dtype=float)
+        if pred_inlier is not None:
+            try:
+                pred = np.asarray(pred_inlier, dtype=int).reshape(-1)
+                n = min(pred.shape[0], s_work.shape[0])
+                if n > 0:
+                    s_eval = s_work[:n]
+                    p_eval = pred[:n]
+                    eval_finite = np.isfinite(s_eval)
+                    pos_scores = s_eval[(p_eval == 1) & eval_finite]
+                    neg_scores = -s_eval[(p_eval == -1) & eval_finite]
+            except Exception:
+                pos_scores = np.array([], dtype=float)
+                neg_scores = np.array([], dtype=float)
+
+        # Fallback to score sign if predictions are not informative on one side.
+        if pos_scores.size == 0:
+            pos_scores = finite_scores[finite_scores > 0.0]
+        if neg_scores.size == 0:
+            neg_scores = -finite_scores[finite_scores < 0.0]
+
+        def _robust_side_scale(side_vals: np.ndarray) -> float:
+            vals = np.asarray(side_vals, dtype=float)
+            vals = vals[np.isfinite(vals) & (vals > 0.0)]
+            if vals.size == 0:
+                return 1.0
+            q = float(np.quantile(vals, 0.9))
+            if not np.isfinite(q) or q <= 1e-12:
+                q = float(np.median(vals))
+            if not np.isfinite(q) or q <= 1e-12:
+                q = float(np.mean(vals))
+            if not np.isfinite(q) or q <= 1e-12:
+                return 1.0
+            # ln(10): map 90th percentile margin to ~0.95 (positive) or ~0.05 (negative).
+            return q / 2.302585092994046
+
+        pos_scale = _robust_side_scale(pos_scores)
+        neg_scale = _robust_side_scale(neg_scores)
+
+        p_ref = np.full(s_work.shape, 0.5, dtype=float)
+        pos_mask = s_work > 0.0
+        neg_mask = s_work < 0.0
+        if np.any(pos_mask):
+            p_ref[pos_mask] = 0.5 + 0.5 * (1.0 - np.exp(-s_work[pos_mask] / pos_scale))
+        if np.any(neg_mask):
+            p_ref[neg_mask] = 0.5 * np.exp(s_work[neg_mask] / neg_scale)
+        p_ref = np.clip(p_ref, 1e-6, 1.0 - 1e-6)
+
+        # Last-resort orientation guard: inliers should not sit below outliers.
+        if pred_inlier is not None:
+            try:
+                pred = np.asarray(pred_inlier, dtype=int).reshape(-1)
+                n = min(pred.shape[0], p_ref.shape[0])
+                if n > 0:
+                    p_eval = p_ref[:n]
+                    pred_eval = pred[:n]
+                    p_in = p_eval[pred_eval == 1]
+                    p_out = p_eval[pred_eval == -1]
+                    if p_in.size > 0 and p_out.size > 0 and float(np.median(p_in)) < float(np.median(p_out)):
+                        p_ref = 1.0 - p_ref
+            except Exception:
+                pass
+
         return np.column_stack([1.0 - p_ref, p_ref])
 
-    class_cal_proba = _to_proba(score_cal)
-    class_val_proba = _to_proba(score_val)
-    class_cv_proba = _to_proba(score_cv)
+    class_cal_proba = _to_proba(score_cal, inlier_cal)
+    class_val_proba = _to_proba(score_val, inlier_val)
+    class_cv_proba = _to_proba(score_cv, inlier_cv)
 
     class_labels = [str(one_class_unknown_label), str(reference_class)]
     method_norm = str(one_class_method).strip().lower()
