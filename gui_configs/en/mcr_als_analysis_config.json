@@ -90,7 +90,40 @@
     "sbs_c_sample_axis": "SBS C Sample Axis",
     "sbs_c_sample_axis_full": "SBS C Sample Axis (All Samples)",
     "sbs_c_component_axis": "SBS C Component Axis",
-    "sbs_component_labels": "SBS Component Labels"
+    "sbs_component_labels": "SBS Component Labels",
+    "sweep_model_axis": "Sweep Model Axis",
+    "sweep_model_labels": "Sweep Model Labels",
+    "sweep_component_labels": "Sweep Component Labels",
+    "sweep_c_component_axis": "Sweep C Component Axis",
+    "sweep_c_sample_axis_full": "Sweep C Sample Axis (All Samples)",
+    "sweep_c_scores": "Sweep C Scores (Cal)",
+    "sweep_val_c_scores": "Sweep C Scores (Val)",
+    "sweep_c_scores_heatmap_full": "Sweep C Scores Heatmap (All Samples)",
+    "sweep_concentrations_unfolded": "Sweep Unfolded C Profiles",
+    "sweep_s_profiles": "Sweep S Profiles",
+    "sweep_mcr_pair_components": "Sweep MCR Pair Components",
+    "sweep_mcr_pair_y_columns": "Sweep MCR Pair Y Columns",
+    "sweep_mcr_pair_y_titles": "Sweep MCR Pair Y Titles",
+    "sweep_mcr_pair_y_titles_by_model": "Sweep MCR Pair Y Titles by Model",
+    "sweep_mcr_pairing_labels": "Sweep MCR Pairing Labels",
+    "sweep_mcr_pairing_labels_by_model": "Sweep MCR Pairing Labels by Model",
+    "sweep_mcr_pairing_labels_by_dimension": "Sweep MCR Pairing Labels by Dimension",
+    "sweep_y_cal_pred_pairs": "Sweep Calibration Predicted (Pairs)",
+    "sweep_y_cal_true_pairs": "Sweep Calibration Reference (Pairs)",
+    "sweep_y_cal_error_pairs": "Sweep Calibration Error (Pairs)",
+    "sweep_y_val_pred_pairs": "Sweep Validation Predicted (Pairs)",
+    "sweep_y_val_true_pairs": "Sweep Validation Reference (Pairs)",
+    "sweep_y_val_error_pairs": "Sweep Validation Error (Pairs)",
+    "sweep_c_scores_cal_pairs": "Sweep Calibration C Scores (Pairs)",
+    "sweep_c_scores_val_pairs": "Sweep Validation C Scores (Pairs)",
+    "sweep_y_val_effective_pairs": "Sweep Validation Effective Y (Pairs)",
+    "sweep_cal_regression_line_x_pairs": "Sweep Calibration Regression X (Pairs)",
+    "sweep_cal_regression_line_y_pairs": "Sweep Calibration Regression Y (Pairs)",
+    "sweep_val_pred_ref_diag_extent": "Sweep Validation Pred-Ref Diagonal Extent",
+    "sweep_val_pred_ref_diag_x": "Sweep Validation Pred-Ref Diagonal X",
+    "sweep_val_pred_ref_diag_y": "Sweep Validation Pred-Ref Diagonal Y",
+    "sweep_ejcr_cal": "Sweep Calibration EJCR",
+    "sweep_ejcr_val": "Sweep Validation EJCR"
   },
   "passforward": {
     "compatible": true,
@@ -680,10 +713,20 @@
         "name": "sweep_mode",
         "label": "Sweep Components",
         "category": "Model Parameters",
-        "widget": "checkbutton",
-        "default": false,
+        "widget": "combobox",
+        "values": [
+          "off",
+          "stats_only",
+          "on"
+        ],
+        "value_aliases": [
+          "Off",
+          "Stats only",
+          "On"
+        ],
+        "default": "off",
         "required": false,
-        "tooltip": "Perform a component sweep by iteratively fitting models with different component counts aggregating results. Useful for generating scree plots.",
+        "tooltip": "Off: disable sweep. Stats only: compute sweep scree metrics only. On: compute sweep scree metrics and expose sweep-model pages.",
         "input_type": "user"
       },
       {
@@ -696,7 +739,10 @@
         "required": false,
         "input_type": "user",
         "visible_if": {
-          "sweep_mode": true
+          "sweep_mode": {
+            "operator": "!=",
+            "value": "off"
+          }
         },
         "tooltip": "Component counts to sweep when sweep mode is enabled. Examples: 2:6, 2-8, 2,3,4."
       },
@@ -939,6 +985,8 @@
               },
               "title": "C Profiles (Unfolded Rows)",
               "show_origin": false,
+              "show_legend": true,
+              "line_series_labels_source": "component_labels",
               "reference_lines": [
                 {
                   "orientation": "vertical",
@@ -981,7 +1029,9 @@
                 "label": "S (a.u.)"
               },
               "title": "S Profiles",
-              "show_origin": false
+              "show_origin": false,
+              "show_legend": true,
+              "line_series_labels_source": "component_labels"
             }
           },
           {
@@ -1004,15 +1054,168 @@
                 "label": "S (a.u.)"
               },
               "title": "S Profiles",
-              "show_origin": false
+              "show_origin": false,
+              "show_legend": true,
+              "line_series_labels_source": "component_labels"
             }
           }
         ],
         "condition": {
-          "parameter": "validation_processing",
-          "operator": "==",
-          "value": "batch"
+          "all": [
+            {
+              "parameter": "validation_processing",
+              "operator": "==",
+              "value": "batch"
+            },
+            {
+              "parameter": "sweep_model_labels",
+              "operator": "not_exists",
+              "value": true
+            }
+          ]
         }
+      },
+      {
+        "title": "C and S Profiles (Sweep)",
+        "layout": "ew",
+        "condition": {
+          "all": [
+            {
+              "parameter": "validation_processing",
+              "operator": "==",
+              "value": "batch"
+            },
+            {
+              "parameter": "sweep_model_labels",
+              "operator": "exists",
+              "value": true
+            }
+          ]
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "x_axis": {
+                "data_source": "concentration_row_axis",
+                "force_integer": true,
+                "label": "Unfolded Row Index"
+              },
+              "y_axis": {
+                "data_source": "sweep_concentrations_unfolded",
+                "label": "C (a.u.)"
+              },
+              "title": "C Profiles (Sweep Model)",
+              "show_origin": false,
+              "show_legend": true,
+              "line_series_labels_source": "sweep_component_labels",
+              "reference_lines": [
+                {
+                  "orientation": "vertical",
+                  "values": {
+                    "data_source": "sample_boundary_positions"
+                  },
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.7,
+                  "color": "#666666"
+                },
+                {
+                  "orientation": "vertical",
+                  "value": {
+                    "data_source": "cal_val_boundary_position"
+                  },
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.7,
+                  "color": "#cc0000"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Sweep Model",
+                  "dimension": 0,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "labels_source": "sweep_model_labels",
+                  "labels_dimension": 0,
+                  "nav_id": "sweep_mcr_profile_model"
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "condition": {
+              "parameter": "s_axis_vector",
+              "operator": "exists",
+              "value": true
+            },
+            "config": {
+              "graph_type": "line",
+              "x_axis": {
+                "data_source": "s_axis_vector",
+                "label": "s_axis_label"
+              },
+              "y_axis": {
+                "data_source": "sweep_s_profiles",
+                "label": "S (a.u.)"
+              },
+              "title": "S Profiles (Sweep Model)",
+              "show_origin": false,
+              "show_legend": true,
+              "line_series_labels_source": "sweep_component_labels",
+              "data_slicing": [
+                {
+                  "name": "Sweep Model",
+                  "dimension": 0,
+                  "default": 0,
+                  "show_navigation_menu": false,
+                  "labels_source": "sweep_model_labels",
+                  "labels_dimension": 0,
+                  "nav_id": "sweep_mcr_profile_model"
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "condition": {
+              "parameter": "s_axis_vector",
+              "operator": "not_exists",
+              "value": true
+            },
+            "config": {
+              "graph_type": "line",
+              "x_axis": {
+                "data_source": "row_index",
+                "reference_source": "sweep_s_profiles",
+                "force_integer": true,
+                "label": "s_axis_label"
+              },
+              "y_axis": {
+                "data_source": "sweep_s_profiles",
+                "label": "S (a.u.)"
+              },
+              "title": "S Profiles (Sweep Model)",
+              "show_origin": false,
+              "show_legend": true,
+              "line_series_labels_source": "sweep_component_labels",
+              "data_slicing": [
+                {
+                  "name": "Sweep Model",
+                  "dimension": 0,
+                  "default": 0,
+                  "show_navigation_menu": false,
+                  "labels_source": "sweep_model_labels",
+                  "labels_dimension": 0,
+                  "nav_id": "sweep_mcr_profile_model"
+                }
+              ]
+            }
+          }
+        ]
       },
       {
         "title": "C scores (Aggregated)",
@@ -1101,10 +1304,140 @@
           }
         ],
         "condition": {
-          "parameter": "validation_processing",
-          "operator": "==",
-          "value": "batch"
+          "all": [
+            {
+              "parameter": "validation_processing",
+              "operator": "==",
+              "value": "batch"
+            },
+            {
+              "parameter": "sweep_model_labels",
+              "operator": "not_exists",
+              "value": true
+            }
+          ]
         }
+      },
+      {
+        "title": "C Scores (Sweep)",
+        "layout": "ew",
+        "condition": {
+          "all": [
+            {
+              "parameter": "validation_processing",
+              "operator": "==",
+              "value": "batch"
+            },
+            {
+              "parameter": "sweep_model_labels",
+              "operator": "exists",
+              "value": true
+            }
+          ]
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "C Scores (Sweep Model)",
+              "show_grid": false,
+              "show_origin": true,
+              "show_labels": false,
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "sweep_c_scores",
+                    "axis_type": "linear",
+                    "axis_labels": "sweep_component_labels"
+                  },
+                  "y_axis": {
+                    "data_source": "sweep_c_scores",
+                    "axis_type": "linear",
+                    "axis_labels": "sweep_component_labels"
+                  },
+                  "class_labels": "class_data_cal",
+                  "point_labels_source": "smp_cal",
+                  "label": "Calibration"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "sweep_val_c_scores",
+                    "axis_type": "linear",
+                    "axis_labels": "sweep_component_labels"
+                  },
+                  "y_axis": {
+                    "data_source": "sweep_val_c_scores",
+                    "axis_type": "linear",
+                    "axis_labels": "sweep_component_labels"
+                  },
+                  "class_labels": "class_data_val",
+                  "point_labels_source": "smp_val",
+                  "label": "Validation"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Sweep Model",
+                  "dimension": 0,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "labels_source": "sweep_model_labels",
+                  "labels_dimension": 0,
+                  "nav_id": "sweep_mcr_model"
+                },
+                {
+                  "name": "C-X",
+                  "dimension": 2,
+                  "axis": "x",
+                  "default": 0,
+                  "show_navigation_menu": true
+                },
+                {
+                  "name": "C-Y",
+                  "dimension": 2,
+                  "axis": "y",
+                  "default": 1,
+                  "show_navigation_menu": true
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "heatmap",
+              "flip_xy": true,
+              "y_axis": {
+                "data_source": "sweep_c_component_axis",
+                "force_integer": true,
+                "label": "Component"
+              },
+              "x_axis": {
+                "data_source": "sweep_c_sample_axis_full",
+                "force_integer": true,
+                "reverse_axis": true,
+                "label": "Sample"
+              },
+              "z_axis": {
+                "data_source": "sweep_c_scores_heatmap_full",
+                "label": "C Score"
+              },
+              "title": "C Scores Heatmap (Sweep Model)",
+              "data_slicing": [
+                {
+                  "name": "Sweep Model",
+                  "dimension": 0,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "labels_source": "sweep_model_labels",
+                  "labels_dimension": 0,
+                  "nav_id": "sweep_mcr_model"
+                }
+              ]
+            }
+          }
+        ]
       },
       {
         "title": "C Scores (SBS)",
@@ -1253,6 +1586,7 @@
               },
               "title": "C Profiles (Unfolded Rows, Model for Val Sample)",
               "show_origin": false,
+              "show_legend": true,
               "line_series_labels_source": "sbs_component_labels",
               "reference_lines": [
                 {
@@ -1306,6 +1640,7 @@
               },
               "title": "S Profiles (Model for Val Sample)",
               "show_origin": false,
+              "show_legend": true,
               "line_series_labels_source": "sbs_component_labels",
               "data_slicing": [
                 {
@@ -1339,6 +1674,7 @@
               },
               "title": "S Profiles (Model for Val Sample)",
               "show_origin": false,
+              "show_legend": true,
               "line_series_labels_source": "sbs_component_labels",
               "data_slicing": [
                 {
@@ -1412,6 +1748,7 @@
         "condition": {
           "all": [
             {"parameter": "validation_processing","operator": "==","value": "batch"},
+            {"parameter": "sweep_model_labels","operator": "not_exists","value": true},
             {"parameter": "Y_cal","operator": "exists"}]
         },
         "sections": [
@@ -1610,6 +1947,277 @@
                   "nav_id": "mcr_pairing",
                   "labels_source": "mcr_pairing_labels",
                   "labels_dimension": 0
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "title": "Prediction Tables (Sweep)",
+        "layout": "fd",
+        "condition": {
+          "all": [
+            {
+              "parameter": "validation_processing",
+              "operator": "==",
+              "value": "batch"
+            },
+            {
+              "parameter": "sweep_model_labels",
+              "operator": "exists",
+              "value": true
+            },
+            {
+              "parameter": "Y_cal",
+              "operator": "exists"
+            }
+          ]
+        },
+        "sections": [
+          {
+            "type": "table",
+            "config": {
+              "title": "Calibration Predictions, References, and Error (Sweep Model)",
+              "row_label": "Sample",
+              "row_headers": "smp_cal",
+              "columns": [
+                {
+                  "data_source": "sweep_y_cal_pred_pairs",
+                  "name": "Predicted"
+                },
+                {
+                  "data_source": "sweep_y_cal_true_pairs",
+                  "name": "Reference"
+                },
+                {
+                  "data_source": "sweep_y_cal_error_pairs",
+                  "name": "Error"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Sweep Model",
+                  "dimension": 0,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "labels_source": "sweep_model_labels",
+                  "labels_dimension": 0,
+                  "nav_id": "sweep_mcr_pred_model"
+                },
+                {
+                  "name": "Pairing",
+                  "dimension": 2,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "labels_source": "sweep_mcr_pairing_labels_by_model",
+                  "labels_dimension": 2,
+                  "labels_index_dimensions": [0, 2],
+                  "nav_id": "sweep_mcr_pred_pairing"
+                }
+              ],
+              "slice_title_source": "sweep_mcr_pair_y_titles_by_model",
+              "slice_title_dimension": 2,
+              "slice_title_index_dimensions": [0, 2],
+              "slice_title_prefix": "Y",
+              "decimal_places": 6,
+              "max_rows": 500
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Validation Predictions, References, and Error (Sweep Model)",
+              "row_label": "Sample",
+              "row_headers": "smp_val",
+              "columns": [
+                {
+                  "data_source": "sweep_y_val_pred_pairs",
+                  "name": "Predicted"
+                },
+                {
+                  "data_source": "sweep_y_val_true_pairs",
+                  "name": "Reference"
+                },
+                {
+                  "data_source": "sweep_y_val_error_pairs",
+                  "name": "Error"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Sweep Model",
+                  "dimension": 0,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "labels_source": "sweep_model_labels",
+                  "labels_dimension": 0,
+                  "nav_id": "sweep_mcr_pred_model"
+                },
+                {
+                  "name": "Pairing",
+                  "dimension": 2,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "labels_source": "sweep_mcr_pairing_labels_by_model",
+                  "labels_dimension": 2,
+                  "labels_index_dimensions": [0, 2],
+                  "nav_id": "sweep_mcr_pred_pairing"
+                }
+              ],
+              "slice_title_source": "sweep_mcr_pair_y_titles_by_model",
+              "slice_title_dimension": 2,
+              "slice_title_index_dimensions": [0, 2],
+              "slice_title_prefix": "Y",
+              "decimal_places": 6,
+              "max_rows": 500
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "C Scores vs Reference Y (Sweep Model)",
+              "show_origin": false,
+              "show_labels": false,
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "sweep_y_cal_true_pairs",
+                    "axis_type": "linear",
+                    "axis_labels": "sweep_mcr_pair_y_titles_by_model",
+                    "axis_labels_dimension": 2,
+                    "axis_labels_index_dimensions": [0, 2],
+                    "label_template": "$y_{{Ref}}$ ({label})"
+                  },
+                  "y_axis": {
+                    "data_source": "sweep_c_scores_cal_pairs",
+                    "axis_type": "linear",
+                    "axis_labels": "sweep_mcr_pair_components",
+                    "axis_labels_dimension": 2,
+                    "label_template": "C Score (C{label})"
+                  },
+                  "point_labels_source": "smp_cal",
+                  "label": "Calibration"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "sweep_y_val_effective_pairs",
+                    "axis_type": "linear",
+                    "axis_labels": "sweep_mcr_pair_y_titles_by_model",
+                    "axis_labels_dimension": 2,
+                    "axis_labels_index_dimensions": [0, 2],
+                    "label_template": "$y_{{Ref}}$ ({label})"
+                  },
+                  "y_axis": {
+                    "data_source": "sweep_c_scores_val_pairs",
+                    "axis_type": "linear",
+                    "axis_labels": "sweep_mcr_pair_components",
+                    "axis_labels_dimension": 2,
+                    "label_template": "C Score (C{label})"
+                  },
+                  "point_labels_source": "smp_val",
+                  "label": "Validation"
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "path",
+                  "x": {
+                    "data_source": "sweep_cal_regression_line_x_pairs"
+                  },
+                  "y": {
+                    "data_source": "sweep_cal_regression_line_y_pairs"
+                  },
+                  "color": "red",
+                  "linestyle": "-",
+                  "linewidth": 1.5,
+                  "alpha": 0.85
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Sweep Model",
+                  "dimension": 0,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "labels_source": "sweep_model_labels",
+                  "labels_dimension": 0,
+                  "nav_id": "sweep_mcr_pred_model"
+                },
+                {
+                  "name": "Pairing",
+                  "dimension": 2,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "labels_source": "sweep_mcr_pairing_labels_by_model",
+                  "labels_dimension": 2,
+                  "labels_index_dimensions": [1, 2],
+                  "nav_id": "sweep_mcr_pred_pairing"
+                }
+              ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Predicted vs Reference (Validation, Sweep Model)",
+              "show_origin": false,
+              "show_labels": false,
+              "equal_scale": true,
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "sweep_y_val_true_pairs",
+                    "axis_type": "linear",
+                    "axis_labels": "sweep_mcr_pair_y_titles_by_model",
+                    "axis_labels_dimension": 2,
+                    "axis_labels_index_dimensions": [0, 2],
+                    "label_template": "$y_{{Ref}}$ ({label})"
+                  },
+                  "y_axis": {
+                    "data_source": "sweep_y_val_pred_pairs",
+                    "axis_type": "linear",
+                    "axis_labels": "sweep_mcr_pair_y_titles_by_model",
+                    "axis_labels_dimension": 2,
+                    "axis_labels_index_dimensions": [0, 2],
+                    "label_template": "$y_{{Pred}}$ ({label})"
+                  },
+                  "point_labels_source": "smp_val",
+                  "label": "Validation"
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "path",
+                  "x": "sweep_val_pred_ref_diag_x",
+                  "y": "sweep_val_pred_ref_diag_y",
+                  "color": "red",
+                  "linestyle": "-",
+                  "linewidth": 1.5,
+                  "alpha": 0.85
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Sweep Model",
+                  "dimension": 0,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "labels_source": "sweep_model_labels",
+                  "labels_dimension": 0,
+                  "nav_id": "sweep_mcr_pred_model"
+                },
+                {
+                  "name": "Pairing",
+                  "dimension": 2,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "labels_source": "sweep_mcr_pairing_labels_by_model",
+                  "labels_dimension": 2,
+                  "labels_index_dimensions": [1, 2],
+                  "nav_id": "sweep_mcr_pred_pairing"
                 }
               ]
             }
@@ -1869,6 +2477,7 @@
         "condition": {
           "all": [
             {"parameter": "validation_processing","operator": "==","value": "batch"},
+            {"parameter": "sweep_model_labels","operator": "not_exists","value": true},
             {"parameter": "Y_cal","operator": "exists"}]
         },
         "sections": [
@@ -2019,6 +2628,198 @@
               ]
             },
             "short_description": "Ellipsoidal joint confidence region (EJCR) for OLS slope and intercept of validation predictions. The ideal point (slope=1, intercept=0) inside the ellipse indicates unbiased prediction."
+          }
+        ]
+      },
+      {
+        "title": "EJCR (Sweep)",
+        "layout": "ew",
+        "condition": {
+          "all": [
+            {
+              "parameter": "validation_processing",
+              "operator": "==",
+              "value": "batch"
+            },
+            {
+              "parameter": "sweep_model_labels",
+              "operator": "exists",
+              "value": true
+            },
+            {
+              "parameter": "Y_cal",
+              "operator": "exists"
+            }
+          ]
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Calibration EJCR (Sweep Model)",
+              "show_origin": false,
+              "show_labels": false,
+              "confidence_ellipses": false,
+              "x_axis": {
+                "data_source": "sweep_ejcr_cal",
+                "nested_key": "fit_slope",
+                "label": "Slope"
+              },
+              "y_axis": {
+                "data_source": "sweep_ejcr_cal",
+                "nested_key": "fit_intercept",
+                "label": "Intercept"
+              },
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "sweep_ejcr_cal",
+                    "nested_key": "fit_slope",
+                    "label": "Slope"
+                  },
+                  "y_axis": {
+                    "data_source": "sweep_ejcr_cal",
+                    "nested_key": "fit_intercept",
+                    "label": "Intercept"
+                  },
+                  "label": "OLS Fit",
+                  "marker": "D"
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "custom_ellipsis",
+                  "ellipses_data": {
+                    "data_source": "sweep_ejcr_cal"
+                  },
+                  "label": "EJCR",
+                  "expand_limits": true
+                },
+                {
+                  "orientation": "vertical",
+                  "values": [1.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                },
+                {
+                  "orientation": "horizontal",
+                  "values": [0.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Sweep Model",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "labels_source": "sweep_model_labels",
+                  "labels_dimension": 0,
+                  "nav_id": "sweep_mcr_pred_model"
+                },
+                {
+                  "name": "Pairing",
+                  "dimension": 2,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "labels_source": "sweep_mcr_pairing_labels_by_model",
+                  "labels_dimension": 2,
+                  "labels_index_dimensions": [0, 2],
+                  "nav_id": "sweep_mcr_pred_pairing"
+                }
+              ]
+            },
+            "short_description": "EJCR for calibration OLS slope/intercept in each sweep model and pairing."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "scatter",
+              "title": "Validation EJCR (Sweep Model)",
+              "show_origin": false,
+              "show_labels": false,
+              "confidence_ellipses": false,
+              "x_axis": {
+                "data_source": "sweep_ejcr_val",
+                "nested_key": "fit_slope",
+                "label": "Slope"
+              },
+              "y_axis": {
+                "data_source": "sweep_ejcr_val",
+                "nested_key": "fit_intercept",
+                "label": "Intercept"
+              },
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "sweep_ejcr_val",
+                    "nested_key": "fit_slope",
+                    "label": "Slope"
+                  },
+                  "y_axis": {
+                    "data_source": "sweep_ejcr_val",
+                    "nested_key": "fit_intercept",
+                    "label": "Intercept"
+                  },
+                  "label": "OLS Fit",
+                  "marker": "D"
+                }
+              ],
+              "scatter_lines": [
+                {
+                  "orientation": "custom_ellipsis",
+                  "ellipses_data": {
+                    "data_source": "sweep_ejcr_val"
+                  },
+                  "label": "EJCR",
+                  "expand_limits": true
+                },
+                {
+                  "orientation": "vertical",
+                  "values": [1.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                },
+                {
+                  "orientation": "horizontal",
+                  "values": [0.0],
+                  "color": "gray",
+                  "linestyle": "--",
+                  "linewidth": 1.0,
+                  "alpha": 0.5
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Sweep Model",
+                  "dimension": 1,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "labels_source": "sweep_model_labels",
+                  "labels_dimension": 0,
+                  "nav_id": "sweep_mcr_pred_model"
+                },
+                {
+                  "name": "Pairing",
+                  "dimension": 2,
+                  "default": 0,
+                  "show_navigation_menu": true,
+                  "labels_source": "sweep_mcr_pairing_labels_by_model",
+                  "labels_dimension": 2,
+                  "labels_index_dimensions": [0, 2],
+                  "nav_id": "sweep_mcr_pred_pairing"
+                }
+              ]
+            },
+            "short_description": "EJCR for validation OLS slope/intercept in each sweep model and pairing."
           }
         ]
       },

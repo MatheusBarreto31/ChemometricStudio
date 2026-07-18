@@ -1355,6 +1355,393 @@ def _build_unified_prediction_matrices(
     }
 
 
+def _gather_sweep_outputs_mcr(
+    sweep_model_results: Sequence[Dict[str, Any]],
+    sweep_ranks: Sequence[int],
+    y_labels: Sequence[str],
+    y_cal_true: Any,
+    y_val_true: Any,
+) -> Dict[str, Any]:
+    """Collect sweep-model tensors and pairwise calibration outputs for MCR-ALS."""
+    out: Dict[str, Any] = {
+        "sweep_model_axis": None,
+        "sweep_model_labels": None,
+        "sweep_component_labels": None,
+        "sweep_c_component_axis": None,
+        "sweep_c_sample_axis_full": None,
+        "sweep_c_scores": None,
+        "sweep_val_c_scores": None,
+        "sweep_c_scores_heatmap_full": None,
+        "sweep_concentrations_unfolded": None,
+        "sweep_s_profiles": None,
+        "sweep_mcr_pair_components": None,
+        "sweep_mcr_pair_y_columns": None,
+        "sweep_mcr_pair_y_titles": None,
+        "sweep_mcr_pair_y_titles_by_model": None,
+        "sweep_mcr_pairing_labels": None,
+        "sweep_mcr_pairing_labels_by_model": None,
+        "sweep_mcr_pairing_labels_by_dimension": None,
+        "sweep_y_cal_pred_pairs": None,
+        "sweep_y_cal_true_pairs": None,
+        "sweep_y_cal_error_pairs": None,
+        "sweep_y_val_pred_pairs": None,
+        "sweep_y_val_true_pairs": None,
+        "sweep_y_val_error_pairs": None,
+        "sweep_c_scores_cal_pairs": None,
+        "sweep_c_scores_val_pairs": None,
+        "sweep_y_val_effective_pairs": None,
+        "sweep_cal_regression_line_x_pairs": None,
+        "sweep_cal_regression_line_y_pairs": None,
+        "sweep_val_pred_ref_diag_extent": None,
+        "sweep_val_pred_ref_diag_x": None,
+        "sweep_val_pred_ref_diag_y": None,
+        "sweep_ejcr_cal": None,
+        "sweep_ejcr_val": None,
+    }
+
+    models = [m for m in sweep_model_results if isinstance(m, dict)]
+    if not models:
+        return out
+
+    n_models = len(models)
+    ranks = [int(r) for r in sweep_ranks[:n_models]]
+    if len(ranks) < n_models:
+        ranks.extend(list(range(1, n_models + 1))[len(ranks):])
+
+    out["sweep_model_axis"] = np.arange(1, n_models + 1, dtype=float)
+    out["sweep_model_labels"] = [f"C={r}" for r in ranks]
+
+    max_comp = 0
+    cal_scores = [m.get("c_scores") for m in models]
+    cal_shapes = [arr.shape for arr in cal_scores if isinstance(arr, np.ndarray) and arr.ndim == 2]
+    if cal_shapes:
+        n_cal = int(max(shape[0] for shape in cal_shapes))
+        max_comp = int(max(shape[1] for shape in cal_shapes))
+        out["sweep_component_labels"] = [f"C{i + 1}" for i in range(max_comp)]
+        out["sweep_c_component_axis"] = np.arange(1, max_comp + 1, dtype=float)
+
+        sweep_cal = np.full((n_models, n_cal, max_comp), np.nan, dtype=float)
+        for model_idx, arr in enumerate(cal_scores):
+            if not isinstance(arr, np.ndarray) or arr.ndim != 2:
+                continue
+            rr = min(n_cal, int(arr.shape[0]))
+            cc = min(max_comp, int(arr.shape[1]))
+            sweep_cal[model_idx, :rr, :cc] = np.asarray(arr[:rr, :cc], dtype=float)
+        out["sweep_c_scores"] = sweep_cal
+
+        val_scores = [m.get("val_c_scores") for m in models]
+        val_shapes = [arr.shape for arr in val_scores if isinstance(arr, np.ndarray) and arr.ndim == 2]
+        n_val = int(max(shape[0] for shape in val_shapes)) if val_shapes else 0
+        if n_val > 0:
+            sweep_val = np.full((n_models, n_val, max_comp), np.nan, dtype=float)
+            for model_idx, arr in enumerate(val_scores):
+                if not isinstance(arr, np.ndarray) or arr.ndim != 2:
+                    continue
+                rr = min(n_val, int(arr.shape[0]))
+                cc = min(max_comp, int(arr.shape[1]))
+                sweep_val[model_idx, :rr, :cc] = np.asarray(arr[:rr, :cc], dtype=float)
+            out["sweep_val_c_scores"] = sweep_val
+
+        n_full = n_cal + n_val
+        heat = np.full((n_models, max_comp, n_full), np.nan, dtype=float)
+        for model_idx in range(n_models):
+            cal = out["sweep_c_scores"][model_idx, :, :] if isinstance(out.get("sweep_c_scores"), np.ndarray) else None
+            if not isinstance(cal, np.ndarray):
+                continue
+            full = cal
+            if isinstance(out.get("sweep_val_c_scores"), np.ndarray):
+                full = np.vstack([full, out["sweep_val_c_scores"][model_idx, :, :]])
+            heat[model_idx, :, :full.shape[0]] = np.asarray(full, dtype=float).T
+        out["sweep_c_scores_heatmap_full"] = np.nan_to_num(heat, nan=0.0)
+        out["sweep_c_sample_axis_full"] = np.arange(1, n_full + 1, dtype=float)
+
+    concentrations = [m.get("concentrations_unfolded") for m in models]
+    conc_shapes = [arr.shape for arr in concentrations if isinstance(arr, np.ndarray) and arr.ndim == 2]
+    if conc_shapes:
+        if max_comp <= 0:
+            max_comp = int(max(shape[0] for shape in conc_shapes))
+            out["sweep_component_labels"] = [f"C{i + 1}" for i in range(max_comp)]
+            out["sweep_c_component_axis"] = np.arange(1, max_comp + 1, dtype=float)
+        n_rows = int(max(shape[1] for shape in conc_shapes))
+        sweep_conc = np.full((n_models, max_comp, n_rows), np.nan, dtype=float)
+        for model_idx, arr in enumerate(concentrations):
+            if not isinstance(arr, np.ndarray) or arr.ndim != 2:
+                continue
+            rr = min(max_comp, int(arr.shape[0]))
+            cc = min(n_rows, int(arr.shape[1]))
+            sweep_conc[model_idx, :rr, :cc] = np.asarray(arr[:rr, :cc], dtype=float)
+        out["sweep_concentrations_unfolded"] = sweep_conc
+
+    s_profiles = [m.get("s_profiles") for m in models]
+    s_shapes = [arr.shape for arr in s_profiles if isinstance(arr, np.ndarray) and arr.ndim == 2]
+    if s_shapes:
+        if max_comp <= 0:
+            max_comp = int(max(shape[0] for shape in s_shapes))
+            out["sweep_component_labels"] = [f"C{i + 1}" for i in range(max_comp)]
+            out["sweep_c_component_axis"] = np.arange(1, max_comp + 1, dtype=float)
+        n_vars = int(max(shape[1] for shape in s_shapes))
+        sweep_s = np.full((n_models, max_comp, n_vars), np.nan, dtype=float)
+        for model_idx, arr in enumerate(s_profiles):
+            if not isinstance(arr, np.ndarray) or arr.ndim != 2:
+                continue
+            rr = min(max_comp, int(arr.shape[0]))
+            cc = min(n_vars, int(arr.shape[1]))
+            sweep_s[model_idx, :rr, :cc] = np.asarray(arr[:rr, :cc], dtype=float)
+        out["sweep_s_profiles"] = sweep_s
+
+    y_cal_arr = _as_2d_y(y_cal_true)
+    y_val_arr = _as_2d_y(y_val_true)
+    pair_payloads: List[Dict[str, Any]] = []
+    max_pair_component = 0
+    default_y_by_component: Dict[int, int] = {}
+    for model in models:
+        p = _build_pair_outputs(
+            component_y_mapping=model.get("component_y_mapping"),
+            y_labels=y_labels,
+            y_cal_true=y_cal_arr,
+            y_val_true=y_val_arr,
+            c_scores_cal=model.get("c_scores"),
+            c_scores_val=model.get("val_c_scores"),
+            calibration_models=model.get("calibration_models"),
+        )
+        pair_payloads.append(p)
+        comp = p.get("mcr_pair_components")
+        ycol = p.get("mcr_pair_y_columns")
+        if isinstance(comp, np.ndarray) and isinstance(ycol, np.ndarray):
+            for j in range(min(comp.size, ycol.size)):
+                comp_1 = int(comp[j])
+                y_1 = int(ycol[j])
+                if comp_1 < 1:
+                    continue
+                max_pair_component = max(max_pair_component, comp_1)
+                if comp_1 not in default_y_by_component and y_1 >= 1:
+                    default_y_by_component[comp_1] = y_1
+
+    if max_pair_component <= 0:
+        return out
+
+    n_pairs = int(max_pair_component)
+    out["sweep_mcr_pair_components"] = np.arange(1, n_pairs + 1, dtype=int)
+    out["sweep_mcr_pair_y_columns"] = np.asarray(
+        [int(default_y_by_component.get(comp_1, 0)) for comp_1 in range(1, n_pairs + 1)],
+        dtype=int,
+    )
+
+    labels_seq = list(y_labels) if y_labels is not None else []
+    y_titles: List[str] = []
+    pair_labels: List[str] = []
+    for comp_1 in range(1, n_pairs + 1):
+        y_1 = int(default_y_by_component.get(comp_1, 0))
+        y_title = f"Y{y_1}" if y_1 >= 1 else "Unmapped"
+        y_idx = y_1 - 1
+        if 0 <= y_idx < len(labels_seq):
+            label_text = str(labels_seq[y_idx]).strip()
+            if label_text:
+                y_title = label_text
+        y_titles.append(y_title)
+        if y_1 >= 1:
+            pair_labels.append(f"C{comp_1} -> {y_title} (Y{y_1})")
+        else:
+            pair_labels.append(f"C{comp_1}")
+
+    out["sweep_mcr_pair_y_titles"] = y_titles
+    out["sweep_mcr_pairing_labels"] = pair_labels
+    out["sweep_mcr_pair_y_titles_by_model"] = [list(y_titles) for _ in range(n_models)]
+    out["sweep_mcr_pairing_labels_by_model"] = [list(pair_labels) for _ in range(n_models)]
+    out["sweep_mcr_pairing_labels_by_dimension"] = [
+        out.get("sweep_model_labels") or [],
+        [],
+        pair_labels,
+    ]
+
+    n_cal = int(y_cal_arr.shape[0]) if isinstance(y_cal_arr, np.ndarray) else 0
+    n_val = int(y_val_arr.shape[0]) if isinstance(y_val_arr, np.ndarray) else 0
+
+    def _alloc(rows: int) -> Optional[np.ndarray]:
+        return np.full((n_models, rows, n_pairs), np.nan, dtype=float) if rows > 0 else None
+
+    out["sweep_y_cal_pred_pairs"] = _alloc(n_cal)
+    out["sweep_y_cal_true_pairs"] = _alloc(n_cal)
+    out["sweep_y_cal_error_pairs"] = _alloc(n_cal)
+    out["sweep_y_val_pred_pairs"] = _alloc(n_val)
+    out["sweep_y_val_true_pairs"] = _alloc(n_val)
+    out["sweep_y_val_error_pairs"] = _alloc(n_val)
+    out["sweep_c_scores_cal_pairs"] = _alloc(n_cal)
+    out["sweep_c_scores_val_pairs"] = _alloc(n_val)
+    out["sweep_y_val_effective_pairs"] = _alloc(n_val)
+    out["sweep_cal_regression_line_x_pairs"] = np.full((n_models, 2, n_pairs), np.nan, dtype=float)
+    out["sweep_cal_regression_line_y_pairs"] = np.full((n_models, 2, n_pairs), np.nan, dtype=float)
+    out["sweep_val_pred_ref_diag_extent"] = np.full((n_models, n_pairs), np.nan, dtype=float)
+    out["sweep_val_pred_ref_diag_x"] = np.full((n_models, 2, n_pairs), np.nan, dtype=float)
+    out["sweep_val_pred_ref_diag_y"] = np.full((n_models, 2, n_pairs), np.nan, dtype=float)
+
+    def _copy_matrix(src: Any, dst_key: str, model_idx: int, idx_map: Dict[int, int]) -> None:
+        dst = out.get(dst_key)
+        if not isinstance(dst, np.ndarray) or not isinstance(src, np.ndarray) or src.ndim != 2:
+            return
+        rr = min(dst.shape[1], src.shape[0])
+        for g, l in idx_map.items():
+            if l < src.shape[1]:
+                dst[model_idx, :rr, g] = np.asarray(src[:rr, l], dtype=float)
+
+    for model_idx, payload in enumerate(pair_payloads):
+        comp = payload.get("mcr_pair_components")
+        ycol = payload.get("mcr_pair_y_columns")
+        if not isinstance(comp, np.ndarray):
+            continue
+        idx_map: Dict[int, int] = {}
+        for local_idx in range(int(comp.size)):
+            comp_1 = int(comp[local_idx])
+            if 1 <= comp_1 <= n_pairs:
+                idx_map[comp_1 - 1] = int(local_idx)
+
+        model_titles: List[str] = []
+        model_pair_labels: List[str] = []
+        y_by_component: Dict[int, int] = {}
+        if isinstance(ycol, np.ndarray):
+            for local_idx in range(min(int(comp.size), int(ycol.size))):
+                comp_1 = int(comp[local_idx])
+                y_1 = int(ycol[local_idx])
+                if comp_1 >= 1 and y_1 >= 1 and comp_1 not in y_by_component:
+                    y_by_component[comp_1] = y_1
+        for comp_1 in range(1, n_pairs + 1):
+            y_1 = int(y_by_component.get(comp_1, 0))
+            y_title = f"Y{y_1}" if y_1 >= 1 else "Unmapped"
+            y_idx = y_1 - 1
+            if 0 <= y_idx < len(labels_seq):
+                label_text = str(labels_seq[y_idx]).strip()
+                if label_text:
+                    y_title = label_text
+            model_titles.append(y_title)
+            if y_1 >= 1:
+                model_pair_labels.append(f"C{comp_1} -> {y_title} (Y{y_1})")
+            else:
+                model_pair_labels.append(f"C{comp_1}")
+        if isinstance(out.get("sweep_mcr_pair_y_titles_by_model"), list) and model_idx < len(out["sweep_mcr_pair_y_titles_by_model"]):
+            out["sweep_mcr_pair_y_titles_by_model"][model_idx] = model_titles
+        if isinstance(out.get("sweep_mcr_pairing_labels_by_model"), list) and model_idx < len(out["sweep_mcr_pairing_labels_by_model"]):
+            out["sweep_mcr_pairing_labels_by_model"][model_idx] = model_pair_labels
+
+        _copy_matrix(payload.get("y_cal_pred_pairs"), "sweep_y_cal_pred_pairs", model_idx, idx_map)
+        _copy_matrix(payload.get("y_cal_true_pairs"), "sweep_y_cal_true_pairs", model_idx, idx_map)
+        _copy_matrix(payload.get("y_cal_error_pairs"), "sweep_y_cal_error_pairs", model_idx, idx_map)
+        _copy_matrix(payload.get("y_val_pred_pairs"), "sweep_y_val_pred_pairs", model_idx, idx_map)
+        _copy_matrix(payload.get("y_val_true_pairs"), "sweep_y_val_true_pairs", model_idx, idx_map)
+        _copy_matrix(payload.get("y_val_error_pairs"), "sweep_y_val_error_pairs", model_idx, idx_map)
+        _copy_matrix(payload.get("c_scores_cal_pairs"), "sweep_c_scores_cal_pairs", model_idx, idx_map)
+        _copy_matrix(payload.get("c_scores_val_pairs"), "sweep_c_scores_val_pairs", model_idx, idx_map)
+        _copy_matrix(payload.get("y_val_effective_pairs"), "sweep_y_val_effective_pairs", model_idx, idx_map)
+
+        line_x = payload.get("cal_regression_line_x_pairs")
+        line_y = payload.get("cal_regression_line_y_pairs")
+        if isinstance(line_x, np.ndarray) and isinstance(line_y, np.ndarray) and line_x.ndim == 2 and line_y.ndim == 2:
+            for g, l in idx_map.items():
+                if l < line_x.shape[1] and l < line_y.shape[1]:
+                    out["sweep_cal_regression_line_x_pairs"][model_idx, :, g] = line_x[:, l]
+                    out["sweep_cal_regression_line_y_pairs"][model_idx, :, g] = line_y[:, l]
+
+        yt = payload.get("y_val_true_pairs")
+        yp = payload.get("y_val_pred_pairs")
+        if isinstance(yt, np.ndarray) and isinstance(yp, np.ndarray) and yt.ndim == 2 and yp.ndim == 2:
+            for g, l in idx_map.items():
+                if l >= yt.shape[1] or l >= yp.shape[1]:
+                    continue
+                vals = np.concatenate([
+                    np.asarray(yt[:, l], dtype=float).reshape(-1),
+                    np.asarray(yp[:, l], dtype=float).reshape(-1),
+                ])
+                finite = vals[np.isfinite(vals)]
+                if finite.size <= 0:
+                    continue
+                extent = float(np.max(np.abs(finite))) * 1.15 + 1e-6
+                out["sweep_val_pred_ref_diag_extent"][model_idx, g] = extent
+                out["sweep_val_pred_ref_diag_x"][model_idx, :, g] = np.array([-extent, extent], dtype=float)
+                out["sweep_val_pred_ref_diag_y"][model_idx, :, g] = np.array([-extent, extent], dtype=float)
+
+    try:
+        from chemometrics.ejcr_analysis import compute_ejcr as _compute_ejcr
+
+        _ejcr_n_pts = 100
+        _ejcr_n_path = _ejcr_n_pts * 2 + 1
+        _ejcr_levels = ("90", "95", "99")
+        _ejcr_level_to_idx = {lvl: i for i, lvl in enumerate(_ejcr_levels)}
+        _ejcr_item_count = len(_ejcr_levels) + 1
+
+        def _new_packed_ejcr(color: str, nav_shape: Tuple[int, ...]) -> Dict[str, Any]:
+            x_paths = np.full((_ejcr_item_count, *nav_shape, _ejcr_n_path), np.nan, dtype=float)
+            y_paths = np.full((_ejcr_item_count, *nav_shape, _ejcr_n_path), np.nan, dtype=float)
+            fit_slope = np.full((1, *nav_shape), np.nan, dtype=float)
+            fit_intercept = np.full((1, *nav_shape), np.nan, dtype=float)
+            x_paths[len(_ejcr_levels), ..., 0] = 1.0
+            y_paths[len(_ejcr_levels), ..., 0] = 0.0
+            return {
+                "fit_slope": fit_slope,
+                "fit_intercept": fit_intercept,
+                "x_paths": x_paths,
+                "y_paths": y_paths,
+                "labels": ["90% EJCR", "95% EJCR", "99% EJCR", "Ideal (1, 0)"],
+                "confidence_levels": ["90", "95", "99", None],
+                "linestyles": [":", "-", "--", "none"],
+                "linewidths": [1.2, 1.5, 1.2, 0.0],
+                "alphas": [0.75, 0.90, 0.75, 0.95],
+                "markers": [None, None, None, "o"],
+                "markersizes": [7, 7, 7, 7],
+                "colors": [color, color, color, "black"],
+                "expand_limits": True,
+            }
+
+        def _fill_packed(y_ref_1d, y_pred_1d, packed: Dict[str, Any], nav_idx: Tuple[int, ...]) -> None:
+            valid = np.isfinite(y_ref_1d) & np.isfinite(y_pred_1d)
+            if valid.sum() < 3:
+                return
+            r = _compute_ejcr(y_ref_1d[valid], y_pred_1d[valid], n_points=_ejcr_n_pts)
+            packed["fit_slope"][(0, *nav_idx)] = r["slope"]
+            packed["fit_intercept"][(0, *nav_idx)] = r["intercept"]
+            for ell in r["ellipses"]:
+                pct = str(ell.get("confidence_pct", "")).strip()
+                idx = _ejcr_level_to_idx.get(pct)
+                if idx is None:
+                    continue
+                es = np.asarray(ell["ellipse_slope"], dtype=float)
+                ei = np.asarray(ell["ellipse_intercept"], dtype=float)
+                k = min(len(es), _ejcr_n_path)
+                packed["x_paths"][(idx, *nav_idx, slice(0, k))] = es[:k]
+                packed["y_paths"][(idx, *nav_idx, slice(0, k))] = ei[:k]
+
+        sweep_ejcr_cal = _new_packed_ejcr("steelblue", (n_models, n_pairs))
+        sweep_ejcr_val = _new_packed_ejcr("darkorange", (n_models, n_pairs))
+        sw_cal_true = out.get("sweep_y_cal_true_pairs")
+        sw_cal_pred = out.get("sweep_y_cal_pred_pairs")
+        sw_val_true = out.get("sweep_y_val_true_pairs")
+        sw_val_pred = out.get("sweep_y_val_pred_pairs")
+        if (
+            isinstance(sw_cal_true, np.ndarray)
+            and isinstance(sw_cal_pred, np.ndarray)
+            and sw_cal_true.ndim == 3
+            and sw_cal_pred.ndim == 3
+            and sw_cal_true.shape == sw_cal_pred.shape
+        ):
+            for m in range(sw_cal_true.shape[0]):
+                for p in range(sw_cal_true.shape[2]):
+                    _fill_packed(sw_cal_true[m, :, p], sw_cal_pred[m, :, p], sweep_ejcr_cal, (m, p))
+                    if (
+                        isinstance(sw_val_true, np.ndarray)
+                        and isinstance(sw_val_pred, np.ndarray)
+                        and sw_val_true.ndim == 3
+                        and sw_val_pred.ndim == 3
+                        and sw_val_true.shape == sw_val_pred.shape
+                        and m < sw_val_true.shape[0]
+                        and p < sw_val_true.shape[2]
+                    ):
+                        _fill_packed(sw_val_true[m, :, p], sw_val_pred[m, :, p], sweep_ejcr_val, (m, p))
+            out["sweep_ejcr_cal"] = sweep_ejcr_cal
+            out["sweep_ejcr_val"] = sweep_ejcr_val
+    except Exception:
+        pass
+
+    return out
+
+
 def _single_fit(
     X_cal: np.ndarray,
     Y_cal: Optional[np.ndarray],
@@ -2508,8 +2895,23 @@ def mcr_als_analysis(
         use_sbs = False
     effective_validation_processing = "sample_by_sample" if use_sbs else "batch"
 
-    run_sweep = _safe_bool(sweep_mode, default=False)
-    if use_sbs and run_sweep:
+    def _normalize_sweep_mode(value: Any) -> str:
+        if isinstance(value, bool):
+            return "on" if value else "off"
+        text = "" if value is None else str(value).strip().lower()
+        if text in {"", "0", "false", "no", "off", "none"}:
+            return "off"
+        if text in {"stats", "stats only", "stats_only", "statistics", "statistics only"}:
+            return "stats_only"
+        if text in {"1", "true", "yes", "on"}:
+            return "on"
+        return "on"
+
+    sweep_mode_normalized = _normalize_sweep_mode(sweep_mode)
+    run_sweep_stats = sweep_mode_normalized in {"stats_only", "on"}
+    run_sweep_models = sweep_mode_normalized == "on"
+
+    if use_sbs and run_sweep_stats:
         emit_execution_warning(
             code="mcr_als_sbs_sweep_first_layer",
             text=(
@@ -2518,20 +2920,26 @@ def mcr_als_analysis(
             ),
         )
 
-    sweep_x_val = np.asarray(X_val, dtype=float)[0:1] if (use_sbs and X_val is not None) else None
+    # Sweep fitting data:
+    # - Batch mode: include all validation samples so sweep pages expose full val outputs.
+    # - SBS mode: keep first validation sample only as documented sweep reference.
+    sweep_x_val = None
     sweep_y_val = None
-    if use_sbs and Y_val is not None:
+    if X_val is not None:
+        xval_arr = np.asarray(X_val, dtype=float)
+        sweep_x_val = xval_arr[0:1] if use_sbs else xval_arr
+    if Y_val is not None:
         yv_arr = np.asarray(Y_val, dtype=float)
         if yv_arr.ndim == 1:
-            sweep_y_val = yv_arr[0:1]
+            sweep_y_val = yv_arr[0:1] if use_sbs else yv_arr.reshape(-1, 1)
         elif yv_arr.ndim >= 2 and yv_arr.shape[0] > 0:
-            sweep_y_val = yv_arr[0:1, ...]
-        else:
-            sweep_y_val = None
+            sweep_y_val = yv_arr[0:1, ...] if use_sbs else yv_arr
 
     ranks: List[int] = [int(max(1, _safe_int(n_components, default=2)))]
     sweep_results: List[Dict[str, Any]] = []
-    if run_sweep:
+    sweep_model_results: List[Dict[str, Any]] = []
+    sweep_ranks: List[int] = []
+    if run_sweep_stats:
         parsed = parse_numeric_spec(component_range)
         if len(parsed) == 1:
             one = max(1, _safe_int(parsed[0], default=ranks[0]))
@@ -2606,6 +3014,9 @@ def mcr_als_analysis(
                         "n_iter": _safe_int(cal_m.get("n_iter"), default=0),
                     }
                 )
+                if run_sweep_models and isinstance(fit_rk, dict):
+                    sweep_model_results.append(fit_rk)
+                    sweep_ranks.append(int(rk))
             except Exception as exc:
                 emit_execution_warning(
                     code="mcr_als_sweep_rank_failed",
@@ -2757,7 +3168,7 @@ def mcr_als_analysis(
     result["s_axis_label"] = s_axis_label
     result["c_aggregation_label"] = _c_aggregation_label(resolved_c_aggregation_method)
 
-    if sweep_results:
+    if run_sweep_stats and sweep_results:
         result["sweep_results"] = sweep_results
         result["sweep_components"] = np.asarray([_safe_float(item.get("n_components")) for item in sweep_results], dtype=float)
         result["sweep_sfit"] = np.asarray([_safe_float(item.get("sfit")) for item in sweep_results], dtype=float)
@@ -2777,6 +3188,17 @@ def mcr_als_analysis(
         result["mcr_als_report"] = "\n".join(sweep_lines)
     else:
         result["sweep_results"] = None
+
+    if run_sweep_models and sweep_model_results:
+        result.update(
+            _gather_sweep_outputs_mcr(
+                sweep_model_results=sweep_model_results,
+                sweep_ranks=sweep_ranks,
+                y_labels=y_labels_resolved,
+                y_cal_true=result.get("y_cal_true"),
+                y_val_true=result.get("y_val_true"),
+            )
+        )
 
     if not use_sbs:
         pair_outputs = _build_pair_outputs(
@@ -3416,6 +3838,16 @@ _MCR_ALS_RETURN_ORDER: Tuple[str, ...] = (
     "sweep_sfit",
     "sweep_n_iter",
     "sweep_explained_variance",
+    "sweep_model_axis",
+    "sweep_model_labels",
+    "sweep_component_labels",
+    "sweep_c_component_axis",
+    "sweep_c_sample_axis_full",
+    "sweep_c_scores",
+    "sweep_val_c_scores",
+    "sweep_c_scores_heatmap_full",
+    "sweep_concentrations_unfolded",
+    "sweep_s_profiles",
     "s_profiles",
     "concentrations",
     "concentrations_unfolded",
@@ -3448,6 +3880,13 @@ _MCR_ALS_RETURN_ORDER: Tuple[str, ...] = (
     "mcr_pair_y_titles",
     "mcr_pairing_labels",
     "mcr_pairing_labels_by_dimension",
+    "sweep_mcr_pair_components",
+    "sweep_mcr_pair_y_columns",
+    "sweep_mcr_pair_y_titles",
+    "sweep_mcr_pair_y_titles_by_model",
+    "sweep_mcr_pairing_labels",
+    "sweep_mcr_pairing_labels_by_model",
+    "sweep_mcr_pairing_labels_by_dimension",
     "y_cal_pred_pairs",
     "y_cal_true_pairs",
     "y_cal_error_pairs",
@@ -3463,6 +3902,20 @@ _MCR_ALS_RETURN_ORDER: Tuple[str, ...] = (
     "val_pred_ref_diag_extent",
     "val_pred_ref_diag_x",
     "val_pred_ref_diag_y",
+    "sweep_y_cal_pred_pairs",
+    "sweep_y_cal_true_pairs",
+    "sweep_y_cal_error_pairs",
+    "sweep_y_val_pred_pairs",
+    "sweep_y_val_true_pairs",
+    "sweep_y_val_error_pairs",
+    "sweep_c_scores_cal_pairs",
+    "sweep_c_scores_val_pairs",
+    "sweep_y_val_effective_pairs",
+    "sweep_cal_regression_line_x_pairs",
+    "sweep_cal_regression_line_y_pairs",
+    "sweep_val_pred_ref_diag_extent",
+    "sweep_val_pred_ref_diag_x",
+    "sweep_val_pred_ref_diag_y",
     "validation_processing",
     "sbs_c_scores",
     "sbs_val_c_scores",
@@ -3497,6 +3950,8 @@ _MCR_ALS_RETURN_ORDER: Tuple[str, ...] = (
     "sbs_cal_regression_line_y_pairs",
     "ejcr_cal",
     "ejcr_val",
+    "sweep_ejcr_cal",
+    "sweep_ejcr_val",
     "sbs_ejcr_cal",
     "sbs_ejcr_val",
 )
