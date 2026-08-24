@@ -1392,20 +1392,30 @@ def _single_fit_once(
         val_scores_a = np.asarray(all_scores_a[n_cal_samples:], dtype=float)
         factors_for_output = [scores_a] + [np.asarray(f, dtype=float) for f in factors[1:]]
         reconstructed = cp_to_tensor((weights, factors_for_output))
-        residual = np.asarray(X_filled[:n_cal_samples] - reconstructed, dtype=float)
+        observed_cal = np.asarray(mask[:n_cal_samples], dtype=bool)
+        residual = np.where(
+            observed_cal,
+            np.asarray(X_filled[:n_cal_samples] - reconstructed, dtype=float),
+            np.nan,
+        )
         _val_factors = [val_scores_a] + [np.asarray(f, dtype=float) for f in factors[1:]]
         _reconstructed_val = cp_to_tensor((weights, _val_factors))
-        residual_val = np.asarray(X_filled[n_cal_samples:] - _reconstructed_val, dtype=float)
-        observed = np.asarray(mask[:n_cal_samples], dtype=bool)
+        observed_val = np.asarray(mask[n_cal_samples:], dtype=bool)
+        residual_val = np.where(
+            observed_val,
+            np.asarray(X_filled[n_cal_samples:] - _reconstructed_val, dtype=float),
+            np.nan,
+        )
+        observed = observed_cal
         X_metrics = np.asarray(X_filled[:n_cal_samples], dtype=float)
         core_factors = factors_for_output
     else:
         scores_a = all_scores_a
         factors_for_output = [np.asarray(f, dtype=float) for f in factors]
         reconstructed = np.asarray(reconstructed_full, dtype=float)
-        residual = np.asarray(X_filled - reconstructed, dtype=float)
-        residual_val = None
         observed = np.asarray(mask, dtype=bool)
+        residual = np.where(observed, np.asarray(X_filled - reconstructed, dtype=float), np.nan)
+        residual_val = None
         X_metrics = np.asarray(X_filled, dtype=float)
         core_factors = factors_for_output
 
