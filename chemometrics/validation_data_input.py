@@ -62,12 +62,14 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
         should_create = False
     
     n_samples = X_cal.shape[0]
+    y_labels_from_file_flag = _coerce_bool_flag(y_labels_from_file, default=False)
 
     if not should_create:
         # Load validation data separately
         # Check if using new parameters (X_val_path, Y_val_path)
         normalized_x_val_paths = _normalize_path_list(X_val_path)
-        if normalized_x_val_paths or Y_val_path:
+        used_new_external_params = bool(normalized_x_val_paths or Y_val_path)
+        if used_new_external_params:
             # Load from external file paths
             X_val, Y_val, _, smp_val, _, _, _, class_data_val, _, val_metadata, _, val_s_mask = load_data(
                 d_specs_separator=d_specs_separator or "Auto detect",
@@ -77,7 +79,7 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
                 d_specs_dimensions=d_specs_dimensions or "",
                 s_padding_type=s_padding_type or "NaN",
                 y_labels=y_labels or "",
-                y_labels_from_file=bool(y_labels_from_file),
+                y_labels_from_file=y_labels_from_file_flag,
             data_path=normalized_x_val_paths,
                 nway_flag=nway_flag or 1,
                 y_path=Y_val_path,
@@ -100,7 +102,7 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
                 d_specs_dimensions=d_specs_dimensions or "",
                 s_padding_type=s_padding_type or "NaN",
                 y_labels=y_labels or "",
-                y_labels_from_file=bool(y_labels_from_file),
+                y_labels_from_file=y_labels_from_file_flag,
                 data_path=data_path,
                 nway_flag=nway_flag,
                 y_path=y_path,
@@ -111,7 +113,75 @@ def validation_data_main(X_cal: np.ndarray, Y_cal: Optional[np.ndarray], smp_cal
                 cdata_path=cdata_path,
                 source_metadata_overrides=source_metadata_overrides
             )
+
+        # If Y rows are off by one relative to X rows, retry once toggling header-mode.
+        # This protects the external-validation path when y_labels_from_file is inherited
+        # from calibration but the validation Y file uses the opposite convention.
+        if Y_val is not None:
+            x_rows = int(np.asarray(X_val).shape[0])
+            y_rows = int(np.asarray(Y_val).shape[0])
+            if y_rows != x_rows and abs(y_rows - x_rows) == 1:
+                toggled_y_labels_from_file = not y_labels_from_file_flag
+                if used_new_external_params:
+                    X_val_retry, Y_val_retry, _, smp_val_retry, _, _, _, class_data_val_retry, _, val_metadata_retry, _, val_s_mask_retry = load_data(
+                        d_specs_separator=d_specs_separator or "Auto detect",
+                        d_specs_headlines=d_specs_headlines if d_specs_headlines is not None else "",
+                        d_specs_headcolumns=d_specs_headcolumns if d_specs_headcolumns is not None else "",
+                        d_specs_type=d_specs_type or "Auto detect",
+                        d_specs_dimensions=d_specs_dimensions or "",
+                        s_padding_type=s_padding_type or "NaN",
+                        y_labels=y_labels or "",
+                        y_labels_from_file=toggled_y_labels_from_file,
+                        data_path=normalized_x_val_paths,
+                        nway_flag=nway_flag or 1,
+                        y_path=Y_val_path,
+                        var_path=None,
+                        smp_path=val_labels_path,
+                        transpose=transpose,
+                        reshape_order=reshape_order,
+                        cdata_path=cdata_path,
+                        source_metadata_overrides=source_metadata_overrides
+                    )
+                else:
+                    X_val_retry, Y_val_retry, _, smp_val_retry, _, _, _, class_data_val_retry, _, val_metadata_retry, _, val_s_mask_retry = load_data(
+                        d_specs_separator=d_specs_separator or "Auto detect",
+                        d_specs_headlines=d_specs_headlines if d_specs_headlines is not None else "",
+                        d_specs_headcolumns=d_specs_headcolumns if d_specs_headcolumns is not None else "",
+                        d_specs_type=d_specs_type or "Auto detect",
+                        d_specs_dimensions=d_specs_dimensions or "",
+                        s_padding_type=s_padding_type or "NaN",
+                        y_labels=y_labels or "",
+                        y_labels_from_file=toggled_y_labels_from_file,
+                        data_path=data_path,
+                        nway_flag=nway_flag,
+                        y_path=y_path,
+                        var_path=var_path,
+                        smp_path=smp_path,
+                        transpose=transpose,
+                        reshape_order=reshape_order,
+                        cdata_path=cdata_path,
+                        source_metadata_overrides=source_metadata_overrides
+                    )
+
+                if Y_val_retry is not None:
+                    retry_x_rows = int(np.asarray(X_val_retry).shape[0])
+                    retry_y_rows = int(np.asarray(Y_val_retry).shape[0])
+                    if retry_x_rows == retry_y_rows:
+                        X_val, Y_val = X_val_retry, Y_val_retry
+                        smp_val = smp_val_retry
+                        class_data_val = class_data_val_retry
+                        val_metadata = val_metadata_retry
+                        val_s_mask = val_s_mask_retry
         
+        _validate_external_validation_alignment(
+            X_val=X_val,
+            Y_cal=Y_cal,
+            Y_val=Y_val,
+            smp_val=smp_val,
+            class_data_val=class_data_val,
+            val_s_mask=val_s_mask,
+        )
+
         X_cal_out, Y_cal_out, smp_cal_out, class_data_cal_out = X_cal, Y_cal, smp_cal, class_data_cal
         cal_metadata_out = cal_metadata
         cal_s_mask_out = cal_s_mask
@@ -211,6 +281,59 @@ def _split_metadata_by_indices(sample_metadata: Optional[dict], cal_indices: np.
         fallback_order += 1
 
     return cal_metadata, val_metadata
+
+
+def _validate_external_validation_alignment(
+    X_val: np.ndarray,
+    Y_cal: Optional[np.ndarray],
+    Y_val: Optional[np.ndarray],
+    smp_val: Optional[List[str]],
+    class_data_val: Optional[List[Any]],
+    val_s_mask: Optional[np.ndarray],
+) -> None:
+    """Validate sample-axis alignment for externally loaded validation payloads."""
+    x_n = int(np.asarray(X_val).shape[0])
+
+    if Y_val is not None:
+        y_n = int(np.asarray(Y_val).shape[0])
+        if y_n != x_n:
+            raise ValueError(
+                "External validation Y sample count does not match X sample count: "
+                f"X_val has {x_n} samples, Y_val has {y_n}. "
+                "Check Y file header-row handling and separators."
+            )
+
+        y_val_arr = np.asarray(Y_val)
+        y_val_cols = int(y_val_arr.shape[1]) if y_val_arr.ndim > 1 else 1
+        if Y_cal is not None:
+            y_cal_arr = np.asarray(Y_cal)
+            y_cal_cols = int(y_cal_arr.shape[1]) if y_cal_arr.ndim > 1 else 1
+            if y_cal_cols != y_val_cols:
+                raise ValueError(
+                    "External validation Y column count does not match calibration Y column count: "
+                    f"Y_cal has {y_cal_cols} columns, Y_val has {y_val_cols}. "
+                    "This can cause downstream broadcast errors (for example (n,4) vs (n,3))."
+                )
+
+    if smp_val is not None and len(smp_val) != x_n:
+        raise ValueError(
+            "External validation sample-label count does not match X sample count: "
+            f"X_val has {x_n} samples, smp_val has {len(smp_val)} labels."
+        )
+
+    if class_data_val is not None and len(class_data_val) != x_n:
+        raise ValueError(
+            "External validation class-data count does not match X sample count: "
+            f"X_val has {x_n} samples, class_data_val has {len(class_data_val)} rows."
+        )
+
+    if val_s_mask is not None:
+        mask_n = int(np.asarray(val_s_mask).shape[0])
+        if mask_n != x_n:
+            raise ValueError(
+                "External validation sample-mask count does not match X sample count: "
+                f"X_val has {x_n} samples, val_s_mask has {mask_n}."
+            )
 
 
 def _kennard_stone_selection(X: np.ndarray, n_select: int) -> np.ndarray:
@@ -326,4 +449,22 @@ def _normalize_path_list(paths: Optional[Union[str, List[str]]]) -> List[str]:
             if text:
                 normalized.append(text)
     return normalized
+
+
+def _coerce_bool_flag(value: Any, default: bool = False) -> bool:
+    """Coerce mixed bool/int/str inputs into a stable boolean value."""
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return bool(default)
+    if isinstance(value, (int, float)):
+        return value != 0
+
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "y", "on"}:
+        return True
+    if text in {"0", "false", "no", "n", "off", ""}:
+        return False
+
+    return bool(default)
 

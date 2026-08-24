@@ -1424,6 +1424,12 @@ def _single_fit_once(
     Yc = _as_2d_y(Y_cal)
     Yv = _as_2d_y(Y_val)
 
+    if Yc is not None and Yv is not None and Yc.shape[1] != Yv.shape[1]:
+        raise ValueError(
+            "Y_val must have the same number of response columns as Y_cal for PARAFAC: "
+            f"Y_cal has {Yc.shape[1]} columns, Y_val has {Yv.shape[1]}."
+        )
+
     calibration_models: List[Dict[str, Any]] = []
     prediction_candidates: List[Dict[str, Any]] = []
     selected_component_y_mapping: Dict[int, int] = {}
@@ -1497,7 +1503,10 @@ def _single_fit_once(
     if Yc is not None and prediction_candidates:
         y_cal_pred = np.full_like(np.asarray(Yc, dtype=float), np.nan, dtype=float)
         n_val_samples = int(val_scores_a.shape[0]) if isinstance(val_scores_a, np.ndarray) and val_scores_a.ndim == 2 else 0
-        n_val_pred_cols = int(max((int(candidate["y_index"]) + 1) for candidate in prediction_candidates)) if prediction_candidates else 0
+        # Keep validation prediction width aligned with calibration Y width.
+        # Unmapped response columns remain NaN, which preserves shape consistency
+        # for downstream error arrays and reporting.
+        n_val_pred_cols = int(y_cal_pred.shape[1])
         candidate_by_pair: Dict[Tuple[int, int], Dict[str, Any]] = {
             (int(candidate["component"]), int(candidate["y_index"])): candidate for candidate in prediction_candidates
         }

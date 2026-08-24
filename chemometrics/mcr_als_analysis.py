@@ -1276,6 +1276,12 @@ def _build_unified_prediction_matrices(
     pred_cal = _to_2d(y_cal_pred_pairs)
     pred_val = _to_2d(y_val_pred_pairs)
 
+    if cal is not None and val is not None and cal.shape[1] != val.shape[1]:
+        raise ValueError(
+            "MCR-ALS requires Y_val to have the same number of response columns as Y_cal: "
+            f"Y_cal has {cal.shape[1]} columns, Y_val has {val.shape[1]}."
+        )
+
     n_y: Optional[int] = None
     for arr in (cal, val):
         if arr is not None:
@@ -1805,6 +1811,12 @@ def _single_fit(
 
     Yc = _as_2d_y(Y_cal)
     Yv = _as_2d_y(Y_val)
+
+    if Yc is not None and Yv is not None and Yc.shape[1] != Yv.shape[1]:
+        raise ValueError(
+            "MCR-ALS requires Y_val to have the same number of response columns as Y_cal: "
+            f"Y_cal has {Yc.shape[1]} columns, Y_val has {Yv.shape[1]}."
+        )
 
     cal_row_counts = _parse_row_counts(aug_row_counts_cal, expected_samples=None)
     val_row_counts = _parse_row_counts(aug_row_counts_val, expected_samples=None)
@@ -2365,6 +2377,11 @@ def _sbs_mcr(
     n_comp = int(n_components)
     Y_cal_2d = _as_2d_y(Y_cal)
     Y_val_2d = _as_2d_y(Y_val)
+    if Y_cal_2d is not None and Y_val_2d is not None and Y_cal_2d.shape[1] != Y_val_2d.shape[1]:
+        raise ValueError(
+            "MCR-ALS SBS requires Y_val to have the same number of response columns as Y_cal: "
+            f"Y_cal has {Y_cal_2d.shape[1]} columns, Y_val has {Y_val_2d.shape[1]}."
+        )
     n_y = int(Y_cal_2d.shape[1]) if Y_cal_2d is not None else 0
 
     # ------------------------------------------------------------------ #

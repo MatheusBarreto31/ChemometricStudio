@@ -61,6 +61,12 @@ def _compute_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, Any]:
     if y_pred_arr.ndim == 1:
         y_pred_arr = y_pred_arr.reshape(-1, 1)
 
+    if y_true_arr.shape != y_pred_arr.shape:
+        raise ValueError(
+            "Y reference and prediction shapes do not match: "
+            f"y_true shape {y_true_arr.shape}, y_pred shape {y_pred_arr.shape}."
+        )
+
     residual = y_true_arr - y_pred_arr
     rmsep = float(np.sqrt(np.mean(residual ** 2)))
     rmsep_per = np.sqrt(np.mean(residual ** 2, axis=0))

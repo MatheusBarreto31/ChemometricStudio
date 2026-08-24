@@ -818,6 +818,11 @@ def npls_analysis(
     Yv = _as_2d_y(Y_val)
     if Xv is not None and Xv.ndim != Xc.ndim:
         raise ValueError("X_val must have the same number of dimensions as X_cal.")
+    if Yv is not None and Yc.shape[1] != Yv.shape[1]:
+        raise ValueError(
+            "Y_val must have the same number of response columns as Y_cal: "
+            f"Y_cal has {Yc.shape[1]} columns, Y_val has {Yv.shape[1]}."
+        )
 
     # Fail early with a clear message if any dataset contains NaN or Inf.
     if not np.all(np.isfinite(Xc)):
