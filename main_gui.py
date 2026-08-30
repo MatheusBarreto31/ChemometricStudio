@@ -20477,9 +20477,16 @@ Count:
             self._show_latest_execution_report_popup(run_type_label)
             self._apply_run_feedback(orchestrated.get('run_feedback', {}))
             
-            # Switch to analysis tab to show results
-            if self.selected_function_idx is not None:
-                self._show_analysis_tab()
+            # Keep users on Custom Analysis if that is the active tab.
+            # Otherwise, open Analysis and ensure one function is selected.
+            if getattr(self, 'current_tab', None) == 'custom_analysis':
+                self._show_custom_analysis_tab()
+            else:
+                if self.selected_function_idx is None and self.methodology_list:
+                    self.selected_function_idx = 0
+                    self._refresh_methodology_listbox(selected_idx=self.selected_function_idx)
+                if self.selected_function_idx is not None:
+                    self._show_analysis_tab()
             
         except Exception as e:
             self._restore_execution_report_popup(run_type_label)
