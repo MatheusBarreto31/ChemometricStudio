@@ -5737,6 +5737,8 @@ class ChemometricsGUI:
         # Keep progress popup centered over workspace while window/layout changes
         if not self._execution_progress_root_bind_set:
             self.root.bind("<Configure>", self._on_execution_progress_anchor_configure, add="+")
+            self.root.bind("<FocusIn>", self._on_execution_progress_root_focus_in, add="+")
+            self.root.bind("<Activate>", self._on_execution_progress_root_focus_in, add="+")
             self._execution_progress_root_bind_set = True
         workspace_frame.bind("<Configure>", self._on_execution_progress_anchor_configure, add="+")
         
@@ -6592,7 +6594,7 @@ class ChemometricsGUI:
         run_btn.pack(side=tk.RIGHT, padx=5)
 
     def _ensure_execution_progress_popup(self):
-        """Create floating execution progress popup with main GUI color scheme if needed."""
+        """Create in-app execution progress overlay if needed."""
         popup = self.execution_progress_popup
         if popup is not None:
             try:
@@ -6601,10 +6603,8 @@ class ChemometricsGUI:
             except Exception:
                 pass
 
-        popup = tk.Toplevel(self.root)
-        popup.overrideredirect(True)
-        popup.attributes("-topmost", True)
-        popup.withdraw()
+        popup = tk.Frame(self.root, bd=0, highlightthickness=0)
+        popup.place_forget()
 
         # Use active ttk theme colors so popup matches light/dark mode
         style = ttk.Style()
@@ -6659,7 +6659,7 @@ class ChemometricsGUI:
         self.execution_progress_bar = progress_bar
 
     def _position_execution_progress_popup(self):
-        """Position execution popup centered on the workspace/tabs pane."""
+        """Position execution progress overlay centered on the workspace/tabs pane."""
         popup = self.execution_progress_popup
         if popup is None or not popup.winfo_exists():
             return
@@ -6685,8 +6685,11 @@ class ChemometricsGUI:
 
         x = anchor_x + max(16, (anchor_width - width) // 2)
         y = anchor_y + max(16, (anchor_height - height) // 2)
+        local_x = x - self.root.winfo_rootx()
+        local_y = y - self.root.winfo_rooty()
 
-        popup.geometry(f"{width}x{height}+{x}+{y}")
+        popup.place(x=local_x, y=local_y, width=width, height=height)
+        popup.lift()
 
     def _on_execution_progress_anchor_configure(self, event=None):
         """Reposition execution popup when root/workspace geometry changes."""
@@ -6696,6 +6699,32 @@ class ChemometricsGUI:
         try:
             if popup.winfo_exists() and popup.winfo_ismapped():
                 self._position_execution_progress_popup()
+        except tk.TclError:
+            pass
+
+    def _on_execution_progress_root_focus_in(self, event=None):
+        """Keep visible execution popup above the main app window on refocus."""
+        self._restore_execution_progress_popup_zorder()
+
+    def _restore_execution_progress_popup_zorder(self):
+        """Raise execution progress overlay above sibling widgets with delayed retries."""
+        popup = self.execution_progress_popup
+        if popup is None:
+            return
+
+        def _raise_once():
+            try:
+                if popup.winfo_exists() and popup.winfo_ismapped():
+                    popup.lift()
+            except tk.TclError:
+                pass
+
+        try:
+            if not popup.winfo_exists() or not popup.winfo_ismapped():
+                return
+            _raise_once()
+            for delay_ms in (40, 120, 240):
+                self.root.after(delay_ms, _raise_once)
         except tk.TclError:
             pass
 
@@ -6725,8 +6754,7 @@ class ChemometricsGUI:
         popup = self.execution_progress_popup
         if popup is not None and popup.winfo_exists():
             self._position_execution_progress_popup()
-            popup.deiconify()
-            popup.lift()
+            self._restore_execution_progress_popup_zorder()
         self.root.update()
 
     def _show_execution_progress_message(self, status_text: str):
@@ -6757,8 +6785,7 @@ class ChemometricsGUI:
         popup = self.execution_progress_popup
         if popup is not None and popup.winfo_exists():
             self._position_execution_progress_popup()
-            popup.deiconify()
-            popup.lift()
+            self._restore_execution_progress_popup_zorder()
         self.root.update_idletasks()
 
     def _stop_execution_progress_message(self):
@@ -6816,7 +6843,10 @@ class ChemometricsGUI:
             self.execution_progress_percent_label.configure(text=f"{percent}%")
 
         self._position_execution_progress_popup()
-        self.root.update_idletasks()
+        try:
+            self.root.update()
+        except tk.TclError:
+            pass
 
     def _finish_execution_progress(self, success: bool = True):
         """Finalize execution progress bar and auto-hide after a short delay."""
@@ -6848,7 +6878,7 @@ class ChemometricsGUI:
         self.execution_progress_hide_after_id = None
         popup = self.execution_progress_popup
         if popup is not None and popup.winfo_exists():
-            popup.withdraw()
+            popup.place_forget()
     
     def _clear_tab(self):
         """Clear current tab content."""
