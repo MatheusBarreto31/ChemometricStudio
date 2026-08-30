@@ -2187,6 +2187,31 @@ def _render_line(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],
         _render_line_multi_dataset(ax, datasets, config, qualitative_cmap)
     # Otherwise use traditional single dataset rendering
     elif x_data is not None and y_data is not None:
+        def _is_empty_line_vector(values: Any) -> bool:
+            """Return True when a line has no plottable samples (empty, None, NaN-only)."""
+            try:
+                arr = np.asarray(values, dtype=object).reshape(-1)
+            except Exception:
+                return True
+
+            if arr.size == 0:
+                return True
+
+            for raw in arr.tolist():
+                if raw is None:
+                    continue
+                text = str(raw).strip()
+                if text == '' or text.lower() in {'none', 'nan'}:
+                    continue
+                try:
+                    if np.isfinite(float(text)):
+                        return False
+                    continue
+                except Exception:
+                    # Non-empty non-numeric values are considered plottable.
+                    return False
+            return True
+
         cmap_name = config.get('cmap', qualitative_cmap)
         marker = config.get('marker')  # None if absent, defaults to line only
         color_cfg = config.get('color')
@@ -2221,6 +2246,8 @@ def _render_line(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],
             if use_sequential_palette:
                 row_palette = [mcolors.to_rgba(c) for c in list(cmap_obj.colors)]
             for i, row in enumerate(y_data):
+                if _is_empty_line_vector(row):
+                    continue
                 if use_sequential_palette:
                     color = row_palette[i % len(row_palette)]
                 else:
@@ -2249,6 +2276,11 @@ def _render_line(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],
             if show_legend:
                 ax.legend()
         else:
+            if _is_empty_line_vector(y_data):
+                ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
+                ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
+                return
+
             plot_kwargs = {}
             if marker is not None:
                 plot_kwargs['marker'] = marker
@@ -2307,6 +2339,31 @@ def _render_line_multi_dataset(ax, datasets: List[Dict[str, Any]], config: dict,
         qualitative_cmap: Qualitative colormap name for discrete class colours
     """
     from matplotlib.lines import Line2D
+
+    def _is_empty_line_vector(values: Any) -> bool:
+        """Return True when a line has no plottable samples (empty, None, NaN-only)."""
+        try:
+            arr = np.asarray(values, dtype=object).reshape(-1)
+        except Exception:
+            return True
+
+        if arr.size == 0:
+            return True
+
+        for raw in arr.tolist():
+            if raw is None:
+                continue
+            text = str(raw).strip()
+            if text == '' or text.lower() in {'none', 'nan'}:
+                continue
+            try:
+                if np.isfinite(float(text)):
+                    return False
+                continue
+            except Exception:
+                # Non-empty non-numeric values are considered plottable.
+                return False
+        return True
 
     def _safe_cmap_line(name: str, fallback: str = 'tab10'):
         try:
@@ -2545,7 +2602,10 @@ def _render_line_multi_dataset(ax, datasets: List[Dict[str, Any]], config: dict,
 
             class_layers = _normalize_class_layers(dataset, n_lines)
             if class_layers is None or class_layers.size == 0:
+                plotted_any_line = False
                 for line_idx, y_line in enumerate(y_rows):
+                    if _is_empty_line_vector(y_line):
+                        continue
                     plot_kwargs: Dict[str, Any] = {
                         'linestyle': dataset_linestyle,
                         'color': dataset.get('color', 'gray'),
@@ -2560,7 +2620,8 @@ def _render_line_multi_dataset(ax, datasets: List[Dict[str, Any]], config: dict,
                         ax.plot(x_line, y_line, **plot_kwargs)
                     else:
                         ax.plot(y_line, **plot_kwargs)
-                if is_multi_dataset:
+                    plotted_any_line = True
+                if is_multi_dataset and plotted_any_line:
                     dataset_legend_items.append((str(dataset_label), dataset_linestyle))
                 continue
 
@@ -2593,14 +2654,17 @@ def _render_line_multi_dataset(ax, datasets: List[Dict[str, Any]], config: dict,
                     aspect_nature[aspect] = 'continuous' if detected is True else 'discrete'
 
             color_vector = np.tile(np.asarray(mcolors.to_rgba(dataset.get('color', 'C0'))), (n_lines, 1))
+            visible_line_indices = [idx for idx, y_line in enumerate(y_rows) if not _is_empty_line_vector(y_line)]
             if 'color' in aspect_layer_values:
                 color_values = np.asarray(aspect_layer_values['color'], dtype=object)
                 if aspect_nature.get('color') == 'continuous':
                     color_vector = _continuous_color_map(color_values, color_cmap_cont)
                 else:
                     color_vector, discrete_map = _discrete_color_map(color_values, color_cmap_qual, class_value_order)
+                    visible_color_keys = {str(color_values[idx]) for idx in visible_line_indices}
                     for key, rgba in discrete_map.items():
-                        color_legend_mapping[key] = rgba
+                        if key in visible_color_keys:
+                            color_legend_mapping[key] = rgba
 
             linestyle_vector = np.asarray([dataset_linestyle] * n_lines, dtype=object)
             if (not is_multi_dataset) and 'linestyle' in aspect_layer_values:
@@ -2609,8 +2673,10 @@ def _render_line_multi_dataset(ax, datasets: List[Dict[str, Any]], config: dict,
                     linestyle_vector, style_map = _continuous_symbol_map(style_values, class_linestyle_cycle)
                 else:
                     linestyle_vector, style_map = _discrete_symbol_map(style_values, class_linestyle_cycle)
+                visible_style_keys = {str(style_values[idx]) for idx in visible_line_indices}
                 for key, value in style_map.items():
-                    linestyle_legend_mapping[str(key)] = str(value)
+                    if str(key) in visible_style_keys:
+                        linestyle_legend_mapping[str(key)] = str(value)
 
             marker_vector = np.asarray([None] * n_lines, dtype=object)
             if line_marker_reserved and dataset_marker is not None:
@@ -2623,10 +2689,17 @@ def _render_line_multi_dataset(ax, datasets: List[Dict[str, Any]], config: dict,
                     marker_vector, marker_map = _continuous_symbol_map(marker_values, marker_cycle)
                 else:
                     marker_vector, marker_map = _discrete_symbol_map(marker_values, marker_cycle)
+                visible_marker_keys = {str(marker_values[idx]) for idx in visible_line_indices}
                 for key, value in marker_map.items():
-                    marker_legend_mapping[str(key)] = str(value)
+                    if str(key) in visible_marker_keys:
+                        marker_legend_mapping[str(key)] = str(value)
 
+            plotted_any_line = False
             for line_idx in range(n_lines):
+                y_line = y_rows[line_idx]
+                if _is_empty_line_vector(y_line):
+                    continue
+
                 plot_kwargs: Dict[str, Any] = {
                     'color': color_vector[line_idx],
                     'linestyle': str(linestyle_vector[line_idx]),
@@ -2636,13 +2709,13 @@ def _render_line_multi_dataset(ax, datasets: List[Dict[str, Any]], config: dict,
                     plot_kwargs['marker'] = marker_value
 
                 x_line = x_rows[line_idx]
-                y_line = y_rows[line_idx]
                 if x_line is not None and len(x_line) == len(y_line):
                     ax.plot(x_line, y_line, **plot_kwargs)
                 else:
                     ax.plot(y_line, **plot_kwargs)
+                plotted_any_line = True
 
-            if is_multi_dataset:
+            if is_multi_dataset and plotted_any_line:
                 dataset_legend_items.append((str(dataset_label), dataset_linestyle))
 
         line_legend_show_mode = _normalize_scatter_legend_show_mode(config)
@@ -2748,8 +2821,13 @@ def _render_line_multi_dataset(ax, datasets: List[Dict[str, Any]], config: dict,
 
             linestyle = dataset_linestyle_cycle[style_slot % len(dataset_linestyle_cycle)] if is_multi_dataset else '-'
             x_rows, y_rows = _prepare_line_rows(x_data_d, y_data_d)
+            dataset_label_used = False
             for line_idx, y_line in enumerate(y_rows):
-                plot_kwargs = {'label': label if line_idx == 0 else None, 'linestyle': linestyle}
+                if _is_empty_line_vector(y_line):
+                    global_line_idx += 1
+                    continue
+
+                plot_kwargs = {'label': label if not dataset_label_used else None, 'linestyle': linestyle}
                 if marker is not None:
                     marker_text = str(marker).strip().lower()
                     if marker_text not in {'', 'none'}:
@@ -2768,6 +2846,7 @@ def _render_line_multi_dataset(ax, datasets: List[Dict[str, Any]], config: dict,
                     ax.plot(x_line, y_line, **plot_kwargs)
                 else:
                     ax.plot(y_line, **plot_kwargs)
+                dataset_label_used = True
                 global_line_idx += 1
 
         line_legend_show_mode = _normalize_scatter_legend_show_mode(config)
