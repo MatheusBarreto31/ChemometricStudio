@@ -11,6 +11,7 @@
     "nway_flag": "Data Order",
     "mode_centering": "Mode Centering",
     "mode_normalization": "Mode Normalization",
+    "cp_normalize": "CP Normalize",
     "constraint_non_negative": "Non-negative Constraint",
     "constraint_l1_reg": "L1 Regularization Constraint",
     "constraint_l1_reg_strength": "L1 Regularization Strength",
@@ -197,7 +198,7 @@
     "categories": [
       "Model Parameters",
       "Data Inputs",
-      "Per-Mode Options",
+      "Preprocessing",
       "Constraints",
       "Unconstrained Model Options",
       "Profiles",
@@ -383,9 +384,19 @@
         "tooltip": "Batch: adds all validation/test samples at once. Sample by Sample: fits one model per validation/test sample. Disabled automatically when Sweep Factors is enabled."
       },
       {
+        "name": "cp_normalize",
+        "label": "CP Normalize",
+        "category": "Model Parameters",
+        "widget": "checkbutton",
+        "default": true,
+        "required": false,
+        "input_type": "user",
+        "tooltip": "Normalize CP factors first, then assign component magnitudes to mode A (sample scores)."
+      },
+      {
         "name": "mode_centering",
         "label": "Mode Centering",
-        "category": "Per-Mode Options",
+        "category": "Preprocessing",
         "widget": "checkbutton_list",
         "count_source": "nway_flag",
         "count_offset": 1,
@@ -398,7 +409,7 @@
       {
         "name": "mode_normalization",
         "label": "Mode Normalization",
-        "category": "Per-Mode Options",
+        "category": "Preprocessing",
         "widget": "checkbutton_list",
         "count_source": "nway_flag",
         "count_offset": 1,

@@ -8,7 +8,7 @@ import os
 
 import numpy as np
 import tensorly as tl
-from tensorly.cp_tensor import cp_to_tensor
+from tensorly.cp_tensor import cp_to_tensor, cp_normalize as tensorly_cp_normalize
 from tensorly.decomposition import parafac
 from tensorly.solvers.admm import admm
 from tensorly.tenalg import khatri_rao
@@ -409,6 +409,33 @@ def _apply_modewise_stats(
             std_arr = np.asarray(std, dtype=float)
             std_arr = np.where((~np.isfinite(std_arr)) | (std_arr <= 0), 1.0, std_arr)
             unfold = unfold / std_arr
+
+        Xp = tl.fold(unfold, mode, Xp.shape)
+
+    return np.asarray(Xp, dtype=float)
+
+
+def _invert_modewise_stats(
+    X: np.ndarray,
+    mode_stats: Sequence[Dict[str, np.ndarray]],
+) -> np.ndarray:
+    """Invert previously applied mode-wise preprocessing statistics."""
+    Xp = np.asarray(X, dtype=float).copy()
+    n_modes = Xp.ndim
+
+    for mode in range(n_modes - 1, -1, -1):
+        unfold = tl.unfold(Xp, mode)
+        stats = mode_stats[mode] if mode < len(mode_stats) else {}
+
+        std = stats.get("std") if isinstance(stats, dict) else None
+        if std is not None:
+            std_arr = np.asarray(std, dtype=float)
+            std_arr = np.where((~np.isfinite(std_arr)) | (std_arr <= 0), 1.0, std_arr)
+            unfold = unfold * std_arr
+
+        mean = stats.get("mean") if isinstance(stats, dict) else None
+        if mean is not None:
+            unfold = unfold + np.asarray(mean, dtype=float)
 
         Xp = tl.fold(unfold, mode, Xp.shape)
 
@@ -1205,6 +1232,7 @@ def _single_fit_once(
     missing_constrained_solver: str,
     component_y_mapping: Any,
     orient_mostly_negative_pairs: bool,
+    cp_normalize: bool,
     emit_missing_solver_notice: bool = True,
 ) -> Dict[str, Any]:
     X_raw = np.asarray(X_cal, dtype=float)
@@ -1230,7 +1258,9 @@ def _single_fit_once(
             ),
         )
 
-    X_proc, mode_stats = _modewise_preprocess(X_fit_raw, mode_centering, mode_normalization)
+    # Keep concatenated fit behavior, but estimate preprocessing stats from calibration only.
+    _, mode_stats = _modewise_preprocess(X_raw, mode_centering, mode_normalization)
+    X_proc = _apply_modewise_stats(X_fit_raw, mode_stats)
     mask = ~np.isnan(X_proc)
     X_filled = np.nan_to_num(X_proc, nan=0.0)
 
@@ -1377,7 +1407,17 @@ def _single_fit_once(
     else:
         weights, factors = parafac_result
         errors = []
-    factors = list(factors)
+
+    # Optional canonical CP normalization before assigning all component
+    # magnitudes to mode A (sample scores).
+    if bool(cp_normalize):
+        weights, factors = tensorly_cp_normalize((weights, factors))
+
+    weights = np.asarray(weights, dtype=float).reshape(-1)
+    factors = [np.asarray(f, dtype=float) for f in list(factors)]
+    if factors and factors[0].ndim == 2 and factors[0].shape[1] == weights.shape[0]:
+        factors[0] = factors[0] * weights.reshape(1, -1)
+        weights = np.ones_like(weights, dtype=float)
 
     sign_flip_pairs: List[Dict[str, Any]] = []
     if bool(orient_mostly_negative_pairs):
@@ -1391,39 +1431,43 @@ def _single_fit_once(
         scores_a = np.asarray(all_scores_a[:n_cal_samples], dtype=float)
         val_scores_a = np.asarray(all_scores_a[n_cal_samples:], dtype=float)
         factors_for_output = [scores_a] + [np.asarray(f, dtype=float) for f in factors[1:]]
-        reconstructed = cp_to_tensor((weights, factors_for_output))
-        observed_cal = np.asarray(mask[:n_cal_samples], dtype=bool)
+        reconstructed_proc = cp_to_tensor((weights, factors_for_output))
+        reconstructed = _invert_modewise_stats(np.asarray(reconstructed_proc, dtype=float), mode_stats)
+        observed_cal = np.isfinite(np.asarray(X_raw, dtype=float))
         residual = np.where(
             observed_cal,
-            np.asarray(X_filled[:n_cal_samples] - reconstructed, dtype=float),
+            np.asarray(X_raw - reconstructed, dtype=float),
             np.nan,
         )
         _val_factors = [val_scores_a] + [np.asarray(f, dtype=float) for f in factors[1:]]
-        _reconstructed_val = cp_to_tensor((weights, _val_factors))
-        observed_val = np.asarray(mask[n_cal_samples:], dtype=bool)
+        _reconstructed_val_proc = cp_to_tensor((weights, _val_factors))
+        _reconstructed_val = _invert_modewise_stats(np.asarray(_reconstructed_val_proc, dtype=float), mode_stats)
+        observed_val = np.isfinite(np.asarray(X_val_raw, dtype=float))
         residual_val = np.where(
             observed_val,
-            np.asarray(X_filled[n_cal_samples:] - _reconstructed_val, dtype=float),
+            np.asarray(X_val_raw - _reconstructed_val, dtype=float),
             np.nan,
         )
         observed = observed_cal
-        X_metrics = np.asarray(X_filled[:n_cal_samples], dtype=float)
+        X_metrics = np.asarray(X_raw, dtype=float)
+        X_core = np.asarray(X_filled[:n_cal_samples], dtype=float)
         core_factors = factors_for_output
     else:
         scores_a = all_scores_a
         factors_for_output = [np.asarray(f, dtype=float) for f in factors]
-        reconstructed = np.asarray(reconstructed_full, dtype=float)
-        observed = np.asarray(mask, dtype=bool)
-        residual = np.where(observed, np.asarray(X_filled - reconstructed, dtype=float), np.nan)
+        reconstructed = _invert_modewise_stats(np.asarray(reconstructed_full, dtype=float), mode_stats)
+        observed = np.isfinite(np.asarray(X_raw, dtype=float))
+        residual = np.where(observed, np.asarray(X_raw - reconstructed, dtype=float), np.nan)
         residual_val = None
-        X_metrics = np.asarray(X_filled, dtype=float)
+        X_metrics = np.asarray(X_raw, dtype=float)
+        X_core = np.asarray(X_filled, dtype=float)
         core_factors = factors_for_output
 
     ssr = float(np.sum((residual[observed]) ** 2))
     n_obs = int(np.count_nonzero(observed))
     sfit = float(np.sqrt(ssr / max(n_obs, 1)))
     explained = _explained_variance(X_metrics, residual, observed)
-    core_cons = _core_consistency(X_metrics, np.asarray(weights, dtype=float), core_factors)
+    core_cons = _core_consistency(X_core, np.asarray(weights, dtype=float), core_factors)
 
     if (not combine_fit_samples) and X_val is not None:
         X_val_proc = _apply_modewise_stats(np.asarray(X_val, dtype=float), mode_stats)
@@ -1582,6 +1626,8 @@ def _single_fit_once(
             "used_constrained_parafac": bool(use_constrained),
             "missing_constrained_solver": solver_mode if (has_missing and use_constrained) else "n/a",
             "orient_mostly_negative_pairs": bool(orient_mostly_negative_pairs),
+            "cp_normalize": bool(cp_normalize),
+            "weights_assigned_to_mode_a": True,
             "fit_combined_samples": bool(combine_fit_samples),
             "n_samples_fit": int(X_fit_raw.shape[0]),
             "n_samples_calibration": int(n_cal_samples),
@@ -1636,6 +1682,7 @@ def _single_fit(
     missing_constrained_solver: str,
     component_y_mapping: Any,
     orient_mostly_negative_pairs: bool,
+    cp_normalize: bool,
     random_multi_start: bool,
     random_multi_start_runs: int,
     emit_missing_solver_notice: bool = True,
@@ -1677,6 +1724,7 @@ def _single_fit(
             missing_constrained_solver=missing_constrained_solver,
             component_y_mapping=component_y_mapping,
             orient_mostly_negative_pairs=orient_mostly_negative_pairs,
+            cp_normalize=cp_normalize,
             emit_missing_solver_notice=emit_missing_solver_notice,
         )
         sfit = _safe_float(
@@ -2853,6 +2901,7 @@ def _sbs_parafac(
     missing_constrained_solver: str,
     component_y_mapping: Any,
     orient_mostly_negative_pairs: bool,
+    cp_normalize: bool,
     axis_n_info: Optional[Any],
     dim_labels: Optional[Any],
 ) -> Dict[str, Any]:
@@ -2916,6 +2965,7 @@ def _sbs_parafac(
         missing_constrained_solver=missing_constrained_solver,
         component_y_mapping=component_y_mapping,
         orient_mostly_negative_pairs=orient_mostly_negative_pairs,
+        cp_normalize=cp_normalize,
     )
 
     nan_row = np.full((max(n_y, 1),), np.nan)
@@ -3407,6 +3457,7 @@ def parafac_analysis(
     nway_flag: Optional[int] = None,
     mode_centering: Optional[Any] = None,
     mode_normalization: Optional[Any] = None,
+    cp_normalize: Any = True,
     constraint_non_negative: Optional[Any] = None,
     constraint_l1_reg: Optional[Any] = None,
     constraint_l1_reg_strength: Optional[Any] = None,
@@ -3496,6 +3547,7 @@ def parafac_analysis(
         constraint_hard_sparsity_strength=constraint_hard_sparsity_strength,
     )
     seed_value = _safe_optional_int(random_state, default=None)
+    cp_normalize_flag = _safe_bool(cp_normalize, default=True)
     multi_start_runs_value = _safe_optional_int(random_multi_start_runs, default=5)
     if multi_start_runs_value is None:
         multi_start_runs_value = 5
@@ -3590,6 +3642,7 @@ def parafac_analysis(
                 unconstrained_orthogonalise=unconstrained_orthogonalise,
                 missing_constrained_solver=solver_mode,
                 orient_mostly_negative_pairs=orient_negative_pairs_flag,
+                cp_normalize=cp_normalize_flag,
                 profile_paths=path_list,
                 profile_usage=usage_list,
                 component_y_mapping=component_y_mapping,
@@ -3633,6 +3686,7 @@ def parafac_analysis(
                 unconstrained_orthogonalise=unconstrained_orthogonalise,
                 missing_constrained_solver=solver_mode,
                 orient_mostly_negative_pairs=orient_negative_pairs_flag,
+                cp_normalize=cp_normalize_flag,
                 profile_paths=path_list,
                 profile_usage=usage_list,
                 component_y_mapping=component_y_mapping,
@@ -3661,6 +3715,7 @@ def parafac_analysis(
                 unconstrained_orthogonalise=unconstrained_orthogonalise,
                 missing_constrained_solver=solver_mode,
                 orient_mostly_negative_pairs=orient_negative_pairs_flag,
+                cp_normalize=cp_normalize_flag,
                 profile_paths=path_list,
                 profile_usage=usage_list,
                 component_y_mapping=component_y_mapping,
@@ -3863,6 +3918,7 @@ def parafac_analysis(
             missing_constrained_solver=solver_mode,
             component_y_mapping=component_y_mapping,
             orient_mostly_negative_pairs=orient_negative_pairs_flag,
+            cp_normalize=cp_normalize_flag,
             axis_n_info=axis_n_info,
             dim_labels=dim_labels,
         )
