@@ -2068,6 +2068,7 @@
                     "axis_labels_dimension": 2,
                     "label_template": "A Score (F{label})"
                   },
+                  "class_labels": "class_data_cal",
                   "point_labels_source": "smp_cal",
                   "label": "Calibration"
                 },
@@ -2087,6 +2088,7 @@
                     "axis_labels_dimension": 2,
                     "label_template": "A Score (F{label})"
                   },
+                  "class_labels": "class_data_val",
                   "point_labels_source": "smp_val",
                   "label": "Validation"
                 }
@@ -2155,6 +2157,7 @@
                     "axis_labels_index_dimensions": [0, 2],
                     "label_template": "$y_{{Pred}}$ ({label})"
                   },
+                  "class_labels": "class_data_val",
                   "point_labels_source": "smp_val",
                   "label": "Validation"
                 }
@@ -2985,6 +2988,7 @@
                       "axis_labels_dimension": 1,
                       "label_template": "A Score (F{label})"
                   },
+                  "class_labels": "class_data_cal",
                   "point_labels_source": "smp_cal",
                   "label": "Calibration"
                 },
@@ -3003,6 +3007,7 @@
                       "axis_labels_dimension": 1,
                       "label_template": "A Score (F{label})"
                   },
+                  "class_labels": "class_data_val",
                   "point_labels_source": "smp_val",
                   "label": "Validation"
                 }
@@ -3059,6 +3064,7 @@
                     "axis_labels_dimension": 1,
                     "label_template": "$y_{{Pred}}$ ({label})"
                   },
+                  "class_labels": "class_data_val",
                   "point_labels_source": "smp_val",
                   "label": "Validation"
                 }
