@@ -6557,26 +6557,34 @@ class ChemometricsGUI:
         """Build tab selection buttons and Run Model button."""
         control_frame = ttk.Frame(parent)
         control_frame.pack(fill=tk.X, padx=0, pady=(0, 10))
+
+        self._tab_nav_buttons = {}
         
-        setup_btn = ttk.Button(control_frame, text=self.language_manager.translate("ui.tabs.setup", "Setup"), command=self._show_setup_tab, width=12)
+        setup_btn = ttk.Button(control_frame, text=self.language_manager.translate("ui.tabs.setup", "Setup"), command=self._show_setup_tab, width=12, style="Toggle.TButton")
         setup_btn.pack(side=tk.LEFT, padx=5)
+        self._register_tab_nav_button("setup", setup_btn)
         
-        analysis_btn = ttk.Button(control_frame, text=self.language_manager.translate("ui.tabs.analysis", "Analysis"), command=self._show_analysis_tab, width=12)
+        analysis_btn = ttk.Button(control_frame, text=self.language_manager.translate("ui.tabs.analysis", "Analysis"), command=self._show_analysis_tab, width=12, style="Toggle.TButton")
         analysis_btn.pack(side=tk.LEFT, padx=5)
+        self._register_tab_nav_button("analysis", analysis_btn)
 
         custom_analysis_btn = ttk.Button(
             control_frame,
             text=self.language_manager.translate("ui.tabs.custom_analysis", "C. Analysis"),
             command=self._show_custom_analysis_tab,
-            width=12
+            width=12,
+            style="Toggle.TButton"
         )
         custom_analysis_btn.pack(side=tk.LEFT, padx=5)
+        self._register_tab_nav_button("custom_analysis", custom_analysis_btn)
         
-        routing_btn = ttk.Button(control_frame, text=self.language_manager.translate("ui.tabs.routing", "Routing"), command=self._show_routing_tab, width=12)
+        routing_btn = ttk.Button(control_frame, text=self.language_manager.translate("ui.tabs.routing", "Routing"), command=self._show_routing_tab, width=12, style="Toggle.TButton")
         routing_btn.pack(side=tk.LEFT, padx=5)
+        self._register_tab_nav_button("routing", routing_btn)
         
-        report_btn = ttk.Button(control_frame, text=self.language_manager.translate("ui.tabs.report", "Report"), command=self._show_report_tab, width=12)
+        report_btn = ttk.Button(control_frame, text=self.language_manager.translate("ui.tabs.report", "Report"), command=self._show_report_tab, width=12, style="Toggle.TButton")
         report_btn.pack(side=tk.LEFT, padx=5)
+        self._register_tab_nav_button("report", report_btn)
         
         # Add spacer frame to push right-side buttons to the right
         spacer = ttk.Frame(control_frame)
@@ -6592,6 +6600,44 @@ class ChemometricsGUI:
         # Run Model button
         run_btn = ttk.Button(control_frame, text="🠊 " + self.language_manager.translate("ui.buttons.run_model", "Run Model"), command=self._run_model, width=12)
         run_btn.pack(side=tk.RIGHT, padx=5)
+
+    def _register_tab_nav_button(self, tab_key: str, button: ttk.Button) -> None:
+        """Register a navigation button that should reflect current active tab."""
+        if not hasattr(self, "_tab_nav_buttons") or not isinstance(self._tab_nav_buttons, dict):
+            self._tab_nav_buttons = {}
+        self._tab_nav_buttons[tab_key] = button
+        self._update_tab_nav_button_states()
+
+    def _update_tab_nav_button_states(self) -> None:
+        """Apply selected state to the active tab button and clear others."""
+        buttons = getattr(self, "_tab_nav_buttons", None)
+        if not isinstance(buttons, dict) or not buttons:
+            return
+
+        active_tab = getattr(self, "current_tab", None)
+        stale_keys: List[str] = []
+
+        for tab_key, button in buttons.items():
+            try:
+                if not button.winfo_exists():
+                    stale_keys.append(tab_key)
+                    continue
+            except Exception:
+                stale_keys.append(tab_key)
+                continue
+
+            if tab_key == active_tab:
+                button.state(["selected"])
+            else:
+                button.state(["!selected"])
+
+        for tab_key in stale_keys:
+            buttons.pop(tab_key, None)
+
+    def _set_current_tab(self, tab_key: str) -> None:
+        """Track the current tab and sync nav button highlight."""
+        self.current_tab = tab_key
+        self._update_tab_nav_button_states()
 
     def _ensure_execution_progress_popup(self):
         """Create in-app execution progress overlay if needed."""
@@ -6920,7 +6966,7 @@ class ChemometricsGUI:
     def _show_setup_tab(self):
         """Show Setup tab with function configuration widgets."""
         self._clear_tab()
-        self.current_tab = "setup"
+        self._set_current_tab("setup")
         
         if self.selected_function_idx is None:
             label = ttk.Label(self.tab_content_frame, text=self.language_manager.translate("ui.messages.no_methodology", "No functions selected. Please add functions to your methodology."), 
@@ -9185,7 +9231,7 @@ class ChemometricsGUI:
     def _show_routing_tab(self):
         """Show Routing tab with visual connection drawing using canvas."""
         self._clear_tab()
-        self.current_tab = "routing"
+        self._set_current_tab("routing")
         
         if not self.methodology_list:
             label = ttk.Label(self.tab_content_frame, text=self.language_manager.translate("ui.messages.empty_methodology", "Add functions to Methodology first"), 
@@ -9787,7 +9833,7 @@ class ChemometricsGUI:
     def _show_custom_analysis_tab(self):
         """Show global Custom Analysis tab that reuses analysis page/navigation structure."""
         self._clear_tab()
-        self.current_tab = "custom_analysis"
+        self._set_current_tab("custom_analysis")
 
         analysis_info = self._ensure_custom_analysis_state()
         self._ensure_analysis_section_styles()
@@ -9948,7 +9994,7 @@ class ChemometricsGUI:
     def _show_analysis_tab(self):
         """Show Analysis tab with analysis and visualization tools."""
         self._clear_tab()
-        self.current_tab = "analysis"
+        self._set_current_tab("analysis")
         
         if self.selected_function_idx is None:
             label = ttk.Label(self.tab_content_frame, text=self.language_manager.translate("ui.messages.no_methodology", "No functions selected. Please add functions to your methodology."), 
@@ -17870,7 +17916,7 @@ Count:
     def _show_report_tab(self):
         """Show Report tab with report composition controls and preview."""
         self._clear_tab()
-        self.current_tab = "report"
+        self._set_current_tab("report")
 
         if not hasattr(self, 'report_data') or not isinstance(self.report_data, dict):
             self.report_data = {'elements': [], 'selected_index': None}

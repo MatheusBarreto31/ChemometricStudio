@@ -260,21 +260,27 @@ class UserChemometricsGUI(ChemometricsGUI):
         control_frame = ttk.Frame(parent)
         control_frame.pack(fill=tk.X, padx=0, pady=(0, 10))
 
+        self._tab_nav_buttons = {}
+
         analysis_btn = ttk.Button(
             control_frame,
             text=self.language_manager.translate("ui.tabs.analysis", "Analysis"),
             command=self._show_analysis_tab,
             width=12,
+            style="Toggle.TButton",
         )
         analysis_btn.pack(side=tk.LEFT, padx=5)
+        self._register_tab_nav_button("analysis", analysis_btn)
 
         custom_analysis_btn = ttk.Button(
             control_frame,
             text=self.language_manager.translate("ui.tabs.custom_analysis", "C. Analysis"),
             command=self._show_custom_analysis_tab,
             width=12,
+            style="Toggle.TButton",
         )
         custom_analysis_btn.pack(side=tk.LEFT, padx=5)
+        self._register_tab_nav_button("custom_analysis", custom_analysis_btn)
 
         report_btn = ttk.Button(
             control_frame,
