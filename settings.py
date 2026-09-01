@@ -15,6 +15,7 @@ class SettingsManager:
         "colormap": "jet",
         "qualitative_colormap": "tab10",
         "graph_font_scale": 1.0,
+        "graph_scale": "per_slice",
         "display_splashscreen": True,
         "import_loading_mode": "eager",
         "categories_start_collapsed": True

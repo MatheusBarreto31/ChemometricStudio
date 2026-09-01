@@ -467,6 +467,9 @@ class ChemometricsGUI:
         1.1: "menu.font_scale_large",
         1.25: "menu.font_scale_very_large"
     }
+    GRAPH_SCALE_MODE_UNIFORM = "uniform"
+    GRAPH_SCALE_MODE_PER_SLICE = "per_slice"
+    GRAPH_SCALE_MODE_DEFAULT = GRAPH_SCALE_MODE_PER_SLICE
     THEME_DEFAULT = "sv_light"
     THEME_LABELS = {
         "sv_light": "Sun Valley (Light)",
@@ -519,6 +522,12 @@ class ChemometricsGUI:
         self.graph_font_scale_var = tk.StringVar(value=self._format_graph_font_scale_value(self.graph_font_scale))
         if self.graph_font_scale != saved_graph_font_scale:
             self.settings_manager.set("graph_font_scale", self.graph_font_scale)
+
+        saved_graph_scale_mode = self.settings_manager.get("graph_scale", self.GRAPH_SCALE_MODE_DEFAULT)
+        self.graph_scale_mode = self._normalize_graph_scale_mode(saved_graph_scale_mode)
+        self.graph_scale_mode_var = tk.StringVar(value=self.graph_scale_mode)
+        if self.graph_scale_mode != saved_graph_scale_mode:
+            self.settings_manager.set("graph_scale", self.graph_scale_mode)
 
         saved_theme = self.settings_manager.get("theme", self.THEME_DEFAULT)
         self.selected_theme = self._normalize_theme_id(saved_theme)
@@ -1212,6 +1221,45 @@ class ChemometricsGUI:
                 command=lambda val=scale: on_select(val)
             )
 
+    def _normalize_graph_scale_mode(self, value: Any) -> str:
+        """Normalize graph scale mode to 'uniform' or 'per_slice'."""
+        text = str(value).strip().lower() if value is not None else ""
+        if text in {"uniform", "true", "1", "yes", "on"}:
+            return self.GRAPH_SCALE_MODE_UNIFORM
+        if text in {"per_slice", "per-slice", "slice", "false", "0", "no", "off"}:
+            return self.GRAPH_SCALE_MODE_PER_SLICE
+        return self.GRAPH_SCALE_MODE_DEFAULT
+
+    def _is_uniform_scale_default_enabled(self) -> bool:
+        """Return default uniform-scale behavior from persistent graph-scale setting."""
+        return self.graph_scale_mode == self.GRAPH_SCALE_MODE_UNIFORM
+
+    def _set_graph_scale_mode(self, mode: str, notify: bool = True):
+        """Persist default graph scale mode and refresh active views."""
+        normalized = self._normalize_graph_scale_mode(mode)
+
+        if self.graph_scale_mode_var.get() != normalized:
+            self.graph_scale_mode_var.set(normalized)
+
+        if normalized == self.graph_scale_mode:
+            return
+
+        self.graph_scale_mode = normalized
+        self.settings_manager.set("graph_scale", normalized)
+
+        if notify:
+            mode_label = (
+                self.language_manager.translate("menu.graph_scale_uniform", "Uniform")
+                if normalized == self.GRAPH_SCALE_MODE_UNIFORM
+                else self.language_manager.translate("menu.graph_scale_per_slice", "Per slice")
+            )
+            self._show_fading_message(
+                self.language_manager.translate("ui.messages.graph_scale_changed_to", "Graph scale changed to") + f" {mode_label}."
+            )
+
+        if getattr(self, "current_tab", None) in {"analysis", "custom_analysis"}:
+            self._refresh_current_tab_view()
+
     def _load_colormaps_catalog(self) -> dict:
         """Load colormap catalog from Settings/colormaps.json with safe fallback."""
         try:
@@ -1268,6 +1316,8 @@ class ChemometricsGUI:
             return normalized_type == 'scatter' and not is_scatter_3d
         if option_key == 'equal_scale':
             return normalized_type == 'scatter' and not is_scatter_3d
+        if option_key == 'uniform_scale':
+            return normalized_type in {'line', 'heatmap', '3d_surf', 'contour'}
         if option_key == 'cmap':
             return normalized_type in {'line', 'scatter', 'bar', 'heatmap', '3d_surf', 'contour'}
         if option_key == 'use_wireframe':
@@ -1291,6 +1341,166 @@ class ChemometricsGUI:
         if option_key == 'z_reverse_axis':
             return normalized_type in {'scatter', '3d_surf'} and has_z_axis
         return False
+
+    @staticmethod
+    def _flatten_finite_numeric_values(values: Any) -> np.ndarray:
+        """Flatten values and keep only finite numeric samples."""
+        if values is None:
+            return np.asarray([], dtype=float)
+
+        try:
+            arr = np.asarray(values, dtype=float).reshape(-1)
+        except Exception:
+            return np.asarray([], dtype=float)
+
+        if arr.size <= 0:
+            return np.asarray([], dtype=float)
+
+        finite = arr[np.isfinite(arr)]
+        return finite if finite.size > 0 else np.asarray([], dtype=float)
+
+    def _extract_uniform_scale_axis_values(self, outputs: dict, axis_cfg: Any) -> np.ndarray:
+        """Extract unsliced numeric values for a configured axis."""
+        if not isinstance(axis_cfg, dict) or not axis_cfg:
+            return np.asarray([], dtype=float)
+
+        try:
+            full_values = self._extract_axis_data(outputs, axis_cfg, indices={})
+        except Exception:
+            full_values = None
+
+        return self._flatten_finite_numeric_values(full_values)
+
+    def _compute_uniform_scale_limits(self, graph_type: str, config: dict, outputs: dict,
+                                      cache_state: Optional[Dict[str, Any]] = None,
+                                      execution_inputs: Optional[Dict[str, Any]] = None) -> Optional[Tuple[float, float]]:
+        """Compute global min/max limits for supported graph types across all slices."""
+        normalized_graph_type = str(graph_type or '').strip().lower()
+        if normalized_graph_type not in {'line', 'heatmap', '3d_surf', 'contour'}:
+            return None
+
+        default_uniform = self._is_uniform_scale_default_enabled()
+        if not _normalize_bool_setting(config.get('uniform_scale'), default_uniform):
+            return None
+
+        cache_key = None
+        if isinstance(cache_state, dict):
+            if normalized_graph_type == 'line' and isinstance(config.get('datasets'), list):
+                cache_basis = [dataset.get('y_axis', {}) for dataset in config.get('datasets', []) if isinstance(dataset, dict)]
+            elif normalized_graph_type == 'line':
+                cache_basis = config.get('y_axis', {})
+            else:
+                cache_basis = config.get('z_axis', {})
+            cache_key = (
+                id(outputs),
+                normalized_graph_type,
+                str(cache_basis),
+                str(config.get('uniform_scale', None)),
+                str(config.get('dataset_visibility', None)),
+                bool(default_uniform),
+            )
+            cached = cache_state.get('_uniform_scale_cache')
+            if isinstance(cached, dict) and cached.get('key') == cache_key:
+                limits = cached.get('limits')
+                if isinstance(limits, tuple) and len(limits) == 2:
+                    return limits
+
+        collected: List[np.ndarray] = []
+
+        if normalized_graph_type == 'line':
+            datasets_cfg = config.get('datasets') if isinstance(config.get('datasets'), list) else None
+            if datasets_cfg:
+                visibility_cfg = config.get('dataset_visibility') if isinstance(config.get('dataset_visibility'), dict) else {}
+                for dataset_idx, dataset_cfg in enumerate(datasets_cfg):
+                    if not isinstance(dataset_cfg, dict):
+                        continue
+
+                    visibility_key = f'cfg:{dataset_idx}'
+                    if not bool(visibility_cfg.get(visibility_key, True)):
+                        continue
+
+                    condition_cfg = dataset_cfg.get('condition') if isinstance(dataset_cfg.get('condition'), dict) else None
+                    if condition_cfg and isinstance(execution_inputs, dict):
+                        param_name = condition_cfg.get('parameter')
+                        operator = condition_cfg.get('operator')
+                        expected_value = condition_cfg.get('value')
+                        if param_name and param_name in execution_inputs:
+                            actual_value = execution_inputs[param_name]
+                            include_dataset = self._evaluate_condition(actual_value, operator, expected_value)
+                            if not include_dataset:
+                                continue
+
+                    axis_values = self._extract_uniform_scale_axis_values(outputs, dataset_cfg.get('y_axis'))
+                    if axis_values.size > 0:
+                        collected.append(axis_values)
+            else:
+                axis_values = self._extract_uniform_scale_axis_values(outputs, config.get('y_axis'))
+                if axis_values.size > 0:
+                    collected.append(axis_values)
+        else:
+            axis_values = self._extract_uniform_scale_axis_values(outputs, config.get('z_axis'))
+            if axis_values.size > 0:
+                collected.append(axis_values)
+
+        if not collected:
+            if isinstance(cache_state, dict) and cache_key is not None:
+                cache_state['_uniform_scale_cache'] = {'key': cache_key, 'limits': None}
+            return None
+
+        try:
+            merged = np.concatenate(collected)
+        except Exception:
+            merged = collected[0]
+
+        if merged.size <= 0:
+            limits = None
+        else:
+            vmin = float(np.nanmin(merged))
+            vmax = float(np.nanmax(merged))
+            if not np.isfinite(vmin) or not np.isfinite(vmax):
+                limits = None
+            elif np.isclose(vmin, vmax):
+                epsilon = max(1e-12, abs(vmin) * 1e-9)
+                limits = (vmin - epsilon, vmax + epsilon)
+            else:
+                limits = (vmin, vmax)
+
+        if isinstance(cache_state, dict) and cache_key is not None:
+            cache_state['_uniform_scale_cache'] = {'key': cache_key, 'limits': limits}
+        return limits
+
+    def _apply_uniform_scale_render_config(self, graph_type: str, config: dict, render_config: dict,
+                                           outputs: dict, cache_state: Optional[Dict[str, Any]] = None,
+                                           execution_inputs: Optional[Dict[str, Any]] = None) -> None:
+        """Inject effective uniform scale options into render config."""
+        normalized_graph_type = str(graph_type or '').strip().lower()
+        if normalized_graph_type not in {'line', 'heatmap', '3d_surf', 'contour'}:
+            return
+
+        default_uniform = self._is_uniform_scale_default_enabled()
+        enabled = _normalize_bool_setting(config.get('uniform_scale'), default_uniform)
+        render_config['uniform_scale'] = enabled
+        render_config['uniform_scale_default'] = default_uniform
+
+        if not enabled:
+            render_config.pop('uniform_scale_limits', None)
+            return
+
+        limits = self._compute_uniform_scale_limits(
+            graph_type,
+            config,
+            outputs,
+            cache_state=cache_state,
+            execution_inputs=execution_inputs,
+        )
+        if limits is None:
+            render_config.pop('uniform_scale_limits', None)
+            return
+
+        render_config['uniform_scale_limits'] = {
+            'vmin': float(limits[0]),
+            'vmax': float(limits[1]),
+        }
 
     def _get_rendered_dataset_visibility_entries(self, instance_alias: str, section_id: Tuple[int, int]) -> List[Dict[str, str]]:
         """Return dataset entries used by visibility controls when a section has multiple datasets."""
@@ -2244,7 +2454,8 @@ class ChemometricsGUI:
             if not self._is_graph_option_supported(graph_type, option_key, config):
                 return
 
-            current = bool(config.get(option_key, False))
+            default_value = self._is_uniform_scale_default_enabled() if option_key == 'uniform_scale' else False
+            current = _normalize_bool_setting(config.get(option_key), default_value)
             state_var = tk.BooleanVar(value=current)
             _keep_var_ref(state_var)
 
@@ -2284,6 +2495,7 @@ class ChemometricsGUI:
                 _add_toggle('confidence_ellipses', 'menu.graph_context.ellipses', 'Ellipses')
 
         _add_toggle('equal_scale', 'menu.graph_context.equal_scale', 'Equal Scale')
+        _add_toggle('uniform_scale', 'menu.graph_context.uniform_scale', 'Uniform Scale')
         _add_toggle('use_wireframe', 'menu.graph_context.use_wireframe', 'Wireframe')
         _add_toggle('annotate_heatmap', 'menu.graph_context.annotate_heatmap', 'Annotate Heatmap')
 
@@ -4463,6 +4675,24 @@ class ChemometricsGUI:
             graph_font_menu,
             self.graph_font_scale_var,
             lambda scale: self._set_graph_font_scale(scale)
+        )
+
+        graph_scale_menu = tk.Menu(settings_menu, tearoff=0)
+        settings_menu.add_cascade(
+            label=self.language_manager.translate("menu.graph_scale", "Graph scale"),
+            menu=graph_scale_menu
+        )
+        graph_scale_menu.add_radiobutton(
+            label=self.language_manager.translate("menu.graph_scale_uniform", "Uniform"),
+            variable=self.graph_scale_mode_var,
+            value=self.GRAPH_SCALE_MODE_UNIFORM,
+            command=lambda: self._set_graph_scale_mode(self.GRAPH_SCALE_MODE_UNIFORM)
+        )
+        graph_scale_menu.add_radiobutton(
+            label=self.language_manager.translate("menu.graph_scale_per_slice", "Per slice"),
+            variable=self.graph_scale_mode_var,
+            value=self.GRAPH_SCALE_MODE_PER_SLICE,
+            command=lambda: self._set_graph_scale_mode(self.GRAPH_SCALE_MODE_PER_SLICE)
         )
         
         # Load available colormaps
@@ -12859,6 +13089,15 @@ class ChemometricsGUI:
                     resolved_lines = filtered_lines
                 render_config['scatter_reference_lines'] = resolved_lines
             
+            self._apply_uniform_scale_render_config(
+                graph_type,
+                config,
+                render_config,
+                outputs,
+                cache_state=current_slice,
+                execution_inputs=execution_results.get('inputs', {}) if isinstance(execution_results, dict) else {},
+            )
+
             # Render graph using graph_renderer module
             graph_renderer = self._get_graph_renderer()
             active_graph_font_scale = self._normalize_graph_font_scale(
@@ -14730,6 +14969,24 @@ Count:
                     popup_graph_font_menu,
                     popup_graph_font_scale_var,
                     _set_popup_graph_font_scale
+                )
+
+                popup_graph_scale_menu = tk.Menu(popup_settings_menu, tearoff=0)
+                popup_settings_menu.add_cascade(
+                    label=self.language_manager.translate("menu.graph_scale", "Graph scale"),
+                    menu=popup_graph_scale_menu
+                )
+                popup_graph_scale_menu.add_radiobutton(
+                    label=self.language_manager.translate("menu.graph_scale_uniform", "Uniform"),
+                    variable=self.graph_scale_mode_var,
+                    value=self.GRAPH_SCALE_MODE_UNIFORM,
+                    command=lambda: (self._set_graph_scale_mode(self.GRAPH_SCALE_MODE_UNIFORM), render_popup_content())
+                )
+                popup_graph_scale_menu.add_radiobutton(
+                    label=self.language_manager.translate("menu.graph_scale_per_slice", "Per slice"),
+                    variable=self.graph_scale_mode_var,
+                    value=self.GRAPH_SCALE_MODE_PER_SLICE,
+                    command=lambda: (self._set_graph_scale_mode(self.GRAPH_SCALE_MODE_PER_SLICE), render_popup_content())
                 )
             
             # Add button frame at top for action buttons
@@ -16921,6 +17178,15 @@ Count:
                             except Exception:
                                 pass
             
+            self._apply_uniform_scale_render_config(
+                graph_type,
+                config,
+                render_config,
+                outputs,
+                cache_state=current_state,
+                execution_inputs=execution_inputs,
+            )
+
             # Render graph using graph_renderer module
             graph_renderer = self._get_graph_renderer()
             fig, ax = graph_renderer.render_graph_figure(
@@ -19189,11 +19455,22 @@ Count:
             x_axis = metadata.get('x_axis_config', config.get('x_axis', {}))
             y_axis = metadata.get('y_axis_config', config.get('y_axis', {}))
             datasets = metadata.get('extracted_datasets')
+            outputs = metadata.get('outputs', {}) if isinstance(metadata.get('outputs', {}), dict) else {}
+
+            render_config = config.copy()
+            self._apply_uniform_scale_render_config(
+                graph_type,
+                config,
+                render_config,
+                outputs,
+                cache_state=None,
+                execution_inputs=None,
+            )
 
             graph_renderer = self._get_graph_renderer()
             fig, _ax = graph_renderer.render_graph_figure(
                 graph_type,
-                config,
+                render_config,
                 x_data,
                 y_data,
                 z_data,

@@ -158,6 +158,39 @@ def _effective_flip_xy(graph_type: str, config: dict) -> bool:
     return _as_bool(config.get('flip_xy'), default=False)
 
 
+def _resolve_uniform_scale_limits(config: dict) -> Optional[Tuple[float, float]]:
+    """Return validated uniform scale limits from config when enabled."""
+    if not isinstance(config, dict):
+        return None
+
+    default_uniform = _as_bool(config.get('uniform_scale_default'), default=False)
+    if not _as_bool(config.get('uniform_scale'), default=default_uniform):
+        return None
+
+    limits = config.get('uniform_scale_limits')
+    if not isinstance(limits, dict):
+        return None
+
+    try:
+        vmin = float(limits.get('vmin'))
+        vmax = float(limits.get('vmax'))
+    except Exception:
+        return None
+
+    if not np.isfinite(vmin) or not np.isfinite(vmax):
+        return None
+
+    if np.isclose(vmin, vmax):
+        epsilon = max(1e-12, abs(vmin) * 1e-9)
+        vmin -= epsilon
+        vmax += epsilon
+
+    if vmax < vmin:
+        vmin, vmax = vmax, vmin
+
+    return vmin, vmax
+
+
 def _normalize_axis_type(axis_config: dict) -> str:
     """Return normalized axis type from config, defaulting to linear."""
     axis_type = str(axis_config.get('axis_type', 'linear')).strip().lower()
@@ -291,6 +324,8 @@ def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarr
     else:
         ax = fig.add_subplot(111)
     
+    uniform_scale_limits = _resolve_uniform_scale_limits(config)
+
     # Render based on graph type
     if graph_type == 'scatter':
         _render_scatter(ax, x_data, y_data, z_data, config, use_3d, datasets, qualitative_cmap, 
@@ -307,7 +342,7 @@ def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarr
     elif graph_type == '3d_surf':
         _render_3d_surface(ax, x_data, y_data, z_data, config)
     elif graph_type == 'contour':
-        _render_contour(ax, x_data, y_data, z_data, config)
+        _render_contour(fig, ax, x_data, y_data, z_data, config)
 
     # Capture scatter data view limits before reference lines so that equal_scale
     # can use them later.  Reference-line ax.plot() calls may expand autoscale,
@@ -339,6 +374,18 @@ def render_graph_figure(graph_type: str, config: dict, x_data: Optional[np.ndarr
     # inside reference-line rendering cannot trigger autoscaling that reverts the
     # scale back to linear (a known matplotlib behaviour with wide-range data).
     _apply_axis_scale_options(ax, config, use_3d=use_3d)
+
+    if graph_type == 'line' and uniform_scale_limits is not None:
+        try:
+            ax.set_ylim(uniform_scale_limits[0], uniform_scale_limits[1])
+        except Exception:
+            pass
+
+    if graph_type == '3d_surf' and uniform_scale_limits is not None:
+        try:
+            ax.set_zlim(uniform_scale_limits[0], uniform_scale_limits[1])
+        except Exception:
+            pass
 
     # Equal scale: force X and Y to the same range using pre-reference-line limits
     # so that drawn lines cannot expand the visible region beyond the scatter data.
@@ -3230,7 +3277,12 @@ def _render_heatmap(fig, ax, x_data: Optional[np.ndarray], y_data: Optional[np.n
 
             # Use 1D-axis pcolormesh for robust handling of center-style coordinates.
             cmap = config.get('cmap', 'viridis')
-            im = ax.pcolormesh(x_coords, y_coords, z_data, cmap=cmap, shading='auto')
+            mesh_kwargs: Dict[str, Any] = {'cmap': cmap, 'shading': 'auto'}
+            uniform_limits = _resolve_uniform_scale_limits(config)
+            if uniform_limits is not None:
+                mesh_kwargs['vmin'] = uniform_limits[0]
+                mesh_kwargs['vmax'] = uniform_limits[1]
+            im = ax.pcolormesh(x_coords, y_coords, z_data, **mesh_kwargs)
             fig.colorbar(im, ax=ax)
             ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
             ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
@@ -3304,10 +3356,23 @@ def _render_3d_surface(ax, x_data: Optional[np.ndarray], y_data: Optional[np.nda
             # Use plot_surface or plot_wireframe for 3D surface plot
             use_wireframe = config.get('use_wireframe', False)
             cmap = config.get('cmap', 'viridis')
+            uniform_limits = _resolve_uniform_scale_limits(config)
+            norm = None
+            if uniform_limits is not None:
+                try:
+                    norm = mcolors.Normalize(vmin=float(uniform_limits[0]), vmax=float(uniform_limits[1]), clip=True)
+                except Exception:
+                    norm = None
             if use_wireframe:
-                ax.plot_wireframe(X, Y, z_data, cmap=cmap)
+                wireframe_kwargs: Dict[str, Any] = {'cmap': cmap}
+                if norm is not None:
+                    wireframe_kwargs['norm'] = norm
+                ax.plot_wireframe(X, Y, z_data, **wireframe_kwargs)
             else:
-                ax.plot_surface(X, Y, z_data, cmap=cmap)
+                surface_kwargs: Dict[str, Any] = {'cmap': cmap}
+                if norm is not None:
+                    surface_kwargs['norm'] = norm
+                ax.plot_surface(X, Y, z_data, **surface_kwargs)
             ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
             ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
             ax.set_zlabel(config.get('z_axis', {}).get('label', 'Z'))
@@ -3325,7 +3390,7 @@ def _render_3d_surface(ax, x_data: Optional[np.ndarray], y_data: Optional[np.nda
                 ax.set_box_aspect(aspect_ratio)
 
 
-def _render_contour(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],
+def _render_contour(fig, ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],
                    z_data: Optional[np.ndarray], config: dict) -> None:
     """Render a contour plot."""
     if x_data is not None and y_data is not None and z_data is not None:
@@ -3333,10 +3398,15 @@ def _render_contour(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarra
             X, Y = np.meshgrid(x_data, y_data)
             contour_type = config.get('contour_type', 'contourf')
             cmap = config.get('cmap', 'viridis')
+            contour_kwargs: Dict[str, Any] = {'levels': 10, 'cmap': cmap}
+            uniform_limits = _resolve_uniform_scale_limits(config)
+            if uniform_limits is not None:
+                contour_kwargs['levels'] = np.linspace(uniform_limits[0], uniform_limits[1], 10)
             if contour_type == 'contourf':
-                ax.contourf(X, Y, z_data, levels=10, cmap=cmap)
+                contour_artist = ax.contourf(X, Y, z_data, **contour_kwargs)
             else:
-                ax.contour(X, Y, z_data, levels=10, cmap=cmap)
+                contour_artist = ax.contour(X, Y, z_data, **contour_kwargs)
+            fig.colorbar(contour_artist, ax=ax)
             ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
             ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
 
