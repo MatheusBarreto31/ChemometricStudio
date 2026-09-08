@@ -1,7 +1,8 @@
-"""Principal Component Analysis (PCA) for calibration and validation data."""
+"""Component Analysis (PCA/ICA) for calibration and validation data."""
 from typing import Optional, Dict, Any, List, Tuple
 import numpy as np
-from sklearn.decomposition import PCA
+from sklearn.decomposition import PCA, FastICA
+from sklearn.decomposition._factor_analysis import _ortho_rotation as _sklearn_ortho_rotation
 
 try:
     from execution_reporting import emit_execution_message, emit_execution_warning
@@ -183,14 +184,14 @@ def _compute_reconstruction_rmse_vector(
     return np.asarray(rmse_vector, dtype=float)
 
 
-def _compute_pca_metrics(
+def _compute_component_metrics(
     scores: np.ndarray,
     X_data: np.ndarray,
     loadings: np.ndarray,
     mean_vector: Optional[np.ndarray] = None,
     eigenvalues: Optional[np.ndarray] = None,
 ) -> Dict[str, Any]:
-    """Compute PCA-relevant metrics.
+    """Compute component-analysis metrics.
     
     Args:
         scores: PCA scores (samples x n_components)
@@ -202,7 +203,7 @@ def _compute_pca_metrics(
                      instead of eigenvalues derived from the passed scores.
         
     Returns:
-        Dictionary with PCA metrics
+        Dictionary with component-analysis metrics
     """
     n_components = scores.shape[1]
     n_variables = X_data.shape[1]
@@ -301,13 +302,167 @@ def _format_pct_value(value: Any) -> str:
     return f"{numeric:.1f}".rstrip("0").rstrip(".")
 
 
-def _build_pc_labels_with_variance(pct_variance_explained: List[Any], variance_word: str) -> List[str]:
-    """Build axis labels such as: PC 1 (12% Variance)."""
+def _build_component_labels_with_variance(
+    pct_variance_explained: List[Any],
+    variance_word: str,
+    component_prefix: str,
+    compact_prefix: bool = False,
+) -> List[str]:
+    """Build axis labels such as: PC 1 (12% Variance) or F1 (12% Variance)."""
     labels: List[str] = []
     for idx, pct_value in enumerate(pct_variance_explained):
         pct_text = _format_pct_value(pct_value)
-        labels.append(f"PC {idx + 1} ({pct_text}% {variance_word})")
+        if compact_prefix:
+            comp_name = f"{component_prefix}{idx + 1}"
+        else:
+            comp_name = f"{component_prefix} {idx + 1}"
+        labels.append(f"{comp_name} ({pct_text}% {variance_word})")
     return labels
+
+
+def _resolve_analysis_method(analysis_method: Optional[str]) -> str:
+    method = str(analysis_method or "pca").strip().lower()
+    if method not in {"pca", "ica"}:
+        return "pca"
+    return method
+
+
+def _resolve_rotation_algorithm(rotation_algorithm: Optional[str]) -> str:
+    algorithm = str(rotation_algorithm or "none").strip().lower()
+    if algorithm in {"none", "no rotation", "no_rotation"}:
+        return "none"
+    if algorithm in {"varimax", "quartimax"}:
+        return algorithm
+    return "none"
+
+
+def _orthogonal_rotate_loadings(
+    loadings: np.ndarray,
+    algorithm: str = "varimax",
+    max_iter: int = 100,
+    tol: float = 1e-6,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Apply scikit-learn orthogonal rotation to loadings.
+
+    Returns (rotated_loadings, rotation_matrix), where rotation_matrix is
+    estimated by orthogonal Procrustes between original and rotated loadings.
+    """
+    loadings_arr = np.asarray(loadings, dtype=float)
+    rotated_raw = _sklearn_ortho_rotation(
+        loadings_arr,
+        method=str(algorithm),
+        tol=max(float(tol), 0.0),
+        max_iter=max(1, int(max_iter)),
+    )
+
+    # sklearn internal APIs may return either rotated loadings directly or
+    # tuple-like payloads depending on version.
+    if isinstance(rotated_raw, tuple):
+        rotated_candidate = np.asarray(rotated_raw[0], dtype=float)
+    else:
+        rotated_candidate = np.asarray(rotated_raw, dtype=float)
+
+    # Normalize orientation to (n_variables, n_components).
+    if rotated_candidate.shape == loadings_arr.shape:
+        rotated_loadings = rotated_candidate
+    elif rotated_candidate.shape == loadings_arr.T.shape:
+        rotated_loadings = rotated_candidate.T
+    else:
+        raise ValueError(
+            "Unexpected sklearn rotation output shape: "
+            f"{rotated_candidate.shape} for loadings shape {loadings_arr.shape}."
+        )
+
+    # Estimate a square orthogonal mapping R such that loadings @ R ~= rotated_loadings.
+    map_estimate = np.linalg.pinv(loadings_arr) @ rotated_loadings
+    u, _, vh = np.linalg.svd(map_estimate, full_matrices=False)
+    rotation = np.asarray(u @ vh, dtype=float)
+    return rotated_loadings, rotation
+
+
+def _fit_component_model(
+    method: str,
+    X_train: np.ndarray,
+    n_components: int,
+    pca_rotation_algorithm: str = "none",
+    rotation_max_iter: int = 100,
+    rotation_tol: float = 1e-6,
+    ica_max_iter: int = 400,
+    ica_tol: float = 1e-4,
+    random_state: int = 42,
+) -> Dict[str, Any]:
+    """Fit PCA or ICA and return scores/loadings/metadata under a shared contract."""
+    method = _resolve_analysis_method(method)
+
+    if method == "ica":
+        model = FastICA(
+            n_components=n_components,
+            random_state=random_state,
+            max_iter=max(1, int(ica_max_iter)),
+            tol=max(float(ica_tol), 1e-12),
+        )
+        scores = model.fit_transform(X_train)
+        loadings = np.asarray(model.mixing_, dtype=float)
+        mean_vector = np.asarray(getattr(model, "mean_", np.zeros(X_train.shape[1], dtype=float)), dtype=float)
+        if scores.shape[0] > 1:
+            eig = np.var(scores, axis=0, ddof=1)
+        else:
+            eig = np.zeros(scores.shape[1], dtype=float)
+        return {
+            "method": method,
+            "model": model,
+            "scores": scores,
+            "loadings": loadings,
+            "mean_vector": mean_vector,
+            "eigenvalues": np.asarray(eig, dtype=float),
+            "component_prefix": "IC",
+            "compact_prefix": False,
+            "method_label": "ICA",
+            "rotation_label": "none",
+            "rotation_matrix": None,
+        }
+
+    model = PCA(n_components=n_components)
+    base_scores = model.fit_transform(X_train)
+    base_loadings = np.asarray(model.components_.T, dtype=float)
+    mean_vector = np.asarray(model.mean_, dtype=float)
+    eigenvalues = np.asarray(model.explained_variance_, dtype=float)
+
+    rotation_algorithm = _resolve_rotation_algorithm(pca_rotation_algorithm)
+    if rotation_algorithm != "none":
+        rotated_loadings, rotation_matrix = _orthogonal_rotate_loadings(
+            base_loadings,
+            algorithm=rotation_algorithm,
+            max_iter=rotation_max_iter,
+            tol=rotation_tol,
+        )
+        scores = np.asarray(base_scores @ rotation_matrix, dtype=float)
+        if scores.shape[0] > 1:
+            eigenvalues = np.var(scores, axis=0, ddof=1)
+        else:
+            eigenvalues = np.zeros(scores.shape[1], dtype=float)
+        component_prefix = "F"
+        compact_prefix = True
+    else:
+        rotated_loadings = base_loadings
+        rotation_matrix = None
+        scores = base_scores
+        component_prefix = "PC"
+        compact_prefix = False
+
+    return {
+        "method": method,
+        "model": model,
+        "scores": scores,
+        "loadings": rotated_loadings,
+        "mean_vector": mean_vector,
+        "eigenvalues": np.asarray(eigenvalues, dtype=float),
+        "component_prefix": component_prefix,
+        "compact_prefix": compact_prefix,
+        "method_label": "PCA",
+        "rotation_label": rotation_algorithm,
+        "rotation_matrix": rotation_matrix,
+    }
 
 
 def pca_analysis(
@@ -324,11 +479,18 @@ def pca_analysis(
     smp_val: Optional[List[str]] = None,
     nway_flag: Optional[int] = None,
     translation_keys: Optional[Dict[str, Any]] = None,
+    analysis_method: str = "pca",
+    pca_rotation_algorithm: str = "none",
+    rotation_max_iter: int = 100,
+    rotation_tol: float = 1e-6,
+    ica_max_iter: int = 400,
+    ica_tol: float = 1e-4,
+    random_state: int = 42,
 ) -> Dict[str, Any]:
-    """Principal Component Analysis with cross-validation and U-PCA support.
+    """Component Analysis with cross-validation and U-PCA support.
     
-    Performs PCA on calibration data, projects validation data using 
-    the learned loadings, and supports cross-validation for robust 
+    Performs PCA/ICA on calibration data, projects validation data using
+    the learned loadings, and supports cross-validation for robust
     component selection. Handles both univariate (2D) and multiway (3D+) data
     using U-PCA (Unfolded-PCA) approach.
 
@@ -350,15 +512,16 @@ def pca_analysis(
 
     Returns:
         Dict with keys:
-        - model_scores: calibration PCA scores (samples x n_components)
-        - model_loadings: PCA loadings (unfolded_variables x n_components)
+        - model_scores: calibration component scores (samples x n_components)
+        - model_loadings: component loadings (unfolded_variables x n_components)
         - val_scores: validation scores (or None if no X_val)
         - model_scores_cv: per-fold calibration scores (if CV enabled)
         - model_loadings_cv: per-fold loadings (if CV enabled)
         - metrics: dictionary with variance explained and other metrics
         - cv_results: aggregated CV metrics (if CV enabled)
-        - pc_component_axis: numeric component axis [1, 2, ..., n_components]
-        - pc_labels: component axis labels with variance annotation
+        - component_axis: numeric component axis [1, 2, ..., n_components]
+        - component_labels: component axis labels with variance annotation
+        - pc_component_axis / pc_labels: legacy aliases for compatibility
         
     Note on Multiway Data:
         When X_cal has ndim >= 3 (e.g., shape (100, 50, 10)):
@@ -402,10 +565,11 @@ def pca_analysis(
 
     # Warning for discrete-axis PCA without autoscaling.
     # Execute once per top-level call to avoid duplicate fold-level warnings.
+    selected_method = _resolve_analysis_method(analysis_method)
     expected_axes = max(int(x_cal_ndim) - 1, 0)
     axis_nature_list = _normalize_axis_nature(axis_nature, expected_axes)
     has_discrete_axis = any(value == "Discrete" for value in axis_nature_list)
-    if has_discrete_axis and fold == 0 and not _is_cv_fold_call():
+    if selected_method == "pca" and has_discrete_axis and fold == 0 and not _is_cv_fold_call():
         try:
             X_cal_2d, _ = _ensure_2d_matrix(X_cal)
             autoscaled_detected = _looks_autoscaled(X_cal_2d)
@@ -443,6 +607,7 @@ def pca_analysis(
                 # Convert tuple to dict
                 return_keys = ['model_scores', 'model_loadings', 'val_scores',
                              'model_scores_cv', 'model_loadings_cv', 'metrics', 'cv_results',
+                             'component_axis', 'component_labels', 'component_prefix',
                              'pc_component_axis', 'pc_labels']
                 result_dict = dict(zip(return_keys, result))
                 # Collect loadings per fold for tensor stacking
@@ -462,6 +627,13 @@ def pca_analysis(
             pipeline_kwargs = {
                 'X_cal': X_cal,
                 'n_components': n_components,
+                'analysis_method': analysis_method,
+                'pca_rotation_algorithm': pca_rotation_algorithm,
+                'rotation_max_iter': rotation_max_iter,
+                'rotation_tol': rotation_tol,
+                'ica_max_iter': ica_max_iter,
+                'ica_tol': ica_tol,
+                'random_state': random_state,
                 'capture_output_keys': ['model_scores'],
             }
 
@@ -489,10 +661,14 @@ def pca_analysis(
             single_results = _pca_analysis_single_fit(
                 X_cal, X_val, n_components, fold=-1, axis_n_info=axis_n_info,
                 class_data_cal=class_data_cal, class_data_val=class_data_val,
-                smp_cal=smp_cal, smp_val=smp_val, nway_flag=nway_flag, translation_keys=translation_keys
+                smp_cal=smp_cal, smp_val=smp_val, nway_flag=nway_flag, translation_keys=translation_keys,
+                analysis_method=analysis_method, pca_rotation_algorithm=pca_rotation_algorithm,
+                rotation_max_iter=rotation_max_iter, rotation_tol=rotation_tol,
+                ica_max_iter=ica_max_iter, ica_tol=ica_tol,
+                random_state=random_state,
             )
             # single_results is a tuple, extract it
-            model_scores, model_loadings, val_scores, scores_cv, loadings_cv, metrics, cv_results, pc_component_axis, pc_labels = single_results
+            model_scores, model_loadings, val_scores, scores_cv, loadings_cv, metrics, cv_results, component_axis, component_labels, component_prefix, pc_component_axis, pc_labels = single_results
             
             # Extract CV scores from pipeline (reconstructed array: n_samples × n_components)
             cv_model_scores = cv_results_dict.get('model_scores_cv', None)
@@ -556,6 +732,9 @@ def pca_analysis(
                 cv_model_loadings,  # Use CV loadings from pipeline
                 metrics,
                 cv_results,  # CV metrics and fold info
+                component_axis,
+                component_labels,
+                component_prefix,
                 pc_component_axis,
                 pc_labels,
             )
@@ -564,7 +743,11 @@ def pca_analysis(
     return _pca_analysis_single_fit(
         X_cal, X_val, n_components, fold=fold, axis_n_info=axis_n_info,
         class_data_cal=class_data_cal, class_data_val=class_data_val,
-        smp_cal=smp_cal, smp_val=smp_val, nway_flag=nway_flag, translation_keys=translation_keys
+        smp_cal=smp_cal, smp_val=smp_val, nway_flag=nway_flag, translation_keys=translation_keys,
+        analysis_method=analysis_method, pca_rotation_algorithm=pca_rotation_algorithm,
+        rotation_max_iter=rotation_max_iter, rotation_tol=rotation_tol,
+        ica_max_iter=ica_max_iter, ica_tol=ica_tol,
+        random_state=random_state,
     )
 
 
@@ -580,6 +763,13 @@ def _pca_analysis_single_fit(
     smp_val: Optional[List[str]] = None,
     nway_flag: Optional[int] = None,
     translation_keys: Optional[Dict[str, Any]] = None,
+    analysis_method: str = "pca",
+    pca_rotation_algorithm: str = "none",
+    rotation_max_iter: int = 100,
+    rotation_tol: float = 1e-6,
+    ica_max_iter: int = 400,
+    ica_tol: float = 1e-4,
+    random_state: int = 42,
     **kwargs
 ) -> Dict[str, Any]:
     """Internal: single PCA fit (used both standalone and by CVPipeline).
@@ -612,19 +802,34 @@ def _pca_analysis_single_fit(
         Xc_test = None
         test_shape = None
     
-    # Fit PCA on calibration data (training set)
-    pca = PCA(n_components=n_components)
-    model_scores = pca.fit_transform(Xc)
-    model_loadings = pca.components_.T  # Convert from (n_components, n_vars) to (n_vars, n_components)
-    
+    # Fit selected component model on calibration data (training set)
+    fit_info = _fit_component_model(
+        method=analysis_method,
+        X_train=Xc,
+        n_components=n_components,
+        pca_rotation_algorithm=pca_rotation_algorithm,
+        rotation_max_iter=rotation_max_iter,
+        rotation_tol=rotation_tol,
+        ica_max_iter=ica_max_iter,
+        ica_tol=ica_tol,
+        random_state=random_state,
+    )
+    model = fit_info['model']
+    model_scores = fit_info['scores']
+    model_loadings = fit_info['loadings']
+    mean_vector = fit_info['mean_vector']
+    cal_eigenvalues = fit_info['eigenvalues']
+    rotation_matrix = fit_info['rotation_matrix']
+
     # Compute metrics for calibration
-    cal_eigenvalues = pca.explained_variance_
-    metrics_cal = _compute_pca_metrics(model_scores, Xc, model_loadings, mean_vector=pca.mean_, eigenvalues=cal_eigenvalues)
+    metrics_cal = _compute_component_metrics(model_scores, Xc, model_loadings, mean_vector=mean_vector, eigenvalues=cal_eigenvalues)
     
     # Project validation data if provided
     if Xv is not None:
-        val_scores = pca.transform(Xv)
-        metrics_val = _compute_pca_metrics(val_scores, Xv, model_loadings, mean_vector=pca.mean_, eigenvalues=cal_eigenvalues)
+        val_scores = model.transform(Xv)
+        if rotation_matrix is not None:
+            val_scores = np.asarray(val_scores @ rotation_matrix, dtype=float)
+        metrics_val = _compute_component_metrics(val_scores, Xv, model_loadings, mean_vector=mean_vector, eigenvalues=cal_eigenvalues)
     else:
         val_scores = None
         metrics_val = None
@@ -633,8 +838,10 @@ def _pca_analysis_single_fit(
     scores_cv = None
     metrics_cv = None
     if Xc_test is not None:
-        scores_cv = pca.transform(Xc_test)
-        metrics_cv = _compute_pca_metrics(scores_cv, Xc_test, model_loadings, mean_vector=pca.mean_, eigenvalues=cal_eigenvalues)
+        scores_cv = model.transform(Xc_test)
+        if rotation_matrix is not None:
+            scores_cv = np.asarray(scores_cv @ rotation_matrix, dtype=float)
+        metrics_cv = _compute_component_metrics(scores_cv, Xc_test, model_loadings, mean_vector=mean_vector, eigenvalues=cal_eigenvalues)
     
     # Build cv_results following FoldSegregatedOutput structure if this is a CV call
     cv_results = None
@@ -645,14 +852,29 @@ def _pca_analysis_single_fit(
             'test': {'metrics': metrics_cv, 'scores': scores_cv},
         }
     
-    # Return tuple in order specified by function_specs.json return_specs for pca_analysis
-    # Build PC labels with explained variance for graph axis titles.
+    # Return tuple in order specified by function_specs.json return_specs for pca_analysis.
+    # Build component labels with explained variance for graph axis titles.
     variance_word = _resolve_translation_term(translation_keys, "variance", "Variance")
     pct_variance_explained = metrics_cal.get('pct_variance_explained', []) if isinstance(metrics_cal, dict) else []
-    pc_labels = _build_pc_labels_with_variance(pct_variance_explained, variance_word)
-    if not pc_labels:
-        pc_labels = [f"PC {i + 1}" for i in range(model_scores.shape[1])]
-    pc_component_axis = np.arange(1, model_scores.shape[1] + 1, dtype=int)
+    component_prefix = fit_info.get('component_prefix', 'PC')
+    compact_prefix = bool(fit_info.get('compact_prefix', False))
+
+    component_labels = _build_component_labels_with_variance(
+        pct_variance_explained,
+        variance_word,
+        component_prefix,
+        compact_prefix,
+    )
+    if not component_labels:
+        if compact_prefix:
+            component_labels = [f"{component_prefix}{i + 1}" for i in range(model_scores.shape[1])]
+        else:
+            component_labels = [f"{component_prefix} {i + 1}" for i in range(model_scores.shape[1])]
+    component_axis = np.arange(1, model_scores.shape[1] + 1, dtype=int)
+
+    # Legacy aliases kept for backward compatibility in existing graphs/workflows.
+    pc_labels = component_labels
+    pc_component_axis = component_axis
     
     return (
         model_scores,
@@ -665,6 +887,9 @@ def _pca_analysis_single_fit(
             'validation': metrics_val,
         },  # metrics
         cv_results,  # cv_results
+        component_axis,
+        component_labels,
+        component_prefix,
         pc_component_axis,
         pc_labels,  # component labels (e.g., ["PC 1", "PC 2", "PC 3"])
     )

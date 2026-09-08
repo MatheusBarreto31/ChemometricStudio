@@ -209,6 +209,9 @@
       "model_loadings_cv",
       "metrics",
       "cv_results",
+      "component_axis",
+      "component_labels",
+      "component_prefix",
       "pc_component_axis",
       "pc_labels"
     ],
@@ -898,7 +901,14 @@
     "pca_analysis": [
       "X_cal",
       "X_val",
+      "analysis_method",
       "n_components",
+      "pca_rotation_algorithm",
+      "rotation_max_iter",
+      "rotation_tol",
+      "ica_max_iter",
+      "ica_tol",
+      "random_state",
       "cv_config",
       "axis_n_info",
       "axis_nature",
@@ -1548,7 +1558,14 @@
       "X_val": "ndarray",
       "n_components": "int",
       "cv_config": "CVConfig",
-      "axis_nature": "list"
+      "axis_nature": "list",
+      "analysis_method": "str",
+      "pca_rotation_algorithm": "str",
+      "rotation_max_iter": "int",
+      "rotation_tol": "float",
+      "ica_max_iter": "int",
+      "ica_tol": "float",
+      "random_state": "int"
     },
     "npls_analysis": {
       "X_cal": "ndarray",

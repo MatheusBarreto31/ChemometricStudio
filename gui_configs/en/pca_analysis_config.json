@@ -1,11 +1,18 @@
 {
-  "display_name": "PCA",
+  "display_name": "Component Analysis",
   "category": "4.Exploratory Analysis",
   "data_type": "firstorder",
   "input_aliases": {
     "X_cal": "X Calibration",
     "X_val": "X Validation",
+    "analysis_method": "Method",
     "n_components": "Number of Components",
+    "pca_rotation_algorithm": "PCA Rotation",
+    "rotation_max_iter": "Rotation Max Iterations",
+    "rotation_tol": "Rotation Tolerance",
+    "ica_max_iter": "ICA Max Iterations",
+    "ica_tol": "ICA Tolerance",
+    "random_state": "Random Seed",
     "cv_config": "CV Configuration",
     "axis_n_info": "Variable Labels",
     "axis_t_info": "Axis Text Labels",
@@ -24,12 +31,15 @@
     "model_loadings_cv": "CV Loadings",
     "metrics": "Metrics",
     "cv_results": "CV Results",
-    "pc_component_axis": "PC Component Axis",
-    "pc_labels": "PC Labels"
+    "component_axis": "Component Axis",
+    "component_labels": "Component Labels",
+    "component_prefix": "Component Prefix",
+    "pc_component_axis": "Legacy Component Axis",
+    "pc_labels": "Legacy Component Labels"
   },
   "passforward": {
     "compatible": true,
-    "description": "Expose selected PCA outputs as routed downstream inputs when enabled.",
+    "description": "Expose selected component-analysis outputs as routed downstream inputs when enabled.",
     "mappings": {
       "X_cal": {
         "source": "model_scores",
@@ -42,21 +52,23 @@
       "axis_n_info": {
         "builder": "score_axis_n_info",
         "sample_source": "axis_n_info",
-        "component_source": "pc_component_axis",
+        "component_source": "component_axis",
         "label": "(PF) Axis N Info"
       },
       "axis_t_info": {
         "builder": "score_axis_t_info",
         "sample_text_source": "axis_t_info",
         "sample_axis_source": "smp_cal",
-        "component_source": "pc_labels",
-        "component_prefix": "PC",
+        "component_source": "component_axis",
+        "component_prefix": "Component",
+        "component_prefix_source": "component_prefix",
         "label": "(PF) Axis T Info"
       },
       "dim_labels": {
         "builder": "score_dim_labels",
         "sample_label_source": "dim_labels",
-        "factor_label": "PC",
+        "factor_label": "Component",
+        "factor_label_source": "component_labels",
         "label": "(PF) Dimension Labels"
       },
       "nway_flag": {
@@ -68,7 +80,7 @@
   "translation_keys": {
     "variance": "Variance"
   },
-  "short_description": "Principal Component Analysis for dimensionality reduction (supports multiway data via U-PCA)",
+  "short_description": "Component Analysis with PCA/ICA methods for dimensionality reduction (supports multiway data via U-PCA)",
   "long_description": "Performs Principal Component Analysis (PCA) to reduce data dimensionality while retaining maximum variance. Supports both univariate (2D) and multiway (3D+) data using U-PCA (Unfolded-PCA). PCA transforms correlated variables into a set of uncorrelated principal components.\n\nHow It Works:\n- Calibration data (X_cal) is used to compute principal components\n- Components are ordered by explained variance (highest first)\n- Loadings show how original variables contribute to each component\n- Scores are the transformed data in the new component space\n- Validation data (X_val) is projected using the same loadings\n\nMultiway Data (U-PCA):\n- For 3D+ data: keeps sample dimension (axis 0) intact\n- Unfolds all other dimensions into single variable dimension\n- Example: (100 samples, 50x10 variables) -> treated as (100, 500)\n- Returns 'data_shape' field for reference: (100, 50, 10)\n- Loadings in unfolded space: (500, n_components)\n- Allows PCA on spectroscopic imaging or multi-sensor data\n\nKey Concepts:\n\n1. Principal Components\n   - Orthogonal (uncorrelated) directions of maximum variance\n   - First component captures most variance, second next most, etc.\n   - Ordered by importance\n\n2. Loadings\n   - Weights showing contribution of original variables to each component\n   - Reveal which variables drive each component\n   - Shape: (n_variables x n_components) or (unfolded_vars x n_components) for multiway\n\n3. Scores\n   - Data projected onto principal components\n   - New representation of samples in component space\n   - Shape: (n_samples x n_components)\n\n4. Variance Explained\n   - Percentage of total variance captured by each component\n   - Helps decide how many components to retain\n   - Cumulative variance shows total explained by selected components\n\n5. Reconstruction Error\n   - RMSE when reconstructing original data from scores and loadings\n   - Indicates information loss from dimensionality reduction\n   - Lower values mean better reconstruction\n\nNumber of Components:\n- Start with 2-3 for initial exploration\n- Use scree plot to identify \"elbow\" point\n- Consider cumulative variance explained (typically 80-95%)\n- More components = better reconstruction but less dimensionality reduction\n- Fewer components = more reduction but more information loss\n\nCross-Validation Mode:\n- With CV enabled: calculates per-fold components and scores\n- Useful for assessing model stability\n- Helps select optimal number of components\n- Without CV: Single fit on full calibration data\n\nAdvantages:\n- Unsupervised (doesn't require response variable)\n- Interpretable through loadings and score plots\n- Removes collinearity among variables\n- Can preprocess data for downstream modeling\n- Useful for data visualization (2-3 components)\n- Computationally efficient\n- Works with multiway data (U-PCA)\n\nLimitations:\n- Components are linear combinations (nonlinear PCA available separately)\n- May not find components relevant to prediction task\n- Sensitive to data scaling (consider centering/normalization)\n- Interpretation requires domain knowledge\n- May require many components for complex data\n\nUse When:\n- Exploring data structure and relationships\n- Reducing computational load for downstream models\n- Addressing multicollinearity issues\n- Visualizing high-dimensional data\n- Preprocessing for other models (PCR, PLS)\n- Identifying key variables (via loadings)\n- Analyzing spectroscopic imaging data (multiway via U-PCA)\n\nNext Steps:\n- Use scores as input to regression models (PCR)\n- Plot scores to visualize samples\n- Analyze loadings to identify important variables\n- Compare with PLS for supervised dimensionality reduction\n- For multiway: reshape loadings back to original variable structure\n\nTip: Center and normalize data before PCA to ensure all variables contribute fairly to components.",
   "execution_report_specs": {
     "messages": {
@@ -87,15 +99,130 @@
     ],
     "layout": [
       {
+        "name": "analysis_method",
+        "label": "Component Method",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "pca",
+        "values": [
+          "pca",
+          "ica"
+        ],
+        "value_aliases": [
+          "Principal Component Analysis (PCA)",
+          "Independent Component Analysis (ICA)"
+        ],
+        "required": true,
+        "input_type": "user",
+        "tooltip": "Select component-analysis method."
+      },
+      {
         "name": "n_components",
-        "label": "Number of Principal Components",
+        "label": "Number of Components",
         "category": "Model Parameters",
         "widget": "entry",
         "type": "int",
         "default": "2",
         "required": true,
         "input_type": "user",
-        "tooltip": "Number of principal components to retain."
+        "tooltip": "Number of latent components to retain."
+      },
+      {
+        "name": "pca_rotation_algorithm",
+        "label": "PCA Rotation",
+        "category": "Model Parameters",
+        "widget": "combobox",
+        "type": "str",
+        "default": "none",
+        "values": [
+          "none",
+          "varimax",
+          "quartimax"
+        ],
+        "value_aliases": [
+          "No rotation",
+          "Varimax",
+          "Quartimax"
+        ],
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "analysis_method": "pca"
+        },
+        "tooltip": "Optional orthogonal rotation for PCA components."
+      },
+      {
+        "name": "rotation_max_iter",
+        "label": "Rotation Max Iterations",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "100",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "analysis_method": "pca",
+          "pca_rotation_algorithm": ["varimax", "quartimax"]
+        },
+        "tooltip": "Maximum iterations used by the PCA rotation algorithm."
+      },
+      {
+        "name": "rotation_tol",
+        "label": "Rotation Tolerance",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1e-6",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "analysis_method": "pca",
+          "pca_rotation_algorithm": ["varimax", "quartimax"]
+        },
+        "tooltip": "Convergence tolerance used by the PCA rotation algorithm."
+      },
+      {
+        "name": "ica_max_iter",
+        "label": "ICA Max Iterations",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "400",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "analysis_method": "ica"
+        },
+        "tooltip": "Maximum iterations for ICA convergence."
+      },
+      {
+        "name": "ica_tol",
+        "label": "ICA Tolerance",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "float",
+        "default": "1e-4",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "analysis_method": "ica"
+        },
+        "tooltip": "Convergence tolerance for ICA."
+      },
+      {
+        "name": "random_state",
+        "label": "Random Seed",
+        "category": "Model Parameters",
+        "widget": "entry",
+        "type": "int",
+        "default": "42",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "analysis_method": "ica"
+        },
+        "tooltip": "Random seed used by ICA initialization for reproducible components."
       },
       {
         "name": "cv_config",
@@ -246,7 +373,7 @@
             "type": "graph",
             "config": {
               "graph_type": "scatter",
-              "title": "PCA Scores",
+              "title": "Component Scores",
               "show_grid": false,
               "show_origin": true,
               "show_labels": false,
@@ -257,12 +384,12 @@
                   "x_axis": {
                     "data_source": "model_scores",
                     "axis_type": "linear",
-                    "axis_labels": "pc_labels"
+                    "axis_labels": "component_labels"
                   },
                   "y_axis": {
                     "data_source": "model_scores",
                     "axis_type": "linear",
-                    "axis_labels": "pc_labels"
+                    "axis_labels": "component_labels"
                   },
                   "class_labels": "class_data_cal",
                   "point_labels_source": "smp_cal",
@@ -272,12 +399,12 @@
                   "x_axis": {
                     "data_source": "val_scores",
                     "axis_type": "linear",
-                    "axis_labels": "pc_labels"
+                    "axis_labels": "component_labels"
                   },
                   "y_axis": {
                     "data_source": "val_scores",
                     "axis_type": "linear",
-                    "axis_labels": "pc_labels"
+                    "axis_labels": "component_labels"
                   },
                   "class_labels": "class_data_val",
                   "point_labels_source": "smp_val",
@@ -287,12 +414,12 @@
                   "x_axis": {
                     "data_source": "model_scores_cv",
                     "axis_type": "linear",
-                    "axis_labels": "pc_labels"
+                    "axis_labels": "component_labels"
                   },
                   "y_axis": {
                     "data_source": "model_scores_cv",
                     "axis_type": "linear",
-                    "axis_labels": "pc_labels"
+                    "axis_labels": "component_labels"
                   },
                   "class_labels": "class_data_cal",
                   "point_labels_source": "smp_cal",
@@ -301,14 +428,14 @@
               ],
               "data_slicing": [
                 {
-                  "name": "PC-X",
+                  "name": "Component-X",
                   "dimension": 1,
                   "axis": "x",
                   "default": 0,
                   "show_navigation_menu": true
                 },
                 {
-                  "name": "PC-Y",
+                  "name": "Component-Y",
                   "dimension": 1,
                   "axis": "y",
                   "default": 1,
@@ -316,8 +443,8 @@
                 }
               ]
             },
-            "short_description": "Displays PCA Scores as a scatter graph in the analysis section.",
-            "long_description": "This section visualizes 'PCA Scores' using a scatter graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
+            "short_description": "Displays component scores as a scatter graph in the analysis section.",
+            "long_description": "This section visualizes component scores using a scatter graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
           },
           {
             "type": "graph",
@@ -327,25 +454,25 @@
               "x_axis": {
                 "data_source": "model_loadings",
                 "axis_type": "linear",
-                "axis_labels": "pc_labels"
+                "axis_labels": "component_labels"
               },
               "y_axis": {
                 "data_source": "model_loadings",
                 "axis_type": "linear",
-                "axis_labels": "pc_labels"
+                "axis_labels": "component_labels"
               },
               "point_labels_source": "axis_t_info",
               "point_labels_index": 1,
-              "title": "PCA Loadings",
+              "title": "Component Loadings",
               "data_slicing": [
                 {
-                  "name": "PC-X",
+                  "name": "Component-X",
                   "dimension": 1,
                   "axis": "x",
                   "show_navigation_menu": true
                 },
                 {
-                  "name": "PC-Y",
+                  "name": "Component-Y",
                   "dimension": 1,
                   "default": 1,
                   "axis": "y",
@@ -353,8 +480,8 @@
                 }
               ]
             },
-            "short_description": "Displays PCA Loadings as a scatter graph in the analysis section.",
-            "long_description": "This section visualizes 'PCA Loadings' using a scatter graph. Each point represents a variable, positioned by its loading values on the selected principal components. Use this view to identify variable groupings and their contributions to each component."
+            "short_description": "Displays component loadings as a scatter graph in the analysis section.",
+            "long_description": "This section visualizes component loadings using a scatter graph. Each point represents a variable, positioned by its loading values on the selected components. Use this view to identify variable groupings and their contributions to each component."
           },
           {
             "type": "graph",
@@ -364,7 +491,7 @@
               "x_axis": {
                 "data_source": "__index__",
                 "axis_type": "linear",
-                "label": "PC",
+                "label": "Component",
                 "force_integer": true,
                 "reference_source": "metrics",
                 "reference_nested_key": "calibration.pct_variance_explained"
@@ -395,20 +522,20 @@
               "y_axis": {
                 "data_source": "model_loadings",
                 "axis_type": "linear",
-                "axis_labels": "pc_labels"
+                "axis_labels": "component_labels"
               },
-              "title": "PCA Loadings Profile",
+              "title": "Component Loadings Profile",
               "data_slicing": [
                 {
-                  "name": "PC",
+                  "name": "Component",
                   "dimension": 1,
                   "axis": "y",
                   "show_navigation_menu": true
                 }
               ]
             },
-            "short_description": "Displays PCA Loadings as a line graph in the analysis section.",
-            "long_description": "This section visualizes 'PCA Loadings' using a line graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
+            "short_description": "Displays component loadings as a line graph in the analysis section.",
+            "long_description": "This section visualizes component loadings using a line graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
           }
         ]
       },
@@ -425,7 +552,7 @@
             "type": "graph",
             "config": {
               "graph_type": "scatter",
-              "title": "U-PCA Scores",
+              "title": "Unfolded Component Scores",
               "show_grid": false,
               "show_origin": true,
               "show_labels": false,
@@ -436,12 +563,12 @@
                   "x_axis": {
                     "data_source": "model_scores",
                     "axis_type": "linear",
-                    "axis_labels": "pc_labels"
+                    "axis_labels": "component_labels"
                   },
                   "y_axis": {
                     "data_source": "model_scores",
                     "axis_type": "linear",
-                    "axis_labels": "pc_labels"
+                    "axis_labels": "component_labels"
                   },
                   "class_labels": "class_data_cal",
                   "point_labels_source": "smp_cal",
@@ -451,12 +578,12 @@
                   "x_axis": {
                     "data_source": "val_scores",
                     "axis_type": "linear",
-                    "axis_labels": "pc_labels"
+                    "axis_labels": "component_labels"
                   },
                   "y_axis": {
                     "data_source": "val_scores",
                     "axis_type": "linear",
-                    "axis_labels": "pc_labels"
+                    "axis_labels": "component_labels"
                   },
                   "class_labels": "class_data_val",
                   "point_labels_source": "smp_val",
@@ -466,12 +593,12 @@
                   "x_axis": {
                     "data_source": "model_scores_cv",
                     "axis_type": "linear",
-                    "axis_labels": "pc_labels"
+                    "axis_labels": "component_labels"
                   },
                   "y_axis": {
                     "data_source": "model_scores_cv",
                     "axis_type": "linear",
-                    "axis_labels": "pc_labels"
+                    "axis_labels": "component_labels"
                   },
                   "class_labels": "class_data_cal",
                   "point_labels_source": "smp_cal",
@@ -480,14 +607,14 @@
               ],
               "data_slicing": [
                 {
-                  "name": "PC-X",
+                  "name": "Component-X",
                   "dimension": 1,
                   "axis": "x",
                   "default": 0,
                   "show_navigation_menu": true
                 },
                 {
-                  "name": "PC-Y",
+                  "name": "Component-Y",
                   "dimension": 1,
                   "axis": "y",
                   "default": 1,
@@ -495,8 +622,8 @@
                 }
               ]
             },
-            "short_description": "Displays U-PCA Scores as a scatter graph in the analysis section.",
-            "long_description": "This section visualizes 'U-PCA Scores' using a scatter graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
+            "short_description": "Displays unfolded component scores as a scatter graph in the analysis section.",
+            "long_description": "This section visualizes unfolded component scores using a scatter graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
           },
           {
             "type": "graph",
@@ -506,25 +633,25 @@
               "x_axis": {
                 "data_source": "model_loadings",
                 "axis_type": "linear",
-                "axis_labels": "pc_labels"
+                "axis_labels": "component_labels"
               },
               "y_axis": {
                 "data_source": "model_loadings",
                 "axis_type": "linear",
-                "axis_labels": "pc_labels"
+                "axis_labels": "component_labels"
               },
               "point_labels_source": "axis_t_info",
               "point_labels_index": 1,
-              "title": "U-PCA Loadings",
+              "title": "Unfolded Component Loadings",
               "data_slicing": [
                 {
-                  "name": "PC-X",
+                  "name": "Component-X",
                   "dimension": 1,
                   "axis": "x",
                   "show_navigation_menu": true
                 },
                 {
-                  "name": "PC-Y",
+                  "name": "Component-Y",
                   "dimension": 1,
                   "default": 1,
                   "axis": "y",
@@ -532,8 +659,8 @@
                 }
               ]
             },
-            "short_description": "Displays U-PCA Loadings as a scatter graph in the analysis section.",
-            "long_description": "This section visualizes 'U-PCA Loadings' using a scatter graph. Each point represents a variable, positioned by its loading values on the selected principal components. Use this view to identify variable groupings and their contributions to each component."
+            "short_description": "Displays unfolded component loadings as a scatter graph in the analysis section.",
+            "long_description": "This section visualizes unfolded component loadings using a scatter graph. Each point represents a variable, positioned by its loading values on the selected components. Use this view to identify variable groupings and their contributions to each component."
           },
           {
             "type": "graph",
@@ -543,7 +670,7 @@
               "x_axis": {
                 "data_source": "__index__",
                 "axis_type": "linear",
-                "label": "PC",
+                "label": "Component",
                 "force_integer": true,
                 "reference_source": "metrics",
                 "reference_nested_key": "calibration.pct_variance_explained"
@@ -573,20 +700,20 @@
               "y_axis": {
                 "data_source": "model_loadings",
                 "axis_type": "linear",
-                "axis_labels": "pc_labels"
+                "axis_labels": "component_labels"
               },
-              "title": "U-PCA Loadings Profile",
+              "title": "Unfolded Component Loadings Profile",
               "data_slicing": [
                 {
-                  "name": "PC",
+                  "name": "Component",
                   "dimension": 1,
                   "axis": "y",
                   "show_navigation_menu": true
                 }
               ]
             },
-            "short_description": "Displays U-PCA Loadings as a line graph in the analysis section.",
-            "long_description": "This section visualizes 'U-PCA Loadings' using a line graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
+            "short_description": "Displays unfolded component loadings as a line graph in the analysis section.",
+            "long_description": "This section visualizes unfolded component loadings using a line graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
           }
         ]
       },
@@ -693,19 +820,19 @@
               ]
             },
             "short_description": "Displays Hotelling's T$^2$ statistic per sample for calibration and validation data.",
-            "long_description": "Hotelling's T$^2$ is the Mahalanobis distance of each sample from the model center in the score subspace: $^2$_i = sum_k(t_ik^2 / lambda_k), where lambda_k is the calibration variance (eigenvalue) of PC k. Unlike leverage, $^2$ accounts for the differing variances of each component. Validation $^2$ is computed using calibration eigenvalues so that calibration and validation statistics are on the same scale. Samples with large $^2$ are far from the model centroid within the retained PCA subspace."
+            "long_description": "Hotelling's T$^2$ is the Mahalanobis distance of each sample from the model center in the score subspace: $^2$_i = sum_k(t_ik^2 / lambda_k), where lambda_k is the calibration variance (eigenvalue) of component k. Unlike leverage, $^2$ accounts for the differing variances of each component. Validation $^2$ is computed using calibration eigenvalues so that calibration and validation statistics are on the same scale. Samples with large $^2$ are far from the model centroid within the retained component subspace."
           }
         ]
       },
       {
-        "title": "Explained Variance and Residual RMSE",
+        "title": "Component Variance and Residual RMSE",
         "layout": "fd",
         "sections": [
           {
             "type": "table",
             "config": {
               "title": "Component Variance Metrics",
-              "row_label": "PC",
+              "row_label": "Component",
               "columns": [
                 {
                   "data_source": "metrics",
@@ -728,7 +855,7 @@
             "type": "table",
             "config": {
               "title": "Reconstruction RMSE Comparison",
-              "row_label": "PC",
+              "row_label": "Component",
               "columns": [
                 {
                   "data_source": "metrics",
@@ -749,20 +876,20 @@
               "decimal_places": 4,
               "max_rows": 50
             },
-            "short_description": "Displays calibration, CV, and validation reconstruction RMSE values side-by-side by principal component.",
+            "short_description": "Displays calibration, CV, and validation reconstruction RMSE values side-by-side by component.",
             "long_description": "This section presents reconstruction RMSE values in tabular form for calibration, CV-based calibration, and validation data. Use this table to compare exact RMSE values across component counts."
           },
           {
             "type": "graph",
             "config": {
-              "title": "Scree Plot - Individual & Cumulative Variance",
+              "title": "Component Variance Profile - Individual & Cumulative",
               "graph_type": "line",
               "datasets": [
                 {
                   "x_axis": {
                     "data_source": "__index__",
                     "axis_type": "linear",
-                    "label": "PC",
+                    "label": "Component",
                     "force_integer": true,
                     "reference_source": "metrics",
                     "reference_nested_key": "calibration.pct_variance_explained"
@@ -781,7 +908,7 @@
                   "x_axis": {
                     "data_source": "__index__",
                     "axis_type": "linear",
-                    "label": "PC",
+                    "label": "Component",
                     "force_integer": true,
                     "reference_source": "metrics",
                     "reference_nested_key": "calibration.pct_variance_explained"
@@ -811,7 +938,7 @@
                   "x_axis": {
                     "data_source": "__index__",
                     "axis_type": "linear",
-                    "label": "PC",
+                    "label": "Component",
                     "force_integer": true,
                     "reference_source": "metrics",
                     "reference_nested_key": "calibration.reconstruction_rmse"
@@ -830,7 +957,7 @@
                   "x_axis": {
                     "data_source": "__index__",
                     "axis_type": "linear",
-                    "label": "PC",
+                    "label": "Component",
                     "force_integer": true,
                     "reference_source": "metrics",
                     "reference_nested_key": "calibration.reconstruction_rmse_cv"
@@ -849,7 +976,7 @@
                   "x_axis": {
                     "data_source": "__index__",
                     "axis_type": "linear",
-                    "label": "PC",
+                    "label": "Component",
                     "force_integer": true,
                     "reference_source": "metrics",
                     "reference_nested_key": "validation.reconstruction_rmse"
@@ -866,8 +993,8 @@
                 }
               ]
             },
-            "short_description": "Displays calibration, CV, and validation reconstruction RMSE by principal component as a line graph.",
-            "long_description": "This section visualizes reconstruction RMSE across principal components for calibration, CV-based calibration, and validation data. Use this view to compare how reconstruction error changes as component count increases."
+            "short_description": "Displays calibration, CV, and validation reconstruction RMSE by component as a line graph.",
+            "long_description": "This section visualizes reconstruction RMSE across components for calibration, CV-based calibration, and validation data. Use this view to compare how reconstruction error changes as component count increases."
           }
         ]
       }

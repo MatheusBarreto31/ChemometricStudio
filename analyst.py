@@ -576,6 +576,7 @@ def analyst_main(
             sample_axis_source = str(mapping.get('sample_axis_source', '') or '').strip()
             component_source = str(mapping.get('component_source', '') or '').strip()
             component_prefix = str(mapping.get('component_prefix', 'F') or 'F')
+            component_prefix_source = str(mapping.get('component_prefix_source', '') or '').strip()
 
             sample_text: List[str] = []
             source_value = _get_source_value(sample_text_source)
@@ -589,14 +590,30 @@ def analyst_main(
 
             component_axis_value = _get_source_value(component_source)
             component_count = 0
+            factor_text: List[str] = []
             if component_axis_value is not None:
-                component_count = int(_as_1d_array(component_axis_value).shape[0])
-            factor_text = [f"{component_prefix}{idx + 1}" for idx in range(component_count)]
+                component_arr = _as_1d_array(component_axis_value)
+                component_count = int(component_arr.shape[0])
+                if component_arr.size > 0 and component_arr.dtype.kind in {'U', 'S', 'O'}:
+                    factor_text = [str(v) for v in component_arr]
+
+            if component_prefix_source:
+                prefix_value = _get_source_value(component_prefix_source)
+                if prefix_value is not None:
+                    prefix_arr = _as_1d_array(prefix_value)
+                    if prefix_arr.size > 0:
+                        candidate_prefix = str(prefix_arr[0]).strip()
+                        if candidate_prefix:
+                            component_prefix = candidate_prefix
+
+            if not factor_text:
+                factor_text = [f"{component_prefix}{idx + 1}" for idx in range(component_count)]
             return [sample_text, factor_text]
 
         def _build_score_dim_labels(mapping: Dict[str, Any]) -> List[str]:
             sample_label_source = str(mapping.get('sample_label_source', 'dim_labels') or 'dim_labels').strip()
             factor_label = str(mapping.get('factor_label', 'Factor') or 'Factor').strip() or 'Factor'
+            factor_label_source = str(mapping.get('factor_label_source', '') or '').strip()
 
             sample_label = 'Samples'
             source_value = _get_source_value(sample_label_source)
@@ -604,6 +621,24 @@ def analyst_main(
                 maybe_label = str(source_value[0]).strip()
                 if maybe_label:
                     sample_label = maybe_label
+
+            if factor_label_source:
+                factor_value = _get_source_value(factor_label_source)
+                if factor_value is not None:
+                    factor_arr = _as_1d_array(factor_value)
+                    if factor_arr.size > 0:
+                        first_label = str(factor_arr[0]).strip()
+                        if first_label:
+                            # Extract leading letters from labels such as "PC 1 (...)" / "IC 1 (...)" / "F1 (...)".
+                            leading = []
+                            for ch in first_label:
+                                if ch.isalpha():
+                                    leading.append(ch)
+                                else:
+                                    break
+                            extracted = ''.join(leading).strip()
+                            if extracted:
+                                factor_label = extracted
             return [sample_label, factor_label]
 
         for dst_key, mapping in mappings.items():
