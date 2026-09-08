@@ -126,7 +126,7 @@
         "default": "2",
         "required": true,
         "input_type": "user",
-        "tooltip": "Number of latent components to retain."
+        "tooltip": "Number of latent components to retain. Use 0 (or leave empty) to retain all components."
       },
       {
         "name": "pca_rotation_algorithm",

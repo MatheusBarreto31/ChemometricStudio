@@ -336,6 +336,33 @@ def _resolve_rotation_algorithm(rotation_algorithm: Optional[str]) -> str:
     return "none"
 
 
+def _normalize_n_components(n_components: Any) -> Optional[int]:
+    """Normalize user-provided n_components.
+
+    Returns None when value is empty or <= 0 so estimators retain all components.
+    """
+    if n_components is None:
+        return None
+
+    if isinstance(n_components, str):
+        raw = n_components.strip()
+        if raw == "":
+            return None
+        try:
+            parsed = int(float(raw))
+        except Exception:
+            return None
+    else:
+        try:
+            parsed = int(n_components)
+        except Exception:
+            return None
+
+    if parsed <= 0:
+        return None
+    return parsed
+
+
 def _orthogonal_rotate_loadings(
     loadings: np.ndarray,
     algorithm: str = "varimax",
@@ -383,7 +410,7 @@ def _orthogonal_rotate_loadings(
 def _fit_component_model(
     method: str,
     X_train: np.ndarray,
-    n_components: int,
+    n_components: Any,
     pca_rotation_algorithm: str = "none",
     rotation_max_iter: int = 100,
     rotation_tol: float = 1e-6,
@@ -393,10 +420,11 @@ def _fit_component_model(
 ) -> Dict[str, Any]:
     """Fit PCA or ICA and return scores/loadings/metadata under a shared contract."""
     method = _resolve_analysis_method(method)
+    n_components_resolved = _normalize_n_components(n_components)
 
     if method == "ica":
         model = FastICA(
-            n_components=n_components,
+            n_components=n_components_resolved,
             random_state=random_state,
             max_iter=max(1, int(ica_max_iter)),
             tol=max(float(ica_tol), 1e-12),
@@ -422,7 +450,7 @@ def _fit_component_model(
             "rotation_matrix": None,
         }
 
-    model = PCA(n_components=n_components)
+    model = PCA(n_components=n_components_resolved)
     base_scores = model.fit_transform(X_train)
     base_loadings = np.asarray(model.components_.T, dtype=float)
     mean_vector = np.asarray(model.mean_, dtype=float)
