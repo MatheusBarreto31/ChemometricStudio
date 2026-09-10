@@ -320,6 +320,17 @@ def _build_component_labels_with_variance(
     return labels
 
 
+def _build_component_labels_plain(
+    n_components: int,
+    component_prefix: str,
+    compact_prefix: bool = False,
+) -> List[str]:
+    """Build plain axis labels such as PC 1 / IC 1 / F1 (without variance suffix)."""
+    if compact_prefix:
+        return [f"{component_prefix}{idx + 1}" for idx in range(max(int(n_components), 0))]
+    return [f"{component_prefix} {idx + 1}" for idx in range(max(int(n_components), 0))]
+
+
 def _resolve_analysis_method(analysis_method: Optional[str]) -> str:
     method = str(analysis_method or "pca").strip().lower()
     if method not in {"pca", "ica"}:
@@ -334,6 +345,13 @@ def _resolve_rotation_algorithm(rotation_algorithm: Optional[str]) -> str:
     if algorithm in {"varimax", "quartimax"}:
         return algorithm
     return "none"
+
+
+def _resolve_ica_whiten_solver(whiten_solver: Optional[str]) -> str:
+    solver = str(whiten_solver or "svd").strip().lower()
+    if solver in {"svd", "eigh"}:
+        return solver
+    return "svd"
 
 
 def _normalize_n_components(n_components: Any) -> Optional[int]:
@@ -416,6 +434,8 @@ def _fit_component_model(
     rotation_tol: float = 1e-6,
     ica_max_iter: int = 400,
     ica_tol: float = 1e-4,
+    ica_whiten: bool = True,
+    ica_whiten_solver: str = "svd",
     random_state: int = 42,
 ) -> Dict[str, Any]:
     """Fit PCA or ICA and return scores/loadings/metadata under a shared contract."""
@@ -423,11 +443,15 @@ def _fit_component_model(
     n_components_resolved = _normalize_n_components(n_components)
 
     if method == "ica":
+        whiten_enabled = bool(ica_whiten)
+        whiten_mode: Any = "unit-variance" if whiten_enabled else False
         model = FastICA(
             n_components=n_components_resolved,
             random_state=random_state,
             max_iter=max(1, int(ica_max_iter)),
             tol=max(float(ica_tol), 1e-12),
+            whiten=whiten_mode,
+            whiten_solver=_resolve_ica_whiten_solver(ica_whiten_solver),
         )
         scores = model.fit_transform(X_train)
         loadings = np.asarray(model.mixing_, dtype=float)
@@ -513,6 +537,8 @@ def pca_analysis(
     rotation_tol: float = 1e-6,
     ica_max_iter: int = 400,
     ica_tol: float = 1e-4,
+    ica_whiten: bool = True,
+    ica_whiten_solver: str = "svd",
     random_state: int = 42,
 ) -> Dict[str, Any]:
     """Component Analysis with cross-validation and U-PCA support.
@@ -635,8 +661,8 @@ def pca_analysis(
                 # Convert tuple to dict
                 return_keys = ['model_scores', 'model_loadings', 'val_scores',
                              'model_scores_cv', 'model_loadings_cv', 'metrics', 'cv_results',
-                             'component_axis', 'component_labels', 'component_prefix',
-                             'pc_component_axis', 'pc_labels']
+                             'component_axis', 'component_labels', 'component_labels_plain',
+                             'component_prefix', 'pc_component_axis', 'pc_labels']
                 result_dict = dict(zip(return_keys, result))
                 # Collect loadings per fold for tensor stacking
                 _fold_loadings_collector.append(result_dict['model_loadings'])
@@ -661,6 +687,8 @@ def pca_analysis(
                 'rotation_tol': rotation_tol,
                 'ica_max_iter': ica_max_iter,
                 'ica_tol': ica_tol,
+                'ica_whiten': ica_whiten,
+                'ica_whiten_solver': ica_whiten_solver,
                 'random_state': random_state,
                 'capture_output_keys': ['model_scores'],
             }
@@ -693,10 +721,11 @@ def pca_analysis(
                 analysis_method=analysis_method, pca_rotation_algorithm=pca_rotation_algorithm,
                 rotation_max_iter=rotation_max_iter, rotation_tol=rotation_tol,
                 ica_max_iter=ica_max_iter, ica_tol=ica_tol,
+                ica_whiten=ica_whiten, ica_whiten_solver=ica_whiten_solver,
                 random_state=random_state,
             )
             # single_results is a tuple, extract it
-            model_scores, model_loadings, val_scores, scores_cv, loadings_cv, metrics, cv_results, component_axis, component_labels, component_prefix, pc_component_axis, pc_labels = single_results
+            model_scores, model_loadings, val_scores, scores_cv, loadings_cv, metrics, cv_results, component_axis, component_labels, component_labels_plain, component_prefix, pc_component_axis, pc_labels = single_results
             
             # Extract CV scores from pipeline (reconstructed array: n_samples × n_components)
             cv_model_scores = cv_results_dict.get('model_scores_cv', None)
@@ -762,6 +791,7 @@ def pca_analysis(
                 cv_results,  # CV metrics and fold info
                 component_axis,
                 component_labels,
+                component_labels_plain,
                 component_prefix,
                 pc_component_axis,
                 pc_labels,
@@ -775,6 +805,7 @@ def pca_analysis(
         analysis_method=analysis_method, pca_rotation_algorithm=pca_rotation_algorithm,
         rotation_max_iter=rotation_max_iter, rotation_tol=rotation_tol,
         ica_max_iter=ica_max_iter, ica_tol=ica_tol,
+        ica_whiten=ica_whiten, ica_whiten_solver=ica_whiten_solver,
         random_state=random_state,
     )
 
@@ -797,6 +828,8 @@ def _pca_analysis_single_fit(
     rotation_tol: float = 1e-6,
     ica_max_iter: int = 400,
     ica_tol: float = 1e-4,
+    ica_whiten: bool = True,
+    ica_whiten_solver: str = "svd",
     random_state: int = 42,
     **kwargs
 ) -> Dict[str, Any]:
@@ -840,6 +873,8 @@ def _pca_analysis_single_fit(
         rotation_tol=rotation_tol,
         ica_max_iter=ica_max_iter,
         ica_tol=ica_tol,
+        ica_whiten=ica_whiten,
+        ica_whiten_solver=ica_whiten_solver,
         random_state=random_state,
     )
     model = fit_info['model']
@@ -898,6 +933,11 @@ def _pca_analysis_single_fit(
             component_labels = [f"{component_prefix}{i + 1}" for i in range(model_scores.shape[1])]
         else:
             component_labels = [f"{component_prefix} {i + 1}" for i in range(model_scores.shape[1])]
+    component_labels_plain = _build_component_labels_plain(
+        n_components=model_scores.shape[1],
+        component_prefix=component_prefix,
+        compact_prefix=compact_prefix,
+    )
     component_axis = np.arange(1, model_scores.shape[1] + 1, dtype=int)
 
     # Legacy aliases kept for backward compatibility in existing graphs/workflows.
@@ -917,6 +957,7 @@ def _pca_analysis_single_fit(
         cv_results,  # cv_results
         component_axis,
         component_labels,
+        component_labels_plain,
         component_prefix,
         pc_component_axis,
         pc_labels,  # component labels (e.g., ["PC 1", "PC 2", "PC 3"])

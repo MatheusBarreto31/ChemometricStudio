@@ -211,6 +211,7 @@
       "cv_results",
       "component_axis",
       "component_labels",
+      "component_labels_plain",
       "component_prefix",
       "pc_component_axis",
       "pc_labels"
@@ -908,6 +909,8 @@
       "rotation_tol",
       "ica_max_iter",
       "ica_tol",
+      "ica_whiten",
+      "ica_whiten_solver",
       "random_state",
       "cv_config",
       "axis_n_info",
@@ -1565,6 +1568,8 @@
       "rotation_tol": "float",
       "ica_max_iter": "int",
       "ica_tol": "float",
+      "ica_whiten": "bool",
+      "ica_whiten_solver": "str",
       "random_state": "int"
     },
     "npls_analysis": {
