@@ -63,7 +63,8 @@ def hydrate_analysis_execution_results(
 
         if history_entries:
             analysis_data[instance_alias]["execution_history"] = history_entries
-            selected_history_idx = 0
+            # Use the most recent execution record so analysis reflects final selected runs.
+            selected_history_idx = len(history_entries) - 1
             analysis_data[instance_alias]["current_result_idx"] = selected_history_idx
             analysis_data[instance_alias]["execution_results"] = history_entries[selected_history_idx].copy()
             continue

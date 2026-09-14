@@ -897,6 +897,22 @@
         "default": false,
         "required": true,
         "input_type": "user",
+        "visible_if": {
+          "model_type": [
+            "ridge",
+            "lasso",
+            "elastic_net",
+            "pls",
+            "pcr",
+            "kernel_pls",
+            "svr",
+            "gaussian_process",
+            "random_forest",
+            "gradient_boosting",
+            "hist_gradient_boosting",
+            "local"
+          ]
+        },
         "tooltip": "If enabled, fixed parameter inputs are hidden and a parameter range is used"
       },
       {

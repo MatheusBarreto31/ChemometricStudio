@@ -649,7 +649,7 @@
                 "data_source": "X_cal",
                 "label": "Signal"
               },
-              "title": "Spectral Data - Contour",
+              "title": "Spectral Data",
               "dimension_labels": "dim_labels",
               "variable_labels": "axis_t_info",
               "data_slicing": [
@@ -663,8 +663,8 @@
                 }
               ]
             },
-            "short_description": "Displays Spectral Data Heatmap as a contour graph in the analysis section.",
-            "long_description": "This section visualizes 'Spectral Data Heatmap' using a contour graph. Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
+            "short_description": "Displays Spectral Data.",
+            "long_description": "Use this view to inspect patterns, compare values, and interpret the section-specific analysis output."
           },
           {
             "type": "graph",

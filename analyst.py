@@ -31,6 +31,7 @@ def analyst_main(
     import inspect
     import json
     import os
+    import random
     import warnings
     from datetime import datetime
     import numpy as np
@@ -361,7 +362,9 @@ def analyst_main(
         "workflow_parallel_end",
         "workflow_ensemble_start",
         "workflow_ensemble_member",
-        "workflow_ensemble_end"
+        "workflow_ensemble_end",
+        "workflow_variable_selection_start",
+        "workflow_variable_selection_end",
     }
 
     # Extract function information from model
@@ -427,7 +430,177 @@ def analyst_main(
         function_execution_target = min(total_functions, max(0, stop_at_function_idx + 1))
     else:
         function_execution_target = total_functions
-    progress_total = function_execution_target + 1
+
+    def _find_matching_end_static(start_idx: int, start_alias: str, end_alias: str) -> int:
+        depth = 0
+        for i in range(start_idx + 1, len(functions_list)):
+            alias = functions_list[i]['base_alias']
+            if alias == start_alias:
+                depth += 1
+            elif alias == end_alias:
+                if depth == 0:
+                    return i
+                depth -= 1
+        return -1
+
+    def _resolve_loop_iterations_for_progress(loop_params: Dict[str, Any]) -> int:
+        try:
+            iterations = int(loop_params.get('iterations', 1))
+        except Exception:
+            iterations = 1
+        iterations = max(1, iterations)
+
+        loop_mode = str(loop_params.get('mode', 'repeat') or 'repeat')
+        sweep_values = _parse_sweep_values(loop_params.get('sweep_values', ''))
+        if loop_mode == "sweep_choice":
+            sweep_choice_values = loop_params.get('sweep_choice_values', [])
+            if isinstance(sweep_choice_values, str):
+                sweep_choice_values = [part.strip() for part in sweep_choice_values.split(',') if part.strip()]
+            if isinstance(sweep_choice_values, list) and sweep_choice_values:
+                sweep_values = [str(v) for v in sweep_choice_values]
+
+        if loop_mode in ("sweep_numeric", "sweep_choice") and sweep_values:
+            iterations = len(sweep_values)
+
+        return max(1, int(iterations))
+
+    def _estimate_progress_steps(start_idx: int, end_idx: int) -> int:
+        total_steps = 0
+        idx = start_idx
+
+        while idx <= end_idx and idx < len(functions_list):
+            entry = functions_list[idx]
+            base_alias = entry['base_alias']
+            model_idx = entry['model_idx']
+
+            if stop_at_function_idx is not None and model_idx > stop_at_function_idx:
+                return total_steps
+
+            if base_alias == "workflow_loop_start":
+                loop_end_idx = _find_matching_end_static(idx, "workflow_loop_start", "workflow_loop_end")
+                total_steps += 1
+                if loop_end_idx < 0:
+                    idx += 1
+                    continue
+
+                body_start = idx + 1
+                body_end = loop_end_idx - 1
+                if body_start <= body_end:
+                    loop_instance_alias = entry['instance_alias']
+                    loop_info = functions_info.get(loop_instance_alias, {})
+                    loop_params = loop_info.get('parameters', {})
+                    iterations = _resolve_loop_iterations_for_progress(loop_params)
+                    body_steps = _estimate_progress_steps(body_start, body_end)
+                    total_steps += iterations * body_steps
+
+                idx = loop_end_idx + 1
+                continue
+
+            if base_alias == "workflow_variable_selection_start":
+                selection_end_idx = _find_matching_end_static(
+                    idx,
+                    "workflow_variable_selection_start",
+                    "workflow_variable_selection_end",
+                )
+                total_steps += 1
+                if selection_end_idx < 0:
+                    idx += 1
+                    continue
+
+                body_start = idx + 1
+                body_end = selection_end_idx - 1
+
+                if body_start > body_end:
+                    raise ValueError(
+                        "workflow_variable_selection_start requires at least one enclosed function before workflow_variable_selection_end."
+                    )
+                if body_start <= body_end:
+                    total_steps += _estimate_progress_steps(body_start, body_end)
+
+                idx = selection_end_idx + 1
+                continue
+
+            if base_alias == "workflow_parallel_start":
+                parallel_end_idx = _find_matching_end_static(idx, "workflow_parallel_start", "workflow_parallel_end")
+                total_steps += 1
+                if parallel_end_idx < 0:
+                    idx += 1
+                    continue
+
+                block_start = idx + 1
+                block_end = parallel_end_idx - 1
+                if block_start <= block_end:
+                    branch_ranges: List[Tuple[int, int]] = []
+                    branch_start = block_start
+                    nested_parallel_depth = 0
+                    for branch_idx in range(block_start, block_end + 1):
+                        branch_alias = functions_list[branch_idx]['base_alias']
+                        if branch_alias == "workflow_parallel_start":
+                            nested_parallel_depth += 1
+                        elif branch_alias == "workflow_parallel_end" and nested_parallel_depth > 0:
+                            nested_parallel_depth -= 1
+                        elif branch_alias == "workflow_parallel_branch" and nested_parallel_depth == 0:
+                            if branch_start <= branch_idx - 1:
+                                branch_ranges.append((branch_start, branch_idx - 1))
+                            branch_start = branch_idx + 1
+                    if branch_start <= block_end:
+                        branch_ranges.append((branch_start, block_end))
+
+                    for range_start, range_end in branch_ranges:
+                        total_steps += _estimate_progress_steps(range_start, range_end)
+
+                idx = parallel_end_idx + 1
+                continue
+
+            if base_alias == "workflow_ensemble_start":
+                ensemble_end_idx = _find_matching_end_static(idx, "workflow_ensemble_start", "workflow_ensemble_end")
+                total_steps += 1
+                if ensemble_end_idx < 0:
+                    idx += 1
+                    continue
+
+                block_start = idx + 1
+                block_end = ensemble_end_idx - 1
+                if block_start <= block_end:
+                    member_ranges: List[Tuple[int, int]] = []
+                    member_start = block_start
+                    nested_ensemble_depth = 0
+                    for member_idx in range(block_start, block_end + 1):
+                        member_alias = functions_list[member_idx]['base_alias']
+                        if member_alias == "workflow_ensemble_start":
+                            nested_ensemble_depth += 1
+                        elif member_alias == "workflow_ensemble_end" and nested_ensemble_depth > 0:
+                            nested_ensemble_depth -= 1
+                        elif member_alias == "workflow_ensemble_member" and nested_ensemble_depth == 0:
+                            if member_start <= member_idx - 1:
+                                member_ranges.append((member_start, member_idx - 1))
+                            member_start = member_idx + 1
+                    if member_start <= block_end:
+                        member_ranges.append((member_start, block_end))
+
+                    for range_start, range_end in member_ranges:
+                        total_steps += _estimate_progress_steps(range_start, range_end)
+
+                idx = ensemble_end_idx + 1
+                continue
+
+            if base_alias in (
+                "workflow_loop_end",
+                "workflow_parallel_branch",
+                "workflow_parallel_end",
+                "workflow_ensemble_member",
+                "workflow_ensemble_end",
+                "workflow_variable_selection_end",
+            ):
+                idx += 1
+                continue
+
+            total_steps += 1
+            idx += 1
+
+        return total_steps
+
+    progress_total = _estimate_progress_steps(0, len(functions_list) - 1) + 1
 
     if progress_callback:
         try:
@@ -450,7 +623,7 @@ def analyst_main(
     lazy_loading_elapsed_seconds = perf_counter() - lazy_loading_start_time
 
     executed_steps = 1
-    if progress_callback and executed_steps >= progress_total:
+    if progress_callback:
         try:
             progress_callback(executed_steps, progress_total, "", "__lazy_loading__")
         except Exception:
@@ -776,7 +949,9 @@ def analyst_main(
     loop_stack_context: List[Dict[str, Any]] = []
     parallel_stack_context: List[Dict[str, Any]] = []
     ensemble_stack_context: List[Dict[str, Any]] = []
+    variable_selection_stack_context: List[Dict[str, Any]] = []
     sweep_override_stack: List[Dict[str, set]] = []
+    history_suppression_depth = 0
     loop_counter = 0
     parallel_counter = 0
     ensemble_counter = 0
@@ -879,6 +1054,499 @@ def analyst_main(
                     params[dst_param] = routed_value
                     break
         return params
+
+    def _apply_variable_selection_to_snapshot(
+        outputs_snapshot: Dict[str, Dict[str, Any]],
+        selected_payload: Dict[str, Any],
+        source_payload: Optional[Dict[str, Any]] = None,
+        clear_validation: bool = False,
+    ) -> None:
+        """Overwrite common data-carrying keys in a scoped snapshot with selected-variable data."""
+        if not isinstance(outputs_snapshot, dict) or not isinstance(selected_payload, dict):
+            return
+
+        selected_x_cal = selected_payload.get('X_cal')
+        selected_x_val = selected_payload.get('X_val')
+        selected_axis_n = selected_payload.get('axis_n_info')
+        selected_axis_t = selected_payload.get('axis_t_info')
+
+        source_data = source_payload if isinstance(source_payload, dict) else {}
+        if selected_x_val is None:
+            selected_x_val = source_data.get('X_val')
+        selected_y_cal = selected_payload.get('Y_cal', source_data.get('Y_cal'))
+        selected_y_val = selected_payload.get('Y_val', source_data.get('Y_val'))
+        selected_class_cal = selected_payload.get('class_data_cal', source_data.get('class_data_cal'))
+        selected_class_val = selected_payload.get('class_data_val', source_data.get('class_data_val'))
+
+        for alias, output_payload in outputs_snapshot.items():
+            if not isinstance(output_payload, dict):
+                continue
+            if selected_x_cal is not None:
+                output_payload['X_cal'] = selected_x_cal
+            if bool(clear_validation):
+                output_payload['X_val'] = None
+            elif selected_x_val is not None:
+                output_payload['X_val'] = selected_x_val
+            if selected_y_cal is not None:
+                output_payload['Y_cal'] = selected_y_cal
+            if bool(clear_validation):
+                output_payload['Y_val'] = None
+            elif selected_y_val is not None:
+                output_payload['Y_val'] = selected_y_val
+            if selected_class_cal is not None:
+                output_payload['class_data_cal'] = selected_class_cal
+            if bool(clear_validation):
+                output_payload['class_data_val'] = None
+            elif selected_class_val is not None:
+                output_payload['class_data_val'] = selected_class_val
+            if selected_axis_n is not None:
+                output_payload['axis_n_info'] = selected_axis_n
+            if selected_axis_t is not None:
+                output_payload['axis_t_info'] = selected_axis_t
+
+    def _apply_cv_config_to_snapshot(
+        outputs_snapshot: Dict[str, Dict[str, Any]],
+        cv_config_value: Any,
+        cv_report_value: Any = None,
+    ) -> None:
+        """Inject effective CV config into scoped snapshot so enclosed nodes can route it."""
+        if not isinstance(outputs_snapshot, dict) or cv_config_value is None:
+            return
+        for _, output_payload in outputs_snapshot.items():
+            if not isinstance(output_payload, dict):
+                continue
+            output_payload['cv_config'] = cv_config_value
+            if cv_report_value is not None:
+                output_payload['cv_report'] = cv_report_value
+
+    def _build_variable_selection_end_payload(
+        selected_payload: Dict[str, Any],
+        block_outputs: Dict[str, Dict[str, Any]],
+        body_start: int,
+        body_end: int,
+    ) -> Dict[str, Any]:
+        """Build end-node payload from selected data plus latest enclosed regular-function outputs."""
+        end_payload: Dict[str, Any] = copy.deepcopy(selected_payload) if isinstance(selected_payload, dict) else {}
+
+        last_regular_alias: Optional[str] = None
+        for list_idx in range(body_end, body_start - 1, -1):
+            if list_idx < 0 or list_idx >= len(functions_list):
+                continue
+            candidate_alias = functions_list[list_idx]['instance_alias']
+            candidate_base_alias = functions_list[list_idx]['base_alias']
+            if candidate_base_alias in workflow_control_aliases:
+                continue
+            if isinstance(block_outputs.get(candidate_alias), dict):
+                last_regular_alias = candidate_alias
+                break
+
+        if last_regular_alias is not None:
+            last_payload = block_outputs.get(last_regular_alias)
+            if isinstance(last_payload, dict):
+                end_payload.update(copy.deepcopy(last_payload))
+            end_payload['wrapped_block_last_alias'] = last_regular_alias
+
+        # Keep selected-data keys authoritative on end payload.
+        for key in (
+            'task_type',
+            'X_cal',
+            'X_val',
+            'axis_n_info',
+            'axis_t_info',
+            'selected_variable_indices',
+            'selected_variable_mask',
+            'selected_variable_scores',
+            'selected_variable_count',
+            'selection_method',
+            'selection_source',
+            'optimization_metric',
+            'optimization_mode',
+            'optimization_score_source',
+            'optimization_metric_value',
+            'selected_metrics_summary',
+            'selection_override_file_path_used',
+            'selection_override_payload_text',
+            'cv_config',
+            'cv_report',
+            'ga_selection_frequency',
+            'ga_consensus_indices',
+            'ga_restart_scores',
+            'ga_frequency_effective_threshold',
+            'feature_count_trajectory',
+            'trajectory_cv_score',
+            'trajectory_rmsecv',
+            'trajectory_r2cv',
+            'trajectory_accuracy',
+            'trajectory_f1_macro',
+            'trajectory_precision_macro',
+            'trajectory_recall_macro',
+            'optimization_model_labels',
+            'selected_variables_display',
+            'optimization_selected_variables_display',
+            'optimization_is_selected_model',
+            'selected_count_marker',
+            'selected_cv_score_marker',
+            'selected_rmsecv_marker',
+            'selected_r2cv_marker',
+            'selected_accuracy_marker',
+            'selected_f1_macro_marker',
+            'selected_precision_macro_marker',
+            'selected_recall_macro_marker',
+            'selection_metadata',
+        ):
+            if isinstance(selected_payload, dict) and key in selected_payload:
+                end_payload[key] = selected_payload.get(key)
+
+        return end_payload
+
+    def _find_last_regular_payload(
+        block_outputs: Dict[str, Dict[str, Any]],
+        body_start: int,
+        body_end: int,
+    ) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
+        last_regular_alias: Optional[str] = None
+        for list_idx in range(body_end, body_start - 1, -1):
+            if list_idx < 0 or list_idx >= len(functions_list):
+                continue
+            candidate_alias = functions_list[list_idx]['instance_alias']
+            candidate_base_alias = functions_list[list_idx]['base_alias']
+            if candidate_base_alias in workflow_control_aliases:
+                continue
+            payload = block_outputs.get(candidate_alias)
+            if isinstance(payload, dict):
+                last_regular_alias = candidate_alias
+                return last_regular_alias, payload
+        return None, None
+
+    def _coerce_metric_value(value: Any) -> Optional[float]:
+        try:
+            out = float(value)
+            if np.isfinite(out):
+                return out
+        except Exception:
+            pass
+        return None
+
+    def _metric_from_split(split_payload: Any, candidate_keys: List[str]) -> Optional[float]:
+        if not isinstance(split_payload, dict):
+            return None
+        for key in candidate_keys:
+            if key in split_payload:
+                value = _coerce_metric_value(split_payload.get(key))
+                if value is not None:
+                    return value
+            upper_key = str(key).upper()
+            if upper_key in split_payload:
+                value = _coerce_metric_value(split_payload.get(upper_key))
+                if value is not None:
+                    return value
+        return None
+
+    def _extract_nested_split_metrics(payload: Optional[Dict[str, Any]]) -> Dict[str, Optional[float]]:
+        out: Dict[str, Optional[float]] = {
+            'rmse_cal': None,
+            'rmse_cv': None,
+            'rmse_val': None,
+            'r2_cal': None,
+            'r2_cv': None,
+            'r2_val': None,
+            'accuracy_cal': None,
+            'accuracy_cv': None,
+            'accuracy_val': None,
+            'f1_cal': None,
+            'f1_cv': None,
+            'f1_val': None,
+            'precision_cal': None,
+            'precision_cv': None,
+            'precision_val': None,
+            'recall_cal': None,
+            'recall_cv': None,
+            'recall_val': None,
+        }
+        if not isinstance(payload, dict):
+            return out
+
+        metrics = payload.get('metrics')
+        if not isinstance(metrics, dict):
+            return out
+
+        split_aliases = {
+            'cal': ['calibration', 'cal', 'train'],
+            'cv': ['cv', 'cross_validation', 'cross-validation'],
+            'val': ['validation', 'val', 'test'],
+        }
+
+        split_payloads: Dict[str, Any] = {'cal': None, 'cv': None, 'val': None}
+        for split_key, aliases in split_aliases.items():
+            for alias in aliases:
+                if alias in metrics and isinstance(metrics.get(alias), dict):
+                    split_payloads[split_key] = metrics.get(alias)
+                    break
+
+        out['rmse_cal'] = _metric_from_split(split_payloads['cal'], ['rmse', 'rmsep', 'rmsec'])
+        out['rmse_cv'] = _metric_from_split(split_payloads['cv'], ['rmse', 'rmsecv', 'rmsep'])
+        out['rmse_val'] = _metric_from_split(split_payloads['val'], ['rmse', 'rmsep'])
+
+        out['r2_cal'] = _metric_from_split(split_payloads['cal'], ['r2'])
+        out['r2_cv'] = _metric_from_split(split_payloads['cv'], ['r2'])
+        out['r2_val'] = _metric_from_split(split_payloads['val'], ['r2'])
+
+        out['accuracy_cal'] = _metric_from_split(split_payloads['cal'], ['accuracy'])
+        out['accuracy_cv'] = _metric_from_split(split_payloads['cv'], ['accuracy'])
+        out['accuracy_val'] = _metric_from_split(split_payloads['val'], ['accuracy'])
+
+        out['f1_cal'] = _metric_from_split(split_payloads['cal'], ['f1_macro', 'f1'])
+        out['f1_cv'] = _metric_from_split(split_payloads['cv'], ['f1_macro', 'f1'])
+        out['f1_val'] = _metric_from_split(split_payloads['val'], ['f1_macro', 'f1'])
+
+        out['precision_cal'] = _metric_from_split(split_payloads['cal'], ['precision_macro', 'precision'])
+        out['precision_cv'] = _metric_from_split(split_payloads['cv'], ['precision_macro', 'precision'])
+        out['precision_val'] = _metric_from_split(split_payloads['val'], ['precision_macro', 'precision'])
+
+        out['recall_cal'] = _metric_from_split(split_payloads['cal'], ['recall_macro', 'recall'])
+        out['recall_cv'] = _metric_from_split(split_payloads['cv'], ['recall_macro', 'recall'])
+        out['recall_val'] = _metric_from_split(split_payloads['val'], ['recall_macro', 'recall'])
+
+        return out
+
+    def _resolve_optimization_metric(task_type: str, requested_metric: Any) -> str:
+        task_norm = str(task_type or '').strip().lower()
+        metric_norm = str(requested_metric or '').strip().lower()
+
+        if task_norm == 'regression':
+            allowed = {'rmse', 'r2'}
+            if metric_norm in allowed:
+                return metric_norm
+            return 'rmse'
+
+        if task_norm in ('classification', 'n_class', 'one_class'):
+            allowed = {'accuracy', 'f1', 'precision', 'recall'}
+            if metric_norm in allowed:
+                return metric_norm
+            return 'accuracy'
+
+        raise ValueError("task_type must be one of: regression, n_class, one_class")
+
+    def _metric_direction(metric_name: str) -> str:
+        return 'min' if str(metric_name).strip().lower() == 'rmse' else 'max'
+
+    def _selected_metric_value_from_nested_metrics_with_split(
+        task_type: str,
+        metrics: Dict[str, Optional[float]],
+        optimization_metric: Any,
+        split_name: str = 'cv',
+        allow_cv_fallback: bool = True,
+    ) -> Optional[float]:
+        split_norm = str(split_name or 'cv').strip().lower()
+        if split_norm not in ('cal', 'cv', 'val'):
+            split_norm = 'cv'
+
+        split_priority = [split_norm]
+        if split_norm != 'cv' and bool(allow_cv_fallback):
+            split_priority.append('cv')
+
+        metric_norm = _resolve_optimization_metric(task_type, optimization_metric)
+        for split_key in split_priority:
+            value = metrics.get(f'{metric_norm}_{split_key}')
+            if value is not None and np.isfinite(float(value)):
+                return float(value)
+        return None
+
+    def _score_candidate_from_nested_metrics_with_split(
+        task_type: str,
+        metrics: Dict[str, Optional[float]],
+        optimization_metric: Any,
+        split_name: str = 'cv',
+        allow_cv_fallback: bool = True,
+    ) -> float:
+        split_norm = str(split_name or 'cv').strip().lower()
+        if split_norm not in ('cal', 'cv', 'val'):
+            split_norm = 'cv'
+
+        metric_value = _selected_metric_value_from_nested_metrics_with_split(
+            task_type,
+            metrics,
+            optimization_metric,
+            split_name=split_norm,
+            allow_cv_fallback=allow_cv_fallback,
+        )
+        if metric_value is None:
+            return float('-inf')
+        if _metric_direction(str(optimization_metric)) == 'min':
+            return -float(metric_value)
+        return float(metric_value)
+
+    def _score_candidate_from_nested_metrics(task_type: str, metrics: Dict[str, Optional[float]], optimization_metric: Any) -> float:
+        return _score_candidate_from_nested_metrics_with_split(task_type, metrics, optimization_metric, split_name='cv')
+
+    def _selected_metric_marker(feature_counts: List[int], values: List[float], selected_count: int) -> float:
+        for idx, count in enumerate(feature_counts):
+            if int(count) == int(selected_count) and idx < len(values):
+                try:
+                    value = float(values[idx])
+                    return value if np.isfinite(value) else float('nan')
+                except Exception:
+                    return float('nan')
+        return float('nan')
+
+    def _parse_feature_count_candidates(raw_values: Any, default_count: int, n_features: int, optimize_enabled: bool) -> List[int]:
+        base_count = max(1, min(int(n_features), int(default_count)))
+        if not optimize_enabled:
+            return [base_count]
+
+        if raw_values is None or str(raw_values).strip() == '':
+            return [base_count]
+
+        try:
+            parsed = parse_numeric_spec(str(raw_values))
+        except Exception:
+            parsed = []
+
+        out: List[int] = []
+        for value in parsed:
+            try:
+                count = int(round(float(value)))
+            except Exception:
+                continue
+            count = max(1, min(int(n_features), count))
+            if count not in out:
+                out.append(count)
+        return out if out else [base_count]
+
+    def _selection_display_from_payload(selection_payload: Dict[str, Any]) -> str:
+        display_values = selection_payload.get('optimization_selected_variables_display')
+        if isinstance(display_values, (list, tuple, np.ndarray)) and len(display_values) > 0:
+            try:
+                return str(list(display_values)[0])
+            except Exception:
+                pass
+        direct_display = selection_payload.get('selected_variables_display')
+        if isinstance(direct_display, str) and direct_display.strip():
+            return direct_display
+        intervals_text = str(selection_payload.get('selected_variable_intervals_one_based', '') or '').strip()
+        if intervals_text:
+            return f"intervals(1-based): {intervals_text}"
+        return ''
+
+    def _apply_nested_trajectory_to_selection_payload(
+        selection_payload: Dict[str, Any],
+        rows: List[Dict[str, Any]],
+        selected_count: int,
+    ) -> None:
+        if not isinstance(selection_payload, dict) or not rows:
+            return
+
+        feature_count_trajectory = [int(r.get('count', 0)) for r in rows]
+        trajectory_cv_score = [float(r.get('cv_score', float('nan'))) for r in rows]
+        trajectory_rmse_cv = [float(r.get('rmse_cv', float('nan'))) for r in rows]
+        trajectory_r2_cv = [float(r.get('r2_cv', float('nan'))) for r in rows]
+        trajectory_accuracy_cv = [float(r.get('accuracy_cv', float('nan'))) for r in rows]
+        trajectory_f1_cv = [float(r.get('f1_cv', float('nan'))) for r in rows]
+        trajectory_precision_cv = [float(r.get('precision_cv', float('nan'))) for r in rows]
+        trajectory_recall_cv = [float(r.get('recall_cv', float('nan'))) for r in rows]
+
+        trajectory_rmse_cal = [float(r.get('rmse_cal', float('nan'))) for r in rows]
+        trajectory_rmse_val = [float(r.get('rmse_val', float('nan'))) for r in rows]
+        trajectory_r2_cal = [float(r.get('r2_cal', float('nan'))) for r in rows]
+        trajectory_r2_val = [float(r.get('r2_val', float('nan'))) for r in rows]
+        trajectory_accuracy_cal = [float(r.get('accuracy_cal', float('nan'))) for r in rows]
+        trajectory_accuracy_val = [float(r.get('accuracy_val', float('nan'))) for r in rows]
+        trajectory_f1_cal = [float(r.get('f1_cal', float('nan'))) for r in rows]
+        trajectory_f1_val = [float(r.get('f1_val', float('nan'))) for r in rows]
+        trajectory_precision_cal = [float(r.get('precision_cal', float('nan'))) for r in rows]
+        trajectory_precision_val = [float(r.get('precision_val', float('nan'))) for r in rows]
+        trajectory_recall_cal = [float(r.get('recall_cal', float('nan'))) for r in rows]
+        trajectory_recall_val = [float(r.get('recall_val', float('nan'))) for r in rows]
+
+        optimization_selected_variables_display = [str(r.get('selected_variables_display', '')) for r in rows]
+        optimization_model_labels = [f"k={int(v)}" for v in feature_count_trajectory]
+        optimization_is_selected_model = [1 if int(v) == int(selected_count) else 0 for v in feature_count_trajectory]
+        selection_payload['feature_count_trajectory'] = np.asarray(feature_count_trajectory, dtype=int)
+        selection_payload['trajectory_cv_score'] = np.asarray(trajectory_cv_score, dtype=float)
+        selection_payload['trajectory_rmsecv'] = np.asarray(trajectory_rmse_cv, dtype=float)
+        selection_payload['trajectory_r2cv'] = np.asarray(trajectory_r2_cv, dtype=float)
+        selection_payload['trajectory_accuracy'] = np.asarray(trajectory_accuracy_cv, dtype=float)
+        selection_payload['trajectory_f1_macro'] = np.asarray(trajectory_f1_cv, dtype=float)
+        selection_payload['trajectory_precision_macro'] = np.asarray(trajectory_precision_cv, dtype=float)
+        selection_payload['trajectory_recall_macro'] = np.asarray(trajectory_recall_cv, dtype=float)
+
+        selection_payload['trajectory_rmse_cal'] = np.asarray(trajectory_rmse_cal, dtype=float)
+        selection_payload['trajectory_rmse_cv'] = np.asarray(trajectory_rmse_cv, dtype=float)
+        selection_payload['trajectory_rmse_val'] = np.asarray(trajectory_rmse_val, dtype=float)
+        selection_payload['trajectory_r2_cal'] = np.asarray(trajectory_r2_cal, dtype=float)
+        selection_payload['trajectory_r2_cv'] = np.asarray(trajectory_r2_cv, dtype=float)
+        selection_payload['trajectory_r2_val'] = np.asarray(trajectory_r2_val, dtype=float)
+        selection_payload['trajectory_accuracy_cal'] = np.asarray(trajectory_accuracy_cal, dtype=float)
+        selection_payload['trajectory_accuracy_cv'] = np.asarray(trajectory_accuracy_cv, dtype=float)
+        selection_payload['trajectory_accuracy_val'] = np.asarray(trajectory_accuracy_val, dtype=float)
+        selection_payload['trajectory_f1_cal'] = np.asarray(trajectory_f1_cal, dtype=float)
+        selection_payload['trajectory_f1_cv'] = np.asarray(trajectory_f1_cv, dtype=float)
+        selection_payload['trajectory_f1_val'] = np.asarray(trajectory_f1_val, dtype=float)
+        selection_payload['trajectory_precision_cal'] = np.asarray(trajectory_precision_cal, dtype=float)
+        selection_payload['trajectory_precision_cv'] = np.asarray(trajectory_precision_cv, dtype=float)
+        selection_payload['trajectory_precision_val'] = np.asarray(trajectory_precision_val, dtype=float)
+        selection_payload['trajectory_recall_cal'] = np.asarray(trajectory_recall_cal, dtype=float)
+        selection_payload['trajectory_recall_cv'] = np.asarray(trajectory_recall_cv, dtype=float)
+        selection_payload['trajectory_recall_val'] = np.asarray(trajectory_recall_val, dtype=float)
+
+        selection_payload['optimization_model_labels'] = np.asarray(optimization_model_labels, dtype=object)
+        selection_payload['optimization_selected_variables_display'] = np.asarray(optimization_selected_variables_display, dtype=object)
+        selection_payload['optimization_is_selected_model'] = np.asarray(optimization_is_selected_model, dtype=int)
+
+        selection_payload['selected_count_marker'] = np.asarray([int(selected_count)], dtype=int)
+        selection_payload['selected_cv_score_marker'] = np.asarray([
+            _selected_metric_marker(feature_count_trajectory, trajectory_cv_score, selected_count)
+        ], dtype=float)
+        selection_payload['selected_rmsecv_marker'] = np.asarray([
+            _selected_metric_marker(feature_count_trajectory, trajectory_rmse_cv, selected_count)
+        ], dtype=float)
+        selection_payload['selected_r2cv_marker'] = np.asarray([
+            _selected_metric_marker(feature_count_trajectory, trajectory_r2_cv, selected_count)
+        ], dtype=float)
+        selection_payload['selected_accuracy_marker'] = np.asarray([
+            _selected_metric_marker(feature_count_trajectory, trajectory_accuracy_cv, selected_count)
+        ], dtype=float)
+        selection_payload['selected_f1_macro_marker'] = np.asarray([
+            _selected_metric_marker(feature_count_trajectory, trajectory_f1_cv, selected_count)
+        ], dtype=float)
+        selection_payload['selected_precision_macro_marker'] = np.asarray([
+            _selected_metric_marker(feature_count_trajectory, trajectory_precision_cv, selected_count)
+        ], dtype=float)
+        selection_payload['selected_recall_macro_marker'] = np.asarray([
+            _selected_metric_marker(feature_count_trajectory, trajectory_recall_cv, selected_count)
+        ], dtype=float)
+
+        metadata = selection_payload.get('selection_metadata')
+        if isinstance(metadata, dict):
+            metadata['feature_count_trajectory'] = [int(v) for v in feature_count_trajectory]
+            metadata['trajectory_cv_score'] = [float(v) for v in trajectory_cv_score]
+            metadata['trajectory_rmsecv'] = [float(v) for v in trajectory_rmse_cv]
+            metadata['trajectory_r2cv'] = [float(v) for v in trajectory_r2_cv]
+            metadata['trajectory_accuracy'] = [float(v) for v in trajectory_accuracy_cv]
+            metadata['trajectory_f1_macro'] = [float(v) for v in trajectory_f1_cv]
+            metadata['trajectory_precision_macro'] = [float(v) for v in trajectory_precision_cv]
+            metadata['trajectory_recall_macro'] = [float(v) for v in trajectory_recall_cv]
+            metadata['trajectory_rmse_cal'] = [float(v) for v in trajectory_rmse_cal]
+            metadata['trajectory_rmse_cv'] = [float(v) for v in trajectory_rmse_cv]
+            metadata['trajectory_rmse_val'] = [float(v) for v in trajectory_rmse_val]
+            metadata['trajectory_r2_cal'] = [float(v) for v in trajectory_r2_cal]
+            metadata['trajectory_r2_cv'] = [float(v) for v in trajectory_r2_cv]
+            metadata['trajectory_r2_val'] = [float(v) for v in trajectory_r2_val]
+            metadata['trajectory_accuracy_cal'] = [float(v) for v in trajectory_accuracy_cal]
+            metadata['trajectory_accuracy_cv'] = [float(v) for v in trajectory_accuracy_cv]
+            metadata['trajectory_accuracy_val'] = [float(v) for v in trajectory_accuracy_val]
+            metadata['trajectory_f1_cal'] = [float(v) for v in trajectory_f1_cal]
+            metadata['trajectory_f1_cv'] = [float(v) for v in trajectory_f1_cv]
+            metadata['trajectory_f1_val'] = [float(v) for v in trajectory_f1_val]
+            metadata['trajectory_precision_cal'] = [float(v) for v in trajectory_precision_cal]
+            metadata['trajectory_precision_cv'] = [float(v) for v in trajectory_precision_cv]
+            metadata['trajectory_precision_val'] = [float(v) for v in trajectory_precision_val]
+            metadata['trajectory_recall_cal'] = [float(v) for v in trajectory_recall_cal]
+            metadata['trajectory_recall_cv'] = [float(v) for v in trajectory_recall_cv]
+            metadata['trajectory_recall_val'] = [float(v) for v in trajectory_recall_val]
+            metadata['optimization_model_labels'] = [str(v) for v in optimization_model_labels]
+            metadata['optimization_selected_variables_display'] = [str(v) for v in optimization_selected_variables_display]
+            metadata['optimization_is_selected_model'] = [int(v) for v in optimization_is_selected_model]
 
     def _fill_missing_required_params(base_alias: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Fill only missing required function args using GUI defaults."""
@@ -1339,6 +2007,53 @@ def analyst_main(
         tie_count = int(np.sum(np.sum(np.isclose(accumulated, max_vals), axis=1) > 1))
         return accumulated, labels, tie_count, list(common_class_labels)
 
+    def _notify_progress_active(instance_alias: str, base_alias: str) -> None:
+        if not progress_callback:
+            return
+        try:
+            progress_callback(min(executed_steps, progress_total), progress_total, instance_alias, base_alias)
+        except Exception:
+            pass
+
+    def _advance_progress(instance_alias: str, base_alias: str) -> None:
+        nonlocal executed_steps
+        executed_steps += 1
+        if not progress_callback:
+            return
+        try:
+            progress_callback(min(executed_steps, progress_total), progress_total, instance_alias, base_alias)
+        except Exception:
+            pass
+
+    def _record_control_execution(
+        *,
+        instance_alias: str,
+        base_alias: str,
+        start_time: float,
+        inputs: Optional[Dict[str, Any]] = None,
+        outputs_payload: Optional[Any] = None,
+    ) -> None:
+        elapsed_seconds = perf_counter() - start_time
+        if outputs_payload is None:
+            outputs_payload = {}
+        history_entry = {
+            'status': 'success',
+            'timestamp': datetime.now().isoformat(),
+            'execution_time': elapsed_seconds,
+            'outputs': copy.deepcopy(outputs_payload if isinstance(outputs_payload, dict) else {}),
+            'inputs': copy.deepcopy(inputs if isinstance(inputs, dict) else {}),
+            'history_context': _snapshot_context(),
+        }
+        execution_history_by_instance.setdefault(instance_alias, []).append(history_entry)
+
+        function_timings.append({
+            "instance_alias": instance_alias,
+            "base_alias": base_alias,
+            "execution_time": elapsed_seconds,
+        })
+
+        _advance_progress(instance_alias, base_alias)
+
     def _execute_regular_function(entry: Dict[str, Any], current_outputs: Dict[str, Dict[str, Any]]):
         nonlocal executed_steps
 
@@ -1395,6 +2110,17 @@ def analyst_main(
                 params['one_class_reference_class'] = ensemble_ref_class
             if ensemble_unknown_label is not None and str(ensemble_unknown_label).strip() != "":
                 params['one_class_unknown_label'] = ensemble_unknown_label
+
+        # Enforce variable-selection-level one-class reference/unknown labels
+        # for one-class functions nested inside the variable-selection block.
+        if base_alias == "classification_one_class" and variable_selection_stack_context:
+            active_selection_context = variable_selection_stack_context[-1]
+            selection_ref_class = active_selection_context.get('one_class_reference_class')
+            selection_unknown_label = active_selection_context.get('one_class_unknown_label')
+            if selection_ref_class is not None and str(selection_ref_class).strip() != "":
+                params['one_class_reference_class'] = selection_ref_class
+            if selection_unknown_label is not None and str(selection_unknown_label).strip() != "":
+                params['one_class_unknown_label'] = selection_unknown_label
 
         params = _fill_missing_required_params(base_alias, params)
         params = _inject_translation_keys(base_alias, params)
@@ -1463,31 +2189,27 @@ def analyst_main(
                 )
                 current_outputs[instance_alias] = function_outputs
 
-            history_entry = {
-                'status': 'success',
-                'timestamp': datetime.now().isoformat(),
-                'execution_time': function_elapsed_seconds,
-                'outputs': copy.deepcopy(function_outputs if isinstance(function_outputs, dict) else {}),
-                'inputs': copy.deepcopy(params),
-                'history_context': _snapshot_context()
-            }
-            execution_history_by_instance.setdefault(instance_alias, []).append(history_entry)
+            if history_suppression_depth <= 0:
+                history_entry = {
+                    'status': 'success',
+                    'timestamp': datetime.now().isoformat(),
+                    'execution_time': function_elapsed_seconds,
+                    'outputs': copy.deepcopy(function_outputs if isinstance(function_outputs, dict) else {}),
+                    'inputs': copy.deepcopy(params),
+                    'history_context': _snapshot_context()
+                }
+                execution_history_by_instance.setdefault(instance_alias, []).append(history_entry)
 
-            function_timings.append({
-                "instance_alias": instance_alias,
-                "base_alias": base_alias,
-                "execution_time": function_elapsed_seconds
-            })
+                function_timings.append({
+                    "instance_alias": instance_alias,
+                    "base_alias": base_alias,
+                    "execution_time": function_elapsed_seconds
+                })
             print(f"{base_alias} executed successfully.")
         else:
             print(f"Function {base_alias} not found.")
 
-        executed_steps += 1
-        if progress_callback:
-            try:
-                progress_callback(min(executed_steps, progress_total), progress_total, instance_alias, base_alias)
-            except Exception:
-                pass
+        _advance_progress(instance_alias, base_alias)
 
     def _execute_range(start_idx: int, end_idx: int, current_outputs: Dict[str, Dict[str, Any]]):
         nonlocal loop_counter, parallel_counter, ensemble_counter
@@ -1510,6 +2232,8 @@ def analyst_main(
                 loop_instance_alias = entry['instance_alias']
                 loop_info = functions_info.get(loop_instance_alias, {})
                 loop_params = loop_info.get('parameters', {})
+                _notify_progress_active(loop_instance_alias, base_alias)
+                loop_start_time = perf_counter()
 
                 try:
                     iterations = int(loop_params.get('iterations', 1))
@@ -1537,6 +2261,16 @@ def analyst_main(
                 body_start = idx + 1
                 body_end = loop_end_idx - 1
                 if body_start > body_end:
+                    _record_control_execution(
+                        instance_alias=loop_instance_alias,
+                        base_alias=base_alias,
+                        start_time=loop_start_time,
+                        inputs=loop_params,
+                        outputs_payload={
+                            'mode': loop_mode,
+                            'iterations_executed': 0,
+                        },
+                    )
                     idx = loop_end_idx + 1
                     continue
 
@@ -1613,7 +2347,2126 @@ def analyst_main(
                 if loop_stack_context:
                     loop_stack_context.pop()
 
+                _record_control_execution(
+                    instance_alias=loop_instance_alias,
+                    base_alias=base_alias,
+                    start_time=loop_start_time,
+                    inputs=loop_params,
+                    outputs_payload={
+                        'mode': loop_mode,
+                        'iterations_executed': iterations,
+                        'use_best_iteration': use_best_iteration,
+                        'best_score': best_score,
+                    },
+                )
+
                 idx = loop_end_idx + 1
+                continue
+
+            if base_alias == "workflow_variable_selection_start":
+                selection_end_idx = _find_matching_end(
+                    idx,
+                    "workflow_variable_selection_start",
+                    "workflow_variable_selection_end",
+                )
+                if selection_end_idx < 0:
+                    print("Warning: Variable Selection Start without matching End. Skipping control node.")
+                    idx += 1
+                    continue
+
+                selection_instance_alias = entry['instance_alias']
+                raw_selection_params = functions_info.get(selection_instance_alias, {}).get('parameters', {})
+                selection_params = _resolve_control_params(selection_instance_alias, raw_selection_params, current_outputs)
+                _notify_progress_active(selection_instance_alias, base_alias)
+                selection_start_time = perf_counter()
+
+                body_start = idx + 1
+                body_end = selection_end_idx - 1
+
+                # Friendly fallback when routed inputs are omitted: use latest available upstream values.
+                if selection_params.get('X_cal') is None:
+                    _x_cal_value, _x_cal_found, _ = _find_latest_output_value(
+                        output_key='X_cal',
+                        nested_key='',
+                        current_outputs=current_outputs,
+                        range_start=0,
+                        range_end=idx - 1,
+                    )
+                    if _x_cal_found:
+                        selection_params['X_cal'] = _x_cal_value
+                if selection_params.get('X_val') is None:
+                    _x_val_value, _x_val_found, _ = _find_latest_output_value(
+                        output_key='X_val',
+                        nested_key='',
+                        current_outputs=current_outputs,
+                        range_start=0,
+                        range_end=idx - 1,
+                    )
+                    if _x_val_found:
+                        selection_params['X_val'] = _x_val_value
+                if selection_params.get('Y_cal') is None:
+                    _y_cal_value, _y_cal_found, _ = _find_latest_output_value(
+                        output_key='Y_cal',
+                        nested_key='',
+                        current_outputs=current_outputs,
+                        range_start=0,
+                        range_end=idx - 1,
+                    )
+                    if _y_cal_found:
+                        selection_params['Y_cal'] = _y_cal_value
+                if selection_params.get('class_data_cal') is None:
+                    _class_cal_value, _class_cal_found, _ = _find_latest_output_value(
+                        output_key='class_data_cal',
+                        nested_key='',
+                        current_outputs=current_outputs,
+                        range_start=0,
+                        range_end=idx - 1,
+                    )
+                    if _class_cal_found:
+                        selection_params['class_data_cal'] = _class_cal_value
+                if selection_params.get('Y_val') is None:
+                    _y_val_value, _y_val_found, _ = _find_latest_output_value(
+                        output_key='Y_val',
+                        nested_key='',
+                        current_outputs=current_outputs,
+                        range_start=0,
+                        range_end=idx - 1,
+                    )
+                    if _y_val_found:
+                        selection_params['Y_val'] = _y_val_value
+                if selection_params.get('class_data_val') is None:
+                    _class_val_value, _class_val_found, _ = _find_latest_output_value(
+                        output_key='class_data_val',
+                        nested_key='',
+                        current_outputs=current_outputs,
+                        range_start=0,
+                        range_end=idx - 1,
+                    )
+                    if _class_val_found:
+                        selection_params['class_data_val'] = _class_val_value
+                if selection_params.get('axis_n_info') is None:
+                    _axis_n_value, _axis_n_found, _ = _find_latest_output_value(
+                        output_key='axis_n_info',
+                        nested_key='',
+                        current_outputs=current_outputs,
+                        range_start=0,
+                        range_end=idx - 1,
+                    )
+                    if _axis_n_found:
+                        selection_params['axis_n_info'] = _axis_n_value
+                if selection_params.get('axis_t_info') is None:
+                    _axis_t_value, _axis_t_found, _ = _find_latest_output_value(
+                        output_key='axis_t_info',
+                        nested_key='',
+                        current_outputs=current_outputs,
+                        range_start=0,
+                        range_end=idx - 1,
+                    )
+                    if _axis_t_found:
+                        selection_params['axis_t_info'] = _axis_t_value
+                if selection_params.get('nway_flag') is None:
+                    _nway_value, _nway_found, _ = _find_latest_output_value(
+                        output_key='nway_flag',
+                        nested_key='',
+                        current_outputs=current_outputs,
+                        range_start=0,
+                        range_end=idx - 1,
+                    )
+                    if _nway_found:
+                        selection_params['nway_flag'] = _nway_value
+
+                def _safe_int(value: Any, default: int) -> int:
+                    try:
+                        return int(value)
+                    except Exception:
+                        return int(default)
+
+                def _safe_float(value: Any, default: float) -> float:
+                    try:
+                        return float(value)
+                    except Exception:
+                        return float(default)
+
+                nway_value = selection_params.get('nway_flag', None)
+                if nway_value is None:
+                    raise ValueError(
+                        "workflow_variable_selection_start requires inherited nway_flag input."
+                    )
+                try:
+                    nway_flag_value = int(nway_value)
+                except Exception as exc:
+                    raise ValueError(
+                        "Invalid nway_flag for workflow_variable_selection_start; expected integer value 1."
+                    ) from exc
+                if nway_flag_value != 1:
+                    _append_execution_report_entry(
+                        instance_alias=selection_instance_alias,
+                        base_alias=base_alias,
+                        level='error',
+                        code='workflow_variable_selection_first_order_only',
+                        text='workflow_variable_selection_first_order_only',
+                        source='workflow_control',
+                        details={
+                            'function': 'workflow_variable_selection_start',
+                            'nway_flag': int(nway_flag_value),
+                        },
+                    )
+                    raise ValueError(
+                        "workflow_variable_selection_start supports first-order data only (nway_flag must be 1)."
+                    )
+
+                from chemometrics.variable_selection_wrapper import select_variables_for_workflow
+
+                selection_override_file_path = str(selection_params.get('selection_override_file_path', '') or '')
+                override_file_mode = bool(selection_override_file_path.strip())
+                override_block_inputs = bool(selection_params.get('override_block_inputs', True))
+
+                n_features_to_select = _safe_int(selection_params.get('n_features_to_select', 10), 10)
+                x_cal_for_count = selection_params.get('X_cal')
+                try:
+                    _x_arr = np.asarray(x_cal_for_count)
+                    _n_features = int(_x_arr.shape[1]) if _x_arr.ndim >= 2 else int(_x_arr.reshape(-1, 1).shape[1])
+                    _n_samples = int(_x_arr.shape[0]) if _x_arr.ndim >= 1 else 0
+                except Exception:
+                    _n_features = max(1, int(n_features_to_select))
+                    _n_samples = 0
+
+                provided_cv_config = selection_params.get('cv_config', None)
+                effective_cv_config_payload: Dict[str, Any] = {}
+                effective_cv_config_value: Any = None
+                effective_cv_report_value: Any = None
+                default_fallback_cv_applied = False
+                default_fallback_cv_strategy = None
+
+                if isinstance(provided_cv_config, dict) and 'cv_config' in provided_cv_config:
+                    effective_cv_config_value = provided_cv_config.get('cv_config')
+                    effective_cv_report_value = provided_cv_config.get('cv_report')
+                elif provided_cv_config is not None:
+                    effective_cv_config_value = provided_cv_config
+
+                if effective_cv_config_value is not None:
+                    try:
+                        _is_enabled_fn = getattr(effective_cv_config_value, 'is_enabled', None)
+                        if callable(_is_enabled_fn) and not bool(_is_enabled_fn()):
+                            effective_cv_config_value = None
+                            effective_cv_report_value = None
+                    except Exception:
+                        pass
+
+                if effective_cv_config_value is None:
+                    try:
+                        from chemometrics.cv_pipeline import cv_configuration as _workflow_cv_configuration
+
+                        class_data_for_fallback = selection_params.get('class_data_cal', None)
+                        has_class_info = class_data_for_fallback is not None
+                        fallback_cv_strategy = 'stratified_kfold' if has_class_info else 'kfold'
+                        try:
+                            generated_cv = _workflow_cv_configuration(
+                                use_cv=True,
+                                cv_strategy=fallback_cv_strategy,
+                                n_splits=5,
+                                random_state=42,
+                                shuffle=True,
+                            )
+                        except Exception:
+                            # If stratification is not feasible for current labels, fall back to standard kfold.
+                            fallback_cv_strategy = 'kfold'
+                            generated_cv = _workflow_cv_configuration(
+                                use_cv=True,
+                                cv_strategy=fallback_cv_strategy,
+                                n_splits=5,
+                                random_state=42,
+                                shuffle=True,
+                            )
+                        if isinstance(generated_cv, dict):
+                            effective_cv_config_value = generated_cv.get('cv_config')
+                            effective_cv_report_value = generated_cv.get('cv_report')
+                        default_fallback_cv_applied = (effective_cv_config_value is not None)
+                        if default_fallback_cv_applied:
+                            default_fallback_cv_strategy = fallback_cv_strategy
+                    except Exception:
+                        effective_cv_config_value = None
+                        effective_cv_report_value = None
+
+                if effective_cv_config_value is not None:
+                    effective_cv_config_payload['cv_config'] = effective_cv_config_value
+                if effective_cv_report_value is not None:
+                    effective_cv_config_payload['cv_report'] = effective_cv_report_value
+
+                if default_fallback_cv_applied:
+                    _append_execution_report_entry(
+                        instance_alias=selection_instance_alias,
+                        base_alias=base_alias,
+                        level='warning',
+                        code='workflow_variable_selection_default_loocv',
+                        text='workflow_variable_selection_default_loocv',
+                        source='workflow_control',
+                        details={
+                            'function': 'workflow_variable_selection_start',
+                            'cv_strategy': str(default_fallback_cv_strategy or 'kfold'),
+                            'n_splits': 5,
+                            'random_state': 42,
+                            'shuffle': True,
+                        },
+                    )
+
+                forced_count_override: Optional[int] = None
+                _raw_count_override = selection_params.get('n_features_to_select', None)
+                if _raw_count_override not in (None, ''):
+                    try:
+                        forced_count_override = max(1, min(int(_n_features), int(_safe_int(_raw_count_override, 0))))
+                    except Exception:
+                        forced_count_override = None
+
+                default_count_for_range = forced_count_override if forced_count_override is not None else n_features_to_select
+                candidate_counts = _parse_feature_count_candidates(
+                    raw_values=selection_params.get('feature_count_range', ''),
+                    default_count=default_count_for_range,
+                    n_features=_n_features,
+                    optimize_enabled=True,
+                )
+                if forced_count_override is not None and int(forced_count_override) not in candidate_counts:
+                    candidate_counts.append(int(forced_count_override))
+                candidate_counts = sorted(set(int(v) for v in candidate_counts))
+
+                if override_file_mode:
+                    # User-provided override file is authoritative.
+                    if forced_count_override is not None:
+                        candidate_counts = [int(forced_count_override)]
+                    else:
+                        candidate_counts = [max(1, min(int(_n_features), int(n_features_to_select)))]
+
+                selection_payload: Dict[str, Any]
+                block_outputs: Dict[str, Dict[str, Any]]
+
+                baseline_outputs = copy.deepcopy(current_outputs)
+                best_score = float('-inf')
+                best_selection_payload: Optional[Dict[str, Any]] = None
+                best_block_outputs: Optional[Dict[str, Dict[str, Any]]] = None
+                trajectory_rows: List[Dict[str, Any]] = []
+                candidate_results: List[Tuple[int, Dict[str, Any], Dict[str, Dict[str, Any]], Dict[str, Optional[float]], float]] = []
+                subset_score_cache: Dict[Tuple[int, ...], float] = {}
+
+                selection_task_type_norm = str(selection_params.get('task_type', 'regression') or 'regression').strip().lower()
+                if selection_task_type_norm not in ('regression', 'n_class', 'one_class'):
+                    raise ValueError("task_type must be one of: regression, n_class, one_class")
+
+                optimization_metric_norm = _resolve_optimization_metric(
+                    selection_task_type_norm,
+                    selection_params.get('optimization_metric', None),
+                )
+
+                classification_family_hint = ''
+                if selection_task_type_norm in ('n_class', 'one_class'):
+                    classification_family_hint = selection_task_type_norm
+
+                optimize_for_norm = str(selection_params.get('optimize_for', 'nested_function') or 'nested_function').strip().lower()
+                if optimize_for_norm not in ('nested_function', 'surrogate_function'):
+                    optimize_for_norm = 'nested_function'
+
+                independent_methods = {'vip', 'spa', 'vip_spa', 'mcuve', 'cars', 'random_frog', 'vissa', 'sfs', 'ga'}
+                supervised_only_methods = {'interval_random_frog', 'ipls', 'fipls', 'bipls'}
+                nested_only_methods: set[str] = set()
+                surrogate_only_methods = {'rfe', 'rfecv'}
+                nested_allowed_methods = independent_methods.union(supervised_only_methods).union(nested_only_methods)
+                surrogate_allowed_methods = independent_methods.union(supervised_only_methods).union(surrogate_only_methods)
+                all_allowed_methods = nested_allowed_methods.union(surrogate_only_methods)
+
+                selection_method_value = selection_params.get('selection_method', None)
+                if selection_method_value is None or str(selection_method_value).strip() == '':
+                    selection_method_value = 'vip' if optimize_for_norm == 'nested_function' else 'rfe'
+
+                selection_method_norm = str(selection_method_value).strip().lower()
+                if selection_method_norm not in all_allowed_methods:
+                    raise ValueError("selection_method must be one of: vip, spa, vip_spa, mcuve, cars, random_frog, interval_random_frog, ipls, fipls, bipls, vissa, sfs, ga, rfe, rfecv")
+                metric_driven_methods = {'sfs', 'ga'}
+                # Surrogate-only methods must run through surrogate optimization.
+                if selection_method_norm in surrogate_only_methods:
+                    optimize_for_norm = 'surrogate_function'
+                # Metric-driven wrappers can use either optimization pathway.
+                elif selection_method_norm in metric_driven_methods:
+                    optimize_for_norm = str(selection_params.get('optimize_for', optimize_for_norm) or optimize_for_norm).strip().lower()
+                    if optimize_for_norm not in ('nested_function', 'surrogate_function'):
+                        optimize_for_norm = 'nested_function'
+                # Canonical direct selectors should stay nested-only.
+                else:
+                    optimize_for_norm = 'nested_function'
+                if selection_task_type_norm == 'one_class' and selection_method_norm in supervised_only_methods:
+                    raise ValueError(
+                        "selection_method is not compatible with one_class task type. "
+                        "Incompatible one_class methods: interval_random_frog, ipls, fipls, bipls."
+                    )
+
+                pls_proxy_classification_methods = {'interval_random_frog', 'ipls', 'fipls', 'bipls'}
+                if selection_task_type_norm == 'n_class' and selection_method_norm in pls_proxy_classification_methods:
+                    _append_execution_report_entry(
+                        instance_alias=selection_instance_alias,
+                        base_alias=base_alias,
+                        level='warning',
+                        code='workflow_variable_selection_pls_proxy_classification',
+                        text='workflow_variable_selection_pls_proxy_classification',
+                        source='workflow_control',
+                        details={
+                            'function': 'workflow_variable_selection_start',
+                            'task_type': 'n_class',
+                            'selection_method': selection_method_norm,
+                        },
+                    )
+
+                ga_population_size = max(6, _safe_int(selection_params.get('ga_population_size', 30), 30))
+                ga_generations = max(1, _safe_int(selection_params.get('ga_generations', 25), 25))
+                ga_mutation_rate = _safe_float(selection_params.get('ga_mutation_rate', 0.05), 0.05)
+                if not np.isfinite(ga_mutation_rate):
+                    ga_mutation_rate = 0.05
+                ga_mutation_rate = float(max(0.0, min(1.0, ga_mutation_rate)))
+                ga_crossover_rate = _safe_float(selection_params.get('ga_crossover_rate', 1.0), 1.0)
+                if not np.isfinite(ga_crossover_rate):
+                    ga_crossover_rate = 1.0
+                ga_crossover_rate = float(max(0.0, min(1.0, ga_crossover_rate)))
+                ga_tournament_size = max(1, _safe_int(selection_params.get('ga_tournament_size', 1), 1))
+                ga_random_state = _safe_int(selection_params.get('ga_random_state', 42), 42)
+                ga_n_restarts = max(1, _safe_int(selection_params.get('ga_n_restarts', 1), 1))
+                ga_patience_generations = max(0, _safe_int(selection_params.get('ga_patience_generations', 0), 0))
+                ga_max_evaluations = max(0, _safe_int(selection_params.get('ga_max_evaluations', 0), 0))
+                ga_min_improvement = _safe_float(selection_params.get('ga_min_improvement', 0.0), 0.0)
+                if not np.isfinite(ga_min_improvement):
+                    ga_min_improvement = 0.0
+                ga_min_improvement = float(max(0.0, ga_min_improvement))
+                ga_consensus_mode = str(selection_params.get('ga_consensus_mode', 'best_run') or 'best_run').strip().lower()
+                if ga_consensus_mode not in ('best_run', 'frequency_top_k', 'frequency_threshold'):
+                    ga_consensus_mode = 'best_run'
+                ga_frequency_threshold = _safe_float(selection_params.get('ga_frequency_threshold', 0.5), 0.5)
+                if not np.isfinite(ga_frequency_threshold):
+                    ga_frequency_threshold = 0.5
+                ga_frequency_threshold = float(max(0.0, min(1.0, ga_frequency_threshold)))
+                ga_frequency_weighting = str(selection_params.get('ga_frequency_weighting', 'uniform') or 'uniform').strip().lower()
+                if ga_frequency_weighting not in ('uniform', 'score_weighted'):
+                    ga_frequency_weighting = 'uniform'
+
+                selection_random_state = _safe_int(selection_params.get('selection_random_state', 42), 42)
+                selection_n_jobs = max(1, _safe_int(selection_params.get('selection_n_jobs', 1), 1))
+
+                nested_cv_enabled = _coerce_bool(selection_params.get('nested_cv_enabled', False))
+                nested_cv_outer_strategy = str(
+                    selection_params.get('nested_cv_outer_strategy', 'kfold') or 'kfold'
+                ).strip().lower()
+                nested_cv_outer_supported_strategies = {'kfold', 'stratified_kfold', 'loocv'}
+                if nested_cv_outer_strategy not in nested_cv_outer_supported_strategies:
+                    raise ValueError(
+                        "Unsupported nested_cv_outer_strategy. Supported values are: "
+                        "'kfold', 'stratified_kfold', 'loocv'."
+                    )
+                nested_cv_outer_splits = max(2, _safe_int(selection_params.get('nested_cv_outer_splits', 5), 5))
+                nested_cv_outer_shuffle = _coerce_bool(selection_params.get('nested_cv_outer_shuffle', True))
+                nested_cv_outer_random_state = _safe_int(
+                    selection_params.get('nested_cv_outer_random_state', 42),
+                    42,
+                )
+                if nested_cv_enabled and optimize_for_norm != 'nested_function':
+                    raise ValueError(
+                        "nested_cv_enabled is currently compatible only with optimize_for='nested_function'."
+                    )
+
+                mcuve_n_subsets = max(2, _safe_int(selection_params.get('mcuve_n_subsets', 100), 100))
+                _raw_mcuve_samples = selection_params.get('mcuve_n_samples_per_subset', None)
+                mcuve_n_samples_per_subset: Optional[float]
+                if _raw_mcuve_samples in (None, ''):
+                    mcuve_n_samples_per_subset = None
+                else:
+                    mcuve_n_samples_per_subset = _safe_float(_raw_mcuve_samples, 0.5)
+
+                cars_n_cars_runs = max(1, _safe_int(selection_params.get('cars_n_cars_runs', 20), 20))
+                cars_n_sample_runs = max(2, _safe_int(selection_params.get('cars_n_sample_runs', 100), 100))
+                cars_fit_samples_ratio = _safe_float(selection_params.get('cars_fit_samples_ratio', 0.9), 0.9)
+                if not np.isfinite(cars_fit_samples_ratio):
+                    cars_fit_samples_ratio = 0.9
+                cars_fit_samples_ratio = float(max(0.01, min(1.0, cars_fit_samples_ratio)))
+
+                random_frog_n_iterations = max(1, _safe_int(selection_params.get('random_frog_n_iterations', 10000), 10000))
+                random_frog_n_initial_features = _safe_float(selection_params.get('random_frog_n_initial_features', 0.1), 0.1)
+                if not np.isfinite(random_frog_n_initial_features):
+                    random_frog_n_initial_features = 0.1
+                random_frog_variance_factor = _safe_float(selection_params.get('random_frog_variance_factor', 0.3), 0.3)
+                if not np.isfinite(random_frog_variance_factor):
+                    random_frog_variance_factor = 0.3
+                random_frog_subset_expansion_factor = _safe_float(selection_params.get('random_frog_subset_expansion_factor', 3.0), 3.0)
+                if not np.isfinite(random_frog_subset_expansion_factor):
+                    random_frog_subset_expansion_factor = 3.0
+                random_frog_subset_expansion_factor = float(max(1.0, random_frog_subset_expansion_factor))
+                random_frog_acceptance_factor = _safe_float(selection_params.get('random_frog_acceptance_factor', 0.1), 0.1)
+                if not np.isfinite(random_frog_acceptance_factor):
+                    random_frog_acceptance_factor = 0.1
+                random_frog_acceptance_factor = float(max(0.0, min(1.0, random_frog_acceptance_factor)))
+                interval_width = selection_params.get('interval_width', None)
+
+                vissa_n_submodels = max(2, _safe_int(selection_params.get('vissa_n_submodels', 1000), 1000))
+                vissa_ratio_submodel_selection = _safe_float(selection_params.get('vissa_ratio_submodel_selection', 0.05), 0.05)
+                if not np.isfinite(vissa_ratio_submodel_selection):
+                    vissa_ratio_submodel_selection = 0.05
+                vissa_ratio_submodel_selection = float(max(1e-6, min(1.0, vissa_ratio_submodel_selection)))
+                vissa_max_iter = max(1, _safe_int(selection_params.get('vissa_max_iter', 100), 100))
+
+                surrogate_task_norm = 'regression' if selection_task_type_norm == 'regression' else 'classification'
+                y_reg = None
+                y_cls = None
+                if selection_task_type_norm == 'regression':
+                    if selection_params.get('Y_cal') is None:
+                        raise ValueError("Y_cal is required when task_type='regression'.")
+                    y_reg = np.asarray(selection_params.get('Y_cal'), dtype=float).reshape(-1)
+                else:
+                    if selection_params.get('class_data_cal') is None:
+                        raise ValueError("class_data_cal is required when task_type is n_class or one_class.")
+                    y_cls = np.asarray(selection_params.get('class_data_cal'), dtype=object)
+                    if y_cls.ndim >= 2:
+                        y_cls = y_cls[:, 0]
+                    y_cls = y_cls.reshape(-1)
+
+                one_class_reference_input = selection_params.get('one_class_reference_class', None)
+                one_class_unknown_raw = selection_params.get('one_class_unknown_label', None)
+                one_class_unknown_label = str(one_class_unknown_raw).strip() if one_class_unknown_raw is not None else ''
+                if one_class_unknown_label == '':
+                    one_class_unknown_label = 'Other'
+
+                variable_selection_context_entry = {
+                    'one_class_reference_class': one_class_reference_input,
+                    'one_class_unknown_label': one_class_unknown_label,
+                }
+
+                surrogate_regression_method = str(selection_params.get('surrogate_regression_method', 'pls') or 'pls').strip().lower()
+                if surrogate_regression_method not in {'pls', 'ridge', 'random_forest', 'svr'}:
+                    surrogate_regression_method = 'pls'
+
+                surrogate_n_class_method = str(selection_params.get('surrogate_n_class_method', 'logistic') or 'logistic').strip().lower()
+                if surrogate_n_class_method not in {'logistic', 'random_forest', 'svc'}:
+                    surrogate_n_class_method = 'logistic'
+
+                surrogate_one_class_method = str(selection_params.get('surrogate_one_class_method', 'one_class_svm') or 'one_class_svm').strip().lower()
+                if surrogate_one_class_method not in {'one_class_svm', 'isolation_forest', 'elliptic_envelope', 'lof'}:
+                    surrogate_one_class_method = 'one_class_svm'
+
+                surrogate_selection_method_for_visibility = str(selection_method_norm or '').strip().lower()
+
+                def _effective_svr_kernel() -> str:
+                    if surrogate_selection_method_for_visibility in {'rfe', 'rfecv'}:
+                        return str(selection_params.get('surrogate_svr_kernel_rfe', 'linear') or 'linear').strip().lower()
+                    return str(selection_params.get('surrogate_svr_kernel', 'rbf') or 'rbf').strip().lower()
+
+                def _effective_svc_kernel() -> str:
+                    if surrogate_selection_method_for_visibility in {'rfe', 'rfecv'}:
+                        return str(selection_params.get('surrogate_svc_kernel_rfe', 'linear') or 'linear').strip().lower()
+                    return str(selection_params.get('surrogate_svc_kernel', 'rbf') or 'rbf').strip().lower()
+
+                def _normalize_optional_class_weight(value: Any) -> Optional[str]:
+                    text = str(value or '').strip().lower()
+                    if text in ('', 'none', 'null'):
+                        return None
+                    return text
+
+                def _normalize_gamma(value: Any, default_numeric: float = 0.1):
+                    text = str(value or '').strip().lower()
+                    if text in ('', 'scale', 'auto'):
+                        return text if text in ('scale', 'auto') else float(default_numeric)
+                    try:
+                        f = float(value)
+                        if np.isfinite(f) and f > 0:
+                            return float(f)
+                    except Exception:
+                        pass
+                    return float(default_numeric)
+
+                def _normalize_tree_max_features(value: Any, default_token: str = 'sqrt'):
+                    text = str(value or '').strip().lower()
+                    if text in ('none', 'all'):
+                        return None
+                    if text in ('sqrt', 'log2'):
+                        return text
+                    try:
+                        i = int(float(text))
+                        if i > 0:
+                            return i
+                    except Exception:
+                        pass
+                    try:
+                        f = float(text)
+                        if np.isfinite(f) and f > 0:
+                            return float(f)
+                    except Exception:
+                        pass
+                    if default_token in ('sqrt', 'log2'):
+                        return default_token
+                    return None
+
+                def _normalize_max_depth(value: Any) -> Optional[int]:
+                    depth = _safe_int(value, 0)
+                    return depth if depth > 0 else None
+
+                def _build_regression_surrogate_estimator(x_data: np.ndarray):
+                    if surrogate_regression_method == 'pls':
+                        from sklearn.cross_decomposition import PLSRegression
+
+                        n_comp_raw = _safe_int(selection_params.get('surrogate_pls_n_components', 2), 2)
+                        n_comp = max(1, min(int(n_comp_raw), int(x_data.shape[1]), max(1, int(x_data.shape[0] - 1))))
+                        pls_scale = _coerce_bool(selection_params.get('surrogate_pls_scale', False))
+                        return PLSRegression(n_components=n_comp, scale=pls_scale)
+
+                    if surrogate_regression_method == 'ridge':
+                        from sklearn.linear_model import Ridge
+
+                        ridge_alpha = _safe_float(selection_params.get('surrogate_ridge_alpha', 1.0), 1.0)
+                        if not np.isfinite(ridge_alpha) or ridge_alpha <= 0:
+                            ridge_alpha = 1.0
+                        return Ridge(alpha=float(ridge_alpha))
+
+                    if surrogate_regression_method == 'random_forest':
+                        from sklearn.ensemble import RandomForestRegressor
+
+                        return RandomForestRegressor(
+                            n_estimators=max(1, _safe_int(selection_params.get('surrogate_random_forest_n_estimators', 200), 200)),
+                            max_depth=_normalize_max_depth(selection_params.get('surrogate_random_forest_max_depth', 0)),
+                            min_samples_leaf=max(1, _safe_int(selection_params.get('surrogate_random_forest_min_samples_leaf', 1), 1)),
+                            max_features=_normalize_tree_max_features(selection_params.get('surrogate_random_forest_max_features', '1.0'), default_token='sqrt'),
+                            bootstrap=_coerce_bool(selection_params.get('surrogate_random_forest_bootstrap', True)),
+                            random_state=selection_random_state,
+                            n_jobs=selection_n_jobs,
+                        )
+
+                    from sklearn.svm import SVR
+
+                    svr_kernel = _effective_svr_kernel()
+                    if svr_kernel not in {'linear', 'rbf', 'poly', 'sigmoid'}:
+                        svr_kernel = 'rbf'
+                    svr_c = _safe_float(selection_params.get('surrogate_svr_c', 1.0), 1.0)
+                    if not np.isfinite(svr_c) or svr_c <= 0:
+                        svr_c = 1.0
+                    svr_eps = _safe_float(selection_params.get('surrogate_svr_epsilon', 0.1), 0.1)
+                    if not np.isfinite(svr_eps) or svr_eps < 0:
+                        svr_eps = 0.1
+                    svr_degree = max(1, _safe_int(selection_params.get('surrogate_svr_degree', 3), 3))
+                    svr_coef0 = _safe_float(selection_params.get('surrogate_svr_coef0', 0.0), 0.0)
+                    if not np.isfinite(svr_coef0):
+                        svr_coef0 = 0.0
+                    return SVR(
+                        kernel=svr_kernel,
+                        C=float(svr_c),
+                        epsilon=float(svr_eps),
+                        gamma=_normalize_gamma(selection_params.get('surrogate_svr_gamma', 0.1), default_numeric=0.1),
+                        degree=int(svr_degree),
+                        coef0=float(svr_coef0),
+                    )
+
+                def _build_n_class_surrogate_estimator():
+                    if surrogate_n_class_method == 'logistic':
+                        from sklearn.linear_model import LogisticRegression
+
+                        c_val = _safe_float(selection_params.get('surrogate_logistic_c', 1.0), 1.0)
+                        if not np.isfinite(c_val) or c_val <= 0:
+                            c_val = 1.0
+                        max_iter = max(100, _safe_int(selection_params.get('surrogate_logistic_max_iter', 1000), 1000))
+                        solver = str(selection_params.get('surrogate_logistic_solver', 'lbfgs') or 'lbfgs').strip().lower()
+                        if solver not in {'lbfgs', 'liblinear', 'newton-cg', 'newton-cholesky', 'sag', 'saga'}:
+                            solver = 'lbfgs'
+                        return LogisticRegression(
+                            C=float(c_val),
+                            max_iter=int(max_iter),
+                            solver=solver,
+                            class_weight=_normalize_optional_class_weight(selection_params.get('surrogate_logistic_class_weight', 'none')),
+                        )
+
+                    if surrogate_n_class_method == 'random_forest':
+                        from sklearn.ensemble import RandomForestClassifier
+
+                        return RandomForestClassifier(
+                            n_estimators=max(1, _safe_int(selection_params.get('surrogate_classification_random_forest_n_estimators', 300), 300)),
+                            max_depth=_normalize_max_depth(selection_params.get('surrogate_classification_random_forest_max_depth', 0)),
+                            min_samples_leaf=max(1, _safe_int(selection_params.get('surrogate_classification_random_forest_min_samples_leaf', 1), 1)),
+                            max_features=_normalize_tree_max_features(selection_params.get('surrogate_classification_random_forest_max_features', 'sqrt'), default_token='sqrt'),
+                            class_weight=_normalize_optional_class_weight(selection_params.get('surrogate_classification_random_forest_class_weight', 'none')),
+                            bootstrap=_coerce_bool(selection_params.get('surrogate_classification_random_forest_bootstrap', True)),
+                            random_state=selection_random_state,
+                            n_jobs=selection_n_jobs,
+                        )
+
+                    from sklearn.svm import SVC
+
+                    svc_kernel = _effective_svc_kernel()
+                    if svc_kernel not in {'linear', 'rbf', 'poly', 'sigmoid'}:
+                        svc_kernel = 'rbf'
+                    svc_c = _safe_float(selection_params.get('surrogate_svc_c', 1.0), 1.0)
+                    if not np.isfinite(svc_c) or svc_c <= 0:
+                        svc_c = 1.0
+                    svc_degree = max(1, _safe_int(selection_params.get('surrogate_svc_degree', 3), 3))
+                    svc_coef0 = _safe_float(selection_params.get('surrogate_svc_coef0', 0.0), 0.0)
+                    if not np.isfinite(svc_coef0):
+                        svc_coef0 = 0.0
+                    return SVC(
+                        kernel=svc_kernel,
+                        C=float(svc_c),
+                        gamma=_normalize_gamma(selection_params.get('surrogate_svc_gamma', 0.1), default_numeric=0.1),
+                        degree=int(svc_degree),
+                        coef0=float(svc_coef0),
+                        class_weight=_normalize_optional_class_weight(selection_params.get('surrogate_svc_class_weight', 'none')),
+                    )
+
+                def _build_one_class_surrogate_estimator():
+                    if surrogate_one_class_method == 'one_class_svm':
+                        from sklearn.svm import OneClassSVM
+
+                        nu_val = _safe_float(selection_params.get('surrogate_one_class_nu', 0.05), 0.05)
+                        if not np.isfinite(nu_val) or nu_val <= 0 or nu_val >= 1:
+                            nu_val = 0.05
+                        oc_kernel = str(selection_params.get('surrogate_one_class_kernel', 'rbf') or 'rbf').strip().lower()
+                        if oc_kernel not in {'linear', 'rbf', 'poly', 'sigmoid'}:
+                            oc_kernel = 'rbf'
+                        oc_degree = max(1, _safe_int(selection_params.get('surrogate_one_class_degree', 3), 3))
+                        oc_coef0 = _safe_float(selection_params.get('surrogate_one_class_coef0', 0.0), 0.0)
+                        if not np.isfinite(oc_coef0):
+                            oc_coef0 = 0.0
+                        return OneClassSVM(
+                            kernel=oc_kernel,
+                            nu=float(nu_val),
+                            gamma=_normalize_gamma(selection_params.get('surrogate_one_class_gamma', 0.1), default_numeric=0.1),
+                            degree=int(oc_degree),
+                            coef0=float(oc_coef0),
+                        )
+
+                    if surrogate_one_class_method == 'isolation_forest':
+                        from sklearn.ensemble import IsolationForest
+
+                        contamination = _safe_float(selection_params.get('surrogate_isolation_forest_contamination', 0.05), 0.05)
+                        if not np.isfinite(contamination) or contamination <= 0 or contamination >= 0.5:
+                            contamination = 0.05
+                        max_samples_raw = str(selection_params.get('surrogate_isolation_forest_max_samples', 'auto') or 'auto').strip().lower()
+                        max_samples_val: Any = 'auto'
+                        if max_samples_raw == 'all':
+                            max_samples_val = 1.0
+                        elif max_samples_raw != 'auto':
+                            try:
+                                f = float(max_samples_raw)
+                                if np.isfinite(f) and f > 0:
+                                    max_samples_val = float(f)
+                            except Exception:
+                                max_samples_val = 'auto'
+                        max_features = _safe_float(selection_params.get('surrogate_isolation_forest_max_features', 1.0), 1.0)
+                        if not np.isfinite(max_features) or max_features <= 0:
+                            max_features = 1.0
+                        return IsolationForest(
+                            n_estimators=max(10, _safe_int(selection_params.get('surrogate_isolation_forest_n_estimators', 300), 300)),
+                            contamination=float(contamination),
+                            max_samples=max_samples_val,
+                            max_features=float(max_features),
+                            bootstrap=_coerce_bool(selection_params.get('surrogate_isolation_forest_bootstrap', False)),
+                            random_state=selection_random_state,
+                            n_jobs=selection_n_jobs,
+                        )
+
+                    if surrogate_one_class_method == 'elliptic_envelope':
+                        from sklearn.covariance import EllipticEnvelope
+
+                        contamination = _safe_float(selection_params.get('surrogate_isolation_forest_contamination', 0.05), 0.05)
+                        if not np.isfinite(contamination) or contamination <= 0 or contamination >= 0.5:
+                            contamination = 0.05
+                        support_fraction = _safe_float(selection_params.get('surrogate_elliptic_support_fraction', 0.95), 0.95)
+                        if not np.isfinite(support_fraction) or support_fraction <= 0 or support_fraction > 1:
+                            support_fraction = 0.95
+                        return EllipticEnvelope(
+                            contamination=float(contamination),
+                            support_fraction=float(support_fraction),
+                            assume_centered=_coerce_bool(selection_params.get('surrogate_elliptic_assume_centered', False)),
+                        )
+
+                    from sklearn.neighbors import LocalOutlierFactor
+
+                    contamination = _safe_float(selection_params.get('surrogate_isolation_forest_contamination', 0.05), 0.05)
+                    if not np.isfinite(contamination) or contamination <= 0 or contamination >= 0.5:
+                        contamination = 0.05
+                    n_neighbors = max(2, _safe_int(selection_params.get('surrogate_lof_n_neighbors', 35), 35))
+                    return LocalOutlierFactor(
+                        n_neighbors=int(n_neighbors),
+                        contamination=float(contamination),
+                        novelty=True,
+                    )
+
+                def _surrogate_cv_splits(
+                    X_local: np.ndarray,
+                    y_local: Optional[np.ndarray],
+                    task_local: str,
+                ):
+                    n_s = int(X_local.shape[0])
+                    if n_s <= 2:
+                        return [(np.arange(n_s, dtype=int), np.arange(n_s, dtype=int))]
+
+                    compatible_strategies = (
+                        'loocv',
+                        'kfold',
+                        'stratified_kfold',
+                        'timeseries',
+                        'repeated_kfold',
+                        'shuffle_split',
+                        'venetian_blinds',
+                        'moving_window',
+                        'bootstrap',
+                    )
+
+                    def _coerce_cv_cfg(cfg_raw: Any) -> Optional[Any]:
+                        cfg = cfg_raw
+                        if cfg is None:
+                            return None
+                        if isinstance(cfg, dict) and 'cv_config' in cfg:
+                            cfg = cfg.get('cv_config')
+                        if isinstance(cfg, dict):
+                            try:
+                                from chemometrics.cv_pipeline import CVConfig as _CVConfig
+
+                                cfg = _CVConfig.from_dict(cfg)
+                            except Exception as exc:
+                                raise ValueError(
+                                    "Invalid routed cv_config payload for surrogate variable-selection optimization. "
+                                    "Expected a CVConfig-compatible dictionary."
+                                ) from exc
+                        return cfg
+
+                    cfg_obj = _coerce_cv_cfg(effective_cv_config_value)
+
+                    if cfg_obj is not None:
+                        cfg_strategy = str(getattr(cfg_obj, 'cv_strategy', '') or '').strip().lower()
+                        cfg_enabled = True
+                        try:
+                            _enabled_fn = getattr(cfg_obj, 'is_enabled', None)
+                            if callable(_enabled_fn):
+                                cfg_enabled = bool(_enabled_fn())
+                            else:
+                                cfg_enabled = bool(getattr(cfg_obj, 'use_cv', True))
+                        except Exception:
+                            cfg_enabled = True
+
+                        if not cfg_enabled:
+                            raise ValueError(
+                                "Surrogate variable-selection optimization requires an enabled CV configuration (use_cv=True). "
+                                "Compatible cv_strategy values: " + ", ".join(compatible_strategies)
+                            )
+
+                        if cfg_strategy not in compatible_strategies:
+                            raise ValueError(
+                                "Unsupported cv_strategy for surrogate variable-selection optimization: "
+                                f"'{cfg_strategy or 'unknown'}'. Compatible values: "
+                                + ", ".join(compatible_strategies)
+                            )
+
+                        if cfg_strategy == 'stratified_kfold':
+                            if task_local != 'classification' or y_local is None:
+                                raise ValueError(
+                                    "cv_strategy='stratified_kfold' is only compatible with classification surrogate tasks "
+                                    "(n_class or one_class) with class labels."
+                                )
+                            y_strat = np.asarray(y_local, dtype=object).reshape(-1)
+                            uniq, counts = np.unique(y_strat, return_counts=True)
+                            min_count = int(np.min(counts)) if counts.size else 0
+                            if uniq.size < 2 or min_count < 2:
+                                raise ValueError(
+                                    "cv_strategy='stratified_kfold' requires at least 2 classes and at least 2 samples per class. "
+                                    "Compatible alternatives for this data include: loocv, kfold, repeated_kfold, shuffle_split, "
+                                    "venetian_blinds, moving_window, bootstrap."
+                                )
+
+                        try:
+                            from chemometrics.cv_pipeline import CVPipeline as _CVPipeline
+
+                            pipeline = _CVPipeline(cfg_obj)
+                            if cfg_strategy == 'stratified_kfold':
+                                splits = list(pipeline.splitter.get_splits(X_local, y=np.asarray(y_local, dtype=object).reshape(-1)))
+                            else:
+                                splits = list(pipeline.splitter.get_splits(X_local))
+
+                            splits = [
+                                (np.asarray(tr, dtype=int), np.asarray(te, dtype=int))
+                                for tr, te in splits
+                                if np.asarray(tr).size > 0 and np.asarray(te).size > 0
+                            ]
+                            if not splits:
+                                raise ValueError("configured strategy generated no non-empty train/test folds")
+                            return splits
+                        except Exception as exc:
+                            raise ValueError(
+                                "Failed to apply routed cv_config to surrogate variable-selection optimization. "
+                                f"Reason: {exc}. Compatible cv_strategy values: "
+                                + ", ".join(compatible_strategies)
+                            )
+
+                    if task_local == 'classification' and y_local is not None:
+                        try:
+                            from sklearn.model_selection import StratifiedKFold
+
+                            uniq, counts = np.unique(np.asarray(y_local, dtype=object), return_counts=True)
+                            min_count = int(np.min(counts)) if counts.size else 0
+                            if uniq.size >= 2 and min_count >= 2:
+                                n_splits = int(min(5, min_count, n_s))
+                                splitter = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
+                                return list(splitter.split(X_local, y_local))
+                        except Exception:
+                            pass
+                    try:
+                        from sklearn.model_selection import KFold
+
+                        n_splits = int(min(5, n_s))
+                        if n_splits < 2:
+                            n_splits = 2
+                        splitter = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+                        return list(splitter.split(X_local))
+                    except Exception:
+                        return [(np.arange(n_s, dtype=int), np.arange(n_s, dtype=int))]
+
+                def _build_nested_outer_splits() -> List[Tuple[np.ndarray, np.ndarray]]:
+                    X_full = np.asarray(selection_params.get('X_cal'), dtype=float)
+                    if X_full.ndim == 1:
+                        X_full = X_full.reshape(-1, 1)
+                    n_s = int(X_full.shape[0])
+                    if n_s <= 2:
+                        return [(np.arange(n_s, dtype=int), np.arange(n_s, dtype=int))]
+
+                    task_local = 'regression' if selection_task_type_norm == 'regression' else 'classification'
+                    y_for_split = None
+                    if task_local == 'classification':
+                        y_raw = np.asarray(selection_params.get('class_data_cal'), dtype=object)
+                        if y_raw.ndim >= 2:
+                            y_raw = y_raw[:, 0]
+                        y_for_split = y_raw.reshape(-1)
+                    elif nested_cv_outer_strategy == 'stratified_kfold':
+                        y_raw = np.asarray(selection_params.get('Y_cal'), dtype=float).reshape(-1)
+                        n_bins = max(2, min(int(nested_cv_outer_splits), 10))
+                        quantiles = np.linspace(0, 1, n_bins + 1)
+                        bin_edges = np.unique(np.quantile(y_raw, quantiles))
+                        if bin_edges.size <= 2:
+                            y_for_split = np.zeros_like(y_raw, dtype=int)
+                        else:
+                            y_for_split = np.digitize(y_raw, bin_edges[1:-1], right=True)
+
+                    try:
+                        from chemometrics.cv_pipeline import CVConfig as _OuterCVConfig, CVPipeline as _OuterCVPipeline
+
+                        cfg = _OuterCVConfig(
+                            use_cv=True,
+                            cv_strategy=nested_cv_outer_strategy,
+                            n_splits=max(2, min(int(nested_cv_outer_splits), n_s)),
+                            random_state=int(nested_cv_outer_random_state),
+                            shuffle=bool(nested_cv_outer_shuffle),
+                        )
+                        if nested_cv_outer_strategy == 'loocv':
+                            cfg.n_splits = int(n_s)
+                        pipeline = _OuterCVPipeline(cfg)
+                        if nested_cv_outer_strategy == 'stratified_kfold':
+                            splits_raw = list(pipeline.splitter.get_splits(X_full, y=np.asarray(y_for_split, dtype=object).reshape(-1)))
+                        else:
+                            splits_raw = list(pipeline.splitter.get_splits(X_full))
+                        splits = [
+                            (np.asarray(tr, dtype=int), np.asarray(te, dtype=int))
+                            for tr, te in splits_raw
+                            if np.asarray(tr).size > 0 and np.asarray(te).size > 0
+                        ]
+                        if splits:
+                            return splits
+                    except Exception:
+                        pass
+
+                    if task_local == 'classification' and y_for_split is not None:
+                        try:
+                            from sklearn.model_selection import StratifiedKFold
+
+                            uniq, counts = np.unique(np.asarray(y_for_split, dtype=object), return_counts=True)
+                            min_count = int(np.min(counts)) if counts.size else 0
+                            if uniq.size >= 2 and min_count >= 2:
+                                n_splits = int(min(max(2, int(nested_cv_outer_splits)), min_count, n_s))
+                                splitter = StratifiedKFold(
+                                    n_splits=n_splits,
+                                    shuffle=bool(nested_cv_outer_shuffle),
+                                    random_state=int(nested_cv_outer_random_state) if nested_cv_outer_shuffle else None,
+                                )
+                                return list(splitter.split(X_full, y_for_split))
+                        except Exception:
+                            pass
+
+                    try:
+                        from sklearn.model_selection import KFold
+
+                        n_splits = int(min(max(2, int(nested_cv_outer_splits)), n_s))
+                        splitter = KFold(
+                            n_splits=n_splits,
+                            shuffle=bool(nested_cv_outer_shuffle),
+                            random_state=int(nested_cv_outer_random_state) if nested_cv_outer_shuffle else None,
+                        )
+                        return list(splitter.split(X_full))
+                    except Exception:
+                        return [(np.arange(n_s, dtype=int), np.arange(n_s, dtype=int))]
+
+                def _build_outer_fold_selection_params(train_idx: np.ndarray, test_idx: np.ndarray) -> Dict[str, Any]:
+                    fold_params = copy.deepcopy(selection_params)
+
+                    X_full = np.asarray(selection_params.get('X_cal'), dtype=float)
+                    fold_params['X_cal'] = np.asarray(X_full[train_idx], dtype=float)
+                    fold_params['X_val'] = np.asarray(X_full[test_idx], dtype=float)
+
+                    if selection_task_type_norm == 'regression':
+                        Y_full = np.asarray(selection_params.get('Y_cal'), dtype=float)
+                        fold_params['Y_cal'] = np.asarray(Y_full[train_idx], dtype=float)
+                        fold_params['Y_val'] = np.asarray(Y_full[test_idx], dtype=float)
+                    else:
+                        cls_full = np.asarray(selection_params.get('class_data_cal'), dtype=object)
+                        fold_params['class_data_cal'] = np.asarray(cls_full[train_idx], dtype=object)
+                        fold_params['class_data_val'] = np.asarray(cls_full[test_idx], dtype=object)
+
+                    return fold_params
+
+                def _surrogate_indices_for_method(candidate_count: int) -> Optional[np.ndarray]:
+                    n_select = max(1, min(int(_n_features), int(candidate_count)))
+                    X_full = np.asarray(selection_params.get('X_cal'), dtype=float)
+                    if selection_method_norm in ('vip', 'spa'):
+                        from chemometrics.variable_selection_wrapper import _select_indices_single  # type: ignore
+
+                        y_for_method = y_reg if surrogate_task_norm == 'regression' else y_cls
+                        cv_splits_local = _surrogate_cv_splits(X_full, y_for_method, surrogate_task_norm)
+                        sel = _select_indices_single(
+                            X=X_full,
+                            y=np.asarray(y_for_method) if y_for_method is not None else None,
+                            task_type=surrogate_task_norm,
+                            selection_method=selection_method_norm,
+                            n_select=n_select,
+                            cv_splits=cv_splits_local,
+                            sfs_direction=str(selection_params.get('sfs_direction', 'forward') or 'forward'),
+                            vip_n_components=_safe_int(selection_params.get('vip_n_components', 2), 2),
+                            interval_pls_n_components=_safe_int(selection_params.get('interval_pls_n_components', 2), 2),
+                            classification_family_hint=classification_family_hint,
+                        )
+                        return np.asarray(sorted(set(int(v) for v in np.asarray(sel.indices, dtype=int).tolist())), dtype=int)
+
+                    if selection_method_norm in ('rfe', 'rfecv'):
+                        if selection_task_type_norm == 'one_class':
+                            raise ValueError("RFE/RFECV surrogate selection is not supported for one_class task type.")
+                        try:
+                            from sklearn.feature_selection import RFE
+                        except Exception as exc:
+                            raise ValueError("scikit-learn feature_selection dependencies are required for RFE/RFECV.") from exc
+
+                        if surrogate_task_norm == 'regression':
+                            if surrogate_regression_method == 'svr':
+                                _kernel = _effective_svr_kernel()
+                                if _kernel != 'linear':
+                                    raise ValueError(
+                                        "RFE/RFECV with surrogate_regression_method='svr' requires surrogate_svr_kernel='linear' "
+                                        "because non-linear SVR does not expose feature importances. "
+                                        "Compatible regression surrogate methods for RFE/RFECV: pls, ridge, random_forest, svr(linear)."
+                                    )
+                            estimator = _build_regression_surrogate_estimator(X_full)
+                            target = np.asarray(y_reg, dtype=float).reshape(-1)
+                        else:
+                            if surrogate_n_class_method == 'svc':
+                                _kernel = _effective_svc_kernel()
+                                if _kernel != 'linear':
+                                    raise ValueError(
+                                        "RFE/RFECV with surrogate_n_class_method='svc' requires surrogate_svc_kernel='linear' "
+                                        "because non-linear SVC does not expose feature importances. "
+                                        "Compatible n_class surrogate methods for RFE/RFECV: logistic, random_forest, svc(linear)."
+                                    )
+                            estimator = _build_n_class_surrogate_estimator()
+                            target = np.asarray(y_cls, dtype=object).reshape(-1)
+
+                        selector = RFE(estimator=estimator, n_features_to_select=int(n_select), step=1)
+                        selector.fit(X_full, target)
+                        idx = np.where(np.asarray(selector.support_, dtype=bool))[0]
+                        return np.asarray(sorted(set(int(v) for v in idx.tolist())), dtype=int)
+
+                    return None
+
+                def _score_with_surrogate(indices_subset: np.ndarray) -> Dict[str, Optional[float]]:
+                    metrics_out: Dict[str, Optional[float]] = {
+                        'rmse_cal': None,
+                        'rmse_cv': None,
+                        'rmse_val': None,
+                        'r2_cal': None,
+                        'r2_cv': None,
+                        'r2_val': None,
+                        'accuracy_cal': None,
+                        'accuracy_cv': None,
+                        'accuracy_val': None,
+                        'f1_cal': None,
+                        'f1_cv': None,
+                        'f1_val': None,
+                        'precision_cal': None,
+                        'precision_cv': None,
+                        'precision_val': None,
+                        'recall_cal': None,
+                        'recall_cv': None,
+                        'recall_val': None,
+                    }
+
+                    idx = np.asarray(indices_subset, dtype=int).reshape(-1)
+                    if idx.size == 0:
+                        return metrics_out
+
+                    X_full = np.asarray(selection_params.get('X_cal'), dtype=float)
+                    X_sel = np.asarray(X_full[:, idx], dtype=float)
+
+                    if selection_task_type_norm == 'regression':
+                        try:
+                            from sklearn.metrics import r2_score
+                        except Exception:
+                            return metrics_out
+
+                        y_full = np.asarray(y_reg, dtype=float).reshape(-1)
+                        cv_pairs = _surrogate_cv_splits(X_sel, y_full, 'regression')
+                        y_pred_cv = np.zeros_like(y_full, dtype=float)
+                        cv_ok = np.zeros_like(y_full, dtype=bool)
+                        for tr, te in cv_pairs:
+                            try:
+                                model = _build_regression_surrogate_estimator(X_sel[tr])
+                                model.fit(X_sel[tr], y_full[tr].reshape(-1, 1) if surrogate_regression_method == 'pls' else y_full[tr])
+                                pred = np.asarray(model.predict(X_sel[te])).reshape(-1)
+                                y_pred_cv[te] = pred
+                                cv_ok[te] = True
+                            except Exception:
+                                continue
+                        if np.any(cv_ok):
+                            y_true_cv = y_full[cv_ok]
+                            y_hat_cv = y_pred_cv[cv_ok]
+                            rmse_cv = float(np.sqrt(np.mean((y_hat_cv - y_true_cv) ** 2)))
+                            metrics_out['rmse_cv'] = rmse_cv
+                            try:
+                                metrics_out['r2_cv'] = float(r2_score(y_true_cv, y_hat_cv))
+                            except Exception:
+                                metrics_out['r2_cv'] = None
+
+                        try:
+                            model_full = _build_regression_surrogate_estimator(X_sel)
+                            model_full.fit(X_sel, y_full.reshape(-1, 1) if surrogate_regression_method == 'pls' else y_full)
+                            pred_cal = np.asarray(model_full.predict(X_sel)).reshape(-1)
+                            metrics_out['rmse_cal'] = float(np.sqrt(np.mean((pred_cal - y_full) ** 2)))
+                            metrics_out['r2_cal'] = float(r2_score(y_full, pred_cal))
+                        except Exception:
+                            pass
+                        return metrics_out
+
+                    if selection_task_type_norm == 'n_class':
+                        try:
+                            from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+                        except Exception:
+                            return metrics_out
+
+                        y_full_cls = np.asarray(y_cls, dtype=object).reshape(-1)
+                        cv_pairs = _surrogate_cv_splits(X_sel, y_full_cls, 'classification')
+                        pred_all = np.asarray([None] * int(y_full_cls.shape[0]), dtype=object)
+                        cv_ok = np.zeros(y_full_cls.shape[0], dtype=bool)
+                        for tr, te in cv_pairs:
+                            try:
+                                clf = _build_n_class_surrogate_estimator()
+                                clf.fit(X_sel[tr], y_full_cls[tr])
+                                pred = np.asarray(clf.predict(X_sel[te]), dtype=object).reshape(-1)
+                                pred_all[te] = pred
+                                cv_ok[te] = True
+                            except Exception:
+                                continue
+                        if np.any(cv_ok):
+                            y_true_cv = y_full_cls[cv_ok]
+                            y_hat_cv = pred_all[cv_ok]
+                            metrics_out['accuracy_cv'] = float(accuracy_score(y_true_cv, y_hat_cv))
+                            metrics_out['f1_cv'] = float(f1_score(y_true_cv, y_hat_cv, average='macro', zero_division=0))
+                            metrics_out['precision_cv'] = float(precision_score(y_true_cv, y_hat_cv, average='macro', zero_division=0))
+                            metrics_out['recall_cv'] = float(recall_score(y_true_cv, y_hat_cv, average='macro', zero_division=0))
+                        try:
+                            clf_full = _build_n_class_surrogate_estimator()
+                            clf_full.fit(X_sel, y_full_cls)
+                            pred_cal = np.asarray(clf_full.predict(X_sel), dtype=object).reshape(-1)
+                            metrics_out['accuracy_cal'] = float(accuracy_score(y_full_cls, pred_cal))
+                            metrics_out['f1_cal'] = float(f1_score(y_full_cls, pred_cal, average='macro', zero_division=0))
+                            metrics_out['precision_cal'] = float(precision_score(y_full_cls, pred_cal, average='macro', zero_division=0))
+                            metrics_out['recall_cal'] = float(recall_score(y_full_cls, pred_cal, average='macro', zero_division=0))
+                        except Exception:
+                            pass
+                        return metrics_out
+
+                    # one_class surrogate scoring
+                    try:
+                        from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+                        from chemometrics.classification_analysis import _resolve_one_class_fit_mask
+                    except Exception:
+                        return metrics_out
+
+                    y_raw = np.asarray(y_cls, dtype=object).reshape(-1)
+                    if y_raw.size == 0:
+                        return metrics_out
+
+                    reference_input = one_class_reference_input
+                    if reference_input is None or str(reference_input).strip() == '':
+                        ordered_unique_labels: List[str] = []
+                        seen_labels: set = set()
+                        for _lbl in np.asarray(y_raw, dtype=object).reshape(-1).tolist():
+                            _s = str(_lbl)
+                            if _s not in seen_labels:
+                                seen_labels.add(_s)
+                                ordered_unique_labels.append(_s)
+                        if ordered_unique_labels:
+                            reference_input = ordered_unique_labels[0]
+                            for _candidate in ordered_unique_labels:
+                                if str(_candidate) != str(one_class_unknown_label):
+                                    reference_input = _candidate
+                                    break
+
+                    fit_mask, _reference_class = _resolve_one_class_fit_mask(
+                        labels=y_raw,
+                        one_class_reference_class=reference_input,
+                    )
+                    y_bin = np.where(np.asarray(fit_mask, dtype=bool), 1, -1)
+                    cv_pairs = _surrogate_cv_splits(X_sel, y_bin, 'classification')
+                    pred_bin = np.zeros_like(y_bin, dtype=int)
+                    cv_ok = np.zeros_like(y_bin, dtype=bool)
+                    for tr, te in cv_pairs:
+                        try:
+                            inlier_train_mask = (y_bin[tr] == 1)
+                            if not np.any(inlier_train_mask):
+                                continue
+                            model = _build_one_class_surrogate_estimator()
+                            model.fit(X_sel[tr][inlier_train_mask])
+                            pred = np.asarray(model.predict(X_sel[te]), dtype=int).reshape(-1)
+                            pred_bin[te] = pred
+                            cv_ok[te] = True
+                        except Exception:
+                            continue
+                    if np.any(cv_ok):
+                        y_true_cv = y_bin[cv_ok]
+                        y_hat_cv = pred_bin[cv_ok]
+                        metrics_out['accuracy_cv'] = float(accuracy_score(y_true_cv, y_hat_cv))
+                        metrics_out['f1_cv'] = float(f1_score(y_true_cv, y_hat_cv, pos_label=1, zero_division=0))
+                        metrics_out['precision_cv'] = float(precision_score(y_true_cv, y_hat_cv, pos_label=1, zero_division=0))
+                        metrics_out['recall_cv'] = float(recall_score(y_true_cv, y_hat_cv, pos_label=1, zero_division=0))
+                    try:
+                        inlier_mask_full = (y_bin == 1)
+                        if np.any(inlier_mask_full):
+                            full_model = _build_one_class_surrogate_estimator()
+                            full_model.fit(X_sel[inlier_mask_full])
+                            pred_cal = np.asarray(full_model.predict(X_sel), dtype=int).reshape(-1)
+                            metrics_out['accuracy_cal'] = float(accuracy_score(y_bin, pred_cal))
+                            metrics_out['f1_cal'] = float(f1_score(y_bin, pred_cal, pos_label=1, zero_division=0))
+                            metrics_out['precision_cal'] = float(precision_score(y_bin, pred_cal, pos_label=1, zero_division=0))
+                            metrics_out['recall_cal'] = float(recall_score(y_bin, pred_cal, pos_label=1, zero_division=0))
+                    except Exception:
+                        pass
+                    return metrics_out
+
+                def _mean_pairwise_jaccard(index_sets: List[np.ndarray]) -> float:
+                    if len(index_sets) < 2:
+                        return float('nan')
+                    total = 0.0
+                    pairs = 0
+                    for i in range(len(index_sets)):
+                        a = set(int(v) for v in np.asarray(index_sets[i], dtype=int).tolist())
+                        for j in range(i + 1, len(index_sets)):
+                            b = set(int(v) for v in np.asarray(index_sets[j], dtype=int).tolist())
+                            union = a.union(b)
+                            if not union:
+                                continue
+                            inter = a.intersection(b)
+                            total += float(len(inter) / len(union))
+                            pairs += 1
+                    return float(total / pairs) if pairs > 0 else float('nan')
+
+                def _evaluate_candidate(
+                    candidate_count: int,
+                    selected_indices_override: Optional[np.ndarray],
+                    source_params_override: Optional[Dict[str, Any]] = None,
+                    score_split: str = 'cv',
+                    score_only: bool = False,
+                ) -> Tuple[Dict[str, Any], Dict[str, Dict[str, Any]], Dict[str, Optional[float]], float]:
+                    nonlocal history_suppression_depth
+                    source_params = source_params_override if isinstance(source_params_override, dict) else selection_params
+                    subset_cache_key: Optional[Tuple[int, ...]] = None
+                    use_subset_cache = (source_params is selection_params) and str(score_split).strip().lower() == 'cv'
+                    if selected_indices_override is not None and use_subset_cache:
+                        _idx_norm = np.asarray(selected_indices_override, dtype=int).reshape(-1)
+                        subset_cache_key = tuple(sorted(set(int(v) for v in _idx_norm.tolist())))
+                        if bool(score_only):
+                            cached_score = subset_score_cache.get(subset_cache_key)
+                            if cached_score is not None:
+                                return ({}, {}, {}, float(cached_score))
+
+                    # During score-only candidate optimization we avoid routed validation inputs
+                    # to prevent unnecessary compute/leakage. Validation remains available for
+                    # non-score-only candidate runs (trajectory rows/final selected execution).
+                    use_internal_optimization_view = bool(score_only)
+                    if use_internal_optimization_view:
+                        source_params_effective = copy.deepcopy(source_params)
+                        source_params_effective['X_val'] = None
+                        source_params_effective['Y_val'] = None
+                        source_params_effective['class_data_val'] = None
+                    else:
+                        source_params_effective = source_params
+
+                    method_subset_override = selected_indices_override
+                    if optimize_for_norm == 'surrogate_function' and method_subset_override is None:
+                        method_subset_override = _surrogate_indices_for_method(int(candidate_count))
+
+                    wrapper_task_type = 'regression' if selection_task_type_norm == 'regression' else 'classification'
+
+                    candidate_payload = select_variables_for_workflow(
+                        X_cal=source_params_effective.get('X_cal'),
+                        Y_cal=source_params_effective.get('Y_cal'),
+                        Y_val=source_params_effective.get('Y_val'),
+                        X_val=source_params_effective.get('X_val'),
+                        class_data_cal=source_params_effective.get('class_data_cal'),
+                        class_data_val=source_params_effective.get('class_data_val'),
+                        axis_n_info=source_params_effective.get('axis_n_info'),
+                        axis_t_info=source_params_effective.get('axis_t_info'),
+                        task_type=wrapper_task_type,
+                        selection_method=str(selection_method_norm),
+                        n_features_to_select=int(candidate_count),
+                        cv_config=effective_cv_config_payload if effective_cv_config_payload else None,
+                        sfs_direction=str(source_params_effective.get('sfs_direction', 'forward') or 'forward'),
+                        vip_n_components=_safe_int(source_params_effective.get('vip_n_components', 2), 2),
+                        interval_pls_n_components=_safe_int(source_params_effective.get('interval_pls_n_components', 2), 2),
+                        selection_random_state=selection_random_state,
+                        selection_n_jobs=selection_n_jobs,
+                        mcuve_n_subsets=mcuve_n_subsets,
+                        mcuve_n_samples_per_subset=mcuve_n_samples_per_subset,
+                        cars_n_cars_runs=cars_n_cars_runs,
+                        cars_n_sample_runs=cars_n_sample_runs,
+                        cars_fit_samples_ratio=cars_fit_samples_ratio,
+                        random_frog_n_iterations=random_frog_n_iterations,
+                        random_frog_n_initial_features=random_frog_n_initial_features,
+                        random_frog_variance_factor=random_frog_variance_factor,
+                        random_frog_subset_expansion_factor=random_frog_subset_expansion_factor,
+                        random_frog_acceptance_factor=random_frog_acceptance_factor,
+                        interval_width=interval_width,
+                        vissa_n_submodels=vissa_n_submodels,
+                        vissa_ratio_submodel_selection=vissa_ratio_submodel_selection,
+                        vissa_max_iter=vissa_max_iter,
+                        selection_override_file_path=selection_override_file_path,
+                        selected_indices_zero_based=method_subset_override,
+                        classification_family_hint=classification_family_hint,
+                    )
+
+                    if effective_cv_config_value is not None:
+                        candidate_payload['cv_config'] = effective_cv_config_value
+                    if effective_cv_report_value is not None:
+                        candidate_payload['cv_report'] = effective_cv_report_value
+
+                    if optimize_for_norm == 'surrogate_function':
+                        selected_idx = np.asarray(candidate_payload.get('selected_variable_indices'), dtype=int).reshape(-1)
+                        nested_metrics = _score_with_surrogate(selected_idx)
+                        candidate_task = str(selection_task_type_norm)
+                        candidate_score = _score_candidate_from_nested_metrics_with_split(
+                            candidate_task,
+                            nested_metrics,
+                            optimization_metric_norm,
+                            split_name=score_split,
+                        )
+                        candidate_outputs = {}
+                    else:
+                        candidate_outputs = copy.deepcopy(baseline_outputs)
+                        if override_block_inputs:
+                            _apply_variable_selection_to_snapshot(
+                                candidate_outputs,
+                                candidate_payload,
+                                source_payload=source_params_effective,
+                                clear_validation=bool(use_internal_optimization_view),
+                            )
+                        _apply_cv_config_to_snapshot(
+                            candidate_outputs,
+                            cv_config_value=effective_cv_config_value,
+                            cv_report_value=effective_cv_report_value,
+                        )
+
+                        candidate_outputs[selection_instance_alias] = copy.deepcopy(candidate_payload)
+                        variable_selection_stack_context.append(variable_selection_context_entry)
+                        if bool(score_only):
+                            history_suppression_depth += 1
+                        try:
+                            _execute_range(body_start, body_end, candidate_outputs)
+                        finally:
+                            if bool(score_only):
+                                history_suppression_depth = max(0, int(history_suppression_depth) - 1)
+                            if variable_selection_stack_context:
+                                variable_selection_stack_context.pop()
+                        _, nested_payload = _find_last_regular_payload(candidate_outputs, body_start, body_end)
+
+                        nested_metrics = _extract_nested_split_metrics(nested_payload)
+                        candidate_task = str(selection_task_type_norm)
+                        candidate_score = _score_candidate_from_nested_metrics_with_split(
+                            candidate_task,
+                            nested_metrics,
+                            optimization_metric_norm,
+                            split_name=score_split,
+                        )
+
+                    if subset_cache_key is not None:
+                        subset_score_cache[subset_cache_key] = float(candidate_score)
+
+                    if bool(score_only):
+                        return ({}, {}, {}, float(candidate_score))
+
+                    return candidate_payload, candidate_outputs, nested_metrics, candidate_score
+
+                sfs_direction_norm = str(selection_params.get('sfs_direction', 'forward') or 'forward').strip().lower()
+                if sfs_direction_norm not in ('forward', 'backward'):
+                    sfs_direction_norm = 'forward'
+
+                if selection_method_norm == 'sfs' and not override_file_mode and int(_n_features) >= 80:
+                    _append_execution_report_entry(
+                        instance_alias=selection_instance_alias,
+                        base_alias=base_alias,
+                        level='warning',
+                        code='workflow_variable_selection_sfs_large_feature_space',
+                        text='workflow_variable_selection_sfs_large_feature_space',
+                        source='workflow_control',
+                        details={
+                            'function': 'workflow_variable_selection_start',
+                            'n_features': int(_n_features),
+                            'sfs_direction': sfs_direction_norm,
+                            'optimization_mode': optimize_for_norm,
+                        },
+                    )
+
+                def _nested_sfs_indices(
+                    candidate_count: int,
+                    source_params_override: Optional[Dict[str, Any]] = None,
+                ) -> Tuple[np.ndarray, bool]:
+                    source_params = source_params_override if isinstance(source_params_override, dict) else selection_params
+                    X_source = np.asarray(source_params.get('X_cal'), dtype=float)
+                    n_features_local = int(X_source.shape[1])
+                    n_select = max(1, min(int(n_features_local), int(candidate_count)))
+                    used_fallback = False
+
+                    def _score_subset(indices: List[int]) -> float:
+                        key = tuple(sorted(set(int(v) for v in indices)))
+                        if len(key) == 0:
+                            return float('-inf')
+                        idx_array = np.asarray(key, dtype=int)
+                        _, _, _, _score = _evaluate_candidate(
+                            int(candidate_count),
+                            idx_array,
+                            source_params_override=source_params,
+                            score_split='cv',
+                            score_only=True,
+                        )
+                        return float(_score)
+
+                    if sfs_direction_norm == 'backward':
+                        current = list(range(int(n_features_local)))
+                        while len(current) > n_select:
+                            best_local_score = float('-inf')
+                            best_local_subset: Optional[List[int]] = None
+                            for feat in current:
+                                trial = [v for v in current if v != feat]
+                                trial_score = _score_subset(trial)
+                                if (best_local_subset is None) or (trial_score >= best_local_score):
+                                    best_local_score = trial_score
+                                    best_local_subset = trial
+                            if best_local_subset is None:
+                                break
+                            current = best_local_subset
+                        if len(current) == 0 and int(n_features_local) > 0:
+                            current = [int(v) for v in range(min(n_select, int(n_features_local)))]
+                            used_fallback = True
+                        return np.asarray(sorted(set(int(v) for v in current)), dtype=int), used_fallback
+
+                    current_set: List[int] = []
+                    current_pool = list(range(int(n_features_local)))
+                    while len(current_set) < n_select:
+                        best_feature: Optional[int] = None
+                        best_local_score = float('-inf')
+                        for feat in current_pool:
+                            if feat in current_set:
+                                continue
+                            trial = current_set + [int(feat)]
+                            trial_score = _score_subset(trial)
+                            if (best_feature is None) or (trial_score >= best_local_score):
+                                best_local_score = trial_score
+                                best_feature = int(feat)
+                        if best_feature is None:
+                            break
+                        current_set.append(best_feature)
+
+                    # Safety fallback: if all candidate evaluations are non-finite or tied,
+                    # guarantee a non-empty deterministic subset instead of raising downstream.
+                    if len(current_set) == 0 and len(current_pool) > 0:
+                        current_set = [int(v) for v in current_pool[:n_select]]
+                        used_fallback = True
+
+                    return np.asarray(sorted(set(int(v) for v in current_set)), dtype=int), used_fallback
+
+                def _run_candidate_for_count(
+                    candidate_count: int,
+                    source_params_override: Optional[Dict[str, Any]] = None,
+                    score_split: str = 'cv',
+                ) -> Tuple[Dict[str, Any], Dict[str, Dict[str, Any]], Dict[str, Optional[float]], float]:
+                    source_params = source_params_override if isinstance(source_params_override, dict) else selection_params
+                    X_source = np.asarray(source_params.get('X_cal'), dtype=float)
+                    n_features_local = int(X_source.shape[1])
+
+                    if selection_method_norm == 'ga' and not override_file_mode:
+                        n_select = max(1, min(int(n_features_local), int(candidate_count)))
+
+                        def _random_mask(rng: np.random.Generator) -> np.ndarray:
+                            idx = rng.choice(int(n_features_local), size=n_select, replace=False)
+                            mask = np.zeros(int(n_features_local), dtype=bool)
+                            mask[idx] = True
+                            return mask
+
+                        def _repair_mask(mask: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+                            out = np.asarray(mask, dtype=bool).copy()
+                            on = np.where(out)[0]
+                            off = np.where(~out)[0]
+                            if on.size > n_select:
+                                drop = rng.choice(on, size=on.size - n_select, replace=False)
+                                out[drop] = False
+                            elif on.size < n_select and off.size > 0:
+                                add = rng.choice(off, size=min(n_select - on.size, off.size), replace=False)
+                                out[add] = True
+                            return out
+
+                        def _select_parent(
+                            population_local: List[np.ndarray],
+                            fitness_local: List[float],
+                            elites_local: List[np.ndarray],
+                            rng_local: np.random.Generator,
+                        ) -> np.ndarray:
+                            # Backward-compatible behavior: tournament_size<=1 samples uniformly from elites.
+                            if int(ga_tournament_size) <= 1 or len(population_local) <= 1:
+                                return np.asarray(elites_local[int(rng_local.integers(0, len(elites_local)))], dtype=bool).copy()
+
+                            size = min(int(ga_tournament_size), len(population_local))
+                            cand_idx = np.asarray(rng_local.choice(len(population_local), size=size, replace=False), dtype=int)
+                            best_idx = int(cand_idx[0])
+                            best_fit = float(fitness_local[best_idx])
+                            for idx_candidate in cand_idx[1:]:
+                                fit_candidate = float(fitness_local[int(idx_candidate)])
+                                if fit_candidate > best_fit:
+                                    best_fit = fit_candidate
+                                    best_idx = int(idx_candidate)
+                            return np.asarray(population_local[best_idx], dtype=bool).copy()
+
+                        restart_indices: List[np.ndarray] = []
+                        restart_scores: List[float] = []
+                        restart_histories: List[List[float]] = []
+                        ga_evaluations = 0
+
+                        for restart_idx in range(ga_n_restarts):
+                            rng = np.random.default_rng(int(ga_random_state) + int(restart_idx))
+                            population = [_random_mask(rng) for _ in range(ga_population_size)]
+                            history: List[float] = []
+                            best_generation_score = float('-inf')
+                            stagnant_generations = 0
+                            restart_terminated_early = False
+
+                            for _ in range(ga_generations):
+                                fitness: List[float] = []
+                                for mask in population:
+                                    idx_subset = np.where(mask)[0]
+                                    _, _, _, score = _evaluate_candidate(
+                                        int(candidate_count),
+                                        np.asarray(idx_subset, dtype=int),
+                                        source_params_override=source_params,
+                                        score_split='cv',
+                                        score_only=True,
+                                    )
+                                    ga_evaluations += 1
+                                    fitness.append(float(score))
+
+                                    if ga_max_evaluations > 0 and ga_evaluations >= ga_max_evaluations:
+                                        break
+
+                                finite_scores = [float(v) for v in fitness if np.isfinite(float(v))]
+                                if len(finite_scores) == 0:
+                                    raise ValueError(
+                                        "Genetic algorithm candidate scoring produced no finite fitness values. "
+                                        "Check nested metrics availability/CV configuration for variable selection optimization."
+                                    )
+
+                                order = np.argsort(np.asarray(fitness, dtype=float))[::-1]
+                                population = [population[i] for i in order]
+                                fitness = [fitness[i] for i in order]
+                                history.append(float(fitness[0]) if fitness else float('-inf'))
+
+                                current_best = float(fitness[0]) if fitness else float('-inf')
+                                if np.isfinite(current_best) and (
+                                    (not np.isfinite(best_generation_score))
+                                    or (current_best > (best_generation_score + float(ga_min_improvement)))
+                                ):
+                                    best_generation_score = current_best
+                                    stagnant_generations = 0
+                                else:
+                                    stagnant_generations += 1
+
+                                if ga_patience_generations > 0 and stagnant_generations >= ga_patience_generations:
+                                    restart_terminated_early = True
+                                if ga_max_evaluations > 0 and ga_evaluations >= ga_max_evaluations:
+                                    restart_terminated_early = True
+                                if restart_terminated_early:
+                                    break
+
+                                elites = population[: max(2, len(population) // 5)]
+                                next_population = elites.copy()
+                                while len(next_population) < len(population):
+                                    p1 = _select_parent(population, fitness, elites, rng)
+                                    p2 = _select_parent(population, fitness, elites, rng)
+                                    if int(n_features_local) <= 1 or rng.random() >= float(ga_crossover_rate):
+                                        child = p1.copy()
+                                    else:
+                                        cross_point = int(rng.integers(1, int(n_features_local)))
+                                        child = np.concatenate([p1[:cross_point], p2[cross_point:]])
+                                    mut_mask = rng.random(int(n_features_local)) < float(ga_mutation_rate)
+                                    child = np.logical_xor(child, mut_mask)
+                                    child = _repair_mask(child, rng)
+                                    next_population.append(child)
+                                population = next_population
+
+                                if ga_max_evaluations > 0 and ga_evaluations >= ga_max_evaluations:
+                                    break
+
+                            best_mask = population[0]
+                            best_idx = np.where(best_mask)[0]
+                            idx_sorted = np.asarray(sorted(np.unique(best_idx.tolist())), dtype=int)
+                            _, _, _, restart_score = _evaluate_candidate(
+                                int(candidate_count),
+                                idx_sorted,
+                                source_params_override=source_params,
+                                score_split='cv',
+                            )
+                            restart_indices.append(idx_sorted)
+                            restart_scores.append(float(restart_score))
+                            restart_histories.append(history)
+
+                            if ga_max_evaluations > 0 and ga_evaluations >= ga_max_evaluations:
+                                break
+
+                        finite_restart_scores = [float(v) for v in restart_scores if np.isfinite(float(v))]
+                        if len(finite_restart_scores) == 0:
+                            raise ValueError(
+                                "Genetic algorithm restarts produced no finite candidate scores. "
+                                "Check nested metrics/CV configuration for variable selection optimization."
+                            )
+
+                        executed_restarts = int(len(restart_indices))
+                        if executed_restarts <= 0:
+                            raise ValueError(
+                                "Genetic algorithm executed no valid restarts for frequency consensus."
+                            )
+
+                        best_run_idx = int(np.argmax(np.asarray(restart_scores, dtype=float)))
+                        selection_frequency = np.zeros(int(n_features_local), dtype=float)
+                        if ga_frequency_weighting == 'score_weighted':
+                            restart_scores_arr = np.asarray(restart_scores, dtype=float)
+                            finite_mask = np.isfinite(restart_scores_arr)
+                            finite_scores = restart_scores_arr[finite_mask]
+                            if finite_scores.size <= 0:
+                                restart_weights = np.ones(executed_restarts, dtype=float)
+                            else:
+                                score_min = float(np.min(finite_scores))
+                                score_max = float(np.max(finite_scores))
+                                if np.isclose(score_min, score_max):
+                                    restart_weights = np.ones(executed_restarts, dtype=float)
+                                else:
+                                    restart_weights = np.zeros(executed_restarts, dtype=float)
+                                    for w_idx in range(executed_restarts):
+                                        score_val = float(restart_scores_arr[w_idx])
+                                        if not np.isfinite(score_val):
+                                            score_val = score_min
+                                        restart_weights[w_idx] = (score_val - score_min) / (score_max - score_min)
+                                    restart_weights += 1e-6
+                        else:
+                            restart_weights = np.ones(executed_restarts, dtype=float)
+
+                        weight_sum = float(np.sum(restart_weights))
+                        if (not np.isfinite(weight_sum)) or weight_sum <= 0.0:
+                            restart_weights = np.ones(executed_restarts, dtype=float)
+                            weight_sum = float(np.sum(restart_weights))
+
+                        for r_idx, idx_sorted in enumerate(restart_indices):
+                            selection_frequency[idx_sorted] += float(restart_weights[r_idx])
+                        selection_frequency /= float(weight_sum)
+
+                        if ga_consensus_mode in ('frequency_top_k', 'frequency_threshold') and executed_restarts < 3:
+                            _append_execution_report_entry(
+                                instance_alias=selection_instance_alias,
+                                base_alias=base_alias,
+                                level='warning',
+                                code='workflow_variable_selection_ga_frequency_low_restarts',
+                                text='workflow_variable_selection_ga_frequency_low_restarts',
+                                source='workflow_control',
+                                details={
+                                    'function': 'workflow_variable_selection_start',
+                                    'ga_consensus_mode': str(ga_consensus_mode),
+                                    'ga_executed_restarts': int(executed_restarts),
+                                    'ga_configured_restarts': int(ga_n_restarts),
+                                },
+                            )
+
+                        if ga_consensus_mode == 'best_run':
+                            chosen_idx = restart_indices[best_run_idx]
+                            frequency_effective_threshold = float('nan')
+                        elif ga_consensus_mode == 'frequency_top_k':
+                            # Deterministic tie-breaker: higher frequency first, then lower feature index.
+                            order = np.lexsort((np.arange(int(n_features_local), dtype=int), -selection_frequency))
+                            chosen_order = np.asarray(order[:n_select], dtype=int)
+                            chosen_idx = np.asarray(sorted(chosen_order.tolist()), dtype=int)
+                            frequency_effective_threshold = float(np.min(selection_frequency[chosen_order])) if chosen_order.size > 0 else float('nan')
+
+                            # Inform users whenever tied frequencies appear in top-k consensus ranking.
+                            freq_rounded = np.round(np.asarray(selection_frequency, dtype=float), 12)
+                            _, tie_counts = np.unique(freq_rounded, return_counts=True)
+                            tie_group_count = int(np.sum(tie_counts > 1))
+                            if tie_group_count > 0 and chosen_order.size > 0:
+                                cutoff_frequency = float(selection_frequency[int(chosen_order[-1])])
+                                tied_at_cutoff = np.where(np.isclose(selection_frequency, cutoff_frequency))[0]
+                                tied_selected = np.intersect1d(tied_at_cutoff, chosen_order)
+                                tied_unselected = np.setdiff1d(tied_at_cutoff, chosen_order)
+                                _append_execution_report_entry(
+                                    instance_alias=selection_instance_alias,
+                                    base_alias=base_alias,
+                                    level='message',
+                                    code='workflow_variable_selection_ga_frequency_topk_tie_break_applied',
+                                    text='workflow_variable_selection_ga_frequency_topk_tie_break_applied',
+                                    source='workflow_control',
+                                    details={
+                                        'function': 'workflow_variable_selection_start',
+                                        'candidate_count': int(candidate_count),
+                                        'ga_consensus_mode': 'frequency_top_k',
+                                        'ga_frequency_weighting': str(ga_frequency_weighting),
+                                        'tie_group_count': int(tie_group_count),
+                                        'cutoff_frequency': float(cutoff_frequency),
+                                        'cutoff_tied_group_size': int(np.asarray(tied_at_cutoff, dtype=int).size),
+                                        'cutoff_selected_count': int(np.asarray(tied_selected, dtype=int).size),
+                                        'cutoff_unselected_count': int(np.asarray(tied_unselected, dtype=int).size),
+                                        'tie_break_rule': 'descending_frequency_then_ascending_feature_index',
+                                        'tie_break_applied_at_cutoff': bool(np.asarray(tied_unselected, dtype=int).size > 0),
+                                    },
+                                )
+                        elif ga_consensus_mode == 'frequency_threshold':
+                            chosen_idx = np.where(selection_frequency >= float(ga_frequency_threshold))[0]
+                            frequency_effective_threshold = float(ga_frequency_threshold)
+                            if chosen_idx.size == 0:
+                                chosen_idx = restart_indices[best_run_idx]
+                            else:
+                                chosen_idx = np.asarray(sorted(np.unique(chosen_idx.tolist())), dtype=int)
+                        else:
+                            raise ValueError(
+                                f"Unsupported ga_consensus_mode '{ga_consensus_mode}'. "
+                                "Supported values: best_run, frequency_top_k, frequency_threshold."
+                            )
+
+                        if chosen_idx.size == 0:
+                            chosen_idx = restart_indices[best_run_idx]
+
+                        candidate_payload, candidate_outputs, nested_metrics, candidate_score = _evaluate_candidate(
+                            int(candidate_count),
+                            np.asarray(chosen_idx, dtype=int),
+                            source_params_override=source_params,
+                            score_split=score_split,
+                        )
+
+                        candidate_payload['ga_selection_frequency'] = np.asarray(selection_frequency, dtype=float)
+                        candidate_payload['ga_consensus_indices'] = np.asarray(chosen_idx, dtype=int)
+                        candidate_payload['ga_restart_scores'] = [float(v) for v in restart_scores]
+                        candidate_payload['ga_frequency_effective_threshold'] = np.asarray([frequency_effective_threshold], dtype=float)
+                        restart_mean_score = float(np.mean(np.asarray(restart_scores, dtype=float))) if restart_scores else float('nan')
+                        if isinstance(candidate_payload.get('selection_metadata'), dict):
+                            _meta = candidate_payload['selection_metadata']
+                            _meta['ga_population_size'] = int(ga_population_size)
+                            _meta['ga_generations'] = int(ga_generations)
+                            _meta['ga_mutation_rate'] = float(ga_mutation_rate)
+                            _meta['ga_crossover_rate'] = float(ga_crossover_rate)
+                            _meta['ga_tournament_size'] = int(ga_tournament_size)
+                            _meta['ga_patience_generations'] = int(ga_patience_generations)
+                            _meta['ga_max_evaluations'] = int(ga_max_evaluations)
+                            _meta['ga_min_improvement'] = float(ga_min_improvement)
+                            _meta['ga_evaluations_used'] = int(ga_evaluations)
+                            _meta['ga_random_state'] = int(ga_random_state)
+                            _meta['ga_n_restarts'] = int(ga_n_restarts)
+                            _meta['ga_executed_restarts'] = int(executed_restarts)
+                            _meta['ga_consensus_mode'] = str(ga_consensus_mode)
+                            _meta['ga_consensus_mode_effective'] = str(ga_consensus_mode)
+                            _meta['ga_frequency_weighting'] = str(ga_frequency_weighting)
+                            _meta['ga_frequency_threshold'] = float(ga_frequency_threshold)
+                            _meta['ga_frequency_effective_threshold'] = float(frequency_effective_threshold) if np.isfinite(float(frequency_effective_threshold)) else None
+                            _meta['ga_best_restart_index'] = int(best_run_idx)
+                            _meta['ga_consensus_selected_count'] = int(np.asarray(chosen_idx, dtype=int).size)
+                            _meta['ga_threshold_hit_count'] = int(np.asarray(np.where(selection_frequency >= float(ga_frequency_threshold))[0], dtype=int).size)
+                            _meta['ga_restart_scores'] = [float(v) for v in restart_scores]
+                            _meta['ga_restart_histories'] = restart_histories
+                            _meta['ga_selection_frequency'] = [float(v) for v in selection_frequency.tolist()]
+                            _meta['ga_consensus_indices'] = [int(v) for v in np.asarray(chosen_idx, dtype=int).tolist()]
+
+                        return (
+                            candidate_payload,
+                            candidate_outputs,
+                            nested_metrics,
+                            float(candidate_score),
+                        )
+
+                    if selection_method_norm == 'sfs' and not override_file_mode:
+                        chosen_idx, sfs_used_fallback = _nested_sfs_indices(
+                            int(candidate_count),
+                            source_params_override=source_params,
+                        )
+                        candidate_payload, candidate_outputs, nested_metrics, candidate_score = _evaluate_candidate(
+                            int(candidate_count),
+                            np.asarray(chosen_idx, dtype=int),
+                            source_params_override=source_params,
+                            score_split=score_split,
+                        )
+                        if sfs_used_fallback and source_params is selection_params:
+                            _append_execution_report_entry(
+                                instance_alias=selection_instance_alias,
+                                base_alias=base_alias,
+                                level='warning',
+                                code='workflow_variable_selection_sfs_fallback_subset_used',
+                                text='workflow_variable_selection_sfs_fallback_subset_used',
+                                source='workflow_control',
+                                details={
+                                    'function': 'workflow_variable_selection_start',
+                                    'candidate_count': int(candidate_count),
+                                    'selected_count': int(np.asarray(chosen_idx, dtype=int).size),
+                                    'sfs_direction': sfs_direction_norm,
+                                    'optimization_mode': optimize_for_norm,
+                                },
+                            )
+                        if isinstance(candidate_payload.get('selection_metadata'), dict):
+                            _meta = candidate_payload['selection_metadata']
+                            _meta['direction'] = sfs_direction_norm
+                            _meta['nested_only'] = bool(optimize_for_norm == 'nested_function')
+                            _meta['sfs_fallback_subset_used'] = bool(sfs_used_fallback)
+                        return (
+                            candidate_payload,
+                            candidate_outputs,
+                            nested_metrics,
+                            float(candidate_score),
+                        )
+
+                    candidate_payload, candidate_outputs, nested_metrics, candidate_score = _evaluate_candidate(
+                        int(candidate_count),
+                        None,
+                        source_params_override=source_params,
+                        score_split=score_split,
+                    )
+                    return (
+                        candidate_payload,
+                        candidate_outputs,
+                        nested_metrics,
+                        float(candidate_score),
+                    )
+
+                def _aggregate_outer_nested_metrics(candidate_count: int) -> Tuple[Dict[str, Optional[float]], float, int]:
+                    outer_splits = _build_nested_outer_splits()
+                    if not outer_splits:
+                        return {}, float('-inf'), 0
+
+                    fold_scores: List[float] = []
+                    fold_metrics: List[Dict[str, Optional[float]]] = []
+
+                    for train_idx, test_idx in outer_splits:
+                        fold_params = _build_outer_fold_selection_params(
+                            np.asarray(train_idx, dtype=int),
+                            np.asarray(test_idx, dtype=int),
+                        )
+
+                        fold_payload, _, fold_metrics_local, _ = _run_candidate_for_count(
+                            int(candidate_count),
+                            source_params_override=fold_params,
+                            score_split='cv',
+                        )
+                        val_score = _score_candidate_from_nested_metrics_with_split(
+                            str(selection_task_type_norm),
+                            fold_metrics_local,
+                            optimization_metric_norm,
+                            split_name='val',
+                            allow_cv_fallback=False,
+                        )
+                        if not np.isfinite(float(val_score)):
+                            raise ValueError(
+                                "Nested CV outer-test evaluation requires finite validation metrics from the nested function. "
+                                f"Missing/invalid metrics for candidate_count={int(candidate_count)} on fold "
+                                f"(n_train={int(np.asarray(train_idx).size)}, n_test={int(np.asarray(test_idx).size)}). "
+                                "Expected metrics.val values compatible with task scoring "
+                                "(regression: rmse or r2; classification/one_class: accuracy or f1 or precision or recall)."
+                            )
+                        fold_metrics.append(copy.deepcopy(fold_metrics_local))
+                        fold_scores.append(float(val_score))
+
+                    def _mean_metric(metric_key: str) -> Optional[float]:
+                        values: List[float] = []
+                        for metrics in fold_metrics:
+                            raw_value = metrics.get(metric_key)
+                            if raw_value is None:
+                                continue
+                            try:
+                                value = float(raw_value)
+                            except Exception:
+                                continue
+                            if np.isfinite(value):
+                                values.append(value)
+                        if not values:
+                            return None
+                        return float(np.mean(np.asarray(values, dtype=float)))
+
+                    aggregated_cv_metrics: Dict[str, Optional[float]] = {
+                        'rmse_cv': _mean_metric('rmse_val'),
+                        'r2_cv': _mean_metric('r2_val'),
+                        'accuracy_cv': _mean_metric('accuracy_val'),
+                        'f1_cv': _mean_metric('f1_val'),
+                        'precision_cv': _mean_metric('precision_val'),
+                        'recall_cv': _mean_metric('recall_val'),
+                    }
+
+                    if fold_scores:
+                        return aggregated_cv_metrics, float(np.mean(np.asarray(fold_scores, dtype=float))), len(fold_scores)
+                    raise ValueError(
+                        "Nested CV outer-test evaluation produced no valid fold scores. "
+                        "Check whether nested functions return validation metrics in metrics.val."
+                    )
+
+                for candidate_count in candidate_counts:
+                    candidate_payload, candidate_outputs, nested_metrics, candidate_score = _run_candidate_for_count(
+                        int(candidate_count),
+                        source_params_override=None,
+                        score_split='cv',
+                    )
+
+                    nested_metrics_for_row = copy.deepcopy(nested_metrics)
+                    effective_candidate_score = float(candidate_score)
+                    nested_outer_folds_used = 0
+                    if nested_cv_enabled:
+                        np_rng_state = np.random.get_state()
+                        py_rng_state = random.getstate()
+                        try:
+                            outer_cv_metrics, outer_candidate_score, nested_outer_folds_used = _aggregate_outer_nested_metrics(
+                                int(candidate_count)
+                            )
+                        finally:
+                            np.random.set_state(np_rng_state)
+                            random.setstate(py_rng_state)
+                        for metric_key in ('rmse_cv', 'r2_cv', 'accuracy_cv', 'f1_cv', 'precision_cv', 'recall_cv'):
+                            nested_metrics_for_row[metric_key] = outer_cv_metrics.get(metric_key)
+                        effective_candidate_score = float(outer_candidate_score)
+
+                    if isinstance(candidate_payload.get('selection_metadata'), dict):
+                        _meta = candidate_payload['selection_metadata']
+                        _meta['nested_cv_enabled'] = bool(nested_cv_enabled)
+                        _meta['nested_cv_outer_strategy'] = str(nested_cv_outer_strategy) if nested_cv_enabled else None
+                        _meta['nested_cv_outer_splits'] = int(nested_cv_outer_splits) if nested_cv_enabled else None
+                        _meta['nested_cv_outer_shuffle'] = bool(nested_cv_outer_shuffle) if nested_cv_enabled else None
+                        _meta['nested_cv_outer_random_state'] = int(nested_cv_outer_random_state) if nested_cv_enabled else None
+                        _meta['nested_cv_outer_folds_used'] = int(nested_outer_folds_used) if nested_cv_enabled else None
+                        if nested_cv_enabled:
+                            _meta['selection_score_source'] = 'nested_outer_val'
+                        elif optimize_for_norm == 'surrogate_function':
+                            _meta['selection_score_source'] = 'surrogate_cv'
+                        else:
+                            _meta['selection_score_source'] = 'nested_cv'
+
+                    trajectory_rows.append({
+                        'count': int(candidate_payload.get('selected_variable_count', candidate_count)),
+                        'cv_score': float(effective_candidate_score) if np.isfinite(effective_candidate_score) else float('nan'),
+                        'rmse_cal': float(nested_metrics_for_row.get('rmse_cal')) if nested_metrics_for_row.get('rmse_cal') is not None else float('nan'),
+                        'rmse_cv': float(nested_metrics_for_row.get('rmse_cv')) if nested_metrics_for_row.get('rmse_cv') is not None else float('nan'),
+                        'rmse_val': float(nested_metrics_for_row.get('rmse_val')) if nested_metrics_for_row.get('rmse_val') is not None else float('nan'),
+                        'r2_cal': float(nested_metrics_for_row.get('r2_cal')) if nested_metrics_for_row.get('r2_cal') is not None else float('nan'),
+                        'r2_cv': float(nested_metrics_for_row.get('r2_cv')) if nested_metrics_for_row.get('r2_cv') is not None else float('nan'),
+                        'r2_val': float(nested_metrics_for_row.get('r2_val')) if nested_metrics_for_row.get('r2_val') is not None else float('nan'),
+                        'accuracy_cal': float(nested_metrics_for_row.get('accuracy_cal')) if nested_metrics_for_row.get('accuracy_cal') is not None else float('nan'),
+                        'accuracy_cv': float(nested_metrics_for_row.get('accuracy_cv')) if nested_metrics_for_row.get('accuracy_cv') is not None else float('nan'),
+                        'accuracy_val': float(nested_metrics_for_row.get('accuracy_val')) if nested_metrics_for_row.get('accuracy_val') is not None else float('nan'),
+                        'f1_cal': float(nested_metrics_for_row.get('f1_cal')) if nested_metrics_for_row.get('f1_cal') is not None else float('nan'),
+                        'f1_cv': float(nested_metrics_for_row.get('f1_cv')) if nested_metrics_for_row.get('f1_cv') is not None else float('nan'),
+                        'f1_val': float(nested_metrics_for_row.get('f1_val')) if nested_metrics_for_row.get('f1_val') is not None else float('nan'),
+                        'precision_cal': float(nested_metrics_for_row.get('precision_cal')) if nested_metrics_for_row.get('precision_cal') is not None else float('nan'),
+                        'precision_cv': float(nested_metrics_for_row.get('precision_cv')) if nested_metrics_for_row.get('precision_cv') is not None else float('nan'),
+                        'precision_val': float(nested_metrics_for_row.get('precision_val')) if nested_metrics_for_row.get('precision_val') is not None else float('nan'),
+                        'recall_cal': float(nested_metrics_for_row.get('recall_cal')) if nested_metrics_for_row.get('recall_cal') is not None else float('nan'),
+                        'recall_cv': float(nested_metrics_for_row.get('recall_cv')) if nested_metrics_for_row.get('recall_cv') is not None else float('nan'),
+                        'recall_val': float(nested_metrics_for_row.get('recall_val')) if nested_metrics_for_row.get('recall_val') is not None else float('nan'),
+                        'selected_variables_display': _selection_display_from_payload(candidate_payload),
+                    })
+
+                    candidate_results.append((
+                        int(candidate_payload.get('selected_variable_count', candidate_count)),
+                        copy.deepcopy(candidate_payload),
+                        copy.deepcopy(candidate_outputs),
+                        copy.deepcopy(nested_metrics_for_row),
+                        float(effective_candidate_score),
+                    ))
+
+                    if effective_candidate_score > best_score or best_selection_payload is None:
+                        best_score = effective_candidate_score
+                        best_selection_payload = copy.deepcopy(candidate_payload)
+                        best_block_outputs = copy.deepcopy(candidate_outputs)
+
+                if best_selection_payload is None:
+                    raise RuntimeError("Variable-selection optimization could not evaluate candidate feature counts from nested workflow outputs.")
+
+                if forced_count_override is not None:
+                    forced_row = None
+                    for row in candidate_results:
+                        if int(row[0]) == int(forced_count_override):
+                            forced_row = row
+                            break
+                    if forced_row is not None:
+                        best_selection_payload = copy.deepcopy(forced_row[1])
+                        best_block_outputs = copy.deepcopy(forced_row[2])
+
+                if best_block_outputs is None:
+                    best_block_outputs = {}
+
+                selected_count = int(best_selection_payload.get('selected_variable_count', n_features_to_select))
+
+                selected_metrics: Dict[str, Optional[float]] = {}
+                selected_effective_score: Optional[float] = None
+                for candidate_result in candidate_results:
+                    if int(candidate_result[0]) == int(selected_count):
+                        selected_metrics = copy.deepcopy(candidate_result[3])
+                        try:
+                            selected_effective_score = float(candidate_result[4])
+                        except Exception:
+                            selected_effective_score = None
+                        break
+
+                selected_metric_value = _selected_metric_value_from_nested_metrics_with_split(
+                    selection_task_type_norm,
+                    selected_metrics,
+                    optimization_metric_norm,
+                    split_name='cv',
+                    allow_cv_fallback=False,
+                )
+
+                def _fmt_metric(value: Any) -> str:
+                    try:
+                        out = float(value)
+                        if np.isfinite(out):
+                            return f"{out:.6g}"
+                    except Exception:
+                        pass
+                    return 'n/a'
+
+                def _triplet(metric_prefix: str) -> str:
+                    return (
+                        f"cal={_fmt_metric(selected_metrics.get(f'{metric_prefix}_cal'))}, "
+                        f"cv={_fmt_metric(selected_metrics.get(f'{metric_prefix}_cv'))}, "
+                        f"val={_fmt_metric(selected_metrics.get(f'{metric_prefix}_val'))}"
+                    )
+
+                if selection_task_type_norm == 'regression':
+                    selected_metrics_summary = f"RMSE({_triplet('rmse')}); R2({_triplet('r2')})"
+                else:
+                    selected_metrics_summary = (
+                        f"Accuracy({_triplet('accuracy')}); "
+                        f"F1({_triplet('f1')}); "
+                        f"Precision({_triplet('precision')}); "
+                        f"Recall({_triplet('recall')})"
+                    )
+
+                selection_metadata = best_selection_payload.get('selection_metadata')
+                if not isinstance(selection_metadata, dict):
+                    selection_metadata = {}
+                    best_selection_payload['selection_metadata'] = selection_metadata
+
+                selection_score_source = str(selection_metadata.get('selection_score_source', '') or '').strip().lower()
+                if not selection_score_source:
+                    if nested_cv_enabled:
+                        selection_score_source = 'nested_outer_val'
+                    elif optimize_for_norm == 'surrogate_function':
+                        selection_score_source = 'surrogate_cv'
+                    else:
+                        selection_score_source = 'nested_cv'
+
+                selection_metadata['optimization_mode_used'] = str(optimize_for_norm)
+                selection_metadata['optimization_metric_used'] = str(optimization_metric_norm)
+                selection_metadata['optimization_metric_direction'] = _metric_direction(optimization_metric_norm)
+                selection_metadata['optimization_score_source'] = str(selection_score_source)
+                selection_metadata['optimization_metric_value'] = float(selected_metric_value) if selected_metric_value is not None else None
+                if selected_effective_score is not None and np.isfinite(float(selected_effective_score)):
+                    selection_metadata['optimization_effective_score'] = float(selected_effective_score)
+                selection_metadata['selected_metrics_summary'] = selected_metrics_summary
+
+                for _metric_name in (
+                    'rmse_cal', 'rmse_cv', 'rmse_val',
+                    'r2_cal', 'r2_cv', 'r2_val',
+                    'accuracy_cal', 'accuracy_cv', 'accuracy_val',
+                    'f1_cal', 'f1_cv', 'f1_val',
+                    'precision_cal', 'precision_cv', 'precision_val',
+                    'recall_cal', 'recall_cv', 'recall_val',
+                ):
+                    _value = selected_metrics.get(_metric_name)
+                    selection_metadata[f'selected_{_metric_name}'] = float(_value) if _value is not None else None
+
+                best_selection_payload['optimization_metric'] = str(optimization_metric_norm)
+                best_selection_payload['optimization_mode'] = str(optimize_for_norm)
+                best_selection_payload['optimization_score_source'] = str(selection_score_source)
+                best_selection_payload['optimization_metric_value'] = (
+                    float(selected_metric_value) if selected_metric_value is not None else float('nan')
+                )
+                best_selection_payload['selected_metrics_summary'] = str(selected_metrics_summary)
+
+                _apply_nested_trajectory_to_selection_payload(best_selection_payload, trajectory_rows, selected_count)
+
+                selection_payload = best_selection_payload
+                if optimize_for_norm == 'surrogate_function':
+                    block_outputs = copy.deepcopy(baseline_outputs)
+                    if override_block_inputs:
+                        _apply_variable_selection_to_snapshot(
+                            block_outputs,
+                            selection_payload,
+                            source_payload=selection_params,
+                        )
+                    _apply_cv_config_to_snapshot(
+                        block_outputs,
+                        cv_config_value=effective_cv_config_value,
+                        cv_report_value=effective_cv_report_value,
+                    )
+                    block_outputs[selection_instance_alias] = copy.deepcopy(selection_payload)
+                    variable_selection_stack_context.append(variable_selection_context_entry)
+                    try:
+                        _execute_range(body_start, body_end, block_outputs)
+                    finally:
+                        if variable_selection_stack_context:
+                            variable_selection_stack_context.pop()
+                else:
+                    # Execute nested body once with full routed inputs for the selected model.
+                    block_outputs = copy.deepcopy(baseline_outputs)
+                    if override_block_inputs:
+                        _apply_variable_selection_to_snapshot(
+                            block_outputs,
+                            selection_payload,
+                            source_payload=selection_params,
+                        )
+                    _apply_cv_config_to_snapshot(
+                        block_outputs,
+                        cv_config_value=effective_cv_config_value,
+                        cv_report_value=effective_cv_report_value,
+                    )
+                    block_outputs[selection_instance_alias] = copy.deepcopy(selection_payload)
+                    variable_selection_stack_context.append(variable_selection_context_entry)
+                    try:
+                        _execute_range(body_start, body_end, block_outputs)
+                    finally:
+                        if variable_selection_stack_context:
+                            variable_selection_stack_context.pop()
+                block_outputs[selection_instance_alias] = copy.deepcopy(selection_payload)
+
+
+                selection_end_instance_alias = functions_list[selection_end_idx]['instance_alias']
+                block_outputs[selection_end_instance_alias] = _build_variable_selection_end_payload(
+                    selected_payload=selection_payload,
+                    block_outputs=block_outputs,
+                    body_start=body_start,
+                    body_end=body_end,
+                )
+
+                current_outputs.clear()
+                current_outputs.update(block_outputs)
+
+                _record_control_execution(
+                    instance_alias=selection_instance_alias,
+                    base_alias=base_alias,
+                    start_time=selection_start_time,
+                    inputs=selection_params,
+                    outputs_payload=current_outputs.get(selection_instance_alias, {}),
+                )
+
+                idx = selection_end_idx + 1
                 continue
 
             if base_alias == "workflow_parallel_start":
@@ -1626,10 +4479,22 @@ def analyst_main(
                 parallel_instance_alias = entry['instance_alias']
                 parallel_params = functions_info.get(parallel_instance_alias, {}).get('parameters', {})
                 merge_strategy = str(parallel_params.get('merge_strategy', 'merge') or 'merge')
+                _notify_progress_active(parallel_instance_alias, base_alias)
+                parallel_start_time = perf_counter()
 
                 block_start = idx + 1
                 block_end = parallel_end_idx - 1
                 if block_start > block_end:
+                    _record_control_execution(
+                        instance_alias=parallel_instance_alias,
+                        base_alias=base_alias,
+                        start_time=parallel_start_time,
+                        inputs=parallel_params,
+                        outputs_payload={
+                            'merge_strategy': merge_strategy,
+                            'branch_count': 0,
+                        },
+                    )
                     idx = parallel_end_idx + 1
                     continue
 
@@ -1678,6 +4543,17 @@ def analyst_main(
                 if parallel_stack_context:
                     parallel_stack_context.pop()
 
+                _record_control_execution(
+                    instance_alias=parallel_instance_alias,
+                    base_alias=base_alias,
+                    start_time=parallel_start_time,
+                    inputs=parallel_params,
+                    outputs_payload={
+                        'merge_strategy': merge_strategy,
+                        'branch_count': len(branch_ranges),
+                    },
+                )
+
                 idx = parallel_end_idx + 1
                 continue
 
@@ -1691,6 +4567,8 @@ def analyst_main(
                 ensemble_instance_alias = entry['instance_alias']
                 raw_ensemble_params = functions_info.get(ensemble_instance_alias, {}).get('parameters', {})
                 ensemble_params = _resolve_control_params(ensemble_instance_alias, raw_ensemble_params, current_outputs)
+                _notify_progress_active(ensemble_instance_alias, base_alias)
+                ensemble_start_time = perf_counter()
                 ensemble_task_type = str(ensemble_params.get('ensemble_task_type', 'regression') or 'regression').lower()
                 regression_aggregation_method = str(
                     ensemble_params.get('regression_aggregation_method', 'mean') or 'mean'
@@ -1806,6 +4684,17 @@ def analyst_main(
                 block_start = idx + 1
                 block_end = ensemble_end_idx - 1
                 if block_start > block_end:
+                    _record_control_execution(
+                        instance_alias=ensemble_instance_alias,
+                        base_alias=base_alias,
+                        start_time=ensemble_start_time,
+                        inputs=ensemble_params,
+                        outputs_payload={
+                            'ensemble_task_type': ensemble_task_type,
+                            'aggregation_method': aggregation_method,
+                            'member_count': 0,
+                        },
+                    )
                     idx = ensemble_end_idx + 1
                     continue
 
@@ -1827,6 +4716,17 @@ def analyst_main(
 
                 if not member_ranges:
                     print("Warning: Ensemble block has no members to execute.")
+                    _record_control_execution(
+                        instance_alias=ensemble_instance_alias,
+                        base_alias=base_alias,
+                        start_time=ensemble_start_time,
+                        inputs=ensemble_params,
+                        outputs_payload={
+                            'ensemble_task_type': ensemble_task_type,
+                            'aggregation_method': aggregation_method,
+                            'member_count': 0,
+                        },
+                    )
                     idx = ensemble_end_idx + 1
                     continue
 
@@ -3336,6 +6236,14 @@ def analyst_main(
                 if ensemble_stack_context:
                     ensemble_stack_context.pop()
 
+                _record_control_execution(
+                    instance_alias=ensemble_instance_alias,
+                    base_alias=base_alias,
+                    start_time=ensemble_start_time,
+                    inputs=ensemble_params,
+                    outputs_payload=current_outputs.get(ensemble_instance_alias, {}),
+                )
+
                 idx = ensemble_end_idx + 1
                 continue
 
@@ -3345,6 +6253,7 @@ def analyst_main(
                 "workflow_parallel_end",
                 "workflow_ensemble_member",
                 "workflow_ensemble_end",
+                "workflow_variable_selection_end",
             ):
                 idx += 1
                 continue

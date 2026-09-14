@@ -335,6 +335,61 @@ def _coerce_optional_bool(value: Optional[Any]) -> Optional[bool]:
     return None
 
 
+def _coerce_bool(value: Any, default: bool) -> bool:
+    normalized = _coerce_optional_bool(value)
+    if normalized is None:
+        return bool(default)
+    return normalized
+
+
+def _coerce_int(value: Any, default: int) -> int:
+    try:
+        parsed = float(value)
+        if np.isfinite(parsed):
+            return int(parsed)
+    except Exception:
+        pass
+    return int(default)
+
+
+def _coerce_float(value: Any, default: float) -> float:
+    try:
+        parsed = float(value)
+        if np.isfinite(parsed):
+            return float(parsed)
+    except Exception:
+        pass
+    return float(default)
+
+
+def _serialize_optimization_parameter_values(values: List[Any]) -> List[Any]:
+    serialized: List[Any] = []
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, (bool, np.bool_)):
+            continue
+        if isinstance(value, (int, np.integer)):
+            serialized.append(int(value))
+            continue
+        if isinstance(value, (float, np.floating)):
+            numeric = float(value)
+            if np.isfinite(numeric):
+                serialized.append(numeric)
+            continue
+        try:
+            numeric = float(value)
+            if not np.isfinite(numeric):
+                continue
+            if float(numeric).is_integer():
+                serialized.append(int(numeric))
+            else:
+                serialized.append(float(numeric))
+        except Exception:
+            continue
+    return serialized
+
+
 def _resolve_translation_term(translation_keys: Optional[Dict[str, Any]], key: str, default: str) -> str:
     if not isinstance(translation_keys, dict):
         return default
@@ -661,49 +716,89 @@ def _candidate_hyperparameters(
     radius_threshold: float,
     kernel_bandwidth: float,
 ) -> Dict[str, Any]:
+    n_components_value = max(1, _coerce_int(n_components, 2))
+    ridge_alpha_value = _coerce_float(ridge_alpha, 1.0)
+    lasso_alpha_value = _coerce_float(lasso_alpha, 1.0)
+    elastic_net_alpha_value = _coerce_float(elastic_net_alpha, 1.0)
+    elastic_net_l1_ratio_value = _coerce_float(elastic_net_l1_ratio, 0.5)
+    random_forest_n_estimators_value = max(1, _coerce_int(random_forest_n_estimators, 200))
+    random_forest_max_depth_value = _coerce_int(random_forest_max_depth, 0)
+    random_forest_min_samples_leaf_value = max(1, _coerce_int(random_forest_min_samples_leaf, 1))
+    random_forest_bootstrap_value = _coerce_bool(random_forest_bootstrap, True)
+    random_forest_oob_score_value = _coerce_bool(random_forest_oob_score, False)
+    svr_c_value = _coerce_float(svr_c, 1.0)
+    svr_epsilon_value = _coerce_float(svr_epsilon, 0.1)
+    svr_gamma_value = _coerce_float(svr_gamma, 0.1)
+    svr_degree_value = max(1, _coerce_int(svr_degree, 3))
+    svr_coef0_value = _coerce_float(svr_coef0, 0.0)
+    gradient_boosting_n_estimators_value = max(1, _coerce_int(gradient_boosting_n_estimators, 200))
+    gradient_boosting_learning_rate_value = _coerce_float(gradient_boosting_learning_rate, 0.05)
+    gradient_boosting_subsample_value = _coerce_float(gradient_boosting_subsample, 1.0)
+    gradient_boosting_max_depth_value = max(1, _coerce_int(gradient_boosting_max_depth, 3))
+    gradient_boosting_min_samples_leaf_value = max(1, _coerce_int(gradient_boosting_min_samples_leaf, 1))
+    hist_gradient_boosting_n_estimators_value = max(1, _coerce_int(hist_gradient_boosting_n_estimators, 200))
+    hist_gradient_boosting_learning_rate_value = _coerce_float(hist_gradient_boosting_learning_rate, 0.05)
+    hist_gradient_boosting_max_depth_value = _coerce_int(hist_gradient_boosting_max_depth, 0)
+    hist_gradient_boosting_min_samples_leaf_value = max(1, _coerce_int(hist_gradient_boosting_min_samples_leaf, 20))
+    hist_gradient_boosting_l2_regularization_value = _coerce_float(hist_gradient_boosting_l2_regularization, 0.0)
+    hist_gradient_boosting_max_bins_value = _coerce_int(hist_gradient_boosting_max_bins, 255)
+    hist_gradient_boosting_max_leaf_nodes_value = _coerce_int(hist_gradient_boosting_max_leaf_nodes, 31)
+    gaussian_process_alpha_value = _coerce_float(gaussian_process_alpha, 1e-6)
+    gaussian_process_length_scale_value = _coerce_float(gaussian_process_length_scale, 1.0)
+    gaussian_process_constant_value_value = _coerce_float(gaussian_process_constant_value, 1.0)
+    gaussian_process_n_restarts_optimizer_value = _coerce_int(gaussian_process_n_restarts_optimizer, 0)
+    gaussian_process_normalize_y_value = _coerce_bool(gaussian_process_normalize_y, True)
+    kernel_pls_gamma_value = _coerce_float(kernel_pls_gamma, 0.1)
+    kernel_pls_n_features_value = max(1, _coerce_int(kernel_pls_n_features, 300))
+    n_neighbors_value = max(1, _coerce_int(n_neighbors, 5))
+    idw_power_value = _coerce_float(idw_power, 1.0)
+    adaptive_alpha_value = _coerce_float(adaptive_alpha, 1.0)
+    radius_threshold_value = _coerce_float(radius_threshold, 1.0)
+    kernel_bandwidth_value = _coerce_float(kernel_bandwidth, 1.0)
+
     return {
-        'n_components': int(candidate) if model_type_norm in ('pls', 'pcr', 'kernel_pls') else int(n_components),
-        'ridge_alpha': float(candidate) if model_type_norm == 'ridge' else float(ridge_alpha),
-        'lasso_alpha': float(candidate) if model_type_norm == 'lasso' else float(lasso_alpha),
-        'elastic_net_alpha': float(candidate) if model_type_norm == 'elastic_net' else float(elastic_net_alpha),
-        'elastic_net_l1_ratio': float(elastic_net_l1_ratio),
-        'random_forest_n_estimators': int(candidate) if model_type_norm == 'random_forest' else int(random_forest_n_estimators),
-        'random_forest_max_depth': int(random_forest_max_depth),
-        'random_forest_min_samples_leaf': int(random_forest_min_samples_leaf),
+        'n_components': max(1, _coerce_int(candidate, n_components_value)) if model_type_norm in ('pls', 'pcr', 'kernel_pls') else n_components_value,
+        'ridge_alpha': _coerce_float(candidate, ridge_alpha_value) if model_type_norm == 'ridge' else ridge_alpha_value,
+        'lasso_alpha': _coerce_float(candidate, lasso_alpha_value) if model_type_norm == 'lasso' else lasso_alpha_value,
+        'elastic_net_alpha': _coerce_float(candidate, elastic_net_alpha_value) if model_type_norm == 'elastic_net' else elastic_net_alpha_value,
+        'elastic_net_l1_ratio': elastic_net_l1_ratio_value,
+        'random_forest_n_estimators': max(1, _coerce_int(candidate, random_forest_n_estimators_value)) if model_type_norm == 'random_forest' else random_forest_n_estimators_value,
+        'random_forest_max_depth': random_forest_max_depth_value,
+        'random_forest_min_samples_leaf': random_forest_min_samples_leaf_value,
         'random_forest_max_features': random_forest_max_features,
-        'random_forest_bootstrap': bool(random_forest_bootstrap),
-        'random_forest_oob_score': bool(random_forest_oob_score),
-        'svr_c': float(candidate) if model_type_norm == 'svr' else float(svr_c),
-        'svr_epsilon': float(svr_epsilon),
-        'svr_gamma': float(svr_gamma),
+        'random_forest_bootstrap': random_forest_bootstrap_value,
+        'random_forest_oob_score': random_forest_oob_score_value,
+        'svr_c': _coerce_float(candidate, svr_c_value) if model_type_norm == 'svr' else svr_c_value,
+        'svr_epsilon': svr_epsilon_value,
+        'svr_gamma': svr_gamma_value,
         'svr_kernel': str(svr_kernel),
-        'svr_degree': int(svr_degree),
-        'svr_coef0': float(svr_coef0),
-        'gradient_boosting_n_estimators': int(candidate) if model_type_norm == 'gradient_boosting' else int(gradient_boosting_n_estimators),
-        'gradient_boosting_learning_rate': float(gradient_boosting_learning_rate),
-        'gradient_boosting_subsample': float(gradient_boosting_subsample),
+        'svr_degree': svr_degree_value,
+        'svr_coef0': svr_coef0_value,
+        'gradient_boosting_n_estimators': max(1, _coerce_int(candidate, gradient_boosting_n_estimators_value)) if model_type_norm == 'gradient_boosting' else gradient_boosting_n_estimators_value,
+        'gradient_boosting_learning_rate': gradient_boosting_learning_rate_value,
+        'gradient_boosting_subsample': gradient_boosting_subsample_value,
         'gradient_boosting_max_features': gradient_boosting_max_features,
-        'gradient_boosting_max_depth': int(gradient_boosting_max_depth),
-        'gradient_boosting_min_samples_leaf': int(gradient_boosting_min_samples_leaf),
-        'hist_gradient_boosting_n_estimators': int(candidate) if model_type_norm == 'hist_gradient_boosting' else int(hist_gradient_boosting_n_estimators),
-        'hist_gradient_boosting_learning_rate': float(hist_gradient_boosting_learning_rate),
-        'hist_gradient_boosting_max_depth': int(hist_gradient_boosting_max_depth),
-        'hist_gradient_boosting_min_samples_leaf': int(hist_gradient_boosting_min_samples_leaf),
-        'hist_gradient_boosting_l2_regularization': float(hist_gradient_boosting_l2_regularization),
-        'hist_gradient_boosting_max_bins': int(hist_gradient_boosting_max_bins),
-        'hist_gradient_boosting_max_leaf_nodes': int(hist_gradient_boosting_max_leaf_nodes),
-        'gaussian_process_alpha': float(candidate) if model_type_norm == 'gaussian_process' else float(gaussian_process_alpha),
-        'gaussian_process_length_scale': float(gaussian_process_length_scale),
-        'gaussian_process_constant_value': float(gaussian_process_constant_value),
-        'gaussian_process_n_restarts_optimizer': int(gaussian_process_n_restarts_optimizer),
-        'gaussian_process_normalize_y': bool(gaussian_process_normalize_y),
-        'kernel_pls_gamma': float(kernel_pls_gamma),
-        'kernel_pls_n_features': int(kernel_pls_n_features),
-        'n_neighbors': int(candidate) if (model_type_norm == 'local' and local_method_norm == 'knn') else int(n_neighbors),
-        'idw_power': float(candidate) if (model_type_norm == 'local' and local_method_norm == 'idw') else float(idw_power),
-        'adaptive_alpha': float(candidate) if (model_type_norm == 'local' and local_method_norm == 'adaptive') else float(adaptive_alpha),
-        'radius_threshold': float(candidate) if (model_type_norm == 'local' and local_method_norm == 'radius') else float(radius_threshold),
-        'kernel_bandwidth': float(candidate) if (model_type_norm == 'local' and local_method_norm == 'kernel') else float(kernel_bandwidth),
+        'gradient_boosting_max_depth': gradient_boosting_max_depth_value,
+        'gradient_boosting_min_samples_leaf': gradient_boosting_min_samples_leaf_value,
+        'hist_gradient_boosting_n_estimators': max(1, _coerce_int(candidate, hist_gradient_boosting_n_estimators_value)) if model_type_norm == 'hist_gradient_boosting' else hist_gradient_boosting_n_estimators_value,
+        'hist_gradient_boosting_learning_rate': hist_gradient_boosting_learning_rate_value,
+        'hist_gradient_boosting_max_depth': hist_gradient_boosting_max_depth_value,
+        'hist_gradient_boosting_min_samples_leaf': hist_gradient_boosting_min_samples_leaf_value,
+        'hist_gradient_boosting_l2_regularization': hist_gradient_boosting_l2_regularization_value,
+        'hist_gradient_boosting_max_bins': hist_gradient_boosting_max_bins_value,
+        'hist_gradient_boosting_max_leaf_nodes': hist_gradient_boosting_max_leaf_nodes_value,
+        'gaussian_process_alpha': _coerce_float(candidate, gaussian_process_alpha_value) if model_type_norm == 'gaussian_process' else gaussian_process_alpha_value,
+        'gaussian_process_length_scale': gaussian_process_length_scale_value,
+        'gaussian_process_constant_value': gaussian_process_constant_value_value,
+        'gaussian_process_n_restarts_optimizer': gaussian_process_n_restarts_optimizer_value,
+        'gaussian_process_normalize_y': gaussian_process_normalize_y_value,
+        'kernel_pls_gamma': kernel_pls_gamma_value,
+        'kernel_pls_n_features': kernel_pls_n_features_value,
+        'n_neighbors': max(1, _coerce_int(candidate, n_neighbors_value)) if (model_type_norm == 'local' and local_method_norm == 'knn') else n_neighbors_value,
+        'idw_power': _coerce_float(candidate, idw_power_value) if (model_type_norm == 'local' and local_method_norm == 'idw') else idw_power_value,
+        'adaptive_alpha': _coerce_float(candidate, adaptive_alpha_value) if (model_type_norm == 'local' and local_method_norm == 'adaptive') else adaptive_alpha_value,
+        'radius_threshold': _coerce_float(candidate, radius_threshold_value) if (model_type_norm == 'local' and local_method_norm == 'radius') else radius_threshold_value,
+        'kernel_bandwidth': _coerce_float(candidate, kernel_bandwidth_value) if (model_type_norm == 'local' and local_method_norm == 'kernel') else kernel_bandwidth_value,
     }
 
 
@@ -2414,7 +2509,7 @@ def first_order_calibration(
     optimization_results = {
         'parameter_name': parameter_name,
         'parameter_display_name': selected_parameter_display_name,
-        'parameter_values': [float(v) if isinstance(v, (float, np.floating)) else int(v) for v in optimization_parameter_values],
+        'parameter_values': _serialize_optimization_parameter_values(optimization_parameter_values),
         'self_r2': optimization_self_r2,
         'cv_r2': optimization_cv_r2,
         'val_r2': optimization_val_r2,

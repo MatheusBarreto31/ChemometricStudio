@@ -65,6 +65,7 @@ class RoutingMapWindow:
         "workflow_parallel_end",
         "workflow_ensemble_member",
         "workflow_ensemble_end",
+        "workflow_variable_selection_end",
     }
 
     CONTROL_NODE_STYLES = {
@@ -115,6 +116,18 @@ class RoutingMapWindow:
             "body_bg": "#ecfdf5",
             "outline": "#059669",
             "label": "Ensemble End",
+        },
+        "workflow_variable_selection_start": {
+            "title_bg": "#fee2e2",
+            "body_bg": "#fff1f2",
+            "outline": "#e11d48",
+            "label": "Variable Selection Start",
+        },
+        "workflow_variable_selection_end": {
+            "title_bg": "#fee2e2",
+            "body_bg": "#fff1f2",
+            "outline": "#e11d48",
+            "label": "Variable Selection End",
         },
     }
     
@@ -828,6 +841,7 @@ class RoutingMapWindow:
             ("workflow_loop_start", "workflow_loop_end", "#3b82f6", "Loop Block", None),
             ("workflow_parallel_start", "workflow_parallel_end", "#8b5cf6", "Parallel Block", "workflow_parallel_branch"),
             ("workflow_ensemble_start", "workflow_ensemble_end", "#059669", "Ensemble Block", "workflow_ensemble_member"),
+            ("workflow_variable_selection_start", "workflow_variable_selection_end", "#e11d48", "Variable Selection Block", None),
         ]
 
         blocks = []

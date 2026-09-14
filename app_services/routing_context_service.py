@@ -20,6 +20,7 @@ def get_workflow_scope_signature(
     loop_counter = 0
     parallel_counter = 0
     ensemble_counter = 0
+    variable_selection_counter = 0
 
     for idx in range(max(0, target_idx)):
         base_alias = function_base_aliases[idx] if idx < len(function_base_aliases) else ""
@@ -59,6 +60,14 @@ def get_workflow_scope_signature(
                 if active_stack[stack_idx][0] == "ensemble":
                     active_stack.pop(stack_idx)
                     break
+        elif base_alias == "workflow_variable_selection_start":
+            variable_selection_counter += 1
+            active_stack.append(("variable_selection", variable_selection_counter))
+        elif base_alias == "workflow_variable_selection_end":
+            for stack_idx in range(len(active_stack) - 1, -1, -1):
+                if active_stack[stack_idx][0] == "variable_selection":
+                    active_stack.pop(stack_idx)
+                    break
 
     return tuple(active_stack)
 
@@ -75,8 +84,29 @@ def can_auto_route_between(
 
     src_base = function_base_aliases[src_idx]
     dst_base = function_base_aliases[dst_idx]
-    if src_base in workflow_control_aliases or dst_base in workflow_control_aliases:
+    if src_base in workflow_control_aliases and src_base != "workflow_variable_selection_start":
         return False
+    if dst_base in workflow_control_aliases and dst_base != "workflow_variable_selection_start":
+        return False
+
+    if src_base == "workflow_variable_selection_start":
+        # Routing from Variable Selection Start is only valid to enclosed body nodes.
+        depth = 0
+        end_idx = -1
+        for idx in range(src_idx, len(function_base_aliases)):
+            alias = function_base_aliases[idx]
+            if alias == "workflow_variable_selection_start":
+                depth += 1
+            elif alias == "workflow_variable_selection_end":
+                depth -= 1
+                if depth == 0:
+                    end_idx = idx
+                    break
+
+        if end_idx < 0:
+            return False
+        if dst_idx <= src_idx or dst_idx >= end_idx:
+            return False
 
     src_scope = get_workflow_scope_signature(function_base_aliases, src_idx)
     dst_scope = get_workflow_scope_signature(function_base_aliases, dst_idx)

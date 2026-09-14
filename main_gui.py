@@ -576,7 +576,9 @@ class ChemometricsGUI:
             "workflow_parallel_end",
             "workflow_ensemble_start",
             "workflow_ensemble_member",
-            "workflow_ensemble_end"
+            "workflow_ensemble_end",
+            "workflow_variable_selection_start",
+            "workflow_variable_selection_end",
         }
         self.gui_configs: Dict[str, Dict] = {}  # {func_alias: config_data}
         self.notification_color_schemes: Dict[str, Dict[str, str]] = {
@@ -1333,7 +1335,7 @@ class ChemometricsGUI:
         if option_key == 'z_axis_type':
             return normalized_type in {'scatter', '3d_surf'} and has_z_axis
         if option_key in {'x_force_integer', 'y_force_integer'}:
-            return normalized_type in {'line', 'scatter', 'heatmap'}
+            return normalized_type in {'line', 'scatter', 'heatmap', 'bar'}
         if option_key == 'z_force_integer':
             return normalized_type == 'scatter' and has_z_axis
         if option_key in {'x_reverse_axis', 'y_reverse_axis'}:
@@ -6047,6 +6049,7 @@ class ChemometricsGUI:
             "workflow_loop_end",
             "workflow_parallel_end",
             "workflow_ensemble_end",
+            "workflow_variable_selection_end",
         }
 
         for func_alias in gui_listing.keys():
@@ -6181,6 +6184,8 @@ class ChemometricsGUI:
             "workflow_parallel_end": ["workflow_parallel_start", "workflow_parallel_branch", "workflow_parallel_end"],
             "workflow_ensemble_start": ["workflow_ensemble_start", "workflow_ensemble_member", "workflow_ensemble_end"],
             "workflow_ensemble_end": ["workflow_ensemble_start", "workflow_ensemble_member", "workflow_ensemble_end"],
+            "workflow_variable_selection_start": ["workflow_variable_selection_start", "workflow_variable_selection_end"],
+            "workflow_variable_selection_end": ["workflow_variable_selection_start", "workflow_variable_selection_end"],
         }
 
         aliases_to_add = wrapper_templates.get(func_alias, [func_alias])
@@ -6399,6 +6404,10 @@ class ChemometricsGUI:
             text = f"├ {display_name}"
         elif base_alias == "workflow_ensemble_end":
             text = f"└ {display_name}"
+        elif base_alias == "workflow_variable_selection_start":
+            text = f"┌ {display_name}"
+        elif base_alias == "workflow_variable_selection_end":
+            text = f"└ {display_name}"
         else:
             text = display_name
 
@@ -6416,7 +6425,7 @@ class ChemometricsGUI:
         depth = 0
 
         for idx, base_alias in enumerate(self.function_base_aliases):
-            if base_alias in ("workflow_loop_end", "workflow_parallel_end", "workflow_ensemble_end"):
+            if base_alias in ("workflow_loop_end", "workflow_parallel_end", "workflow_ensemble_end", "workflow_variable_selection_end"):
                 depth = max(0, depth - 1)
 
             if base_alias in ("workflow_parallel_branch", "workflow_ensemble_member"):
@@ -6426,7 +6435,7 @@ class ChemometricsGUI:
 
             self.methodology_listbox.insert(tk.END, self._get_methodology_item_display(idx, item_depth))
 
-            if base_alias in ("workflow_loop_start", "workflow_parallel_start", "workflow_ensemble_start"):
+            if base_alias in ("workflow_loop_start", "workflow_parallel_start", "workflow_ensemble_start", "workflow_variable_selection_start"):
                 depth += 1
 
         if selected_idx is not None and 0 <= selected_idx < len(self.methodology_list):
@@ -6445,7 +6454,7 @@ class ChemometricsGUI:
         """
         if new_func_idx == 0:
             return  # First function, no previous outputs to route from
-        if self._is_workflow_control(new_func_alias):
+        if self._is_workflow_control(new_func_alias) and new_func_alias != "workflow_variable_selection_start":
             return
         
         new_func_inputs = self._get_input_spec_candidates(new_func_alias)
@@ -8100,6 +8109,8 @@ class ChemometricsGUI:
             "workflow_parallel_end": ("workflow_parallel_start", "workflow_parallel_end"),
             "workflow_ensemble_start": ("workflow_ensemble_start", "workflow_ensemble_end"),
             "workflow_ensemble_end": ("workflow_ensemble_start", "workflow_ensemble_end"),
+            "workflow_variable_selection_start": ("workflow_variable_selection_start", "workflow_variable_selection_end"),
+            "workflow_variable_selection_end": ("workflow_variable_selection_start", "workflow_variable_selection_end"),
         }
 
         pair = wrapper_pairs.get(base_alias)
@@ -8809,6 +8820,13 @@ class ChemometricsGUI:
                 return actual_input_type == condition_value
 
             current_value = func_config.get(condition_field)
+            if current_value is None and condition_field in {
+                "selection_method_nested",
+                "selection_method_nested_supervised",
+                "selection_method_surrogate",
+                "selection_method_surrogate_supervised",
+            }:
+                current_value = func_config.get("selection_method")
 
             widget_data_for_condition = visible_widgets.get(condition_field, {})
             if "variable" in widget_data_for_condition:
@@ -8903,6 +8921,46 @@ class ChemometricsGUI:
             widget_spec = widget_data.get("widget_spec", {})
             grid_params = widget_data.get("grid_params", {})
             input_type = str(widget_spec.get("input_type", "user")).lower()
+
+            # Optional per-choice combobox filtering using visible_if-like rules.
+            if widget_spec.get("widget") == "combobox":
+                value_visible_if = widget_spec.get("value_visible_if")
+                if isinstance(value_visible_if, dict):
+                    raw_values = widget_spec.get("values", [])
+                    raw_aliases = widget_spec.get("value_aliases", raw_values)
+                    if not isinstance(raw_values, list):
+                        raw_values = []
+                    if not isinstance(raw_aliases, list):
+                        raw_aliases = list(raw_values)
+
+                    filtered_values: List[Any] = []
+                    filtered_aliases: List[Any] = []
+                    for idx, actual_value in enumerate(raw_values):
+                        alias_value = raw_aliases[idx] if idx < len(raw_aliases) else actual_value
+                        visibility_rule = value_visible_if.get(str(actual_value), value_visible_if.get(actual_value))
+
+                        keep_option = True
+                        if visibility_rule is False:
+                            keep_option = False
+                        elif isinstance(visibility_rule, dict):
+                            keep_option = _evaluate_visible_if(visibility_rule, widget_spec)
+                        elif visibility_rule is not None:
+                            keep_option = bool(visibility_rule)
+
+                        if keep_option:
+                            filtered_values.append(actual_value)
+                            filtered_aliases.append(alias_value)
+
+                    if not filtered_values:
+                        filtered_values = list(raw_values)
+                        filtered_aliases = list(raw_aliases)
+
+                    self._set_setup_combobox_options(
+                        widget_data,
+                        filtered_values,
+                        filtered_aliases,
+                        selected_actual=func_config.get(field_name),
+                    )
             
             # Hide routed/inherited setup inputs by default; only user inputs are shown.
             should_show = input_type == "user"
@@ -9608,7 +9666,7 @@ class ChemometricsGUI:
         
         for idx, instance_alias in enumerate(self.methodology_list):
             base_alias = self.function_base_aliases[idx]
-            if self._is_workflow_control(base_alias):
+            if self._is_workflow_control(base_alias) and base_alias != "workflow_variable_selection_start":
                 continue
             display_name = self._get_instance_base_display_name(instance_alias, base_alias)
             
@@ -9743,7 +9801,9 @@ class ChemometricsGUI:
             base_alias = self.function_base_aliases[input_idx]
             func_config = self.gui_configs.get(base_alias, {})
             display_name = func_config.get("display_name", base_alias)
-            inputs = func_config.get("input_aliases", {})
+            inputs = dict(func_config.get("input_aliases", {}) or {})
+            if base_alias == "workflow_variable_selection_start" and "cv_config" not in inputs:
+                inputs["cv_config"] = "CV Configuration"
             
             # Draw label centered above input buttons
             self.routing_canvas.create_text(right_x - 65, current_y, text=self.language_manager.translate("ui.messages.inputs", "Inputs"), font=("Arial", 11, "bold"), anchor="center")
@@ -19813,6 +19873,9 @@ Count:
     def _generate_model_json(self) -> bool:
         """Generate model.json from current configuration."""
         try:
+            # Keep auto-routing synchronized with the current methodology before export.
+            self._recalculate_auto_routing()
+
             # Refresh merged specs before persisting model data.
             self._refresh_function_specs()
             specs_data = FUNCTION_SPECS

@@ -147,6 +147,77 @@ def _should_force_integer_ticks(ax, axis_cfg: dict, axis_name: str) -> bool:
     return _is_integer_like_numeric_values(values)
 
 
+def _prepare_axis_values(values: Any, expected_len: int, axis_name: str) -> Tuple[np.ndarray, Optional[List[str]], bool]:
+    """Return numeric axis coordinates, optional labels, and optional fixed-tick hint."""
+    arr = np.asarray(values, dtype=object).reshape(-1)
+
+    if expected_len > 0:
+        if arr.size == 0:
+            raise ValueError(
+                f"Axis length mismatch: {axis_name} has 0 values, expected {expected_len}."
+            )
+        if arr.size != expected_len:
+            raise ValueError(
+                f"Axis length mismatch: {axis_name} has {arr.size} values, expected {expected_len}."
+            )
+
+    # Numeric axis (including numeric strings)
+    try:
+        numeric_axis = np.asarray(arr, dtype=float)
+        if expected_len > 0 and numeric_axis.size != expected_len:
+            numeric_axis = np.arange(expected_len, dtype=float)
+        if numeric_axis.size > 1:
+            diffs = np.diff(numeric_axis)
+            if not np.all(np.isfinite(diffs)) or np.any(diffs <= 0):
+                fallback_len = expected_len if expected_len > 0 else numeric_axis.size
+                numeric_axis = np.arange(fallback_len, dtype=float)
+        return numeric_axis, None, False
+    except Exception:
+        pass
+
+    # Treat fallback auto-generated labels (V1, V2, ...) as numeric-like.
+    normalized_labels = [str(v).strip() for v in arr.tolist()]
+    auto_label_indices: List[float] = []
+    for label in normalized_labels:
+        if len(label) >= 2 and label[0] in ('V', 'v') and label[1:].isdigit():
+            auto_label_indices.append(float(int(label[1:])))
+        else:
+            auto_label_indices = []
+            break
+    if auto_label_indices and len(auto_label_indices) == len(normalized_labels):
+        return np.asarray(auto_label_indices, dtype=float), None, False
+
+    # Categorical/text axis -> map to integer coordinates and keep labels.
+    labels = [str(v) for v in arr.tolist()]
+    coords = np.arange(len(labels), dtype=float)
+    return coords, labels, False
+
+
+def _set_index_mapped_numeric_ticks(ax, positions: np.ndarray, axis_values: np.ndarray) -> None:
+    """Show readable numeric ticks while bars are plotted on index positions."""
+    pos = np.asarray(positions, dtype=float).reshape(-1)
+    vals = np.asarray(axis_values, dtype=float).reshape(-1)
+    if pos.size == 0 or vals.size == 0 or pos.size != vals.size:
+        return
+
+    ax.set_xlim(float(pos[0]) - 0.5, float(pos[-1]) + 0.5)
+    integer_like = _is_integer_like_numeric_values(vals)
+
+    def _format_tick(x_value, _tick_pos):
+        if pos.size == 1:
+            mapped = vals[0]
+        else:
+            mapped = float(np.interp(float(x_value), pos, vals))
+        if not np.isfinite(mapped):
+            return ''
+        if integer_like:
+            return str(int(np.round(mapped)))
+        return f"{mapped:.6g}"
+
+    ax.xaxis.set_major_locator(MaxNLocator(nbins='auto', integer=bool(integer_like)))
+    ax.xaxis.set_major_formatter(FuncFormatter(_format_tick))
+
+
 def _effective_flip_xy(graph_type: str, config: dict) -> bool:
     """Resolve effective flip_xy value with graph-specific defaults."""
     if not isinstance(config, dict):
@@ -3000,16 +3071,25 @@ def _render_bar(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],
 
         x_positions = np.arange(n_samples, dtype=float)
 
+        x_axis_values: Optional[np.ndarray] = None
         x_labels: Optional[List[str]] = None
         if x_data is not None:
             try:
                 x_arr = np.asarray(x_data, dtype=object).reshape(-1)
                 if x_arr.size > 0:
                     n_label = min(int(x_arr.size), n_samples)
-                    x_labels = [str(v) for v in x_arr[:n_label].tolist()]
+                    x_axis_values, x_labels, _ = _prepare_axis_values(x_arr[:n_label], n_label, 'x-axis')
                     if n_label < n_samples:
-                        x_labels.extend([str(i + 1) for i in range(n_label, n_samples)])
+                        tail_start = int(x_axis_values[-1]) + 1 if x_axis_values is not None and x_axis_values.size > 0 else n_label
+                        tail = np.arange(tail_start, tail_start + (n_samples - n_label), dtype=float)
+                        if x_axis_values is None or x_axis_values.size == 0:
+                            x_axis_values = tail
+                        else:
+                            x_axis_values = np.concatenate([x_axis_values, tail])
+                        if x_labels is not None:
+                            x_labels.extend([str(i + 1) for i in range(n_label, n_samples)])
             except Exception:
+                x_axis_values = None
                 x_labels = None
 
         series_labels: List[str] = []
@@ -3094,14 +3174,16 @@ def _render_bar(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],
                 color=bar_color,
             )
 
-        ax.set_xticks(x_positions)
         if x_labels is not None:
+            ax.set_xticks(x_positions)
             ax.set_xticklabels(x_labels)
             if len(x_labels) > 12:
                 for tick_label in ax.get_xticklabels():
                     tick_label.set_rotation(45)
                     tick_label.set_horizontalalignment('right')
                     tick_label.set_rotation_mode('anchor')
+        elif x_axis_values is not None and x_axis_values.size == n_samples:
+            _set_index_mapped_numeric_ticks(ax, x_positions, x_axis_values)
 
         ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
         ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
@@ -3153,11 +3235,32 @@ def _render_bar(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],
                 legend_color_mapping = {}
 
             try:
-                x_numeric = np.asarray(x_arr, dtype=float)
-                if np.all(np.isfinite(x_numeric)):
-                    ax.bar(x_numeric, y_1d, color=class_colors_1d if class_colors_1d is not None else single_color)
+                axis_values, axis_labels, _ = _prepare_axis_values(x_arr, n, 'x-axis')
+
+                group_width = _coerce_float(config.get('bar_group_width', 0.8))
+                if group_width is None:
+                    group_width = 0.8
+                group_width = float(np.clip(group_width, 0.05, 0.95))
+
+                # Use positional bars so width depends on element count, not numeric x scale.
+                pos = np.arange(n, dtype=float)
+                ax.bar(
+                    pos,
+                    y_1d,
+                    width=group_width,
+                    color=class_colors_1d if class_colors_1d is not None else single_color,
+                )
+
+                if axis_labels is not None:
+                    ax.set_xticks(pos)
+                    ax.set_xticklabels(axis_labels)
+                    if n > 12:
+                        for tick_label in ax.get_xticklabels():
+                            tick_label.set_rotation(45)
+                            tick_label.set_horizontalalignment('right')
+                            tick_label.set_rotation_mode('anchor')
                 else:
-                    raise ValueError
+                    _set_index_mapped_numeric_ticks(ax, pos, axis_values)
             except Exception:
                 pos = np.arange(n)
                 ax.bar(pos, y_1d, color=class_colors_1d if class_colors_1d is not None else single_color)
@@ -3220,60 +3323,9 @@ def _render_heatmap(fig, ax, x_data: Optional[np.ndarray], y_data: Optional[np.n
     """Render a heatmap."""
     if x_data is not None and y_data is not None and z_data is not None:
         if isinstance(x_data, np.ndarray) and isinstance(y_data, np.ndarray) and isinstance(z_data, np.ndarray):
-            def _prepare_axis(values: np.ndarray, expected_len: int, axis_name: str) -> Tuple[np.ndarray, Optional[List[str]], bool]:
-                """Return numeric axis coordinates, optional labels, and optional fixed-tick hint."""
-                arr = np.asarray(values, dtype=object).reshape(-1)
-
-                if expected_len > 0:
-                    if arr.size == 0:
-                        raise ValueError(
-                            f"Heatmap axis length mismatch: {axis_name} has 0 values, expected {expected_len}."
-                        )
-                    elif arr.size != expected_len:
-                        raise ValueError(
-                            f"Heatmap axis length mismatch: {axis_name} has {arr.size} values, expected {expected_len}."
-                        )
-
-                # Numeric axis (including numeric strings)
-                try:
-                    numeric_axis = np.asarray(arr, dtype=float)
-                    if expected_len > 0 and numeric_axis.size != expected_len:
-                        numeric_axis = np.arange(expected_len, dtype=float)
-                    # Guard against non-increasing coordinates (e.g., padded duplicates),
-                    # which can collapse edge cells in pcolormesh.
-                    if numeric_axis.size > 1:
-                        diffs = np.diff(numeric_axis)
-                        if not np.all(np.isfinite(diffs)) or np.any(diffs <= 0):
-                            fallback_len = expected_len if expected_len > 0 else numeric_axis.size
-                            numeric_axis = np.arange(fallback_len, dtype=float)
-                    return numeric_axis, None, False
-                except Exception:
-                    pass
-
-                # Treat fallback auto-generated labels (V1, V2, ...) as numeric-like.
-                # This avoids classifying them as free-text categorical labels.
-                normalized_labels = [str(v).strip() for v in arr.tolist()]
-                auto_label_indices: List[float] = []
-                for label in normalized_labels:
-                    if len(label) >= 2 and label[0] in ('V', 'v') and label[1:].isdigit():
-                        auto_label_indices.append(float(int(label[1:])))
-                    else:
-                        auto_label_indices = []
-                        break
-                if auto_label_indices and len(auto_label_indices) == len(normalized_labels):
-                    # Numeric-like auto labels should behave like numeric axes.
-                    # Do not force one tick per variable; allow Matplotlib to pick
-                    # readable tick spacing for large matrices.
-                    return np.asarray(auto_label_indices, dtype=float), None, False
-
-                # Categorical/text axis -> map to integer coordinates and keep labels
-                labels = [str(v) for v in arr.tolist()]
-                coords = np.arange(len(labels), dtype=float)
-                return coords, labels, False
-
             n_rows, n_cols = z_data.shape[0], z_data.shape[1]
-            x_coords, x_labels, x_force_ticks = _prepare_axis(x_data, n_cols, 'x-axis')
-            y_coords, y_labels, y_force_ticks = _prepare_axis(y_data, n_rows, 'y-axis')
+            x_coords, x_labels, x_force_ticks = _prepare_axis_values(x_data, n_cols, 'x-axis')
+            y_coords, y_labels, y_force_ticks = _prepare_axis_values(y_data, n_rows, 'y-axis')
 
             # Use 1D-axis pcolormesh for robust handling of center-style coordinates.
             cmap = config.get('cmap', 'viridis')
