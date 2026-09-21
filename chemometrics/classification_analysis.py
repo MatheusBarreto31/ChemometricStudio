@@ -1364,60 +1364,76 @@ def _resolve_one_class_fit_mask(
           1-based index into the classes in their order of first appearance.
     """
     labels = np.asarray(labels, dtype=object).reshape(-1)
-    # String-normalised view used for all comparisons (avoids int vs "1" mismatches).
-    labels_str = np.asarray([str(v) for v in labels])
+    labels_str = np.asarray([str(v).strip() for v in labels], dtype=object)
 
-    # Determine whether all label values are numeric.
-    _is_numeric = all(
-        isinstance(v, (int, float, np.integer, np.floating))
-        for v in labels[: min(len(labels), 50)]
-    )
-
-    # Build order-of-first-appearance unique list (as strings).
-    _seen: set = set()
-    ordered_unique: List[str] = []
-    for v in labels_str:
-        if v not in _seen:
-            _seen.add(v)
-            ordered_unique.append(v)
-
-    def _resolve_ref(ref_input: Any) -> str:
-        if ref_input in (None, ""):
-            # Default: first class in order of appearance.
-            return ordered_unique[0] if ordered_unique else "Reference"
-        ref_str = str(ref_input).strip()
-        # Try to interpret as a 1-based integer.
+    def _to_numeric(value: Any) -> Optional[float]:
+        if isinstance(value, (bool, np.bool_)):
+            return None
+        if isinstance(value, (int, float, np.integer, np.floating)):
+            as_float = float(value)
+            return as_float if np.isfinite(as_float) else None
+        as_text = str(value).strip()
+        if as_text == "":
+            return None
         try:
-            ref_int = int(ref_str)
-            is_int = True
-        except (ValueError, TypeError):
-            is_int = False
-        if is_int:
-            if _is_numeric:
-                # Numeric labels: the integer is the class value itself.
-                return ref_str
-            else:
-                # Non-numeric labels: treat as 1-based index into ordered_unique.
-                idx = ref_int - 1
-                if 0 <= idx < len(ordered_unique):
-                    return ordered_unique[idx]
-                raise ValueError(
-                    f"Reference class index {ref_int} is out of range "
-                    f"(valid range: 1-{len(ordered_unique)})."
-                )
-        return ref_str
+            as_float = float(as_text)
+        except (TypeError, ValueError):
+            return None
+        return as_float if np.isfinite(as_float) else None
 
-    unique = np.unique(labels_str)
+    # Build order-of-first-appearance classes from the raw labels (preserves displayed class text).
+    ordered_unique: List[str] = []
+    seen: set = set()
+    for v in labels_str:
+        if v not in seen:
+            seen.add(v)
+            ordered_unique.append(str(v))
 
-    if unique.shape[0] == 1:
-        return np.ones(labels.shape[0], dtype=bool), str(unique[0])
+    # Treat labels as numeric-like when every non-empty class label can be parsed as a finite number.
+    labels_num = np.array([_to_numeric(v) for v in labels_str], dtype=object)
+    is_numeric_like = labels_num.size > 0 and all(v is not None for v in labels_num.tolist())
 
-    # Multiple classes: resolve reference (defaults to first class by appearance).
-    reference = _resolve_ref(one_class_reference_class)
-    mask = labels_str == reference
-    if not np.any(mask):
-        raise ValueError("No calibration samples found for one_class_reference_class.")
-    return mask, reference
+    if len(ordered_unique) == 1:
+        return np.ones(labels.shape[0], dtype=bool), ordered_unique[0]
+
+    if one_class_reference_class in (None, ""):
+        reference = ordered_unique[0] if ordered_unique else "Reference"
+        return labels_str == reference, reference
+
+    ref_text = str(one_class_reference_class).strip()
+    ref_num = _to_numeric(one_class_reference_class)
+
+    # Numeric-like labels: numeric target input is interpreted as class value, not class index.
+    if is_numeric_like and ref_num is not None:
+        labels_num_float = np.asarray([float(v) for v in labels_num.tolist()], dtype=float)
+        mask_num = np.isclose(labels_num_float, float(ref_num), atol=1e-12, rtol=0.0)
+        if np.any(mask_num):
+            first_match = int(np.where(mask_num)[0][0])
+            return mask_num, str(labels_str[first_match])
+
+    # Direct text match takes precedence over positional indexing fallback.
+    mask_text = labels_str == ref_text
+    if np.any(mask_text):
+        first_match = int(np.where(mask_text)[0][0])
+        return mask_text, str(labels_str[first_match])
+
+    # Positional fallback only for non-numeric label sets.
+    if not is_numeric_like:
+        try:
+            ref_int = int(ref_text)
+        except (TypeError, ValueError):
+            ref_int = None
+        if ref_int is not None:
+            idx = ref_int - 1
+            if 0 <= idx < len(ordered_unique):
+                reference = ordered_unique[idx]
+                return labels_str == reference, reference
+            raise ValueError(
+                f"Reference class index {ref_int} is out of range "
+                f"(valid range: 1-{len(ordered_unique)})."
+            )
+
+    raise ValueError("No calibration samples found for one_class_reference_class.")
 
 
 def _one_class_cv_predictions(
