@@ -8385,6 +8385,7 @@ class ChemometricsGUI:
 
             body_config = self.gui_configs.get(body_base, {})
             body_display = body_config.get("display_name", body_base)
+            body_instance_display = self._get_instance_display_name(body_instance, body_base)
             layout = body_config.get("setup", {}).get("layout", [])
             body_param_types = parameter_types.get(body_base, {})
 
@@ -8411,7 +8412,7 @@ class ChemometricsGUI:
 
                 target_value = f"{body_instance}.{field_name}"
                 target_label = field.get("label", field_name)
-                target_alias = f"{body_display} [{body_instance}] · {target_label}"
+                target_alias = f"[{body_instance_display}] · {target_label}"
 
                 sweep_targets_actual.append(target_value)
                 sweep_targets_display.append(target_alias)
@@ -8441,7 +8442,7 @@ class ChemometricsGUI:
                 if not output_key:
                     continue
                 actual = f"{body_instance}.{output_key}"
-                display = f"{body_display} [{body_instance}] · {output_key}"
+                display = f"[{body_instance_display}] · {output_key}"
                 benchmark_actual.append(actual)
                 benchmark_display.append(display)
 

@@ -443,6 +443,34 @@ def analyst_main(
                 depth -= 1
         return -1
 
+    def _parse_sweep_values(raw_value: Any) -> List[Any]:
+        if raw_value is None:
+            return []
+
+        if isinstance(raw_value, list):
+            parsed_values: List[Any] = []
+            for value in raw_value:
+                text_value = str(value).strip()
+                if not text_value:
+                    continue
+                try:
+                    parsed_values.extend(parse_numeric_spec(text_value))
+                except Exception:
+                    parsed_values.append(text_value)
+            return parsed_values
+
+        text = str(raw_value).strip()
+        if not text:
+            return []
+
+        parsed_values = []
+        for part in [segment.strip() for segment in text.split(',') if segment.strip()]:
+            try:
+                parsed_values.extend(parse_numeric_spec(part))
+            except Exception:
+                parsed_values.append(part)
+        return parsed_values
+
     def _resolve_loop_iterations_for_progress(loop_params: Dict[str, Any]) -> int:
         try:
             iterations = int(loop_params.get('iterations', 1))
@@ -868,34 +896,6 @@ def analyst_main(
                 if depth == 0:
                     return idx
         return -1
-
-    def _parse_sweep_values(raw_value: Any) -> List[Any]:
-        if raw_value is None:
-            return []
-
-        if isinstance(raw_value, list):
-            parsed_values: List[Any] = []
-            for value in raw_value:
-                text_value = str(value).strip()
-                if not text_value:
-                    continue
-                try:
-                    parsed_values.extend(parse_numeric_spec(text_value))
-                except Exception:
-                    parsed_values.append(text_value)
-            return parsed_values
-
-        text = str(raw_value).strip()
-        if not text:
-            return []
-
-        parsed_values = []
-        for part in [segment.strip() for segment in text.split(',') if segment.strip()]:
-            try:
-                parsed_values.extend(parse_numeric_spec(part))
-            except Exception:
-                parsed_values.append(part)
-        return parsed_values
 
     function_timings = []
     execution_report: Dict[str, Any] = {
