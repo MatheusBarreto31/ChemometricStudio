@@ -198,6 +198,7 @@ Pinned in `requirements.txt`:
 - tensorly==0.9.0
 - pylatex==1.4.2
 - pandas==3.0.1
+- openpyxl==3.1.5
 - pyMCR==0.5.1
 - ddsimca==1.0.3
 - prcv==1.2.1

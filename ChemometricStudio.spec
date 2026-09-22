@@ -11,6 +11,7 @@ sklearn_imports = collect_submodules('sklearn')
 scipy_imports = collect_submodules('scipy')
 numpy_imports = collect_submodules('numpy')
 pandas_imports = collect_submodules('pandas')
+openpyxl_imports = collect_submodules('openpyxl')
 matplotlib_imports = collect_submodules('matplotlib')
 PIL_imports = collect_submodules('PIL')
 pylatex_imports = collect_submodules('pylatex')
@@ -82,6 +83,7 @@ a = Analysis(
         *scipy_imports,
         *numpy_imports,
         *pandas_imports,
+        *openpyxl_imports,
         *matplotlib_imports,
         *PIL_imports,
         *pylatex_imports,
@@ -132,6 +134,7 @@ a_user = Analysis(
         *scipy_imports,
         *numpy_imports,
         *pandas_imports,
+        *openpyxl_imports,
         *matplotlib_imports,
         *PIL_imports,
         *pylatex_imports,

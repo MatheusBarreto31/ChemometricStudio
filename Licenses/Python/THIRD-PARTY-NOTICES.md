@@ -11,6 +11,7 @@ Pinned Python packages from requirements.txt:
 | tensorly | 0.9.0 | BSD-3-Clause |
 | pylatex | 1.4.2 | MIT |
 | pandas | 3.0.1 | BSD-3-Clause |
+| openpyxl | 3.1.5 | MIT |
 | pyMCR | 0.5.1 | NIST Public Domain Notice |
 | ddsimca | 1.0.3 | MIT |
 | prcv | 1.2.1 | MIT |
@@ -25,6 +26,30 @@ These entries summarize the licenses associated with bundled Python dependencies
 Source: https://github.com/rdbende/Sun-Valley-ttk-theme (MIT License)
 
 Copyright (c) rdbende <rdbende@proton.me>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+## openpyxl Required Notice
+
+Source: https://openpyxl.readthedocs.io/ (MIT License)
+
+Copyright (c) openpyxl contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

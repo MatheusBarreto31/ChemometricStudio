@@ -20,6 +20,11 @@ def _load_file(path: str, separator: Optional[str], num_headlines: int, num_head
         df = pd.read_excel(path, header=None, skiprows=num_headlines)
         if num_header_columns > 0:
             df = df.iloc[:, num_header_columns:]
+
+        # Excel cells may contain mixed types or trailing empty rows/columns.
+        # Coerce to numeric and trim fully empty margins to reduce downstream warnings.
+        df = df.apply(pd.to_numeric, errors='coerce')
+        df = df.dropna(axis=0, how='all').dropna(axis=1, how='all')
         return df.values
     else:
         # Load text file - use pandas for more robust CSV handling
@@ -467,9 +472,14 @@ def _calculate_correlation_matrix(X: np.ndarray) -> np.ndarray:
     
     # Handle cases where X has NaN or is not numeric
     X_clean = np.asarray(X, dtype=float)
-    
-    # Calculate correlation matrix
-    corr_matrix = np.corrcoef(X_clean.T)
+
+    # np.corrcoef emits divide/invalid warnings for all-NaN or zero-variance columns.
+    # In those cases correlation is undefined, so we keep NaN values without warning spam.
+    with np.errstate(divide='ignore', invalid='ignore'):
+        corr_matrix = np.corrcoef(X_clean.T)
+
+    corr_matrix = np.asarray(corr_matrix, dtype=float)
+    corr_matrix[~np.isfinite(corr_matrix)] = np.nan
     
     # If single variable, corrcoef returns scalar; convert to 2D array
     if corr_matrix.ndim == 0:
