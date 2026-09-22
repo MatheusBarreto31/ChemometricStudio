@@ -141,7 +141,12 @@ def _coerce_cv_config(cv_config: Optional[Any], n_samples: int) -> Optional[Any]
     return None
 
 
-def _classification_metrics(y_true: Optional[np.ndarray], y_pred: Optional[np.ndarray]) -> Optional[Dict[str, float]]:
+def _classification_metrics(
+    y_true: Optional[np.ndarray],
+    y_pred: Optional[np.ndarray],
+    target_label: Optional[Any] = None,
+    include_macro: bool = True,
+) -> Optional[Dict[str, float]]:
     if y_true is None or y_pred is None:
         return None
     y_true = np.asarray(y_true, dtype=object).reshape(-1)
@@ -149,13 +154,102 @@ def _classification_metrics(y_true: Optional[np.ndarray], y_pred: Optional[np.nd
     if y_true.shape[0] != y_pred.shape[0] or y_true.shape[0] == 0:
         return None
 
-    return {
+    labels = np.unique(np.concatenate([y_true, y_pred]))
+    cm = confusion_matrix(y_true, y_pred, labels=labels)
+    cm = np.asarray(cm, dtype=float)
+    total = float(np.sum(cm))
+
+    tp = np.diag(cm)
+    fn = np.sum(cm, axis=1) - tp
+    fp = np.sum(cm, axis=0) - tp
+    tn = total - (tp + fn + fp)
+
+    sens_denom = tp + fn
+    spec_denom = tn + fp
+    sensitivity_per_class = np.divide(tp, sens_denom, out=np.zeros_like(tp), where=sens_denom > 0.0)
+    specificity_per_class = np.divide(tn, spec_denom, out=np.zeros_like(tn), where=spec_denom > 0.0)
+    precision_per_class = np.divide(tp, tp + fp, out=np.zeros_like(tp), where=(tp + fp) > 0.0)
+    recall_per_class = sensitivity_per_class.copy()
+    f1_per_class = np.divide(
+        2.0 * precision_per_class * recall_per_class,
+        precision_per_class + recall_per_class,
+        out=np.zeros_like(precision_per_class),
+        where=(precision_per_class + recall_per_class) > 0.0,
+    )
+
+    error_rate = float(np.mean(y_true != y_pred))
+    non_error_rate = float(1.0 - error_rate)
+    ner = float(np.mean(sensitivity_per_class)) if sensitivity_per_class.size > 0 else 0.0
+    er = float(1.0 - ner)
+
+    target_idx: Optional[int] = None
+    if target_label is not None:
+        target_str = str(target_label)
+        for idx, lbl in enumerate(labels.tolist()):
+            if str(lbl) == target_str:
+                target_idx = idx
+                break
+
+    if target_idx is not None:
+        precision_value = float(precision_per_class[target_idx])
+        recall_value = float(recall_per_class[target_idx])
+        f1_value = float(f1_per_class[target_idx])
+        sensitivity_value = float(sensitivity_per_class[target_idx])
+        specificity_value = float(specificity_per_class[target_idx])
+        tp_count = float(tp[target_idx])
+        fp_count = float(fp[target_idx])
+        fn_count = float(fn[target_idx])
+        tn_count = float(tn[target_idx])
+        correct_count = float(tp[target_idx] + tn[target_idx])
+        misclassified_count = float(fp[target_idx] + fn[target_idx])
+    else:
+        precision_value = float(np.mean(precision_per_class)) if precision_per_class.size > 0 else 0.0
+        recall_value = float(np.mean(recall_per_class)) if recall_per_class.size > 0 else 0.0
+        f1_value = float(np.mean(f1_per_class)) if f1_per_class.size > 0 else 0.0
+        sensitivity_value = float(np.mean(sensitivity_per_class)) if sensitivity_per_class.size > 0 else 0.0
+        specificity_value = float(np.mean(specificity_per_class)) if specificity_per_class.size > 0 else 0.0
+        tp_count = float(np.trace(cm))
+        fp_count = float(total - tp_count)
+        fn_count = float(total - tp_count)
+        tn_count = float("nan")
+        correct_count = float(tp_count)
+        misclassified_count = float(total - tp_count)
+
+    metrics: Dict[str, float] = {
         "accuracy": float(accuracy_score(y_true, y_pred)),
-        "precision_macro": float(precision_score(y_true, y_pred, average="macro", zero_division=0)),
-        "recall_macro": float(recall_score(y_true, y_pred, average="macro", zero_division=0)),
-        "f1_macro": float(f1_score(y_true, y_pred, average="macro", zero_division=0)),
+        "precision": precision_value,
+        "prec": precision_value,
+        "recall": recall_value,
+        "f1": f1_value,
+        "sensitivity": sensitivity_value,
+        "specificity": specificity_value,
+        "error_rate": error_rate,
+        "non_error_rate": non_error_rate,
+        "er": er,
+        "ner": ner,
+        "er_macro": er,
+        "ner_macro": ner,
+        "tp_count": tp_count,
+        "fp_count": fp_count,
+        "fn_count": fn_count,
+        "tn_count": tn_count,
+        "correct_count": correct_count,
+        "misclassified_count": misclassified_count,
         "n_samples": int(y_true.shape[0]),
     }
+
+    if include_macro:
+        metrics.update(
+            {
+                "precision_macro": float(precision_score(y_true, y_pred, average="macro", zero_division=0)),
+                "recall_macro": float(recall_score(y_true, y_pred, average="macro", zero_division=0)),
+                "f1_macro": float(f1_score(y_true, y_pred, average="macro", zero_division=0)),
+                "sensitivity_macro": float(np.mean(sensitivity_per_class)) if sensitivity_per_class.size > 0 else 0.0,
+                "specificity_macro": float(np.mean(specificity_per_class)) if specificity_per_class.size > 0 else 0.0,
+            }
+        )
+
+    return metrics
 
 
 def _build_confusion(y_true: Optional[np.ndarray], y_pred: Optional[np.ndarray], labels: List[str]) -> Optional[Dict[str, Any]]:
@@ -590,6 +684,7 @@ def _classification_cv_predictions(
         )
         fold_pred, fold_proba = _predict_closed_set(model_info, X_cal[te], classes=classes)
         oof_pred[te] = np.asarray(fold_pred, dtype=object)
+        fold_stats = _classification_metrics(y_cal[te], fold_pred)
 
         if fold_proba is not None:
             if oof_proba is None:
@@ -604,6 +699,18 @@ def _classification_cv_predictions(
                 "n_test": int(len(te)),
                 "accuracy": float(accuracy_score(y_cal[te], fold_pred)),
                 "f1_macro": float(f1_score(y_cal[te], fold_pred, average="macro", zero_division=0)),
+                "sensitivity_macro": (
+                    float(fold_stats.get("sensitivity_macro")) if fold_stats is not None else None
+                ),
+                "specificity_macro": (
+                    float(fold_stats.get("specificity_macro")) if fold_stats is not None else None
+                ),
+                "error_rate": (
+                    float(fold_stats.get("error_rate")) if fold_stats is not None else None
+                ),
+                "non_error_rate": (
+                    float(fold_stats.get("non_error_rate")) if fold_stats is not None else None
+                ),
             }
         )
 
@@ -1810,15 +1917,18 @@ def classification_one_class(
 
     # For CV we only have predictions for calibration samples, so use y_cal_eval.
     metrics_payload = {
-        "calibration": _classification_metrics(y_cal_eval, class_cal_pred),
-        "cv": _classification_metrics(y_cal_eval, class_cv_pred),
-        "validation": _classification_metrics(y_val_eval, class_val_pred),
+        "calibration": _classification_metrics(y_cal_eval, class_cal_pred, target_label=_ref_str, include_macro=True),
+        "cv": _classification_metrics(y_cal_eval, class_cv_pred, target_label=_ref_str, include_macro=True),
+        "validation": _classification_metrics(y_val_eval, class_val_pred, target_label=_ref_str, include_macro=True),
         "one_class": {
             "reference_class": _ref_str,
             "fit_sample_count": int(X_fit.shape[0]),
             "inlier_rate_calibration": float(np.mean(np.asarray(inlier_cal) == 1)) if inlier_cal is not None else None,
             "inlier_rate_cv": float(np.mean(np.asarray(inlier_cv) == 1)) if inlier_cv is not None else None,
             "inlier_rate_validation": float(np.mean(np.asarray(inlier_val) == 1)) if inlier_val is not None else None,
+            "acceptance_rate_calibration": float(np.mean(np.asarray(inlier_cal) == 1)) if inlier_cal is not None else None,
+            "acceptance_rate_cv": float(np.mean(np.asarray(inlier_cv) == 1)) if inlier_cv is not None else None,
+            "acceptance_rate_validation": float(np.mean(np.asarray(inlier_val) == 1)) if inlier_val is not None else None,
             "simca_limit_method": model_info.get("limit_method") if method_norm in ("simca", "dd_simca") else None,
             "simca_decision_rule": model_info.get("decision_rule") if method_norm in ("simca", "dd_simca") else None,
             "simca_combined_rule": model_info.get("combined_rule") if method_norm == "simca" else None,
@@ -1953,7 +2063,7 @@ def classification_one_class(
     cv_results = {
         "n_folds": int(np.sum(fit_mask)),
         "cv_strategy": str(effective_cv.cv_strategy) if effective_cv is not None else "loocv",
-        "aggregated_metrics": _classification_metrics(y_cal, class_cv_pred),
+        "aggregated_metrics": _classification_metrics(y_cal_eval, class_cv_pred, target_label=_ref_str, include_macro=True),
     } if class_cv_pred is not None else None
 
     optimization_results = {

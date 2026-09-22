@@ -1317,9 +1317,19 @@ def select_variables_for_workflow(
             trajectory_rmsecv.append(float(metrics["rmsecv"]) if metrics["rmsecv"] is not None else float("nan"))
             trajectory_r2cv.append(float(metrics["r2cv"]) if metrics["r2cv"] is not None else float("nan"))
             trajectory_accuracy.append(float(metrics["accuracy"]) if metrics["accuracy"] is not None else float("nan"))
-            trajectory_f1_macro.append(float(metrics["f1_macro"]) if metrics["f1_macro"] is not None else float("nan"))
-            trajectory_precision_macro.append(float(metrics["precision_macro"]) if metrics["precision_macro"] is not None else float("nan"))
-            trajectory_recall_macro.append(float(metrics["recall_macro"]) if metrics["recall_macro"] is not None else float("nan"))
+            _f1_macro_like = metrics.get("f1_macro")
+            if _f1_macro_like is None:
+                _f1_macro_like = metrics.get("f1")
+            _precision_macro_like = metrics.get("precision_macro")
+            if _precision_macro_like is None:
+                _precision_macro_like = metrics.get("precision")
+            _recall_macro_like = metrics.get("recall_macro")
+            if _recall_macro_like is None:
+                _recall_macro_like = metrics.get("recall")
+
+            trajectory_f1_macro.append(float(_f1_macro_like) if _f1_macro_like is not None else float("nan"))
+            trajectory_precision_macro.append(float(_precision_macro_like) if _precision_macro_like is not None else float("nan"))
+            trajectory_recall_macro.append(float(_recall_macro_like) if _recall_macro_like is not None else float("nan"))
             trajectory_rmse_cal.append(float(split_metrics["rmse_cal"]) if split_metrics["rmse_cal"] is not None else float("nan"))
             trajectory_rmse_cv.append(float(split_metrics["rmse_cv"]) if split_metrics["rmse_cv"] is not None else float("nan"))
             trajectory_rmse_val.append(float(split_metrics["rmse_val"]) if split_metrics["rmse_val"] is not None else float("nan"))

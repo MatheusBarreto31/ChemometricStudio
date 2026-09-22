@@ -1256,12 +1256,45 @@ def analyst_main(
             'f1_cal': None,
             'f1_cv': None,
             'f1_val': None,
+            'f1_macro_cal': None,
+            'f1_macro_cv': None,
+            'f1_macro_val': None,
             'precision_cal': None,
             'precision_cv': None,
             'precision_val': None,
+            'precision_macro_cal': None,
+            'precision_macro_cv': None,
+            'precision_macro_val': None,
             'recall_cal': None,
             'recall_cv': None,
             'recall_val': None,
+            'recall_macro_cal': None,
+            'recall_macro_cv': None,
+            'recall_macro_val': None,
+            'sensitivity_cal': None,
+            'sensitivity_cv': None,
+            'sensitivity_val': None,
+            'sensitivity_macro_cal': None,
+            'sensitivity_macro_cv': None,
+            'sensitivity_macro_val': None,
+            'specificity_cal': None,
+            'specificity_cv': None,
+            'specificity_val': None,
+            'specificity_macro_cal': None,
+            'specificity_macro_cv': None,
+            'specificity_macro_val': None,
+            'ner_cal': None,
+            'ner_cv': None,
+            'ner_val': None,
+            'ner_macro_cal': None,
+            'ner_macro_cv': None,
+            'ner_macro_val': None,
+            'er_cal': None,
+            'er_cv': None,
+            'er_val': None,
+            'er_macro_cal': None,
+            'er_macro_cv': None,
+            'er_macro_val': None,
         }
         if not isinstance(payload, dict):
             return out
@@ -1295,17 +1328,64 @@ def analyst_main(
         out['accuracy_cv'] = _metric_from_split(split_payloads['cv'], ['accuracy'])
         out['accuracy_val'] = _metric_from_split(split_payloads['val'], ['accuracy'])
 
-        out['f1_cal'] = _metric_from_split(split_payloads['cal'], ['f1_macro', 'f1'])
-        out['f1_cv'] = _metric_from_split(split_payloads['cv'], ['f1_macro', 'f1'])
-        out['f1_val'] = _metric_from_split(split_payloads['val'], ['f1_macro', 'f1'])
+        out['f1_cal'] = _metric_from_split(split_payloads['cal'], ['f1', 'f1_macro'])
+        out['f1_cv'] = _metric_from_split(split_payloads['cv'], ['f1', 'f1_macro'])
+        out['f1_val'] = _metric_from_split(split_payloads['val'], ['f1', 'f1_macro'])
+        out['f1_macro_cal'] = _metric_from_split(split_payloads['cal'], ['f1_macro'])
+        out['f1_macro_cv'] = _metric_from_split(split_payloads['cv'], ['f1_macro'])
+        out['f1_macro_val'] = _metric_from_split(split_payloads['val'], ['f1_macro'])
 
-        out['precision_cal'] = _metric_from_split(split_payloads['cal'], ['precision_macro', 'precision'])
-        out['precision_cv'] = _metric_from_split(split_payloads['cv'], ['precision_macro', 'precision'])
-        out['precision_val'] = _metric_from_split(split_payloads['val'], ['precision_macro', 'precision'])
+        out['precision_cal'] = _metric_from_split(split_payloads['cal'], ['precision', 'prec', 'precision_macro'])
+        out['precision_cv'] = _metric_from_split(split_payloads['cv'], ['precision', 'prec', 'precision_macro'])
+        out['precision_val'] = _metric_from_split(split_payloads['val'], ['precision', 'prec', 'precision_macro'])
+        out['precision_macro_cal'] = _metric_from_split(split_payloads['cal'], ['precision_macro'])
+        out['precision_macro_cv'] = _metric_from_split(split_payloads['cv'], ['precision_macro'])
+        out['precision_macro_val'] = _metric_from_split(split_payloads['val'], ['precision_macro'])
 
-        out['recall_cal'] = _metric_from_split(split_payloads['cal'], ['recall_macro', 'recall'])
-        out['recall_cv'] = _metric_from_split(split_payloads['cv'], ['recall_macro', 'recall'])
-        out['recall_val'] = _metric_from_split(split_payloads['val'], ['recall_macro', 'recall'])
+        out['recall_cal'] = _metric_from_split(split_payloads['cal'], ['recall', 'recall_macro'])
+        out['recall_cv'] = _metric_from_split(split_payloads['cv'], ['recall', 'recall_macro'])
+        out['recall_val'] = _metric_from_split(split_payloads['val'], ['recall', 'recall_macro'])
+        out['recall_macro_cal'] = _metric_from_split(split_payloads['cal'], ['recall_macro'])
+        out['recall_macro_cv'] = _metric_from_split(split_payloads['cv'], ['recall_macro'])
+        out['recall_macro_val'] = _metric_from_split(split_payloads['val'], ['recall_macro'])
+
+        out['sensitivity_cal'] = _metric_from_split(split_payloads['cal'], ['sensitivity', 'recall', 'sensitivity_macro', 'recall_macro'])
+        out['sensitivity_cv'] = _metric_from_split(split_payloads['cv'], ['sensitivity', 'recall', 'sensitivity_macro', 'recall_macro'])
+        out['sensitivity_val'] = _metric_from_split(split_payloads['val'], ['sensitivity', 'recall', 'sensitivity_macro', 'recall_macro'])
+        out['sensitivity_macro_cal'] = _metric_from_split(split_payloads['cal'], ['sensitivity_macro'])
+        out['sensitivity_macro_cv'] = _metric_from_split(split_payloads['cv'], ['sensitivity_macro'])
+        out['sensitivity_macro_val'] = _metric_from_split(split_payloads['val'], ['sensitivity_macro'])
+
+        out['specificity_cal'] = _metric_from_split(split_payloads['cal'], ['specificity', 'specificity_macro'])
+        out['specificity_cv'] = _metric_from_split(split_payloads['cv'], ['specificity', 'specificity_macro'])
+        out['specificity_val'] = _metric_from_split(split_payloads['val'], ['specificity', 'specificity_macro'])
+        out['specificity_macro_cal'] = _metric_from_split(split_payloads['cal'], ['specificity_macro'])
+        out['specificity_macro_cv'] = _metric_from_split(split_payloads['cv'], ['specificity_macro'])
+        out['specificity_macro_val'] = _metric_from_split(split_payloads['val'], ['specificity_macro'])
+
+        out['ner_cal'] = _metric_from_split(split_payloads['cal'], ['non_error_rate', 'ner', 'accuracy'])
+        out['ner_cv'] = _metric_from_split(split_payloads['cv'], ['non_error_rate', 'ner', 'accuracy'])
+        out['ner_val'] = _metric_from_split(split_payloads['val'], ['non_error_rate', 'ner', 'accuracy'])
+        out['ner_macro_cal'] = _metric_from_split(split_payloads['cal'], ['ner_macro', 'ner'])
+        out['ner_macro_cv'] = _metric_from_split(split_payloads['cv'], ['ner_macro', 'ner'])
+        out['ner_macro_val'] = _metric_from_split(split_payloads['val'], ['ner_macro', 'ner'])
+
+        out['er_cal'] = _metric_from_split(split_payloads['cal'], ['error_rate', 'er'])
+        out['er_cv'] = _metric_from_split(split_payloads['cv'], ['error_rate', 'er'])
+        out['er_val'] = _metric_from_split(split_payloads['val'], ['error_rate', 'er'])
+        out['er_macro_cal'] = _metric_from_split(split_payloads['cal'], ['er_macro', 'er'])
+        out['er_macro_cv'] = _metric_from_split(split_payloads['cv'], ['er_macro', 'er'])
+        out['er_macro_val'] = _metric_from_split(split_payloads['val'], ['er_macro', 'er'])
+
+        # Compatibility fallback for payloads that only provide accuracy.
+        for split_key in ('cal', 'cv', 'val'):
+            ner_key = f'ner_{split_key}'
+            er_key = f'er_{split_key}'
+            if out[ner_key] is None:
+                acc_val = out.get(f'accuracy_{split_key}')
+                out[ner_key] = float(acc_val) if acc_val is not None else None
+            if out[er_key] is None and out[ner_key] is not None:
+                out[er_key] = float(1.0 - float(out[ner_key]))
 
         return out
 
@@ -4350,12 +4430,31 @@ def analyst_main(
 
                 if selection_task_type_norm == 'regression':
                     selected_metrics_summary = f"RMSE({_triplet('rmse')}); R2({_triplet('r2')})"
-                else:
+                elif selection_task_type_norm == 'one_class':
                     selected_metrics_summary = (
                         f"Accuracy({_triplet('accuracy')}); "
                         f"F1({_triplet('f1')}); "
                         f"Precision({_triplet('precision')}); "
-                        f"Recall({_triplet('recall')})"
+                        f"Sensitivity({_triplet('sensitivity')}); "
+                        f"Specificity({_triplet('specificity')}); "
+                        f"NER({_triplet('ner')}); "
+                        f"ER({_triplet('er')}); "
+                        f"F1 (Macro)({_triplet('f1_macro')}); "
+                        f"Precision (Macro)({_triplet('precision_macro')}); "
+                        f"Sensitivity (Macro)({_triplet('sensitivity_macro')}); "
+                        f"Specificity (Macro)({_triplet('specificity_macro')}); "
+                        f"NER (Macro)({_triplet('ner_macro')}); "
+                        f"ER (Macro)({_triplet('er_macro')})"
+                    )
+                else:
+                    selected_metrics_summary = (
+                        f"Accuracy({_triplet('accuracy')}); "
+                        f"F1 (Macro)({_triplet('f1_macro')}); "
+                        f"Precision (Macro)({_triplet('precision_macro')}); "
+                        f"Sensitivity (Macro)({_triplet('sensitivity_macro')}); "
+                        f"Specificity (Macro)({_triplet('specificity_macro')}); "
+                        f"NER (Macro)({_triplet('ner_macro')}); "
+                        f"ER (Macro)({_triplet('er_macro')})"
                     )
 
                 selection_metadata = best_selection_payload.get('selection_metadata')
@@ -4388,6 +4487,17 @@ def analyst_main(
                     'f1_cal', 'f1_cv', 'f1_val',
                     'precision_cal', 'precision_cv', 'precision_val',
                     'recall_cal', 'recall_cv', 'recall_val',
+                    'sensitivity_cal', 'sensitivity_cv', 'sensitivity_val',
+                    'specificity_cal', 'specificity_cv', 'specificity_val',
+                    'ner_cal', 'ner_cv', 'ner_val',
+                    'er_cal', 'er_cv', 'er_val',
+                    'f1_macro_cal', 'f1_macro_cv', 'f1_macro_val',
+                    'precision_macro_cal', 'precision_macro_cv', 'precision_macro_val',
+                    'recall_macro_cal', 'recall_macro_cv', 'recall_macro_val',
+                    'sensitivity_macro_cal', 'sensitivity_macro_cv', 'sensitivity_macro_val',
+                    'specificity_macro_cal', 'specificity_macro_cv', 'specificity_macro_val',
+                    'ner_macro_cal', 'ner_macro_cv', 'ner_macro_val',
+                    'er_macro_cal', 'er_macro_cv', 'er_macro_val',
                 ):
                     _value = selected_metrics.get(_metric_name)
                     selection_metadata[f'selected_{_metric_name}'] = float(_value) if _value is not None else None
@@ -5974,6 +6084,7 @@ def analyst_main(
                     try:
                         from sklearn.metrics import (
                             accuracy_score as _acc,
+                            confusion_matrix as _cm,
                             f1_score as _f1,
                             precision_score as _prec,
                             recall_score as _rec,
@@ -5982,13 +6093,78 @@ def analyst_main(
                         y_p = np.asarray(y_pred, dtype=object).reshape(-1)
                         if y_t.shape[0] == 0 or y_t.shape[0] != y_p.shape[0]:
                             return None
-                        return {
+                        labels = np.unique(np.concatenate([y_t, y_p]))
+                        cm = np.asarray(_cm(y_t, y_p, labels=labels), dtype=float)
+                        total = float(np.sum(cm))
+                        tp = np.diag(cm)
+                        fn = np.sum(cm, axis=1) - tp
+                        fp = np.sum(cm, axis=0) - tp
+                        tn = total - (tp + fn + fp)
+                        sens_denom = tp + fn
+                        spec_denom = tn + fp
+                        sensitivity_per_class = np.divide(tp, sens_denom, out=np.zeros_like(tp), where=sens_denom > 0.0)
+                        specificity_per_class = np.divide(tn, spec_denom, out=np.zeros_like(tn), where=spec_denom > 0.0)
+                        precision_per_class = np.divide(tp, tp + fp, out=np.zeros_like(tp), where=(tp + fp) > 0.0)
+                        recall_per_class = sensitivity_per_class.copy()
+                        f1_per_class = np.divide(
+                            2.0 * precision_per_class * recall_per_class,
+                            precision_per_class + recall_per_class,
+                            out=np.zeros_like(precision_per_class),
+                            where=(precision_per_class + recall_per_class) > 0.0,
+                        )
+                        error_rate = float(np.mean(y_t != y_p))
+                        non_error_rate = float(1.0 - error_rate)
+                        ner = float(np.mean(sensitivity_per_class)) if sensitivity_per_class.size > 0 else 0.0
+                        er = float(1.0 - ner)
+
+                        is_one_class_eval = bool(one_class_ensemble_active)
+                        target_idx: Optional[int] = None
+                        if is_one_class_eval and one_class_resolved_ref_label is not None:
+                            target_str = str(one_class_resolved_ref_label)
+                            for idx, lbl in enumerate(labels.tolist()):
+                                if str(lbl) == target_str:
+                                    target_idx = idx
+                                    break
+
+                        if target_idx is not None:
+                            precision_value = float(precision_per_class[target_idx])
+                            recall_value = float(recall_per_class[target_idx])
+                            f1_value = float(f1_per_class[target_idx])
+                            sensitivity_value = float(sensitivity_per_class[target_idx])
+                            specificity_value = float(specificity_per_class[target_idx])
+                        else:
+                            precision_value = float(np.mean(precision_per_class)) if precision_per_class.size > 0 else 0.0
+                            recall_value = float(np.mean(recall_per_class)) if recall_per_class.size > 0 else 0.0
+                            f1_value = float(np.mean(f1_per_class)) if f1_per_class.size > 0 else 0.0
+                            sensitivity_value = float(np.mean(sensitivity_per_class)) if sensitivity_per_class.size > 0 else 0.0
+                            specificity_value = float(np.mean(specificity_per_class)) if specificity_per_class.size > 0 else 0.0
+
+                        payload = {
                             'accuracy': float(_acc(y_t, y_p)),
-                            'f1_macro': float(_f1(y_t, y_p, average='macro', zero_division=0)),
-                            'precision_macro': float(_prec(y_t, y_p, average='macro', zero_division=0)),
-                            'recall_macro': float(_rec(y_t, y_p, average='macro', zero_division=0)),
+                            'f1': f1_value,
+                            'precision': precision_value,
+                            'prec': precision_value,
+                            'recall': recall_value,
+                            'sensitivity': sensitivity_value,
+                            'specificity': specificity_value,
+                            'error_rate': error_rate,
+                            'non_error_rate': non_error_rate,
+                            'er': er,
+                            'ner': ner,
+                            'er_macro': er,
+                            'ner_macro': ner,
                             'n_samples': int(y_t.shape[0]),
                         }
+                        payload.update(
+                            {
+                                'f1_macro': float(_f1(y_t, y_p, average='macro', zero_division=0)),
+                                'precision_macro': float(_prec(y_t, y_p, average='macro', zero_division=0)),
+                                'recall_macro': float(_rec(y_t, y_p, average='macro', zero_division=0)),
+                                'sensitivity_macro': float(np.mean(sensitivity_per_class)) if sensitivity_per_class.size > 0 else 0.0,
+                                'specificity_macro': float(np.mean(specificity_per_class)) if specificity_per_class.size > 0 else 0.0,
+                            }
+                        )
+                        return payload
                     except Exception:
                         return None
 

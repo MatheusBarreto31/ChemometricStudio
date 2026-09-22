@@ -594,7 +594,7 @@
             "type": "text",
             "config": {
               "title": "Performance Report",
-              "text_template": "One-Class Classification Performance Report\n===========================================\nMethod:                {method}\nReference Class:       {ref_class}\nNon-Reference Label:   {unknown_label}\nFit Samples:           {fit_n}\n\nCalibration\n-----------\nSamples:               {n_cal}\nTrue Positives (TP):   {tp_cal}\nTrue Negatives (TN):   {tn_cal}\nFalse Positives (FP):  {fp_cal}\nFalse Negatives (FN):  {fn_cal}\nAccuracy:              {acc_cal}\nF1 (Macro):            {f1_cal}\nPrecision (Macro):     {prec_cal}\nRecall (Macro):        {rec_cal}\nInlier Rate:           {inlier_cal}\n\nValidation\n----------\nSamples:               {n_val}\nTrue Positives (TP):   {tp_val}\nTrue Negatives (TN):   {tn_val}\nFalse Positives (FP):  {fp_val}\nFalse Negatives (FN):  {fn_val}\nAccuracy:              {acc_val}\nF1 (Macro):            {f1_val}\nPrecision (Macro):     {prec_val}\nRecall (Macro):        {rec_val}\nInlier Rate:           {inlier_val}",
+              "text_template": "One-Class Classification Performance Report\n===========================================\nMethod:                {method}\nReference Class:       {ref_class}\nNon-Reference Label:   {unknown_label}\nFit Samples:           {fit_n}\n\nCalibration\n-----------\nSamples:               {n_cal}\nTrue Positives (TP):   {tp_cal}\nTrue Negatives (TN):   {tn_cal}\nFalse Positives (FP):  {fp_cal}\nFalse Negatives (FN):  {fn_cal}\nAccuracy:              {acc_cal}\nF1:                    {f1_cal}\nPrecision:             {prec_cal}\nSensitivity:           {sen_cal}\nSpecificity:           {spec_cal}\nNER:                   {ner_cal}\nER:                    {er_cal}\nF1 (Macro):            {f1m_cal}\nPrecision (Macro):     {precm_cal}\nSensitivity (Macro):   {senm_cal}\nSpecificity (Macro):   {specm_cal}\nNER (Macro):           {nerm_cal}\nER (Macro):            {erm_cal}\nAcceptance Rate:       {accp_cal}\n\nCross-Validation\n----------------\nSamples:               {n_cv}\nAccuracy:              {acc_cv}\nF1:                    {f1_cv}\nPrecision:             {prec_cv}\nSensitivity:           {sen_cv}\nSpecificity:           {spec_cv}\nNER:                   {ner_cv}\nER:                    {er_cv}\nF1 (Macro):            {f1m_cv}\nPrecision (Macro):     {precm_cv}\nSensitivity (Macro):   {senm_cv}\nSpecificity (Macro):   {specm_cv}\nNER (Macro):           {nerm_cv}\nER (Macro):            {erm_cv}\nAcceptance Rate:       {accp_cv}\n\nValidation\n----------\nSamples:               {n_val}\nTrue Positives (TP):   {tp_val}\nTrue Negatives (TN):   {tn_val}\nFalse Positives (FP):  {fp_val}\nFalse Negatives (FN):  {fn_val}\nAccuracy:              {acc_val}\nF1:                    {f1_val}\nPrecision:             {prec_val}\nSensitivity:           {sen_val}\nSpecificity:           {spec_val}\nNER:                   {ner_val}\nER:                    {er_val}\nF1 (Macro):            {f1m_val}\nPrecision (Macro):     {precm_val}\nSensitivity (Macro):   {senm_val}\nSpecificity (Macro):   {specm_val}\nNER (Macro):           {nerm_val}\nER (Macro):            {erm_val}\nAcceptance Rate:       {accp_val}",
               "bindings": [
                 {
                   "name": "method",
@@ -681,7 +681,7 @@
                 {
                   "name": "f1_cal",
                   "data_source": "metrics",
-                  "nested_key": "calibration.f1_macro",
+                  "nested_key": "calibration.f1",
                   "selector": {
                     "mode": "value"
                   },
@@ -690,6 +690,60 @@
                 {
                   "name": "prec_cal",
                   "data_source": "metrics",
+                  "nested_key": "calibration.precision",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "sen_cal",
+                  "data_source": "metrics",
+                  "nested_key": "calibration.sensitivity",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "spec_cal",
+                  "data_source": "metrics",
+                  "nested_key": "calibration.specificity",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "ner_cal",
+                  "data_source": "metrics",
+                  "nested_key": "calibration.non_error_rate",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "er_cal",
+                  "data_source": "metrics",
+                  "nested_key": "calibration.error_rate",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "f1m_cal",
+                  "data_source": "metrics",
+                  "nested_key": "calibration.f1_macro",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "precm_cal",
+                  "data_source": "metrics",
                   "nested_key": "calibration.precision_macro",
                   "selector": {
                     "mode": "value"
@@ -697,18 +751,179 @@
                   "value_format": ".4f"
                 },
                 {
-                  "name": "rec_cal",
+                  "name": "senm_cal",
                   "data_source": "metrics",
-                  "nested_key": "calibration.recall_macro",
+                  "nested_key": "calibration.sensitivity_macro",
                   "selector": {
                     "mode": "value"
                   },
                   "value_format": ".4f"
                 },
                 {
-                  "name": "inlier_cal",
+                  "name": "specm_cal",
                   "data_source": "metrics",
-                  "nested_key": "one_class.inlier_rate_calibration",
+                  "nested_key": "calibration.specificity_macro",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "nerm_cal",
+                  "data_source": "metrics",
+                  "nested_key": "calibration.ner_macro",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "erm_cal",
+                  "data_source": "metrics",
+                  "nested_key": "calibration.er_macro",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "accp_cal",
+                  "data_source": "metrics",
+                  "nested_key": "one_class.acceptance_rate_calibration",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "n_cv",
+                  "data_source": "metrics",
+                  "nested_key": "cv.n_samples",
+                  "selector": {
+                    "mode": "value"
+                  }
+                },
+                {
+                  "name": "acc_cv",
+                  "data_source": "metrics",
+                  "nested_key": "cv.accuracy",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "f1_cv",
+                  "data_source": "metrics",
+                  "nested_key": "cv.f1",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "prec_cv",
+                  "data_source": "metrics",
+                  "nested_key": "cv.precision",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "sen_cv",
+                  "data_source": "metrics",
+                  "nested_key": "cv.sensitivity",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "spec_cv",
+                  "data_source": "metrics",
+                  "nested_key": "cv.specificity",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "ner_cv",
+                  "data_source": "metrics",
+                  "nested_key": "cv.non_error_rate",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "er_cv",
+                  "data_source": "metrics",
+                  "nested_key": "cv.error_rate",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "f1m_cv",
+                  "data_source": "metrics",
+                  "nested_key": "cv.f1_macro",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "precm_cv",
+                  "data_source": "metrics",
+                  "nested_key": "cv.precision_macro",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "senm_cv",
+                  "data_source": "metrics",
+                  "nested_key": "cv.sensitivity_macro",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "specm_cv",
+                  "data_source": "metrics",
+                  "nested_key": "cv.specificity_macro",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "nerm_cv",
+                  "data_source": "metrics",
+                  "nested_key": "cv.ner_macro",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "erm_cv",
+                  "data_source": "metrics",
+                  "nested_key": "cv.er_macro",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "accp_cv",
+                  "data_source": "metrics",
+                  "nested_key": "one_class.acceptance_rate_cv",
                   "selector": {
                     "mode": "value"
                   },
@@ -766,7 +981,7 @@
                 {
                   "name": "f1_val",
                   "data_source": "metrics",
-                  "nested_key": "validation.f1_macro",
+                  "nested_key": "validation.f1",
                   "selector": {
                     "mode": "value"
                   },
@@ -775,6 +990,60 @@
                 {
                   "name": "prec_val",
                   "data_source": "metrics",
+                  "nested_key": "validation.precision",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "sen_val",
+                  "data_source": "metrics",
+                  "nested_key": "validation.sensitivity",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "spec_val",
+                  "data_source": "metrics",
+                  "nested_key": "validation.specificity",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "ner_val",
+                  "data_source": "metrics",
+                  "nested_key": "validation.non_error_rate",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "er_val",
+                  "data_source": "metrics",
+                  "nested_key": "validation.error_rate",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "f1m_val",
+                  "data_source": "metrics",
+                  "nested_key": "validation.f1_macro",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "precm_val",
+                  "data_source": "metrics",
                   "nested_key": "validation.precision_macro",
                   "selector": {
                     "mode": "value"
@@ -782,18 +1051,45 @@
                   "value_format": ".4f"
                 },
                 {
-                  "name": "rec_val",
+                  "name": "senm_val",
                   "data_source": "metrics",
-                  "nested_key": "validation.recall_macro",
+                  "nested_key": "validation.sensitivity_macro",
                   "selector": {
                     "mode": "value"
                   },
                   "value_format": ".4f"
                 },
                 {
-                  "name": "inlier_val",
+                  "name": "specm_val",
                   "data_source": "metrics",
-                  "nested_key": "one_class.inlier_rate_validation",
+                  "nested_key": "validation.specificity_macro",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "nerm_val",
+                  "data_source": "metrics",
+                  "nested_key": "validation.ner_macro",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "erm_val",
+                  "data_source": "metrics",
+                  "nested_key": "validation.er_macro",
+                  "selector": {
+                    "mode": "value"
+                  },
+                  "value_format": ".4f"
+                },
+                {
+                  "name": "accp_val",
+                  "data_source": "metrics",
+                  "nested_key": "one_class.acceptance_rate_validation",
                   "selector": {
                     "mode": "value"
                   },
