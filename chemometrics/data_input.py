@@ -9,6 +9,12 @@ from datetime import datetime
 import re
 from chemometrics.input_parsing import parse_numeric_spec
 
+try:
+    from execution_reporting import emit_execution_warning
+except ImportError:
+    def emit_execution_warning(code: Optional[str] = None, text: str = "", details: Optional[Dict[str, Any]] = None) -> None:
+        return
+
 
 def _load_file(path: str, separator: Optional[str], num_headlines: int, num_header_columns: int = 0) -> np.ndarray:
     """Load data from file, supporting text and Excel formats.
@@ -785,7 +791,7 @@ def load_data(d_specs_separator: str = "Auto detect", d_specs_headlines: str = "
         smp_labels,
         nway_flag,
         axis_n_info,
-        prefer_axis_numeric_labels=bool(axis_info_list)
+        prefer_axis_numeric_labels=bool(axis_info_list),
     )
 
     # Generate dimension labels
@@ -1679,6 +1685,38 @@ def _load_axis_text_info(
     for i in range(nway_flag):
         axis_t_info.append([])
     
+    def _resolve_expected_axis_length(axis_slot: int) -> Optional[int]:
+        if axis_n_info is None or axis_slot >= len(axis_n_info):
+            return None
+        axis_entry = axis_n_info[axis_slot]
+        if axis_entry is None:
+            return None
+        try:
+            return int(np.asarray(axis_entry).reshape(-1).size)
+        except Exception:
+            return None
+
+    mismatch_warning_message = "Axis file size does not match the loaded data dimension. Falling back to generic index axis."
+
+    def _fallback_to_generic_axis(axis_slot: int, expected_len: Optional[int], path: str, current_len: int) -> None:
+        if axis_n_info is not None and axis_slot < len(axis_n_info) and expected_len is not None and expected_len > 0:
+            axis_n_info[axis_slot] = np.arange(1, expected_len + 1, dtype=float)
+        axis_t_info[axis_slot] = []
+        print(
+            f"Warning: Axis file '{path}' has {current_len} values but expected {expected_len}. "
+            f"Falling back to generic index axis."
+        )
+        emit_execution_warning(
+            code="axis_file_mismatch_fallback",
+            text=mismatch_warning_message,
+            details={
+                "axis_file_path": path,
+                "expected_length": expected_len,
+                "actual_length": current_len,
+                "axis_slot": axis_slot,
+            },
+        )
+
     # If var_path is provided, load files
     if var_path:
         for i, path in enumerate(var_path):
@@ -1691,16 +1729,22 @@ def _load_axis_text_info(
                     file_content = _load_axis_file_content(path)
                     
                     if file_content is not None and len(file_content) > 0:
+                        axis_slot = i + 1
+                        expected_len = _resolve_expected_axis_length(axis_slot)
+                        current_len = len(file_content)
+                        if expected_len is not None and expected_len > 0 and current_len != expected_len:
+                            _fallback_to_generic_axis(axis_slot, expected_len, path, current_len)
+                            continue
                         is_numeric, values = _check_if_numeric(file_content)
                         
                         if is_numeric and axis_n_info is not None:
                             # Override the corresponding axis_n_info vector
                             # Position in axis_n_info is i+1 (0 is samples)
-                            if i + 1 < len(axis_n_info):
+                            if axis_slot < len(axis_n_info):
                                 axis_n_info[i + 1] = values
                         
                         # Always store as text labels (numeric values become strings)
-                        axis_t_info[i + 1] = file_content
+                        axis_t_info[axis_slot] = file_content
                 except Exception as e:
                     print(f"Warning: Could not load axis labels from '{path}': {e}")
                     axis_t_info[i + 1] = []
@@ -1735,11 +1779,37 @@ def _load_axis_file_content(path: str) -> Optional[List[str]]:
         path: Path to the file
         
     Returns:
-        List of strings (one per line) or None if loading fails
+        List of axis tokens (row-wise or column-wise) or None if loading fails.
+        Separator is auto-detected per file (comma, tab, semicolon, or whitespace).
     """
     try:
-        with open(path, 'r') as f:
-            content = [line.strip() for line in f if line.strip()]
+        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+            raw_lines = [line.strip() for line in f if line.strip()]
+
+        if not raw_lines:
+            return []
+
+        first_line = raw_lines[0]
+        if ',' in first_line:
+            delimiter = ','
+        elif '\t' in first_line:
+            delimiter = '\t'
+        elif ';' in first_line:
+            delimiter = ';'
+        else:
+            delimiter = None  # whitespace-delimited
+
+        content: List[str] = []
+        for line in raw_lines:
+            # Accept vectors written either as:
+            # - one value per line (column vector), or
+            # - many values in one line (row vector), using one delimiter per file.
+            if delimiter is None:
+                tokens = [token for token in re.split(r"\s+", line) if token]
+            else:
+                tokens = [token.strip() for token in line.split(delimiter) if token.strip()]
+            if tokens:
+                content.extend(tokens)
         return content
     except Exception as e:
         print(f"Error loading axis file '{path}': {e}")

@@ -49,6 +49,13 @@
     "variable": "Variable",
     "way_prefix": "W"
   },
+  "execution_report_specs": {
+    "messages": {},
+    "warnings": {
+      "axis_file_mismatch_fallback": "Axis file size does not match the loaded data dimension. Falling back to generic index axis."
+    },
+    "errors": {}
+  },
   "output_synonyms": {
     "X_cal": [
       "X",
@@ -419,7 +426,7 @@
         "count_source": "nway_flag",
         "required": false,
         "input_type": "user",
-        "tooltip": "Files containing axis labels for each dimension (one file per dimension, based on Data Order)",
+        "tooltip": "Files containing axis labels for each dimension (one file per dimension, based on Data Order). Axis files may be row-wise or column-wise vectors. Separator is auto-detected per file (spaces, tabs, commas, or semicolons).",
         "ispath": true
       },
       {

@@ -2300,6 +2300,21 @@ def _render_line(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],
                 config: dict, datasets: Optional[List[Dict[str, Any]]] = None,
                 qualitative_cmap: str = 'tab10') -> None:
     """Render a line plot, supporting single or multiple datasets with class coloring."""
+    def _coerce_axis_vector(values: Any, expected_len: int) -> Optional[np.ndarray]:
+        """Best-effort coercion of axis vectors to the expected length."""
+        if expected_len <= 0:
+            return None
+        try:
+            arr = np.asarray(values, dtype=float).reshape(-1)
+        except Exception:
+            return None
+        if arr.size == expected_len:
+            return arr
+        # Common off-by-one mismatch from mixed extraction/header-column workflows.
+        if arr.size > expected_len and (arr.size - expected_len) <= 2:
+            return arr[:expected_len]
+        return None
+
     # If datasets provided, use multi-dataset rendering with class support
     if datasets and len(datasets) > 0:
         _render_line_multi_dataset(ax, datasets, config, qualitative_cmap)
@@ -2351,8 +2366,8 @@ def _render_line(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],
             x_vector = None
             x_matrix = None
             if isinstance(x_data, np.ndarray):
-                if x_data.ndim == 1 and int(x_data.shape[0]) == int(n_cols):
-                    x_vector = np.asarray(x_data, dtype=float)
+                if x_data.ndim == 1:
+                    x_vector = _coerce_axis_vector(x_data, int(n_cols))
                 elif x_data.ndim == 2 and int(x_data.shape[0]) == int(n_rows) and int(x_data.shape[1]) == int(n_cols):
                     x_matrix = np.asarray(x_data, dtype=float)
 
@@ -2415,10 +2430,17 @@ def _render_line(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],
             # plot only y so matplotlib uses implicit integer indexing.
             use_explicit_x = True
             try:
-                x_arr = np.asarray(x_data).reshape(-1)
+                x_arr = np.asarray(x_data, dtype=float).reshape(-1)
                 y_arr = np.asarray(y_data).reshape(-1)
                 if x_arr.shape[0] != y_arr.shape[0]:
-                    use_explicit_x = False
+                    aligned_x = _coerce_axis_vector(x_arr, int(y_arr.shape[0]))
+                    if aligned_x is not None:
+                        x_data = aligned_x
+                        use_explicit_x = True
+                    else:
+                        use_explicit_x = False
+                else:
+                    x_data = x_arr
             except Exception:
                 use_explicit_x = False
 

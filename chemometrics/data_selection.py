@@ -177,6 +177,33 @@ def _indices_from_numeric_axis(values: Sequence[Number], axis_values: np.ndarray
     return selected
 
 
+def _indices_from_numeric_text_axis(values: Sequence[Number], labels: Sequence[Any]) -> List[int]:
+    if not labels:
+        return []
+
+    parsed_targets: List[float] = []
+    for value in values:
+        try:
+            parsed_targets.append(float(value))
+        except Exception:
+            continue
+
+    if not parsed_targets:
+        return []
+
+    selected: List[int] = []
+    for idx, label in enumerate(labels):
+        try:
+            label_value = float(str(label).strip())
+        except Exception:
+            continue
+        for target in parsed_targets:
+            if np.isclose(label_value, target, atol=1e-9, rtol=0.0):
+                selected.append(idx)
+                break
+    return selected
+
+
 def _indices_from_text(values: Sequence[str], labels: Sequence[Any]) -> List[int]:
     target_set = {str(v).strip() for v in values if str(v).strip()}
     if not target_set:
@@ -278,10 +305,25 @@ def _select_variable_indices(
         return list(range(axis_size))
 
     if selector_type == "numeric":
+        candidate_indices: List[int] = []
+        has_axis_metadata = axis_numeric_entry is not None or axis_text_entry is not None
         if axis_numeric_entry is not None:
-            axis_vector = np.asarray(axis_numeric_entry, dtype=float).reshape(-1)
-            candidate_indices = _indices_from_numeric_axis(selector_values, axis_vector)
-        else:
+            try:
+                axis_vector = np.asarray(axis_numeric_entry, dtype=float).reshape(-1)
+                candidate_indices = _indices_from_numeric_axis(selector_values, axis_vector)
+            except Exception:
+                candidate_indices = []
+
+        if not candidate_indices and axis_text_entry is not None:
+            if isinstance(axis_text_entry, np.ndarray):
+                labels = axis_text_entry.reshape(-1).tolist()
+            elif isinstance(axis_text_entry, (list, tuple)):
+                labels = list(axis_text_entry)
+            else:
+                labels = [axis_text_entry]
+            candidate_indices = _indices_from_numeric_text_axis(selector_values, labels)
+
+        if not candidate_indices and not has_axis_metadata:
             candidate_indices = _indices_from_numeric_positions(selector_values, axis_size)
     else:
         if axis_text_entry is not None:
