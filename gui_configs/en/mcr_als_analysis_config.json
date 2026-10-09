@@ -48,7 +48,6 @@
     "sweep_mode": "Sweep Mode",
     "component_range": "Component Range",
     "mcr_component_y_mapping": "Component-Y Mapping",
-    "cv_config": "CV Configuration",
     "y_labels": "Y Labels",
     "validation_processing": "Validation Processing"
   },
@@ -69,8 +68,6 @@
     "calibration_models": "Calibration Models",
     "component_y_mapping": "Component-Y Pairing",
     "mcr_als_report": "MCR-ALS Report",
-    "cv_results": "CV Results",
-    "y_cv_pred": "CV Predictions",
     "s_axis_label": "S Axis Label",
     "c_aggregation_label": "C Aggregation Label",
     "auto_mapping_used": "Auto Component-Y Mapping Used",
@@ -177,14 +174,13 @@
       "Calibration Iterations"
     ]
   },
-  "short_description": "MCR-ALS (pyMCR) decomposition with optional calibration, sweep, and cross-validation.",
+  "short_description": "MCR-ALS (pyMCR) decomposition with optional calibration and sweep.",
   "long_description": "Fits MCR-ALS to unfolded calibration data using pyMCR, estimates concentration/spectral profiles, and optionally maps components to Y targets for calibration and validation prediction.",
   "setup": {
     "categories": [
       "Model Parameters",
       "Constraints",
       "Calibration",
-      "Cross-Validation",
       "Data Inputs"
     ],
     "layout": [
@@ -843,18 +839,6 @@
         "input_type": "router",
         "visible_if": false,
         "tooltip": "Routed from upstream labels source; hidden in direct user setup."
-      },
-      {
-        "name": "cv_config",
-        "label": "Cross-Validation Config",
-        "category": "Cross-Validation",
-        "widget": "entry",
-        "type": "CVConfig",
-        "default": "",
-        "required": false,
-        "input_type": "router",
-        "visible_if": false,
-        "tooltip": "Routed from CV configuration step; hidden in direct user setup."
       },
       {
         "name": "nway_flag",

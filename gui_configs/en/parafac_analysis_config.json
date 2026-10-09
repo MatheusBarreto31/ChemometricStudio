@@ -48,7 +48,6 @@
     "sweep_mode": "Sweep Mode",
     "component_range": "Component Range",
     "component_y_mapping": "Component-Y Mapping",
-    "cv_config": "CV Configuration",
     "axis_n_info": "Axis Vectors",
     "axis_t_info": "Axis Text Labels",
     "dim_labels": "Dimension Labels",
@@ -87,8 +86,6 @@
     "parafac_report": "PARAFAC Report",
     "sweep_results": "Sweep Results",
     "selected_n_components": "Selected Components",
-    "cv_results": "CV Results",
-    "y_cv_pred": "CV Predictions",
     "validation_processing": "Validation Processing Mode",
     "sbs_scores_mode_a": "SBS A Scores (Cal)",
     "sbs_val_scores_mode_a": "SBS A Scores (Val Sample)",
@@ -206,7 +203,7 @@
       "Calibration Iterations"
     ]
   },
-  "short_description": "PARAFAC decomposition with missing-data, profile constraints, sweep, calibration, and CV support.",
+  "short_description": "PARAFAC decomposition with missing-data, profile constraints, sweep, and calibration.",
   "long_description": "Fits a CP/PARAFAC model to multiway data, supports NaN-aware fitting, optional reference/initial/fixed profiles, optional sweep across component counts, and calibration of mode-A scores against Y.",
   "setup": {
     "categories": [
@@ -216,8 +213,7 @@
       "Constraints",
       "Unconstrained Model Options",
       "Profiles",
-      "Calibration",
-      "Cross-Validation"
+      "Calibration"
     ],
     "layout": [
       {
@@ -901,17 +897,6 @@
         "name": "dim_labels",
         "label": "Dimension Labels",
         "category": "Data Inputs",
-        "widget": "data_input",
-        "required": false,
-        "visible_if": {
-          "input_type": "user"
-        },
-        "input_type": "routed"
-      },
-      {
-        "name": "cv_config",
-        "label": "CV Configuration",
-        "category": "Cross-Validation",
         "widget": "data_input",
         "required": false,
         "visible_if": {

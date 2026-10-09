@@ -1,4 +1,4 @@
-"""PARAFAC (CP decomposition) analysis with optional calibration and CV support."""
+"""PARAFAC (CP decomposition) analysis with optional calibration support."""
 
 from __future__ import annotations
 
@@ -3495,7 +3495,6 @@ def parafac_analysis(
     sweep_mode: Any = False,
     component_range: str = "",
     component_y_mapping: Any = "",
-    cv_config: Optional[Any] = None,
     fold: int = 0,
     axis_n_info: Optional[List[np.ndarray]] = None,
     dim_labels: Optional[List[str]] = None,
@@ -3503,7 +3502,7 @@ def parafac_analysis(
     validation_processing: str = "batch",
     **kwargs: Any,
 ) -> Dict[str, Any]:
-    """PARAFAC with missing-data handling, sweep mode, calibration, and CV."""
+    """PARAFAC with missing-data handling, sweep mode, and calibration."""
 
     X_cal_test = kwargs.get("X_cal_test")
     Y_cal_test = kwargs.get("Y_cal_test")
@@ -3774,19 +3773,13 @@ def parafac_analysis(
         "axis_n_info": axis_n_info,
         "dim_labels": dim_labels,
         "nway_flag": int(nway_flag) if nway_flag is not None else int(max(1, X_arr.ndim - 1)),
-        "cv_results": result.get("cv_results"),
-        "y_cv_pred": result.get("y_cv_pred"),
         "y_cal_pred": result.get("y_cal_pred"),
         "y_val_pred": result.get("y_val_pred"),
         "y_cal_error": result.get("y_cal_error"),
         "y_val_error": result.get("y_val_error"),
-        "y_cv_error": result.get("y_cv_error"),
         "y_cal_true": _as_2d_y(Y_cal),
         "y_val_true": _as_2d_y(Y_val),
     }
-
-    if output.get("y_cv_error") is None and output.get("y_cv_pred") is not None and output.get("y_cal_true") is not None:
-        output["y_cv_error"] = np.asarray(output["y_cal_true"], dtype=float) - np.asarray(output["y_cv_pred"], dtype=float)
 
     if run_sweep_models and sweep_model_results:
         output.update(
@@ -4591,13 +4584,10 @@ _PARAFAC_RETURN_ORDER: Tuple[str, ...] = (
     "parafac_report",
     "sweep_results",
     "selected_n_components",
-    "cv_results",
-    "y_cv_pred",
     "y_cal_pred",
     "y_val_pred",
     "y_cal_error",
     "y_val_error",
-    "y_cv_error",
     "y_cal_true",
     "y_val_true",
     "parafac_pair_components",

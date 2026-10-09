@@ -1,4 +1,4 @@
-"""MCR-ALS analysis based on pyMCR with optional calibration and CV support."""
+"""MCR-ALS analysis based on pyMCR with optional calibration support."""
 
 from __future__ import annotations
 
@@ -2233,13 +2233,10 @@ def _single_fit(
         "auto_mapping_used": bool(auto_mapping_used),
         "mcr_als_report": "\n".join(report_lines),
         "selected_n_components": int(n_components),
-        "cv_results": None,
-        "y_cv_pred": None,
         "y_cal_pred": y_cal_pred,
         "y_val_pred": y_val_pred,
         "y_cal_error": y_cal_error,
         "y_val_error": y_val_error,
-        "y_cv_error": None,
         "y_cal_true": y_cal_true,
         "y_val_true": y_val_true,
         "data_shape": tuple(X_cal_raw.shape),
@@ -2848,7 +2845,6 @@ def mcr_als_analysis(
     sweep_mode: bool = False,
     component_range: str = "",
     mcr_component_y_mapping: Any = "",
-    cv_config: Optional[Any] = None,
     y_labels: Optional[Any] = None,
     nway_flag: Optional[Any] = None,
     aug_direction: Optional[Any] = None,
@@ -2856,7 +2852,7 @@ def mcr_als_analysis(
     validation_processing: str = "batch",
     **kwargs: Any,
 ) -> Dict[str, Any]:
-    """MCR-ALS with optional component sweep, calibration, and CV support."""
+    """MCR-ALS with optional component sweep and calibration support."""
 
     if X_cal is None and "X_cal_train" in kwargs:
         X_cal = kwargs["X_cal_train"]
@@ -3126,13 +3122,10 @@ def mcr_als_analysis(
             "auto_mapping_used": False,
             "mcr_als_report": "",
             "selected_n_components": int(selected_rank),
-            "cv_results": None,
-            "y_cv_pred": None,
             "y_cal_pred": None,
             "y_val_pred": None,
             "y_cal_error": None,
             "y_val_error": None,
-            "y_cv_error": None,
             "y_cal_true": _as_2d_y(Y_cal),
             "y_val_true": _as_2d_y(Y_val),
         }
@@ -3883,13 +3876,10 @@ _MCR_ALS_RETURN_ORDER: Tuple[str, ...] = (
     "mcr_als_report",
     "sweep_results",
     "selected_n_components",
-    "cv_results",
-    "y_cv_pred",
     "y_cal_pred",
     "y_val_pred",
     "y_cal_error",
     "y_val_error",
-    "y_cv_error",
     "y_cal_true",
     "y_val_true",
     "mcr_pair_components",
