@@ -1,31 +1,41 @@
-# Third-Party Licenses
+# Third-Party Licensing Documentation
 
-This folder contains third-party licensing material that should ship with redistributions of Chemometric Studio.
+This folder contains third-party licensing material that must be included when redistributing Chemometric Studio.
 
-## Why this exists
+## Overview
 
-The project code is licensed under Apache License 2.0, while bundled third-party components keep their own licenses.
-This folder centralizes those notices.
+Chemometric Studio is licensed under Apache License 2.0. Bundled third-party components retain their respective original licenses. This directory organizes all required license notices and attributions.
 
-## Contents
+**For the main project license, see:** `../LICENSE` (Apache License 2.0)
 
-- `../LICENSE`: Apache License 2.0 text for the Chemometric Studio project code.
-- `../EULA.md`: End-user license terms for distributed application use.
-- `Fonts/Selawik/NOTICE.txt`: Notice for Microsoft Selawik font distribution under SIL OFL 1.1.
-- `Fonts/Selawik/OFL-1.1.txt`: Bundled SIL Open Font License text.
-- `Python/THIRD-PARTY-NOTICES.md`: Third-party Python dependency notice list for pinned dependencies.
-- `Python/sv_ttk-LICENSE.md`: MIT license text and attribution for the bundled Sun Valley ttk theme (`sv-ttk`).
-- `References/THIRD-PARTY-NOTICES.md`: Third-party notice list for referenced open-source materials not bundled as direct dependencies.
-- `Python/pyMCR-LICENSE.md`: Required NIST public-domain notice/disclaimer text for pyMCR redistribution.
-- `References/MVC2_MVC3_NOTICE.md`: Attribution and license text for mvc2/mvc3 MATLAB toolbox materials used as canonical methodological references.
+## License Files by Category
 
-## Important note
+### Python Dependencies
 
-Bundled splash/about font assets currently come from:
-- `Fonts/Selawik/selawk.ttf`
-- `Fonts/Selawik/selawksb.ttf`
+Located in `Python/`:
+- `THIRD-PARTY-NOTICES.md` — Comprehensive notice list for all pinned Python dependencies
+- `sv_ttk-LICENSE.md` — MIT license for Sun Valley ttk theme (`sv-ttk`)
+- `pyMCR-LICENSE.md` — NIST public-domain notice and disclaimer for pyMCR
 
-The corresponding license text provided with the font is:
-- `Licenses/Fonts/Selawik/OFL-1.1.txt`
+### Font Assets
 
-When redistributing this application, include this `Licenses` folder together with `LICENSE`, `NOTICE`, and `EULA.md`.
+Located in `Fonts/Selawik/`:
+- `OFL-1.1.txt` — SIL Open Font License (applies to Selawik font files)
+- `NOTICE.txt` — Font distribution notice
+
+Bundled fonts: `selawk.ttf`, `selawksb.ttf`
+
+### Referenced Materials
+
+Located in `References/`:
+- `THIRD-PARTY-NOTICES.md` — Attribution list for referenced (non-bundled) open-source projects
+- `MVC2_MVC3_NOTICE.md` — Attribution for mvc2/mvc3 MATLAB toolbox methodological references
+
+## Distribution Requirements
+
+When redistributing this application, include:
+1. Root-level `LICENSE` file (Apache 2.0)
+2. Root-level `EULA.md` (end-user terms)
+3. This entire `Licenses/` folder
+
+This ensures compliance with all bundled third-party licenses.
