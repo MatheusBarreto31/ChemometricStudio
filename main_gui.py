@@ -7392,13 +7392,16 @@ class ChemometricsGUI:
         func_config = self.function_configs[instance_alias]
         swept_locked_params = self._get_swept_param_locks_for_index(self.selected_function_idx)
         ensemble_locked_params = self._get_ensemble_param_locks_for_index(self.selected_function_idx)
-        locked_params = set(swept_locked_params) | set(ensemble_locked_params)
+        variable_selection_locked_params = self._get_variable_selection_param_locks_for_index(self.selected_function_idx)
+        locked_params = set(swept_locked_params) | set(ensemble_locked_params) | set(variable_selection_locked_params)
 
         def _get_lock_reason_text(param_name: str) -> str:
             if param_name in swept_locked_params:
                 return "Swept by loop"
             if param_name in ensemble_locked_params:
                 return "Controlled by Ensemble Start"
+            if param_name in variable_selection_locked_params:
+                return "Controlled by Variable Selection"
             return "Locked"
         
         # Store widgets for visibility control
@@ -8249,6 +8252,48 @@ class ChemometricsGUI:
                 locked.add("one_class_unknown_label")
             if ref_lock or unknown_lock:
                 break
+
+        return locked
+
+    def _get_variable_selection_param_locks_for_index(self, target_idx: Optional[int]) -> set:
+        """Return parameter names controlled by enclosing variable-selection settings for given function index."""
+        locked = set()
+        if target_idx is None or target_idx < 0 or target_idx >= len(self.methodology_list):
+            return locked
+
+        target_base_alias = self.function_base_aliases[target_idx]
+        if target_base_alias not in ("classification_n_class", "classification_one_class"):
+            return locked
+
+        selection_stack: List[int] = []
+        for idx in range(target_idx + 1):
+            base_alias = self.function_base_aliases[idx]
+            if base_alias == "workflow_variable_selection_start":
+                selection_stack.append(idx)
+            elif base_alias == "workflow_variable_selection_end" and selection_stack:
+                selection_stack.pop()
+
+        if not selection_stack:
+            return locked
+
+        # Inner-most enclosing variable-selection wrapper takes precedence.
+        for selection_idx in reversed(selection_stack):
+            selection_instance = self.methodology_list[selection_idx]
+            selection_cfg = self.function_configs.get(selection_instance, {})
+
+            # class_layer is always controlled for nested classification functions.
+            locked.add("class_layer")
+
+            if target_base_alias == "classification_one_class":
+                ref_class = selection_cfg.get("one_class_reference_class", "")
+                if ref_class is not None and str(ref_class).strip() != "":
+                    locked.add("one_class_reference_class")
+
+                unknown_label = selection_cfg.get("one_class_unknown_label", "")
+                if unknown_label is not None and str(unknown_label).strip() != "":
+                    locked.add("one_class_unknown_label")
+
+            break
 
         return locked
 

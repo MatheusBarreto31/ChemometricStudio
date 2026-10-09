@@ -11,11 +11,13 @@
                           "class_data_cal":  "Class Calibration",
                           "class_data_val":  "Class Validation",
                           "one_class_reference_class":  "One-Class Reference Class",
+                          "class_layer":  "Class Layer",
                           "one_class_unknown_label":  "One-Class Unknown Label",
                           "axis_n_info":  "Axis Numeric Info",
                           "axis_t_info":  "Axis Text Info",
                           "task_type":  "Task Type",
                           "optimization_metric":  "Optimization Metric",
+                          "target_response_y":  "Target response (Y)",
                           "optimize_for":  "Optimize For",
                           "nested_cv_enabled":  "Enable Nested CV",
                           "nested_cv_outer_strategy":  "Nested CV Outer Strategy",
@@ -304,6 +306,20 @@
                                      "tooltip":  "Objective metric used to optimize candidate variable subsets."
                                  },
                     {
+                                     "name":  "target_response_y",
+                                     "label":  "Target response (Y)",
+                                     "category":  "Variable Selection",
+                                     "widget":  "entry",
+                                     "type":  "str",
+                                     "default":  "",
+                                     "required":  false,
+                                     "input_type":  "user",
+                                     "visible_if":  {
+                                                        "task_type":  "regression"
+                                                    },
+                                     "tooltip":  "Optional 1-based Y column index used as optimization target for regression variable selection. Leave empty to keep current scalar behavior."
+                                 },
+                    {
                                      "name":  "selection_method",
                                      "label":  "Selection Method",
                                      "category":  "Variable Selection",
@@ -399,6 +415,23 @@
                                                         "task_type":  "one_class"
                                                     },
                                      "tooltip":  "Optional accepted class label for one-class optimization and nested one-class functions."
+                                 },
+                                 {
+                                     "name":  "class_layer",
+                                     "label":  "Class Layer",
+                                     "category":  "Variable Selection",
+                                     "widget":  "entry",
+                                     "type":  "int",
+                                     "default":  "1",
+                                     "required":  false,
+                                     "input_type":  "user",
+                                     "visible_if":  {
+                                                        "task_type":  [
+                                                                          "n_class",
+                                                                          "one_class"
+                                                                      ]
+                                                    },
+                                     "tooltip":  "1-based class column used when class_data_* contains multiple class layers."
                                  },
                                  {
                                      "name":  "one_class_unknown_label",
@@ -5053,6 +5086,4 @@
                                ]
                  }
 }
-
-
 

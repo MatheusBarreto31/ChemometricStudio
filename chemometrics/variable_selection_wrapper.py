@@ -208,12 +208,15 @@ def _ensure_2d(arr: Optional[Any]) -> Optional[np.ndarray]:
     return out
 
 
-def _ensure_1d_labels(arr: Optional[Any]) -> Optional[np.ndarray]:
+def _ensure_1d_labels(arr: Optional[Any], class_layer: int = 1) -> Optional[np.ndarray]:
     if arr is None:
         return None
     out = np.asarray(arr, dtype=object)
     if out.ndim >= 2:
-        out = out[:, 0]
+        col_idx = max(0, int(class_layer) - 1)
+        if col_idx >= out.shape[1]:
+            col_idx = out.shape[1] - 1
+        out = out[:, col_idx]
     return out.reshape(-1)
 
 
@@ -1015,6 +1018,7 @@ def select_variables_for_workflow(
     X_val: Optional[np.ndarray] = None,
     class_data_cal: Optional[Any] = None,
     class_data_val: Optional[Any] = None,
+    class_layer: int = 1,
     axis_n_info: Optional[List[Any]] = None,
     axis_t_info: Optional[List[Any]] = None,
     task_type: str = "auto",
@@ -1106,7 +1110,7 @@ def select_variables_for_workflow(
         if y_for_selection.ndim == 1:
             y_for_selection = y_for_selection.reshape(-1, 1)
     else:
-        class_vector = _ensure_1d_labels(class_data_cal)
+        class_vector = _ensure_1d_labels(class_data_cal, class_layer=class_layer)
         if class_vector is None:
             raise ValueError("class_data_cal is required when task_type='classification'.")
         y_for_selection = np.asarray(class_vector, dtype=object)

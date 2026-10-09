@@ -1149,6 +1149,8 @@ def analyst_main(
         # Keep selected-data keys authoritative on end payload.
         for key in (
             'task_type',
+            'target_response_y',
+            'target_response_index',
             'X_cal',
             'X_val',
             'axis_n_info',
@@ -1242,7 +1244,10 @@ def analyst_main(
                     return value
         return None
 
-    def _extract_nested_split_metrics(payload: Optional[Dict[str, Any]]) -> Dict[str, Optional[float]]:
+    def _extract_nested_split_metrics(
+        payload: Optional[Dict[str, Any]],
+        regression_target_response_index: Optional[int] = None,
+    ) -> Dict[str, Optional[float]]:
         out: Dict[str, Optional[float]] = {
             'rmse_cal': None,
             'rmse_cv': None,
@@ -1323,6 +1328,77 @@ def analyst_main(
         out['r2_cal'] = _metric_from_split(split_payloads['cal'], ['r2'])
         out['r2_cv'] = _metric_from_split(split_payloads['cv'], ['r2'])
         out['r2_val'] = _metric_from_split(split_payloads['val'], ['r2'])
+
+        if regression_target_response_index is not None:
+            target_col = int(regression_target_response_index) - 1
+
+            def _metric_from_split_per_response(
+                split_payload: Any,
+                per_response_keys: List[str],
+            ) -> Optional[float]:
+                if not isinstance(split_payload, dict):
+                    return None
+                for key in per_response_keys:
+                    value = split_payload.get(key, split_payload.get(str(key).upper()))
+                    if value is None:
+                        continue
+                    try:
+                        arr = np.asarray(value, dtype=float).reshape(-1)
+                    except Exception:
+                        continue
+                    if arr.size == 0 or target_col < 0 or target_col >= arr.size:
+                        continue
+                    out_val = float(arr[target_col])
+                    if np.isfinite(out_val):
+                        return out_val
+                return None
+
+            def _reg_metrics_from_arrays(y_true: Any, y_pred: Any) -> Tuple[Optional[float], Optional[float]]:
+                if y_true is None or y_pred is None:
+                    return None, None
+                try:
+                    yt = np.asarray(y_true, dtype=float)
+                    yp = np.asarray(y_pred, dtype=float)
+                except Exception:
+                    return None, None
+                if yt.ndim == 1:
+                    yt = yt.reshape(-1, 1)
+                if yp.ndim == 1:
+                    yp = yp.reshape(-1, 1)
+                if yt.shape != yp.shape or yt.shape[0] == 0:
+                    return None, None
+                if target_col < 0 or target_col >= yt.shape[1]:
+                    return None, None
+                ytv = np.asarray(yt[:, target_col], dtype=float).reshape(-1)
+                ypv = np.asarray(yp[:, target_col], dtype=float).reshape(-1)
+                valid = np.isfinite(ytv) & np.isfinite(ypv)
+                if not np.any(valid):
+                    return None, None
+                ytv = ytv[valid]
+                ypv = ypv[valid]
+                rmse = float(np.sqrt(np.mean((ypv - ytv) ** 2)))
+                ss_res = float(np.sum((ytv - ypv) ** 2))
+                ss_tot = float(np.sum((ytv - np.mean(ytv)) ** 2))
+                r2 = float(1.0 - ss_res / ss_tot) if ss_tot > 0 else float('nan')
+                return rmse if np.isfinite(rmse) else None, r2 if np.isfinite(r2) else None
+
+            rmse_cal_pr = _metric_from_split_per_response(split_payloads['cal'], ['rmse_per_response', 'rmsep_per_response', 'rmsec_per_response'])
+            r2_cal_pr = _metric_from_split_per_response(split_payloads['cal'], ['r2_per_response'])
+            rmse_cv_pr = _metric_from_split_per_response(split_payloads['cv'], ['rmse_per_response', 'rmsecv_per_response', 'rmsep_per_response'])
+            r2_cv_pr = _metric_from_split_per_response(split_payloads['cv'], ['r2_per_response'])
+            rmse_val_pr = _metric_from_split_per_response(split_payloads['val'], ['rmse_per_response', 'rmsep_per_response'])
+            r2_val_pr = _metric_from_split_per_response(split_payloads['val'], ['r2_per_response'])
+
+            rmse_cal_arr, r2_cal_arr = _reg_metrics_from_arrays(payload.get('y_cal_true'), payload.get('y_cal_pred')) if isinstance(payload, dict) else (None, None)
+            rmse_cv_arr, r2_cv_arr = _reg_metrics_from_arrays(payload.get('y_cal_true'), payload.get('y_cv_pred')) if isinstance(payload, dict) else (None, None)
+            rmse_val_arr, r2_val_arr = _reg_metrics_from_arrays(payload.get('y_val_true'), payload.get('y_val_pred')) if isinstance(payload, dict) else (None, None)
+
+            out['rmse_cal'] = rmse_cal_pr if rmse_cal_pr is not None else (rmse_cal_arr if rmse_cal_arr is not None else out['rmse_cal'])
+            out['r2_cal'] = r2_cal_pr if r2_cal_pr is not None else (r2_cal_arr if r2_cal_arr is not None else out['r2_cal'])
+            out['rmse_cv'] = rmse_cv_pr if rmse_cv_pr is not None else (rmse_cv_arr if rmse_cv_arr is not None else out['rmse_cv'])
+            out['r2_cv'] = r2_cv_pr if r2_cv_pr is not None else (r2_cv_arr if r2_cv_arr is not None else out['r2_cv'])
+            out['rmse_val'] = rmse_val_pr if rmse_val_pr is not None else (rmse_val_arr if rmse_val_arr is not None else out['rmse_val'])
+            out['r2_val'] = r2_val_pr if r2_val_pr is not None else (r2_val_arr if r2_val_arr is not None else out['r2_val'])
 
         out['accuracy_cal'] = _metric_from_split(split_payloads['cal'], ['accuracy'])
         out['accuracy_cv'] = _metric_from_split(split_payloads['cv'], ['accuracy'])
@@ -2191,16 +2267,20 @@ def analyst_main(
             if ensemble_unknown_label is not None and str(ensemble_unknown_label).strip() != "":
                 params['one_class_unknown_label'] = ensemble_unknown_label
 
-        # Enforce variable-selection-level one-class reference/unknown labels
-        # for one-class functions nested inside the variable-selection block.
-        if base_alias == "classification_one_class" and variable_selection_stack_context:
+        # Enforce variable-selection-level classification controls
+        # for classification functions nested inside the variable-selection block.
+        if base_alias in ("classification_n_class", "classification_one_class") and variable_selection_stack_context:
             active_selection_context = variable_selection_stack_context[-1]
             selection_ref_class = active_selection_context.get('one_class_reference_class')
             selection_unknown_label = active_selection_context.get('one_class_unknown_label')
-            if selection_ref_class is not None and str(selection_ref_class).strip() != "":
-                params['one_class_reference_class'] = selection_ref_class
-            if selection_unknown_label is not None and str(selection_unknown_label).strip() != "":
-                params['one_class_unknown_label'] = selection_unknown_label
+            selection_class_layer = active_selection_context.get('class_layer')
+            if selection_class_layer is not None:
+                params['class_layer'] = selection_class_layer
+            if base_alias == "classification_one_class":
+                if selection_ref_class is not None and str(selection_ref_class).strip() != "":
+                    params['one_class_reference_class'] = selection_ref_class
+                if selection_unknown_label is not None and str(selection_unknown_label).strip() != "":
+                    params['one_class_unknown_label'] = selection_unknown_label
 
         params = _fill_missing_required_params(base_alias, params)
         params = _inject_translation_keys(base_alias, params)
@@ -2731,6 +2811,47 @@ def analyst_main(
                 if selection_task_type_norm not in ('regression', 'n_class', 'one_class'):
                     raise ValueError("task_type must be one of: regression, n_class, one_class")
 
+                regression_target_response_index: Optional[int] = None
+                if selection_task_type_norm == 'regression':
+                    _target_response_raw = str(selection_params.get('target_response_y', '') or '').strip()
+                    if _target_response_raw != '':
+                        try:
+                            _target_response_idx = int(_target_response_raw)
+                        except Exception as exc:
+                            raise ValueError("target_response_y must be a positive integer (1-based Y column index) or empty.") from exc
+                        if _target_response_idx < 1:
+                            raise ValueError("target_response_y must be >= 1.")
+
+                        if selection_params.get('Y_cal') is None:
+                            raise ValueError("Y_cal is required when target_response_y is provided.")
+                        _y_cal_arr = np.asarray(selection_params.get('Y_cal'), dtype=float)
+                        if _y_cal_arr.ndim == 1:
+                            _y_cal_2d = _y_cal_arr.reshape(-1, 1)
+                        else:
+                            _y_cal_2d = _y_cal_arr.reshape(_y_cal_arr.shape[0], -1)
+                        _n_y_cal = int(_y_cal_2d.shape[1]) if _y_cal_2d.ndim >= 2 else 1
+                        if _target_response_idx > _n_y_cal:
+                            raise ValueError(
+                                f"target_response_y={_target_response_idx} is out of range for Y_cal with {_n_y_cal} response column(s)."
+                            )
+
+                        if selection_params.get('Y_val') is not None:
+                            _y_val_arr = np.asarray(selection_params.get('Y_val'), dtype=float)
+                            if _y_val_arr.ndim == 1:
+                                _y_val_2d = _y_val_arr.reshape(-1, 1)
+                            else:
+                                _y_val_2d = _y_val_arr.reshape(_y_val_arr.shape[0], -1)
+                            _n_y_val = int(_y_val_2d.shape[1]) if _y_val_2d.ndim >= 2 else 1
+                            if (_target_response_idx - 1) >= _n_y_val:
+                                raise ValueError(
+                                    f"target_response_y={_target_response_idx} is out of range for Y_val with {_n_y_val} response column(s)."
+                                )
+
+                        regression_target_response_index = int(_target_response_idx)
+                        selection_params['target_response_y'] = str(_target_response_idx)
+                    else:
+                        selection_params['target_response_y'] = ''
+
                 optimization_metric_norm = _resolve_optimization_metric(
                     selection_task_type_norm,
                     selection_params.get('optimization_metric', None),
@@ -2887,19 +3008,39 @@ def analyst_main(
                 vissa_max_iter = max(1, _safe_int(selection_params.get('vissa_max_iter', 100), 100))
 
                 surrogate_task_norm = 'regression' if selection_task_type_norm == 'regression' else 'classification'
+                class_layer_value = max(1, _safe_int(selection_params.get('class_layer', 1), 1))
+
+                def _extract_class_labels_for_layer(class_data: Any, class_layer: int) -> np.ndarray:
+                    labels = np.asarray(class_data, dtype=object)
+                    if labels.ndim >= 2:
+                        col_idx = max(0, int(class_layer) - 1)
+                        if col_idx >= labels.shape[1]:
+                            col_idx = labels.shape[1] - 1
+                        labels = labels[:, col_idx]
+                    return labels.reshape(-1)
+
                 y_reg = None
                 y_cls = None
                 if selection_task_type_norm == 'regression':
                     if selection_params.get('Y_cal') is None:
                         raise ValueError("Y_cal is required when task_type='regression'.")
-                    y_reg = np.asarray(selection_params.get('Y_cal'), dtype=float).reshape(-1)
+                    _y_reg_raw = np.asarray(selection_params.get('Y_cal'), dtype=float)
+                    if _y_reg_raw.ndim == 1:
+                        _y_reg_2d = _y_reg_raw.reshape(-1, 1)
+                    else:
+                        _y_reg_2d = _y_reg_raw.reshape(_y_reg_raw.shape[0], -1)
+                    if regression_target_response_index is not None:
+                        _target_col_zero = int(regression_target_response_index) - 1
+                        y_reg = np.asarray(_y_reg_2d[:, _target_col_zero], dtype=float).reshape(-1)
+                    else:
+                        y_reg = np.asarray(_y_reg_raw, dtype=float).reshape(-1)
                 else:
                     if selection_params.get('class_data_cal') is None:
                         raise ValueError("class_data_cal is required when task_type is n_class or one_class.")
-                    y_cls = np.asarray(selection_params.get('class_data_cal'), dtype=object)
-                    if y_cls.ndim >= 2:
-                        y_cls = y_cls[:, 0]
-                    y_cls = y_cls.reshape(-1)
+                    y_cls = _extract_class_labels_for_layer(
+                        selection_params.get('class_data_cal'),
+                        class_layer=class_layer_value,
+                    )
 
                 one_class_reference_input = selection_params.get('one_class_reference_class', None)
                 one_class_unknown_raw = selection_params.get('one_class_unknown_label', None)
@@ -2910,6 +3051,7 @@ def analyst_main(
                 variable_selection_context_entry = {
                     'one_class_reference_class': one_class_reference_input,
                     'one_class_unknown_label': one_class_unknown_label,
+                    'class_layer': class_layer_value,
                 }
 
                 surrogate_regression_method = str(selection_params.get('surrogate_regression_method', 'pls') or 'pls').strip().lower()
@@ -3306,10 +3448,10 @@ def analyst_main(
                     task_local = 'regression' if selection_task_type_norm == 'regression' else 'classification'
                     y_for_split = None
                     if task_local == 'classification':
-                        y_raw = np.asarray(selection_params.get('class_data_cal'), dtype=object)
-                        if y_raw.ndim >= 2:
-                            y_raw = y_raw[:, 0]
-                        y_for_split = y_raw.reshape(-1)
+                        y_for_split = _extract_class_labels_for_layer(
+                            selection_params.get('class_data_cal'),
+                            class_layer=class_layer_value,
+                        )
                     elif nested_cv_outer_strategy == 'stratified_kfold':
                         y_raw = np.asarray(selection_params.get('Y_cal'), dtype=float).reshape(-1)
                         n_bins = max(2, min(int(nested_cv_outer_splits), 10))
@@ -3690,6 +3832,7 @@ def analyst_main(
                         X_val=source_params_effective.get('X_val'),
                         class_data_cal=source_params_effective.get('class_data_cal'),
                         class_data_val=source_params_effective.get('class_data_val'),
+                        class_layer=max(1, _safe_int(source_params_effective.get('class_layer', 1), 1)),
                         axis_n_info=source_params_effective.get('axis_n_info'),
                         axis_t_info=source_params_effective.get('axis_t_info'),
                         task_type=wrapper_task_type,
@@ -3764,7 +3907,12 @@ def analyst_main(
                                 variable_selection_stack_context.pop()
                         _, nested_payload = _find_last_regular_payload(candidate_outputs, body_start, body_end)
 
-                        nested_metrics = _extract_nested_split_metrics(nested_payload)
+                        nested_metrics = _extract_nested_split_metrics(
+                            nested_payload,
+                            regression_target_response_index=(
+                                regression_target_response_index if selection_task_type_norm == 'regression' else None
+                            ),
+                        )
                         candidate_task = str(selection_task_type_norm)
                         candidate_score = _score_candidate_from_nested_metrics_with_split(
                             candidate_task,
@@ -4429,7 +4577,13 @@ def analyst_main(
                     )
 
                 if selection_task_type_norm == 'regression':
-                    selected_metrics_summary = f"RMSE({_triplet('rmse')}); R2({_triplet('r2')})"
+                    if regression_target_response_index is not None:
+                        selected_metrics_summary = (
+                            f"Y{int(regression_target_response_index)} -> "
+                            f"RMSE({_triplet('rmse')}); R2({_triplet('r2')})"
+                        )
+                    else:
+                        selected_metrics_summary = f"RMSE({_triplet('rmse')}); R2({_triplet('r2')})"
                 elif selection_task_type_norm == 'one_class':
                     selected_metrics_summary = (
                         f"Accuracy({_triplet('accuracy')}); "
@@ -4476,6 +4630,16 @@ def analyst_main(
                 selection_metadata['optimization_metric_direction'] = _metric_direction(optimization_metric_norm)
                 selection_metadata['optimization_score_source'] = str(selection_score_source)
                 selection_metadata['optimization_metric_value'] = float(selected_metric_value) if selected_metric_value is not None else None
+                selection_metadata['target_response_y'] = (
+                    int(regression_target_response_index)
+                    if (selection_task_type_norm == 'regression' and regression_target_response_index is not None)
+                    else None
+                )
+                selection_metadata['target_response_mode'] = (
+                    'selected'
+                    if (selection_task_type_norm == 'regression' and regression_target_response_index is not None)
+                    else ('scalar_default' if selection_task_type_norm == 'regression' else None)
+                )
                 if selected_effective_score is not None and np.isfinite(float(selected_effective_score)):
                     selection_metadata['optimization_effective_score'] = float(selected_effective_score)
                 selection_metadata['selected_metrics_summary'] = selected_metrics_summary
@@ -4509,6 +4673,16 @@ def analyst_main(
                     float(selected_metric_value) if selected_metric_value is not None else float('nan')
                 )
                 best_selection_payload['selected_metrics_summary'] = str(selected_metrics_summary)
+                best_selection_payload['target_response_y'] = (
+                    str(int(regression_target_response_index))
+                    if (selection_task_type_norm == 'regression' and regression_target_response_index is not None)
+                    else ''
+                )
+                best_selection_payload['target_response_index'] = (
+                    int(regression_target_response_index)
+                    if (selection_task_type_norm == 'regression' and regression_target_response_index is not None)
+                    else None
+                )
 
                 _apply_nested_trajectory_to_selection_payload(best_selection_payload, trajectory_rows, selected_count)
 
