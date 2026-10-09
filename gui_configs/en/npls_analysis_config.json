@@ -51,6 +51,24 @@
     "cv_results": "CV Results",
     "npls_report": "N-PLS Report"
   },
+  "benchmark_metrics": {
+    "values": [
+      "calibration.rmse",
+      "calibration.r2",
+      "cv.rmse",
+      "cv.r2",
+      "validation.rmse",
+      "validation.r2"
+    ],
+    "value_aliases": [
+      "Calibration RMSE",
+      "Calibration R2",
+      "CV RMSE",
+      "CV R2",
+      "Validation RMSE",
+      "Validation R2"
+    ]
+  },
   "short_description": "Multiway calibration using U-PLS (unfolded) or N-PLS (CP-PLSR) with canonical residual correction.",
   "long_description": "Select U-PLS to unfold multiway X into 2D and run standard PLS, or N-PLS to run CP-PLSR directly on tensor X. Residual correction uses RBL (SVD) for nway_flag=2 and Tucker-based multilinear correction for nway_flag>=3.",
   "setup": {

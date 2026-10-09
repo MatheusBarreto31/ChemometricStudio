@@ -163,6 +163,20 @@
       }
     }
   },
+  "benchmark_metrics": {
+    "values": [
+      "calibration.sfit",
+      "calibration.explained_variance",
+      "calibration.mse",
+      "calibration.n_iter"
+    ],
+    "value_aliases": [
+      "Calibration SFit",
+      "Calibration Explained Variance",
+      "Calibration MSE",
+      "Calibration Iterations"
+    ]
+  },
   "short_description": "MCR-ALS (pyMCR) decomposition with optional calibration, sweep, and cross-validation.",
   "long_description": "Fits MCR-ALS to unfolded calibration data using pyMCR, estimates concentration/spectral profiles, and optionally maps components to Y targets for calibration and validation prediction.",
   "setup": {

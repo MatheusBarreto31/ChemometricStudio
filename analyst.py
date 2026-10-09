@@ -344,10 +344,54 @@ def analyst_main(
 
         return input_types_by_function
 
+    def _build_function_benchmark_catalogs(spec_data: Dict[str, Any]) -> Dict[str, Dict[str, List[str]]]:
+        """Build {base_alias: {'values': [...], 'aliases': [...]}} from GUI config files."""
+        benchmark_by_function: Dict[str, Dict[str, List[str]]] = {}
+        gui_listing = spec_data.get('gui_listing', {})
+        if not isinstance(gui_listing, dict):
+            return benchmark_by_function
+
+        for base_alias, gui_meta in gui_listing.items():
+            if not isinstance(gui_meta, dict):
+                continue
+            config_path = _resolve_gui_config_path(gui_meta.get('config_path', ''))
+            if not config_path:
+                continue
+
+            try:
+                with open(config_path, 'r', encoding='utf-8-sig') as config_file:
+                    config_data = json.load(config_file)
+            except Exception:
+                continue
+
+            benchmark_spec = config_data.get('benchmark_metrics', {})
+            if not isinstance(benchmark_spec, dict):
+                continue
+
+            raw_values = benchmark_spec.get('values', [])
+            raw_aliases = benchmark_spec.get('value_aliases', raw_values)
+            if not isinstance(raw_values, list):
+                continue
+            if not isinstance(raw_aliases, list):
+                raw_aliases = raw_values
+
+            values = [str(v) for v in raw_values if str(v).strip()]
+            aliases = [str(v) for v in raw_aliases[:len(values)]]
+            if len(aliases) < len(values):
+                aliases.extend(values[len(aliases):])
+            if values:
+                benchmark_by_function[str(base_alias)] = {
+                    'values': values,
+                    'aliases': aliases,
+                }
+
+        return benchmark_by_function
+
     function_default_params = _build_function_default_params(specs_data)
     function_translation_keys = _build_function_translation_keys(specs_data)
     function_passforward_specs = _build_function_passforward_specs(specs_data)
     function_input_types = _build_function_input_types(specs_data)
+    function_benchmark_catalogs = _build_function_benchmark_catalogs(specs_data)
     
     # Convert import_map tuples back from list format
     import_map = {}
@@ -722,6 +766,26 @@ def analyst_main(
             return None, False
         extracted, ok = _extract_nested(current_outputs[src_alias][src_param], nested_key)
         return extracted, ok
+
+    def _coerce_metric_scalar(value: Any) -> Optional[float]:
+        try:
+            if isinstance(value, np.generic):
+                value = value.item()
+            if isinstance(value, bool):
+                return None
+            if isinstance(value, (int, float)):
+                return float(value)
+            return None
+        except Exception:
+            return None
+
+    def _format_metric_scalar(value: Any) -> str:
+        scalar = _coerce_metric_scalar(value)
+        if scalar is None:
+            return "n/a"
+        if np.isnan(scalar) or np.isinf(scalar):
+            return str(scalar)
+        return f"{scalar:.6g}"
 
     def _apply_passforward_outputs(
         instance_alias: str,
@@ -2417,6 +2481,20 @@ def analyst_main(
                 benchmark_nested_key = str(loop_params.get('benchmark_nested_key', '') or '').strip()
                 benchmark_mode = str(loop_params.get('benchmark_mode', 'min') or 'min').lower()
                 use_best_iteration = bool(loop_params.get('use_best_iteration', False))
+                if loop_mode == "sweep_numeric":
+                    benchmark_table_row_label = "Value"
+                elif loop_mode == "sweep_choice":
+                    benchmark_table_row_label = "Choice"
+                else:
+                    benchmark_table_row_label = "Iteration"
+                benchmark_source_base_alias = str(functions_info.get(benchmark_source, {}).get('base_alias', '') or '').strip() if benchmark_source else ''
+                benchmark_catalog = function_benchmark_catalogs.get(benchmark_source_base_alias, {})
+                benchmark_metric_keys = [str(v) for v in benchmark_catalog.get('values', [])] if isinstance(benchmark_catalog, dict) else []
+                benchmark_metric_aliases = [str(v) for v in benchmark_catalog.get('aliases', benchmark_metric_keys)] if isinstance(benchmark_catalog, dict) else benchmark_metric_keys
+                if len(benchmark_metric_aliases) < len(benchmark_metric_keys):
+                    benchmark_metric_aliases.extend(benchmark_metric_keys[len(benchmark_metric_aliases):])
+                iteration_metric_rows: List[List[Optional[float]]] = []
+                iteration_row_headers: List[str] = []
 
                 body_start = idx + 1
                 body_end = loop_end_idx - 1
@@ -2429,6 +2507,15 @@ def analyst_main(
                         outputs_payload={
                             'mode': loop_mode,
                             'iterations_executed': 0,
+                            'benchmark_source': benchmark_source,
+                            'benchmark_nested_key': benchmark_nested_key,
+                            'benchmark_mode': benchmark_mode,
+                            'use_best_iteration': use_best_iteration,
+                            'report_text': "Loop block did not execute because no body functions were found.",
+                            'benchmark_table_column_headers': benchmark_metric_aliases,
+                            'benchmark_table_row_headers': [],
+                            'benchmark_table_row_label': benchmark_table_row_label,
+                            'benchmark_table_values': [],
                         },
                     )
                     idx = loop_end_idx + 1
@@ -2447,6 +2534,7 @@ def analyst_main(
 
                 best_score = None
                 best_outputs_snapshot = None
+                best_iteration_index = None
                 loop_counter += 1
                 current_loop_id = loop_counter
                 loop_stack_context.append({
@@ -2461,11 +2549,13 @@ def analyst_main(
                 for iteration in range(iterations):
                     loop_stack_context[-1]['iteration'] = iteration + 1
                     loop_stack_context[-1]['sweep_value'] = None
+                    iteration_row_label = str(iteration + 1)
                     sweep_override = {}
                     if loop_mode in ("sweep_numeric", "sweep_choice") and target_instance and target_param and sweep_values:
                         sweep_value = sweep_values[min(iteration, len(sweep_values) - 1)]
                         functions_info[target_instance]['parameters'][target_param] = sweep_value
                         loop_stack_context[-1]['sweep_value'] = sweep_value
+                        iteration_row_label = str(sweep_value)
                         sweep_override = {target_instance: {target_param}}
                         print(f"  Iteration {iteration + 1}: set {target_instance}.{target_param} = {sweep_value}")
 
@@ -2473,16 +2563,30 @@ def analyst_main(
                     _execute_range(body_start, body_end, current_outputs)
                     sweep_override_stack.pop()
 
-                    if benchmark_source and "." in benchmark_source:
-                        benchmark_parts = benchmark_source.split('.')
-                        if len(benchmark_parts) >= 2:
+                    iteration_row_headers.append(iteration_row_label)
+                    current_metric_row: List[Optional[float]] = []
+                    for metric_key in benchmark_metric_keys:
+                        if benchmark_source:
+                            metric_value, metric_found = _resolve_routed_value(benchmark_source, "metrics", metric_key, current_outputs)
+                            current_metric_row.append(_coerce_metric_scalar(metric_value) if metric_found else None)
+                        else:
+                            current_metric_row.append(None)
+                    iteration_metric_rows.append(current_metric_row)
+
+                    if benchmark_source:
+                        b_instance = ""
+                        b_nested_from_source = ""
+                        if "." in benchmark_source:
+                            benchmark_parts = benchmark_source.split('.')
                             b_instance = benchmark_parts[0]
-                            b_output = benchmark_parts[1]
-                            b_nested_from_source = '.'.join(benchmark_parts[2:]) if len(benchmark_parts) > 2 else ''
-                            if benchmark_nested_key:
-                                b_nested = benchmark_nested_key
-                            else:
-                                b_nested = b_nested_from_source
+                            if len(benchmark_parts) >= 3 and str(benchmark_parts[1]).strip() == "metrics":
+                                b_nested_from_source = '.'.join(benchmark_parts[2:])
+                        else:
+                            b_instance = benchmark_source
+
+                        if b_instance:
+                            b_output = "metrics"
+                            b_nested = benchmark_nested_key if benchmark_nested_key else b_nested_from_source
                             score, found = _resolve_routed_value(b_instance, b_output, b_nested, current_outputs)
                             if found and isinstance(score, (int, float)):
                                 should_update = False
@@ -2495,6 +2599,7 @@ def analyst_main(
                                 if should_update:
                                     best_score = score
                                     best_outputs_snapshot = copy.deepcopy(current_outputs)
+                                    best_iteration_index = iteration + 1
 
                 if target_instance and target_param:
                     functions_info[target_instance]['parameters'][target_param] = original_target_value
@@ -2502,7 +2607,34 @@ def analyst_main(
                 if use_best_iteration and best_outputs_snapshot is not None:
                     current_outputs.clear()
                     current_outputs.update(best_outputs_snapshot)
-                    print(f"Loop block selected best iteration with score={best_score}")
+                    print(f"Loop block selected best iteration #{best_iteration_index} with score={best_score}")
+
+                best_metric_lines: List[str] = []
+                if best_iteration_index is not None and iteration_metric_rows:
+                    best_row_idx = best_iteration_index - 1
+                    if 0 <= best_row_idx < len(iteration_metric_rows):
+                        for metric_alias, metric_value in zip(benchmark_metric_aliases, iteration_metric_rows[best_row_idx]):
+                            best_metric_lines.append(f"  - {metric_alias}: {_format_metric_scalar(metric_value)}")
+                if not best_metric_lines:
+                    best_metric_lines.append("  - n/a")
+
+                report_lines = [
+                    "Loop Execution Report",
+                    "====================",
+                    f"Mode: {loop_mode}",
+                    f"Iterations executed: {iterations}",
+                    f"Sweep target: {target_instance}.{target_param}" if target_instance and target_param else "Sweep target: n/a",
+                    f"Benchmark source: {benchmark_source or 'n/a'}",
+                    f"Benchmark metric: {benchmark_nested_key or 'n/a'}",
+                    f"Benchmark mode: {benchmark_mode}",
+                    f"Keep best iteration outputs: {bool(use_best_iteration)}",
+                    f"Best iteration: {best_iteration_index if best_iteration_index is not None else 'n/a'}",
+                    f"Best benchmark score: {_format_metric_scalar(best_score)}",
+                    "",
+                    "Best iteration metric summary:",
+                ]
+                report_lines.extend(best_metric_lines)
+                loop_report_text = "\n".join(report_lines)
 
                 if loop_stack_context:
                     loop_stack_context.pop()
@@ -2515,8 +2647,19 @@ def analyst_main(
                     outputs_payload={
                         'mode': loop_mode,
                         'iterations_executed': iterations,
+                        'benchmark_source': benchmark_source,
+                        'benchmark_nested_key': benchmark_nested_key,
+                        'benchmark_mode': benchmark_mode,
                         'use_best_iteration': use_best_iteration,
+                        'best_iteration_index': best_iteration_index,
                         'best_score': best_score,
+                        'benchmark_metric_keys': benchmark_metric_keys,
+                        'benchmark_metric_aliases': benchmark_metric_aliases,
+                        'benchmark_table_column_headers': benchmark_metric_aliases,
+                        'benchmark_table_row_headers': iteration_row_headers,
+                        'benchmark_table_row_label': benchmark_table_row_label,
+                        'benchmark_table_values': iteration_metric_rows,
+                        'report_text': loop_report_text,
                     },
                 )
 
@@ -4762,7 +4905,24 @@ def analyst_main(
 
                 parallel_instance_alias = entry['instance_alias']
                 parallel_params = functions_info.get(parallel_instance_alias, {}).get('parameters', {})
-                merge_strategy = str(parallel_params.get('merge_strategy', 'merge') or 'merge')
+                output_routing_mode = str(parallel_params.get('output_routing_mode', '') or '').strip().lower()
+                if not output_routing_mode:
+                    # Backward compatibility for older models.
+                    legacy_use_best_branch = bool(parallel_params.get('use_best_branch', False))
+                    legacy_merge_strategy = str(parallel_params.get('merge_strategy', 'merge') or 'merge').strip().lower()
+                    if legacy_use_best_branch:
+                        output_routing_mode = 'benchmark'
+                    elif legacy_merge_strategy == 'keep_last':
+                        output_routing_mode = 'manual'
+                        if not str(parallel_params.get('manual_branch', '') or '').strip():
+                            parallel_params['manual_branch'] = "1"
+                    else:
+                        output_routing_mode = 'isolated'
+                if output_routing_mode not in ('isolated', 'manual', 'benchmark'):
+                    output_routing_mode = 'isolated'
+                manual_branch = str(parallel_params.get('manual_branch', '') or '').strip()
+                benchmark_nested_key = str(parallel_params.get('benchmark_nested_key', '') or '').strip()
+                benchmark_mode = str(parallel_params.get('benchmark_mode', 'min') or 'min').lower()
                 _notify_progress_active(parallel_instance_alias, base_alias)
                 parallel_start_time = perf_counter()
 
@@ -4775,7 +4935,15 @@ def analyst_main(
                         start_time=parallel_start_time,
                         inputs=parallel_params,
                         outputs_payload={
-                            'merge_strategy': merge_strategy,
+                            'output_routing_mode': output_routing_mode,
+                            'manual_branch': manual_branch,
+                            'benchmark_nested_key': benchmark_nested_key,
+                            'benchmark_mode': benchmark_mode,
+                            'selected_branch_index': None,
+                            'benchmark_table_column_headers': [],
+                            'benchmark_table_row_headers': [],
+                            'benchmark_table_values': [],
+                            'report_text': "Parallel block did not execute because no branch functions were found.",
                             'branch_count': 0,
                         },
                     )
@@ -4798,8 +4966,77 @@ def analyst_main(
                 if branch_start <= block_end:
                     branch_ranges.append((branch_start, block_end))
 
+                branch_benchmark_instances: List[Optional[str]] = []
+                for range_start, range_end in branch_ranges:
+                    branch_benchmark_instance: Optional[str] = None
+                    for branch_node_idx in range(range_end, range_start - 1, -1):
+                        branch_base_alias = functions_list[branch_node_idx]['base_alias']
+                        if branch_base_alias in workflow_control_aliases:
+                            continue
+                        output_keys = return_specs.get(branch_base_alias, [])
+                        has_metrics_output = False
+                        for output_key in output_keys:
+                            if isinstance(output_key, dict):
+                                output_key = output_key.get("key", "")
+                            if str(output_key) == "metrics":
+                                has_metrics_output = True
+                                break
+                        if has_metrics_output:
+                            branch_benchmark_instance = functions_list[branch_node_idx]['instance_alias']
+                            break
+                    branch_benchmark_instances.append(branch_benchmark_instance)
+
+                branch_metric_values: List[List[str]] = []
+                branch_metric_aliases: List[List[str]] = []
+                for branch_instance in branch_benchmark_instances:
+                    if not branch_instance:
+                        branch_metric_values.append([])
+                        branch_metric_aliases.append([])
+                        continue
+                    branch_base_alias = str(functions_info.get(branch_instance, {}).get('base_alias', '') or '').strip()
+                    branch_catalog = function_benchmark_catalogs.get(branch_base_alias, {})
+                    values = [str(v) for v in branch_catalog.get('values', [])] if isinstance(branch_catalog, dict) else []
+                    aliases = [str(v) for v in branch_catalog.get('aliases', values)] if isinstance(branch_catalog, dict) else values
+                    if len(aliases) < len(values):
+                        aliases.extend(values[len(aliases):])
+                    branch_metric_values.append(values)
+                    branch_metric_aliases.append(aliases)
+
+                common_metric_set = None
+                common_metric_ordered: List[str] = []
+                common_metric_aliases: List[str] = []
+                for values, aliases in zip(branch_metric_values, branch_metric_aliases):
+                    value_set = set(values)
+                    if common_metric_set is None:
+                        common_metric_set = set(value_set)
+                        common_metric_ordered = values[:]
+                        common_metric_aliases = aliases[:]
+                    else:
+                        common_metric_set &= value_set
+
+                if common_metric_set:
+                    filtered_values: List[str] = []
+                    filtered_aliases: List[str] = []
+                    for value, alias in zip(common_metric_ordered, common_metric_aliases):
+                        if value in common_metric_set:
+                            filtered_values.append(value)
+                            filtered_aliases.append(alias)
+                    common_metric_ordered = filtered_values
+                    common_metric_aliases = filtered_aliases
+                else:
+                    common_metric_ordered = []
+                    common_metric_aliases = []
+
                 baseline_outputs = copy.deepcopy(current_outputs)
                 branch_output_snapshots: List[Dict[str, Dict[str, Any]]] = []
+                branch_metric_rows: List[List[Optional[float]]] = []
+                branch_row_headers: List[str] = []
+                best_branch_score: Optional[float] = None
+                best_branch_snapshot: Optional[Dict[str, Dict[str, Any]]] = None
+                best_branch_index: Optional[int] = None
+                best_branch_benchmark_instance: Optional[str] = None
+                selected_branch_snapshot: Optional[Dict[str, Dict[str, Any]]] = None
+                selected_branch_index: Optional[int] = None
                 parallel_counter += 1
                 current_parallel_id = parallel_counter
                 parallel_stack_context.append({
@@ -4813,19 +5050,109 @@ def analyst_main(
                     branch_outputs = copy.deepcopy(baseline_outputs)
                     _execute_range(range_start, range_end, branch_outputs)
                     branch_output_snapshots.append(branch_outputs)
+                    branch_row_headers.append(str(branch_idx))
 
-                if merge_strategy == "keep_last":
-                    final_snapshot = branch_output_snapshots[-1] if branch_output_snapshots else baseline_outputs
+                    b_instance = branch_benchmark_instances[branch_idx - 1] if branch_idx - 1 < len(branch_benchmark_instances) else None
+                    branch_metric_row: List[Optional[float]] = []
+                    for metric_key in common_metric_ordered:
+                        if b_instance:
+                            metric_value, metric_found = _resolve_routed_value(b_instance, "metrics", metric_key, branch_outputs)
+                            branch_metric_row.append(_coerce_metric_scalar(metric_value) if metric_found else None)
+                        else:
+                            branch_metric_row.append(None)
+                    branch_metric_rows.append(branch_metric_row)
+
+                    if b_instance and benchmark_nested_key:
+                        score, found = _resolve_routed_value(b_instance, "metrics", benchmark_nested_key, branch_outputs)
+                        if found and isinstance(score, (int, float)):
+                            should_update = False
+                            if best_branch_score is None:
+                                should_update = True
+                            elif benchmark_mode == 'max' and score > best_branch_score:
+                                should_update = True
+                            elif benchmark_mode != 'max' and score < best_branch_score:
+                                should_update = True
+                            if should_update:
+                                best_branch_score = float(score)
+                                best_branch_snapshot = copy.deepcopy(branch_outputs)
+                                best_branch_index = branch_idx
+                                best_branch_benchmark_instance = b_instance
+
+                if output_routing_mode == 'benchmark' and best_branch_snapshot is not None:
+                    selected_branch_snapshot = best_branch_snapshot
+                    selected_branch_index = best_branch_index
+                    print(
+                        f"Parallel block selected best branch #{best_branch_index} "
+                        f"(source={best_branch_benchmark_instance}, metric={benchmark_nested_key}, score={best_branch_score})"
+                    )
+                elif output_routing_mode == 'manual':
+                    manual_branch_index: Optional[int] = None
+                    try:
+                        parsed_manual_idx = int(str(manual_branch).strip())
+                        if 1 <= parsed_manual_idx <= len(branch_output_snapshots):
+                            manual_branch_index = parsed_manual_idx
+                    except Exception:
+                        manual_branch_index = None
+                    if manual_branch_index is not None:
+                        selected_branch_snapshot = branch_output_snapshots[manual_branch_index - 1]
+                        selected_branch_index = manual_branch_index
+                        print(f"Parallel block selected manual branch #{manual_branch_index}")
+
+                if selected_branch_snapshot is not None:
                     current_outputs.clear()
-                    current_outputs.update(final_snapshot)
+                    current_outputs.update(selected_branch_snapshot)
                 else:
                     current_outputs.clear()
                     current_outputs.update(baseline_outputs)
-                    for snapshot in branch_output_snapshots:
-                        current_outputs.update(snapshot)
 
                 if parallel_stack_context:
                     parallel_stack_context.pop()
+
+                summary_branch_index: Optional[int] = None
+                summary_title = "Selected branch metric summary:"
+                if output_routing_mode == 'benchmark':
+                    summary_branch_index = best_branch_index
+                    summary_title = "Best branch metric summary:"
+                elif output_routing_mode == 'manual':
+                    summary_branch_index = selected_branch_index
+                else:
+                    summary_branch_index = None
+
+                summary_metric_lines: List[str] = []
+                if summary_branch_index is not None and branch_metric_rows:
+                    summary_row_idx = summary_branch_index - 1
+                    if 0 <= summary_row_idx < len(branch_metric_rows):
+                        for metric_alias, metric_value in zip(common_metric_aliases, branch_metric_rows[summary_row_idx]):
+                            summary_metric_lines.append(f"  - {metric_alias}: {_format_metric_scalar(metric_value)}")
+                if not summary_metric_lines:
+                    summary_metric_lines.append("  - n/a")
+
+                parallel_report_lines = [
+                    "Parallel Execution Report",
+                    "=========================",
+                    f"Output routing mode: {output_routing_mode}",
+                    f"Branches executed: {len(branch_ranges)}",
+                ]
+                if output_routing_mode == 'manual':
+                    parallel_report_lines.extend([
+                        f"Manual branch: {manual_branch or 'n/a'}",
+                        f"Selected branch: {selected_branch_index if selected_branch_index is not None else 'n/a'}",
+                    ])
+                elif output_routing_mode == 'benchmark':
+                    parallel_report_lines.extend([
+                        f"Benchmark metric: {benchmark_nested_key or 'n/a'}",
+                        f"Benchmark mode: {benchmark_mode}",
+                        f"Selected branch: {selected_branch_index if selected_branch_index is not None else 'n/a'}",
+                        f"Best benchmark score: {_format_metric_scalar(best_branch_score)}",
+                    ])
+                else:
+                    parallel_report_lines.append("Selected branch: none (isolated mode)")
+                parallel_report_lines.extend([
+                    "",
+                    summary_title,
+                ])
+                parallel_report_lines.extend(summary_metric_lines)
+                parallel_report_text = "\n".join(parallel_report_lines)
 
                 _record_control_execution(
                     instance_alias=parallel_instance_alias,
@@ -4833,7 +5160,21 @@ def analyst_main(
                     start_time=parallel_start_time,
                     inputs=parallel_params,
                     outputs_payload={
-                        'merge_strategy': merge_strategy,
+                        'output_routing_mode': output_routing_mode,
+                        'manual_branch': manual_branch,
+                        'benchmark_nested_key': benchmark_nested_key,
+                        'benchmark_mode': benchmark_mode,
+                        'selected_branch_index': selected_branch_index,
+                        'best_branch_score': best_branch_score,
+                        'best_branch_index': best_branch_index,
+                        'best_branch_benchmark_instance': best_branch_benchmark_instance,
+                        'branch_benchmark_instances': branch_benchmark_instances,
+                        'benchmark_metric_keys': common_metric_ordered,
+                        'benchmark_metric_aliases': common_metric_aliases,
+                        'benchmark_table_column_headers': common_metric_aliases,
+                        'benchmark_table_row_headers': branch_row_headers,
+                        'benchmark_table_values': branch_metric_rows,
+                        'report_text': parallel_report_text,
                         'branch_count': len(branch_ranges),
                     },
                 )

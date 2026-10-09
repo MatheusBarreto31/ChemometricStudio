@@ -64,6 +64,36 @@
     "confusion_matrices": "Confusion Matrices",
     "probability_graph": "Probability Graph Data"
   },
+  "benchmark_metrics": {
+    "values": [
+      "calibration.accuracy",
+      "calibration.f1_macro",
+      "calibration.precision_macro",
+      "calibration.recall_macro",
+      "cv.accuracy",
+      "cv.f1_macro",
+      "cv.precision_macro",
+      "cv.recall_macro",
+      "validation.accuracy",
+      "validation.f1_macro",
+      "validation.precision_macro",
+      "validation.recall_macro"
+    ],
+    "value_aliases": [
+      "Calibration Accuracy",
+      "Calibration F1 (Macro)",
+      "Calibration Precision (Macro)",
+      "Calibration Recall (Macro)",
+      "CV Accuracy",
+      "CV F1 (Macro)",
+      "CV Precision (Macro)",
+      "CV Recall (Macro)",
+      "Validation Accuracy",
+      "Validation F1 (Macro)",
+      "Validation Precision (Macro)",
+      "Validation Recall (Macro)"
+    ]
+  },
   "short_description": "N-class classification with model-specific parameters.",
   "long_description": "Supports Logistic Regression, Random Forest, Extra Trees, SVC, KNN, LDA, QDA, and PLS-DA. Emits prediction/probability outputs for calibration, CV, and validation with report-ready tables and graph payloads.",
   "execution_report_specs": {

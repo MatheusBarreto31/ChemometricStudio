@@ -87,6 +87,24 @@
     "pred_ref_diag_x": "Prediction Diagonal X",
     "pred_ref_diag_y": "Prediction Diagonal Y"
   },
+  "benchmark_metrics": {
+    "values": [
+      "calibration.RMSEP",
+      "calibration.R2",
+      "cv.RMSEP",
+      "cv.R2",
+      "validation.RMSEP",
+      "validation.R2"
+    ],
+    "value_aliases": [
+      "Calibration RMSE",
+      "Calibration R2",
+      "CV RMSE",
+      "CV R2",
+      "Validation RMSE",
+      "Validation R2"
+    ]
+  },
   "short_description": "Unified first-order calibration with linear, kernel, tree, kernelized latent-variable, and local regression models",
   "long_description": "Builds first-order calibration models for quantitative prediction with optional parameter optimization. Supports OLS, Ridge, Lasso, Elastic Net, Random Forest, SVR, Gradient Boosting, HistGradientBoosting, Gaussian Process Regression, PLS, PCR, Kernel PLS extension, and Local Regression (KNN, IDW, Adaptive Threshold, Radius, Kernel). Computes calibration/CV/validation statistics, provides model-specific diagnostics, supports local distance metrics, and exposes optimization curves for parameter tuning. Note: PLS/PCR/Kernel PLS apply latent-variable modeling of transformed predictors. For scale-sensitive models (Ridge, Lasso, Elastic Net, SVR, Gaussian Process, Kernel PLS), if routed flag 'was_scaled' is missing or false, autoscaling fallback is applied with a warning.",
   "execution_report_specs": {

@@ -3,25 +3,124 @@
   "category": "7.Workflow\\2.Parallel",
   "data_type": "workflow",
   "input_aliases": {
-    "merge_strategy": "Merge Strategy"
+    "output_routing_mode": "Output Routing Mode",
+    "manual_branch": "Manual Branch",
+    "benchmark_nested_key": "Benchmark Metric",
+    "benchmark_mode": "Benchmark Mode"
   },
-  "output_aliases": {},
+  "output_aliases": {
+    "report_text": "Parallel Report",
+    "benchmark_table_values": "Benchmark Table Values",
+    "benchmark_table_column_headers": "Benchmark Metric Headers",
+    "benchmark_table_row_headers": "Benchmark Branch Labels"
+  },
   "short_description": "Start a parallel block.",
   "long_description": "Functions between Parallel Start and Parallel End run in independent branches split by Parallel Branch.",
   "setup": {
-    "categories": ["Parallel"],
+    "categories": ["Parallel", "Benchmarking"],
     "layout": [
       {
-        "name": "merge_strategy",
-        "label": "Merge Strategy",
+        "name": "output_routing_mode",
+        "label": "Output Routing Mode",
         "category": "Parallel",
         "widget": "combobox",
-        "values": ["merge", "keep_last"],
-        "value_aliases": ["Merge Branch Outputs", "Keep Last Branch Outputs"],
-        "default": "merge",
+        "values": ["isolated", "manual", "benchmark"],
+        "value_aliases": ["Keep Branches Isolated", "Select Branch Manually", "Select Best Branch by Benchmark"],
+        "default": "isolated",
         "required": false,
         "input_type": "user",
-        "tooltip": "merge keeps all branch outputs by instance alias; keep_last applies only last branch outputs"
+        "tooltip": "Choose whether to keep branch outputs isolated, route one selected branch manually, or route the benchmark-best branch."
+      },
+      {
+        "name": "manual_branch",
+        "label": "Manual Branch",
+        "category": "Parallel",
+        "widget": "combobox",
+        "editable": false,
+        "values": [],
+        "value_aliases": [],
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "output_routing_mode": "manual"
+        },
+        "tooltip": "Select which branch number should be routed to downstream functions."
+      },
+      {
+        "name": "benchmark_nested_key",
+        "label": "Benchmark Metric",
+        "category": "Benchmarking",
+        "widget": "combobox",
+        "editable": false,
+        "values": [],
+        "value_aliases": [],
+        "type": "str",
+        "default": "",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "output_routing_mode": "benchmark"
+        },
+        "tooltip": "Metric key path under metrics (e.g., validation.RMSEP or cv.accuracy)."
+      },
+      {
+        "name": "benchmark_mode",
+        "label": "Benchmark Mode",
+        "category": "Benchmarking",
+        "widget": "combobox",
+        "values": ["min", "max"],
+        "value_aliases": ["Min", "Max"],
+        "default": "min",
+        "required": false,
+        "input_type": "user",
+        "visible_if": {
+          "output_routing_mode": "benchmark"
+        },
+        "tooltip": "Choose lower-is-better (min) or higher-is-better (max)"
+      }
+    ]
+  },
+  "analysis": {
+    "pages": [
+      {
+        "title": "Parallel Benchmark",
+        "layout": "ew",
+        "sections": [
+          {
+            "type": "text",
+            "config": {
+              "title": "Parallel Benchmark Report",
+              "text_template": "{report_text}",
+              "bindings": [
+                {
+                  "name": "report_text",
+                  "data_source": "report_text",
+                  "selector": {
+                    "mode": "value"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Branch Metrics",
+              "data_source": "benchmark_table_values",
+              "column_headers": {
+                "data_source": "benchmark_table_column_headers"
+              },
+              "row_label": "Branch",
+              "row_headers": {
+                "data_source": "benchmark_table_row_headers"
+              },
+              "decimal_places": 6,
+              "max_rows": 1000
+            }
+          }
+        ]
       }
     ]
   }

@@ -7573,6 +7573,8 @@ class ChemometricsGUI:
                     current_base_alias = self.function_base_aliases[self.selected_function_idx] if self.selected_function_idx is not None else ""
                     if current_base_alias == "workflow_loop_start" and n in ("mode", "sweep_target", "benchmark_source"):
                         self._refresh_workflow_setup_dynamic_options(a, current_base_alias, vw)
+                    elif current_base_alias == "workflow_parallel_start" and n in ("output_routing_mode",):
+                        self._refresh_workflow_setup_dynamic_options(a, current_base_alias, vw)
                 combo.bind("<<ComboboxSelected>>", on_combo_selected)
 
                 def on_combo_focus_out(event, n=name, c_widget=combo, a=instance_alias, vw=visible_widgets, ch=category_headers):
@@ -8176,6 +8178,39 @@ class ChemometricsGUI:
             return []
         return list(range(loop_start_idx + 1, loop_end_idx))
 
+    def _get_parallel_body_indices(self, parallel_start_idx: int) -> List[int]:
+        parallel_end_idx = self._find_matching_control_end(parallel_start_idx, "workflow_parallel_start", "workflow_parallel_end")
+        if parallel_end_idx < 0:
+            return []
+        return list(range(parallel_start_idx + 1, parallel_end_idx))
+
+    def _get_parallel_branch_ranges(self, parallel_start_idx: int) -> List[Tuple[int, int]]:
+        parallel_end_idx = self._find_matching_control_end(parallel_start_idx, "workflow_parallel_start", "workflow_parallel_end")
+        if parallel_end_idx < 0:
+            return []
+        block_start = parallel_start_idx + 1
+        block_end = parallel_end_idx - 1
+        if block_start > block_end:
+            return []
+
+        branch_ranges: List[Tuple[int, int]] = []
+        branch_start = block_start
+        nested_parallel_depth = 0
+        for branch_idx in range(block_start, block_end + 1):
+            branch_alias = self.function_base_aliases[branch_idx]
+            if branch_alias == "workflow_parallel_start":
+                nested_parallel_depth += 1
+            elif branch_alias == "workflow_parallel_end" and nested_parallel_depth > 0:
+                nested_parallel_depth -= 1
+            elif branch_alias == "workflow_parallel_branch" and nested_parallel_depth == 0:
+                if branch_start <= branch_idx - 1:
+                    branch_ranges.append((branch_start, branch_idx - 1))
+                branch_start = branch_idx + 1
+        if branch_start <= block_end:
+            branch_ranges.append((branch_start, block_end))
+
+        return branch_ranges
+
     def _get_swept_param_locks_for_index(self, target_idx: Optional[int]) -> set:
         """Return parameter names controlled by enclosing loop sweep for given function index."""
         locked = set()
@@ -8399,14 +8434,18 @@ class ChemometricsGUI:
         widget_data["widget"] = check_vars
 
     def _refresh_workflow_setup_dynamic_options(self, instance_alias: str, base_alias: str, visible_widgets: Dict[str, Dict[str, Any]]):
-        """Populate dynamic combobox options for loop workflow controls."""
-        if base_alias != "workflow_loop_start":
+        """Populate dynamic combobox options for workflow controls that benchmark nested metrics."""
+        if base_alias not in ("workflow_loop_start", "workflow_parallel_start"):
             return
         if instance_alias not in self.methodology_list:
             return
 
-        loop_start_idx = self.methodology_list.index(instance_alias)
-        body_indices = self._get_loop_body_indices(loop_start_idx)
+        control_start_idx = self.methodology_list.index(instance_alias)
+        if base_alias == "workflow_loop_start":
+            body_indices = self._get_loop_body_indices(control_start_idx)
+        else:
+            body_indices = self._get_parallel_body_indices(control_start_idx)
+        parallel_branch_ranges = self._get_parallel_branch_ranges(control_start_idx) if base_alias == "workflow_parallel_start" else []
         if not body_indices:
             return
 
@@ -8418,6 +8457,7 @@ class ChemometricsGUI:
 
         benchmark_actual: List[str] = []
         benchmark_display: List[str] = []
+        benchmark_source_meta: Dict[str, Dict[str, Any]] = {}
 
         parameter_types = FUNCTION_SPECS.get("parameter_types", {})
         return_specs = FUNCTION_SPECS.get("return_specs", {})
@@ -8448,11 +8488,14 @@ class ChemometricsGUI:
                 is_choice = field_widget == "combobox"
                 is_sweep_choice = is_choice or is_boolean
 
-                if current_mode == "sweep_numeric" and not is_numeric:
-                    continue
-                if current_mode == "sweep_choice" and not is_sweep_choice:
-                    continue
-                if current_mode not in ("sweep_numeric", "sweep_choice"):
+                if base_alias == "workflow_loop_start":
+                    if current_mode == "sweep_numeric" and not is_numeric:
+                        continue
+                    if current_mode == "sweep_choice" and not is_sweep_choice:
+                        continue
+                    if current_mode not in ("sweep_numeric", "sweep_choice"):
+                        continue
+                else:
                     continue
 
                 target_value = f"{body_instance}.{field_name}"
@@ -8481,17 +8524,33 @@ class ChemometricsGUI:
                 }
 
             output_keys = return_specs.get(body_base, [])
+            has_metrics_output = False
             for output_key in output_keys:
                 if isinstance(output_key, dict):
                     output_key = output_key.get("key", "")
-                if not output_key:
-                    continue
-                actual = f"{body_instance}.{output_key}"
-                display = f"[{body_instance_display}] · {output_key}"
-                benchmark_actual.append(actual)
-                benchmark_display.append(display)
+                if str(output_key) == "metrics":
+                    has_metrics_output = True
+                    break
+
+            benchmark_spec = body_config.get("benchmark_metrics", {})
+            metric_values_raw = benchmark_spec.get("values", []) if isinstance(benchmark_spec, dict) else []
+            metric_aliases_raw = benchmark_spec.get("value_aliases", metric_values_raw) if isinstance(benchmark_spec, dict) else []
+            metric_values_raw = metric_values_raw if isinstance(metric_values_raw, list) else []
+            metric_aliases_raw = metric_aliases_raw if isinstance(metric_aliases_raw, list) else metric_values_raw
+            metric_values, metric_aliases, _hidden_metric_values = self._filter_hidden_setup_choices(metric_values_raw, metric_aliases_raw)
+
+            if has_metrics_output or metric_values:
+                benchmark_actual.append(str(body_instance))
+                benchmark_display.append(f"[{body_instance_display}] · Metrics")
+                benchmark_source_meta[str(body_instance)] = {
+                    "base_alias": str(body_base),
+                    "display_name": str(body_instance_display),
+                    "metric_values": [str(v) for v in metric_values],
+                    "metric_aliases": [str(v) for v in metric_aliases],
+                }
 
         sweep_target_data = visible_widgets.get("sweep_target")
+        manual_branch_data = visible_widgets.get("manual_branch")
         benchmark_data = visible_widgets.get("benchmark_source")
         benchmark_nested_data = visible_widgets.get("benchmark_nested_key")
         sweep_values_data = visible_widgets.get("sweep_values")
@@ -8508,51 +8567,80 @@ class ChemometricsGUI:
                 selected_actual=selected_target_actual
             )
 
+        if manual_branch_data and base_alias == "workflow_parallel_start":
+            branch_count = len(parallel_branch_ranges)
+            manual_actual = [str(i) for i in range(1, branch_count + 1)]
+            manual_display = manual_actual[:]
+            selected_manual = str(self.function_configs.get(instance_alias, {}).get("manual_branch", "") or "")
+            self._set_setup_combobox_options(
+                manual_branch_data,
+                manual_actual,
+                manual_display,
+                selected_actual=selected_manual
+            )
+
         if benchmark_data:
             selected_benchmark = self.function_configs.get(instance_alias, {}).get("benchmark_source", "")
+            if isinstance(selected_benchmark, str) and "." in selected_benchmark:
+                selected_benchmark = selected_benchmark.split(".", 1)[0]
+                self._save_widget_value(instance_alias, "benchmark_source", selected_benchmark)
             self._set_setup_combobox_options(
                 benchmark_data,
                 benchmark_actual,
                 benchmark_display,
                 selected_actual=selected_benchmark
             )
+            benchmark_data["source_meta"] = benchmark_source_meta
 
         if benchmark_nested_data:
-            selected_benchmark_source = self.function_configs.get(instance_alias, {}).get("benchmark_source", "")
             selected_nested_key = self.function_configs.get(instance_alias, {}).get("benchmark_nested_key", "")
             nested_actual: List[str] = []
             nested_display: List[str] = []
 
-            if isinstance(selected_benchmark_source, str) and "." in selected_benchmark_source:
-                source_instance, source_output = selected_benchmark_source.split(".", 1)
+            if base_alias == "workflow_loop_start":
+                selected_benchmark_source = self.function_configs.get(instance_alias, {}).get("benchmark_source", "")
+                source_instance = ""
+                if isinstance(selected_benchmark_source, str) and selected_benchmark_source.strip():
+                    source_instance = selected_benchmark_source.split(".", 1)[0].strip()
 
-                source_value = None
-                source_analysis = self.analysis_data.get(source_instance, {}) if hasattr(self, 'analysis_data') else {}
-                source_history = source_analysis.get('execution_history', []) if isinstance(source_analysis, dict) else []
-                if source_history and isinstance(source_history, list):
-                    latest_snapshot = source_history[-1]
-                    if isinstance(latest_snapshot, dict):
-                        latest_outputs = latest_snapshot.get('outputs', {})
-                        if isinstance(latest_outputs, dict):
-                            source_value = latest_outputs.get(source_output)
+                source_meta = benchmark_source_meta.get(source_instance, {})
+                if isinstance(source_meta, dict):
+                    nested_actual = [str(v) for v in source_meta.get("metric_values", [])]
+                    nested_display = [str(v) for v in source_meta.get("metric_aliases", nested_actual)]
+            else:
+                common_metric_set: Optional[Set[str]] = None
+                alias_by_metric: Dict[str, str] = {}
+                ordered_metric_candidates: List[str] = []
+                have_all_branch_sources = bool(parallel_branch_ranges)
+                for branch_start, branch_end in parallel_branch_ranges:
+                    last_source_instance = ""
+                    for branch_idx in range(branch_end, branch_start - 1, -1):
+                        branch_base = self.function_base_aliases[branch_idx]
+                        if self._is_workflow_control(branch_base):
+                            continue
+                        candidate_instance = self.methodology_list[branch_idx]
+                        source_meta = benchmark_source_meta.get(candidate_instance, {})
+                        if isinstance(source_meta, dict):
+                            last_source_instance = candidate_instance
+                            break
+                    if not last_source_instance:
+                        have_all_branch_sources = False
+                        break
 
-                if source_value is None and isinstance(source_analysis, dict):
-                    fallback_outputs = source_analysis.get('execution_results', {}).get('outputs', {})
-                    if isinstance(fallback_outputs, dict):
-                        source_value = fallback_outputs.get(source_output)
+                    source_meta = benchmark_source_meta.get(last_source_instance, {})
+                    metric_values = [str(v) for v in source_meta.get("metric_values", [])] if isinstance(source_meta, dict) else []
+                    metric_aliases = [str(v) for v in source_meta.get("metric_aliases", metric_values)] if isinstance(source_meta, dict) else metric_values
+                    metric_set = set(metric_values)
+                    if common_metric_set is None:
+                        common_metric_set = set(metric_set)
+                        ordered_metric_candidates = metric_values[:]
+                        alias_by_metric = {str(k): str(v) for k, v in zip(metric_values, metric_aliases)}
+                    else:
+                        common_metric_set &= metric_set
 
-                def _collect_dict_paths(value, prefix=""):
-                    paths = []
-                    if isinstance(value, dict):
-                        for key, child in value.items():
-                            child_prefix = f"{prefix}.{key}" if prefix else str(key)
-                            paths.append(child_prefix)
-                            paths.extend(_collect_dict_paths(child, child_prefix))
-                    return paths
-
-                if isinstance(source_value, dict):
-                    nested_actual = _collect_dict_paths(source_value)
-                    nested_display = nested_actual.copy()
+                if have_all_branch_sources and common_metric_set:
+                    nested_actual = [m for m in ordered_metric_candidates if m in common_metric_set]
+                    nested_display = [alias_by_metric.get(m, m) for m in nested_actual]
 
             self._set_setup_combobox_options(
                 benchmark_nested_data,
@@ -8567,8 +8655,8 @@ class ChemometricsGUI:
                     hint_label = ttk.Label(
                         benchmark_nested_data.get("container"),
                         text=self.language_manager.translate(
-                            "ui.messages.run_to_discover_nested_keys",
-                            "Run the model once to discover nested keys automatically."
+                            "ui.messages.no_benchmark_metrics_declared",
+                            "No benchmark metrics declared for this function configuration."
                         ),
                         font=("Arial", 8, "italic")
                     )
@@ -14523,6 +14611,17 @@ class ChemometricsGUI:
                 
                 # Get col_headers from config if provided
                 col_headers = config.get('column_headers')
+                if isinstance(col_headers, str):
+                    resolved_col_headers = self._get_data_from_source(outputs, col_headers)
+                    if resolved_col_headers is not None:
+                        col_headers = np.asarray(resolved_col_headers).flatten().tolist()
+                elif isinstance(col_headers, dict):
+                    chs_source = col_headers.get('data_source')
+                    chs_nested = col_headers.get('nested_key')
+                    if chs_source:
+                        resolved_col_headers = self._get_data_from_source(outputs, chs_source, chs_nested)
+                        if resolved_col_headers is not None:
+                            col_headers = np.asarray(resolved_col_headers).flatten().tolist()
             
             # Extract sliced data if data_slicing is configured
             if nav_axes:
@@ -14567,6 +14666,16 @@ class ChemometricsGUI:
                     resolved_row_headers = self._get_data_from_source(outputs, rhs_source, rhs_nested)
                     if resolved_row_headers is not None:
                         row_headers = np.asarray(resolved_row_headers).flatten().tolist()
+
+            row_label_header_override = None
+            row_label_cfg = config.get('row_label')
+            if isinstance(row_label_cfg, dict):
+                rlabel_source = row_label_cfg.get('data_source')
+                rlabel_nested = row_label_cfg.get('nested_key')
+                if rlabel_source:
+                    resolved_row_label = self._get_data_from_source(outputs, rlabel_source, rlabel_nested)
+                    if resolved_row_label is not None and str(resolved_row_label).strip():
+                        row_label_header_override = str(resolved_row_label)
             
             # Initialize table state if needed
             # Note: section_id is already defined above as stable identifier
@@ -14647,7 +14756,7 @@ class ChemometricsGUI:
             
             # Create table view
             self._create_table_view(main_frame, data, config, decimal_places, 
-                                   max_rows, max_cols, col_headers, row_headers)
+                                   max_rows, max_cols, col_headers, row_headers, row_label_header_override=row_label_header_override)
             
         except Exception as e:
             import traceback
@@ -14661,7 +14770,8 @@ class ChemometricsGUI:
     
     def _create_table_view(self, parent: ttk.Frame, data: np.ndarray, config: dict,
                           decimal_places: int, max_rows: int, max_cols: int,
-                          col_headers: list = None, row_headers: list = None) -> None:
+                          col_headers: list = None, row_headers: list = None,
+                          row_label_header_override: Optional[str] = None) -> None:
         """Create the actual table view with scrollbars and formatting."""
         try:
             # Check if data is still 3D+ (shouldn't happen if slicing is configured, but safety check)
@@ -14700,7 +14810,7 @@ class ChemometricsGUI:
             tree = ttk.Treeview(tree_frame, columns=columns)
             
             # Configure row header column with configurable label
-            row_label_header = config.get('row_label', 'Row')  # Default to 'Row' if not specified
+            row_label_header = row_label_header_override if row_label_header_override else config.get('row_label', 'Row')  # Default to 'Row' if not specified
             tree.column('#0', width=50, anchor='center')
             tree.heading('#0', text=row_label_header)
             

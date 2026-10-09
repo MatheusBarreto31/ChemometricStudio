@@ -192,6 +192,20 @@
       }
     }
   },
+  "benchmark_metrics": {
+    "values": [
+      "calibration.sfit",
+      "calibration.explained_variance",
+      "calibration.core_consistency",
+      "calibration.n_iter"
+    ],
+    "value_aliases": [
+      "Calibration SFit",
+      "Calibration Explained Variance",
+      "Calibration Core Consistency",
+      "Calibration Iterations"
+    ]
+  },
   "short_description": "PARAFAC decomposition with missing-data, profile constraints, sweep, calibration, and CV support.",
   "long_description": "Fits a CP/PARAFAC model to multiway data, supports NaN-aware fitting, optional reference/initial/fixed profiles, optional sweep across component counts, and calibration of mode-A scores against Y.",
   "setup": {

@@ -716,7 +716,10 @@
     ],
     "workflow_loop_end": [],
     "workflow_parallel_start": [
-      "merge_strategy"
+      "output_routing_mode",
+      "manual_branch",
+      "benchmark_nested_key",
+      "benchmark_mode"
     ],
     "workflow_parallel_branch": [],
     "workflow_parallel_end": [],
@@ -1522,7 +1525,10 @@
     },
     "workflow_loop_end": {},
     "workflow_parallel_start": {
-      "merge_strategy": "str"
+      "output_routing_mode": "str",
+      "manual_branch": "str",
+      "benchmark_nested_key": "str",
+      "benchmark_mode": "str"
     },
     "workflow_parallel_branch": {},
     "workflow_parallel_end": {},

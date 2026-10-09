@@ -8,15 +8,20 @@
     "sweep_target": "Sweep Target",
     "sweep_values": "Sweep Values",
     "benchmark_source": "Benchmark Source",
-    "benchmark_nested_key": "Benchmark Nested Key",
+    "benchmark_nested_key": "Benchmark Metric",
     "benchmark_mode": "Benchmark Mode",
     "use_best_iteration": "Use Best Iteration"
   },
-  "output_aliases": {},
+  "output_aliases": {
+    "report_text": "Loop Report",
+    "benchmark_table_values": "Benchmark Table Values",
+    "benchmark_table_column_headers": "Benchmark Metric Headers",
+    "benchmark_table_row_headers": "Benchmark Iteration Labels"
+  },
   "short_description": "Start a loop block.",
   "long_description": "Controls repeated execution of functions between Loop Start and Loop End.",
   "setup": {
-    "categories": ["Loop"],
+    "categories": ["Loop", "Benchmarking"],
     "layout": [
       {
         "name": "iterations",
@@ -86,8 +91,8 @@
       },
       {
         "name": "benchmark_source",
-        "label": "Benchmark Source (instance.output)",
-        "category": "Loop",
+        "label": "Benchmark Source (instance)",
+        "category": "Benchmarking",
         "widget": "combobox",
         "editable": false,
         "values": [],
@@ -96,26 +101,26 @@
         "default": "",
         "required": false,
         "input_type": "user",
-        "tooltip": "Example: pca_analysis.metrics"
+        "tooltip": "Select which nested function instance provides the metrics used for benchmarking."
       },
       {
         "name": "benchmark_nested_key",
-        "label": "Benchmark Nested Key (for dict outputs)",
-        "category": "Loop",
+        "label": "Benchmark Metric",
+        "category": "Benchmarking",
         "widget": "combobox",
-        "editable": true,
+        "editable": false,
         "values": [],
         "value_aliases": [],
         "type": "str",
         "default": "",
         "required": false,
         "input_type": "user",
-        "tooltip": "Optional nested key path for dict benchmark outputs (e.g., rmse or scores.mean)."
+        "tooltip": "Metric key path under metrics (e.g., calibration.RMSEP or calibration.accuracy)."
       },
       {
         "name": "benchmark_mode",
         "label": "Benchmark Mode",
-        "category": "Loop",
+        "category": "Benchmarking",
         "widget": "combobox",
         "values": ["min", "max"],
         "value_aliases": ["Min", "Max"],
@@ -127,13 +132,57 @@
       {
         "name": "use_best_iteration",
         "label": "Keep Best Iteration Outputs",
-        "category": "Loop",
+        "category": "Benchmarking",
         "widget": "checkbutton",
         "type": "bool",
         "default": false,
         "required": false,
         "input_type": "user",
         "tooltip": "If enabled, final outputs after loop come from the best benchmarked iteration"
+      }
+    ]
+  },
+  "analysis": {
+    "pages": [
+      {
+        "title": "Loop Benchmark",
+        "layout": "ew",
+        "sections": [
+          {
+            "type": "text",
+            "config": {
+              "title": "Loop Benchmark Report",
+              "text_template": "{report_text}",
+              "bindings": [
+                {
+                  "name": "report_text",
+                  "data_source": "report_text",
+                  "selector": {
+                    "mode": "value"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Iteration Metrics",
+              "data_source": "benchmark_table_values",
+              "column_headers": {
+                "data_source": "benchmark_table_column_headers"
+              },
+              "row_label": {
+                "data_source": "benchmark_table_row_label"
+              },
+              "row_headers": {
+                "data_source": "benchmark_table_row_headers"
+              },
+              "decimal_places": 6,
+              "max_rows": 1000
+            }
+          }
+        ]
       }
     ]
   }

@@ -70,6 +70,42 @@
     "confusion_matrices": "Confusion Matrices",
     "probability_graph": "Probability/Score Graph Data"
   },
+  "benchmark_metrics": {
+    "values": [
+      "calibration.accuracy",
+      "calibration.f1",
+      "calibration.precision",
+      "calibration.recall",
+      "calibration.specificity",
+      "cv.accuracy",
+      "cv.f1",
+      "cv.precision",
+      "cv.recall",
+      "cv.specificity",
+      "validation.accuracy",
+      "validation.f1",
+      "validation.precision",
+      "validation.recall",
+      "validation.specificity"
+    ],
+    "value_aliases": [
+      "Calibration Accuracy",
+      "Calibration F1",
+      "Calibration Precision",
+      "Calibration Recall",
+      "Calibration Specificity",
+      "CV Accuracy",
+      "CV F1",
+      "CV Precision",
+      "CV Recall",
+      "CV Specificity",
+      "Validation Accuracy",
+      "Validation F1",
+      "Validation Precision",
+      "Validation Recall",
+      "Validation Specificity"
+    ]
+  },
   "translation_keys": {
     "dd_simca_tag_regular": "Regular",
     "dd_simca_tag_extreme": "Extreme",
