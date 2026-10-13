@@ -122,7 +122,7 @@ jobs:
 
   build-macos-intel:
     name: macOS Intel
-    runs-on: macos-14
+    runs-on: macos-15-intel
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_macos_intel }}
     steps:
       - name: Checkout
@@ -159,6 +159,12 @@ jobs:
         run: |
           test -f dist/ChemometricStudio/ChemometricStudio || (echo "Missing main executable" && exit 1)
           test -f dist/ChemometricStudio/ChemometricStudioUser || (echo "Missing user executable" && exit 1)
+          for exe in dist/ChemometricStudio/ChemometricStudio dist/ChemometricStudio/ChemometricStudioUser; do
+            archs=$(lipo -archs "$exe")
+            if [ "$archs" != "x86_64" ]; then
+              echo "Expected x86_64 executable, got '$archs' for $exe" && exit 1
+            fi
+          done
 
       - name: Package (tar.gz)
         shell: bash
