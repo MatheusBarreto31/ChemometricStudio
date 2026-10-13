@@ -11100,7 +11100,7 @@ class ChemometricsGUI:
 
         if section_type == 'table':
             visible_nav = 0
-            for nav_item in nav_axes:
+            for nav_idx, nav_item in enumerate(nav_axes):
                 if isinstance(nav_item, dict):
                     if nav_item.get('show_navigation_menu', True):
                         visible_nav += 1
@@ -13874,42 +13874,16 @@ class ChemometricsGUI:
                 return
             
             # Get a representative source array to determine shape/bounds.
-            # Support both single-source tables (data_source) and multi-column tables (columns).
-            data = None
-            data_source = config.get('data_source')
-            if data_source and data_source in outputs:
-                data = outputs[data_source]
-            else:
-                columns_cfg = config.get('columns', [])
-                if isinstance(columns_cfg, list):
-                    for col_spec in columns_cfg:
-                        if not isinstance(col_spec, dict):
-                            continue
-                        col_source = col_spec.get('data_source')
-                        col_nested = col_spec.get('nested_key')
-                        if not col_source:
-                            continue
-                        candidate = self._get_data_from_source(outputs, col_source, col_nested)
-                        if candidate is None:
-                            continue
-                        data = candidate
-                        break
-
+            data = self._get_table_navigation_data_array(outputs, config, nav_axes=nav_axes)
             if data is None:
                 return
-
-            if not isinstance(data, np.ndarray):
-                try:
-                    data = np.array(data)
-                except (ValueError, TypeError):
-                    return
             
             # Initialize indices if not present
             if 'indices' not in slice_state:
                 slice_state['indices'] = {}
-                for nav_item in nav_axes:
+                for nav_idx, nav_item in enumerate(nav_axes):
                     if isinstance(nav_item, dict):
-                        dim = nav_item.get('dimension', 0)
+                        dim = self._get_table_nav_dimension(nav_item, nav_idx)
                         slice_state['indices'][dim] = nav_item.get('default', 0)
             
             # Reserve fixed title width so prev/next buttons stay aligned across items.
@@ -13925,22 +13899,22 @@ class ChemometricsGUI:
             nav_frame.pack(anchor='w', padx=4, pady=1)
             
             # For each navigable axis, create controls
-            for nav_item in nav_axes:
+            for nav_idx, nav_item in enumerate(nav_axes):
                 # Parse navigation item
                 if isinstance(nav_item, dict):
                     axis_name = nav_item.get('name', 'Dimension')
-                    dimension = nav_item.get('dimension', 0)
+                    dimension = self._get_table_nav_dimension(nav_item, nav_idx)
                     show_nav = nav_item.get('show_navigation_menu', True)
-                    nav_id = self._normalize_navigation_id(nav_item)
+                    nav_id = self._get_table_navigation_id(config, nav_item)
                     nav_labels_source = nav_item.get('labels_source')
                     nav_labels_dimension = nav_item.get('labels_dimension', None)
                     nav_labels_index_dimensions = nav_item.get('labels_index_dimensions')
                 else:
                     # Old format: just a string
                     axis_name = nav_item
-                    dimension = nav_axes.index(nav_item)
+                    dimension = int(nav_idx)
                     show_nav = True
-                    nav_id = None
+                    nav_id = self._get_table_navigation_id(config, nav_item)
                     nav_labels_source = None
                     nav_labels_dimension = None
                     nav_labels_index_dimensions = None
@@ -13997,7 +13971,10 @@ class ChemometricsGUI:
                 # Variable labels - show current value label after buttons (graph-style)
                 var_labels_config = nav_labels_source if nav_labels_source else config.get('variable_labels')
                 if var_labels_config:
-                    label_dim = int(nav_labels_dimension) if nav_labels_dimension is not None else int(dimension)
+                    if nav_labels_dimension is not None:
+                        label_dim = self._get_table_nav_dimension({'dimension': nav_labels_dimension}, dimension)
+                    else:
+                        label_dim = int(dimension)
                     var_label_text = self._get_variable_label_with_indices(
                         outputs,
                         var_labels_config,
@@ -14205,41 +14182,92 @@ class ChemometricsGUI:
         except Exception as e:
             print(f"Error navigating table slice: {str(e)}")
 
-    def _get_table_navigation_data_array(self, outputs: dict, config: dict) -> Optional[np.ndarray]:
-        """Resolve representative ndarray used for table navigation bounds."""
-        data_source = config.get('data_source')
-        data = None
-        if data_source:
-            nested_key = config.get('nested_key')
-            data = self._get_data_from_source(outputs, data_source, nested_key)
+    def _get_table_nav_dimension(self, nav_item: Any, fallback_dimension: int = 0) -> int:
+        """Resolve table nav dimension with numeric-only compatibility and safe fallback."""
 
-        if data is None:
-            columns_cfg = config.get('columns', [])
-            if isinstance(columns_cfg, list):
-                for col_spec in columns_cfg:
-                    if not isinstance(col_spec, dict):
-                        continue
-                    col_source = col_spec.get('data_source')
-                    if not col_source:
-                        continue
-                    col_nested = col_spec.get('nested_key')
-                    candidate = self._get_data_from_source(outputs, col_source, col_nested)
-                    if candidate is not None:
-                        data = candidate
-                        break
+        if not isinstance(nav_item, dict):
+            try:
+                return int(fallback_dimension)
+            except (TypeError, ValueError):
+                return 0
 
-        if isinstance(data, np.ndarray):
-            return data
+        dim_value = nav_item.get('dimension')
+        if dim_value is None:
+            try:
+                return int(fallback_dimension)
+            except (TypeError, ValueError):
+                return 0
 
         try:
-            return np.array(data)
-        except (ValueError, TypeError):
+            return int(dim_value)
+        except (TypeError, ValueError):
+            try:
+                return int(fallback_dimension)
+            except (TypeError, ValueError):
+                return 0
+
+    def _get_table_navigation_data_array(self, outputs: dict, config: dict, nav_axes: Optional[List[Any]] = None) -> Optional[np.ndarray]:
+        """Resolve representative ndarray used for table navigation bounds."""
+        data_source = config.get('data_source')
+        candidates: List[np.ndarray] = []
+
+        target_dims: List[int] = []
+        if isinstance(nav_axes, list):
+            for idx, nav_item in enumerate(nav_axes):
+                dim = self._get_table_nav_dimension(nav_item, idx)
+                if dim not in target_dims:
+                    target_dims.append(dim)
+
+        def _append_candidate(value: Any) -> None:
+            if value is None:
+                return
+            if isinstance(value, np.ndarray):
+                arr = value
+            else:
+                try:
+                    arr = np.array(value)
+                except (ValueError, TypeError):
+                    return
+            if isinstance(arr, np.ndarray):
+                candidates.append(arr)
+
+        if data_source:
+            nested_key = config.get('nested_key')
+            _append_candidate(self._get_data_from_source(outputs, data_source, nested_key))
+
+        columns_cfg = config.get('columns', [])
+        if isinstance(columns_cfg, list):
+            for col_spec in columns_cfg:
+                if not isinstance(col_spec, dict):
+                    continue
+                col_source = col_spec.get('data_source')
+                if not col_source:
+                    continue
+                col_nested = col_spec.get('nested_key')
+                _append_candidate(self._get_data_from_source(outputs, col_source, col_nested))
+
+        if not candidates:
             return None
+
+        if not target_dims:
+            return candidates[0]
+
+        best_candidate = candidates[0]
+        best_score = -1
+        for candidate in candidates:
+            score = sum(1 for dim in target_dims if 0 <= int(dim) < int(candidate.ndim))
+            if score > best_score:
+                best_score = score
+                best_candidate = candidate
+            if score == len(target_dims):
+                break
+
+        return best_candidate
 
     def _update_table_nav_widgets(self, instance_alias: str, section_id: tuple, nav_item: dict,
                                   new_index: int, max_index: int, outputs: dict) -> None:
         """Refresh table navigation widgets and labels for one nav item."""
-        dimension = nav_item.get('dimension', 0)
+        dimension = self._get_table_nav_dimension(nav_item, 0)
         axis_name = nav_item.get('name', 'Dimension')
 
         if hasattr(self, '_table_nav_labels'):
@@ -14274,7 +14302,9 @@ class ChemometricsGUI:
                               source_nav_item: dict, new_index: int,
                               expected_max_index: int) -> List[tuple]:
         """Sync table nav items with the same nav_id when member ranges match."""
-        nav_id = self._normalize_navigation_id(source_nav_item)
+        source_section_data = self._get_section_data_by_id(instance_alias, source_section_id)
+        source_section_config = source_section_data.get('config', {}) if isinstance(source_section_data, dict) else {}
+        nav_id = self._get_table_navigation_id(source_section_config if isinstance(source_section_config, dict) else {}, source_nav_item)
         if not nav_id:
             return []
 
@@ -14284,7 +14314,6 @@ class ChemometricsGUI:
             table_slices = {}
             analysis_info['table_slices'] = table_slices
 
-        source_section_data = self._get_section_data_by_id(instance_alias, source_section_id)
         source_render_alias = self._resolve_section_render_instance_alias(
             instance_alias,
             section_data=source_section_data,
@@ -14345,36 +14374,24 @@ class ChemometricsGUI:
                 if not isinstance(nav_axes, list):
                     continue
 
-                for nav_item in nav_axes:
+                for nav_idx, nav_item in enumerate(nav_axes):
                     if not isinstance(nav_item, dict):
                         continue
-                    dim_value = nav_item.get('dimension')
-                    if dim_value is None:
-                        continue
-                    try:
-                        dim = int(dim_value)
-                    except (TypeError, ValueError):
-                        continue
+                    dim = self._get_table_nav_dimension(nav_item, nav_idx)
                     if dim not in section_state['indices']:
                         section_state['indices'][dim] = nav_item.get('default', 0)
 
-                data = self._get_table_navigation_data_array(candidate_outputs, config)
+                data = self._get_table_navigation_data_array(candidate_outputs, config, nav_axes=nav_axes)
                 if data is None or not isinstance(data, np.ndarray):
                     continue
 
-                for nav_item in nav_axes:
+                for nav_idx, nav_item in enumerate(nav_axes):
                     if not isinstance(nav_item, dict):
                         continue
-                    if self._normalize_navigation_id(nav_item) != nav_id:
+                    if self._get_table_navigation_id(config, nav_item) != nav_id:
                         continue
 
-                    dim_value = nav_item.get('dimension')
-                    if dim_value is None:
-                        continue
-                    try:
-                        dimension = int(dim_value)
-                    except (TypeError, ValueError):
-                        continue
+                    dimension = self._get_table_nav_dimension(nav_item, nav_idx)
                     if dimension < 0 or dimension >= len(data.shape):
                         continue
 
@@ -14391,7 +14408,7 @@ class ChemometricsGUI:
         changed_sections = set()
         for section_id, section_state, nav_item, max_index, candidate_outputs in candidates:
             indices = section_state.get('indices', {})
-            dimension = int(nav_item.get('dimension', 0))
+            dimension = self._get_table_nav_dimension(nav_item, 0)
             try:
                 current_index = int(indices.get(dimension, nav_item.get('default', 0)))
             except (TypeError, ValueError):
@@ -14419,16 +14436,41 @@ class ChemometricsGUI:
         """Resolve a slice-aware subtitle/title token for tables (e.g., selected Y label)."""
         try:
             source = config.get('slice_title_source')
+            dim_raw = config.get('slice_title_dimension', 1)
+            index_dims = config.get('slice_title_index_dimensions')
+            prefix = str(config.get('slice_title_prefix', '')).strip()
+
+            if not source:
+                nav_axes = config.get('data_slicing', [])
+                if isinstance(nav_axes, list):
+                    for nav_idx, nav_item in enumerate(nav_axes):
+                        if not isinstance(nav_item, dict):
+                            continue
+                        nav_source = nav_item.get('slice_title_source')
+                        if not nav_source:
+                            continue
+                        source = nav_source
+                        dim_raw = nav_item.get(
+                            'slice_title_dimension',
+                            nav_item.get('labels_dimension', self._get_table_nav_dimension(nav_item, nav_idx))
+                        )
+                        index_dims = nav_item.get(
+                            'slice_title_index_dimensions',
+                            nav_item.get('labels_index_dimensions')
+                        )
+                        if not prefix:
+                            prefix = str(nav_item.get('slice_title_prefix', '')).strip()
+                        break
+
             if not source:
                 return ""
             values = self._get_data_from_source(outputs, source)
             if values is None:
                 return ""
-            dim = int(config.get('slice_title_dimension', 1))
+            dim = self._get_table_nav_dimension({'dimension': dim_raw}, 1)
             idx = int(indices.get(dim, 0)) if isinstance(indices, dict) else 0
             token = ""
 
-            index_dims = config.get('slice_title_index_dimensions')
             if isinstance(index_dims, (list, tuple)) and len(index_dims) > 0 and isinstance(indices, dict):
                 try:
                     cursor = values
@@ -14457,7 +14499,6 @@ class ChemometricsGUI:
 
             if not token:
                 return ""
-            prefix = str(config.get('slice_title_prefix', '')).strip()
             if prefix:
                 return f"{prefix}: {token}"
             return token
@@ -14516,9 +14557,9 @@ class ChemometricsGUI:
 
                 # Build indices dict for multi-dimensional slicing
                 indices = {}
-                for nav_item in nav_axes:
+                for nav_idx, nav_item in enumerate(nav_axes):
                     if isinstance(nav_item, dict):
-                        dim = nav_item.get('dimension', 0)
+                        dim = self._get_table_nav_dimension(nav_item, nav_idx)
                         indices[dim] = nav_item.get('default', 0)
                     else:
                         # Old format: just a string
@@ -15941,6 +15982,24 @@ Count:
             return None
         nav_id = str(nav_id).strip()
         return nav_id if nav_id else None
+
+    def _get_table_navigation_id(self, config: Optional[dict], nav_item: Any) -> Optional[str]:
+        """Resolve table navigation id from nav item first, then config-level fallback."""
+        nav_id = self._normalize_navigation_id(nav_item if isinstance(nav_item, dict) else {})
+        if nav_id:
+            return nav_id
+
+        if not isinstance(config, dict):
+            return None
+
+        for key in ('nav_id', 'slice_nav_id', 'table_nav_id'):
+            raw = config.get(key)
+            if raw is None:
+                continue
+            normalized = str(raw).strip()
+            if normalized:
+                return normalized
+        return None
 
     def _get_graph_navigation_data_array(self, outputs: dict, config: dict) -> Optional[np.ndarray]:
         """Resolve the ndarray used to determine navigation bounds for graph slicing."""
@@ -19756,9 +19815,9 @@ Count:
         nav_axes = config.get('data_slicing', [])
         if nav_axes and data.ndim > 2:
             indices = {}
-            for nav_item in nav_axes:
+            for nav_idx, nav_item in enumerate(nav_axes):
                 if isinstance(nav_item, dict):
-                    dim = nav_item.get('dimension', 0)
+                    dim = self._get_table_nav_dimension(nav_item, nav_idx)
                     indices[dim] = nav_item.get('default', 0)
             if indices:
                 data = self._extract_sliced_data(data, indices)
