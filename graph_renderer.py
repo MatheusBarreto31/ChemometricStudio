@@ -2397,7 +2397,8 @@ def _render_line(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],
                 elif x_vector is not None:
                     ax.plot(x_vector, row, **plot_kwargs)
                 else:
-                    ax.plot(row, **plot_kwargs)
+                    fallback_x = np.arange(1, int(len(row)) + 1, dtype=float)
+                    ax.plot(fallback_x, row, **plot_kwargs)
 
             has_named_legend_content = any(str(lbl).strip() for lbl in series_labels)
             show_legend = False
@@ -2427,11 +2428,11 @@ def _render_line(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],
                 plot_kwargs['color'] = cmap_obj(0.0)
 
             # Match multi-dataset fallback behavior: when x/y lengths are incompatible,
-            # plot only y so matplotlib uses implicit integer indexing.
+            # use explicit 1-based indexing to keep sample-index semantics consistent.
             use_explicit_x = True
+            y_arr = np.asarray(y_data).reshape(-1)
             try:
                 x_arr = np.asarray(x_data, dtype=float).reshape(-1)
-                y_arr = np.asarray(y_data).reshape(-1)
                 if x_arr.shape[0] != y_arr.shape[0]:
                     aligned_x = _coerce_axis_vector(x_arr, int(y_arr.shape[0]))
                     if aligned_x is not None:
@@ -2447,7 +2448,8 @@ def _render_line(ax, x_data: Optional[np.ndarray], y_data: Optional[np.ndarray],
             if use_explicit_x:
                 ax.plot(x_data, y_data, **plot_kwargs)
             else:
-                ax.plot(y_data, **plot_kwargs)
+                fallback_x = np.arange(1, int(y_arr.shape[0]) + 1, dtype=float)
+                ax.plot(fallback_x, y_arr, **plot_kwargs)
         ax.set_xlabel(config.get('x_axis', {}).get('label', 'X'))
         ax.set_ylabel(config.get('y_axis', {}).get('label', 'Y'))
 
@@ -2759,7 +2761,8 @@ def _render_line_multi_dataset(ax, datasets: List[Dict[str, Any]], config: dict,
                     if x_line is not None and len(x_line) == len(y_line):
                         ax.plot(x_line, y_line, **plot_kwargs)
                     else:
-                        ax.plot(y_line, **plot_kwargs)
+                        fallback_x = np.arange(1, int(len(y_line)) + 1, dtype=float)
+                        ax.plot(fallback_x, y_line, **plot_kwargs)
                     plotted_any_line = True
                 if is_multi_dataset and plotted_any_line:
                     dataset_legend_items.append((str(dataset_label), dataset_linestyle))
@@ -2852,7 +2855,8 @@ def _render_line_multi_dataset(ax, datasets: List[Dict[str, Any]], config: dict,
                 if x_line is not None and len(x_line) == len(y_line):
                     ax.plot(x_line, y_line, **plot_kwargs)
                 else:
-                    ax.plot(y_line, **plot_kwargs)
+                    fallback_x = np.arange(1, int(len(y_line)) + 1, dtype=float)
+                    ax.plot(fallback_x, y_line, **plot_kwargs)
                 plotted_any_line = True
 
             if is_multi_dataset and plotted_any_line:
@@ -2985,7 +2989,8 @@ def _render_line_multi_dataset(ax, datasets: List[Dict[str, Any]], config: dict,
                 if x_line is not None and len(x_line) == len(y_line):
                     ax.plot(x_line, y_line, **plot_kwargs)
                 else:
-                    ax.plot(y_line, **plot_kwargs)
+                    fallback_x = np.arange(1, int(len(y_line)) + 1, dtype=float)
+                    ax.plot(fallback_x, y_line, **plot_kwargs)
                 dataset_label_used = True
                 global_line_idx += 1
 

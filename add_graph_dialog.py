@@ -497,7 +497,7 @@ class AddGraphDialog:
         
         # Data source
         ttk.Label(frame, text=self._t("ui.labels.input_output_source", "Input/Output Source:")).grid(row=0, column=0, sticky=tk.W, pady=2)
-        data_sources = [''] + self._get_available_data_sources() + ['__index__']
+        data_sources = [''] + self._get_available_data_sources() + ['__index__', '__index0__', '__index1__']
         
         axis_var = tk.StringVar()
         setattr(self, f'{axis_key}_data_source_var', axis_var)
@@ -2065,7 +2065,8 @@ This dialog allows you to add a new graph to an empty section in your analysis.
     - Matplotlib math-text is supported using $...$ (e.g., CO$_2$, x$^2$, $\alpha$)
 
    Special data sources:
-   - __index__: Auto-generate row indices (1, 2, 3, ...)
+   - __index__ / __index1__: Auto-generate row indices (1, 2, 3, ...)
+   - __index0__: Auto-generate row indices (0, 1, 2, ...)
 
 3. MULTI-DATASET TAB:
    - Configure multiple datasets to plot together

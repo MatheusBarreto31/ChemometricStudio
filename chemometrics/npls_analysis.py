@@ -894,6 +894,7 @@ def npls_analysis(
     first_payload: Optional[Dict[str, Any]] = None
     _n_y = int(Yc_cent.shape[1])
     all_target_predictions: List[List[Dict[str, Any]]] = [[] for _ in range(_n_y)]
+    all_target_predictions_cal: List[List[Dict[str, Any]]] = [[] for _ in range(_n_y)]
     res_before_matrix: List[List[float]] = [[] for _ in range(_n_y)]
     res_after_matrix: List[List[float]] = [[] for _ in range(_n_y)]
     target_fit_upls_list: List[Dict[str, Any]] = []
@@ -924,6 +925,20 @@ def npls_analysis(
             "x_percent": np.column_stack(ev_x_all) if len(ev_x_all) > 1 else np.asarray(ev_x_all[0], dtype=float).reshape(-1, 1),
             "y_percent": np.column_stack(ev_y_all) if len(ev_y_all) > 1 else np.asarray(ev_y_all[0], dtype=float).reshape(-1, 1),
         }
+
+        for sample_idx in range(Xc2d.shape[0]):
+            x_sample = Xc2d[sample_idx, :]
+            for target_idx, fit in enumerate(target_models):
+                pred = _predict_upls1_sample(
+                    fit,
+                    x_sample_1d=x_sample,
+                    sample_shape=sample_shape,
+                    nway_flag=nway_flag_int,
+                    apply_correction=apply_correction,
+                    interferent_rank=interferent_rank,
+                    max_iter=model_payload["max_iter"],
+                )
+                all_target_predictions_cal[target_idx].append(pred)
 
         if Xv2d is not None:
             for sample_idx in range(Xv2d.shape[0]):
@@ -997,6 +1012,22 @@ def npls_analysis(
                 "x_percent": np.column_stack(ev_x_all_np) if len(ev_x_all_np) > 1 else np.asarray(ev_x_all_np[0], dtype=float).reshape(-1, 1),
                 "y_percent": np.column_stack(ev_y_all_np) if len(ev_y_all_np) > 1 else np.asarray(ev_y_all_np[0], dtype=float).reshape(-1, 1),
             }
+
+        for sample_idx in range(Xc_cent.shape[0]):
+            x_sample_t = Xc_cent[sample_idx, ...]
+            for target_idx, cp_model in enumerate(target_models_cp):
+                pred = _predict_npls1_sample(
+                    cp_model,
+                    spatial_kron=target_spatial_kron[target_idx],
+                    x_sample_tensor=x_sample_t,
+                    sample_shape=sample_shape,
+                    nway_flag=nway_flag_int,
+                    apply_correction=apply_correction,
+                    interferent_rank=interferent_rank,
+                    max_iter=model_payload["max_iter"],
+                    y_offset=float(y_mean[0, target_idx]),
+                )
+                all_target_predictions_cal[target_idx].append(pred)
 
         if Xv_cent is not None:
             for sample_idx in range(Xv_cent.shape[0]):
@@ -1106,6 +1137,18 @@ def npls_analysis(
     lod_max: Optional[np.ndarray] = None
     loq_min: Optional[np.ndarray] = None
     loq_max: Optional[np.ndarray] = None
+    sensitivity_cal: Optional[np.ndarray] = None
+    concentration_sd_cal: Optional[np.ndarray] = None
+    lod_min_cal: Optional[np.ndarray] = None
+    lod_max_cal: Optional[np.ndarray] = None
+    loq_min_cal: Optional[np.ndarray] = None
+    loq_max_cal: Optional[np.ndarray] = None
+    sensitivity_val: Optional[np.ndarray] = None
+    concentration_sd_val: Optional[np.ndarray] = None
+    lod_min_val: Optional[np.ndarray] = None
+    lod_max_val: Optional[np.ndarray] = None
+    loq_min_val: Optional[np.ndarray] = None
+    loq_max_val: Optional[np.ndarray] = None
     residual_diagnostics: Optional[Dict[str, Any]] = None
     interferent_profiles: Optional[Dict[str, Any]] = None
 
@@ -1185,7 +1228,10 @@ def npls_analysis(
 
     # Per-target analytical outputs: sensitivity, LOD/LOQ, residual diagnostics.
     # Results are stacked to (n_val, n_y) after the per-target loop.
-    _any_preds = any(len(all_target_predictions[t]) > 0 for t in range(_n_y))
+    _any_preds = any(
+        (len(all_target_predictions[t]) > 0) or (len(all_target_predictions_cal[t]) > 0)
+        for t in range(_n_y)
+    )
     if _any_preds:
         i_cal = int(Xc.shape[0])
         n_features = int(np.prod(sample_shape))
@@ -1193,12 +1239,18 @@ def npls_analysis(
         dof_before = max(1, n_features - n_comp_eff)
         dof_after = max(1, int(np.prod([max(1, d - int(interferent_rank)) for d in sample_shape])) - n_comp_eff)
 
-        _sensitivity_cols: List[np.ndarray] = []
-        _sd_cols: List[np.ndarray] = []
-        _lod_min_cols: List[np.ndarray] = []
-        _lod_max_cols: List[np.ndarray] = []
-        _loq_min_cols: List[np.ndarray] = []
-        _loq_max_cols: List[np.ndarray] = []
+        _sensitivity_cal_cols: List[np.ndarray] = []
+        _sd_cal_cols: List[np.ndarray] = []
+        _lod_min_cal_cols: List[np.ndarray] = []
+        _lod_max_cal_cols: List[np.ndarray] = []
+        _loq_min_cal_cols: List[np.ndarray] = []
+        _loq_max_cal_cols: List[np.ndarray] = []
+        _sensitivity_val_cols: List[np.ndarray] = []
+        _sd_val_cols: List[np.ndarray] = []
+        _lod_min_val_cols: List[np.ndarray] = []
+        _lod_max_val_cols: List[np.ndarray] = []
+        _loq_min_val_cols: List[np.ndarray] = []
+        _loq_max_val_cols: List[np.ndarray] = []
         _sr_before_cols: List[np.ndarray] = []
         _sr_after_cols: List[np.ndarray] = []
         _norm_before_cols: List[np.ndarray] = []
@@ -1210,14 +1262,21 @@ def npls_analysis(
             mode_factors_for_projection = [np.asarray(f, dtype=float) for f in first_payload.get("mode_factors")]
 
         for target_idx in range(_n_y):
-            preds_t = all_target_predictions[target_idx]
-            if not preds_t:
-                _sensitivity_cols.append(np.full(0, np.nan))
-                _sd_cols.append(np.full(0, np.nan))
-                _lod_min_cols.append(np.full(0, np.nan))
-                _lod_max_cols.append(np.full(0, np.nan))
-                _loq_min_cols.append(np.full(0, np.nan))
-                _loq_max_cols.append(np.full(0, np.nan))
+            preds_cal_t = all_target_predictions_cal[target_idx]
+            preds_val_t = all_target_predictions[target_idx]
+            if not preds_cal_t and not preds_val_t:
+                _sensitivity_cal_cols.append(np.full(0, np.nan))
+                _sd_cal_cols.append(np.full(0, np.nan))
+                _lod_min_cal_cols.append(np.full(0, np.nan))
+                _lod_max_cal_cols.append(np.full(0, np.nan))
+                _loq_min_cal_cols.append(np.full(0, np.nan))
+                _loq_max_cal_cols.append(np.full(0, np.nan))
+                _sensitivity_val_cols.append(np.full(0, np.nan))
+                _sd_val_cols.append(np.full(0, np.nan))
+                _lod_min_val_cols.append(np.full(0, np.nan))
+                _lod_max_val_cols.append(np.full(0, np.nan))
+                _loq_min_val_cols.append(np.full(0, np.nan))
+                _loq_max_val_cols.append(np.full(0, np.nan))
                 _sr_before_cols.append(np.full(0, np.nan))
                 _sr_after_cols.append(np.full(0, np.nan))
                 _norm_before_cols.append(np.asarray(res_before_matrix[target_idx], dtype=float))
@@ -1282,64 +1341,76 @@ def npls_analysis(
             hmax_t = float(1.0 / max(1, i_cal) + (max(hcal_vals_t) if hcal_vals_t else 0.0))
             hmin_t = float(1.0 / max(1, i_cal) + huni_t)
 
-            _sens_list: List[float] = []
-            _sd_list: List[float] = []
-            _lmin_list: List[float] = []
-            _lmax_list: List[float] = []
-            _qmin_list: List[float] = []
-            _qmax_list: List[float] = []
-            _srb_list: List[float] = []
-            _sra_list: List[float] = []
+            def _compute_afom_lists(preds: List[Dict[str, Any]]) -> Tuple[List[float], List[float], List[float], List[float], List[float], List[float], List[float], List[float]]:
+                _sens_list: List[float] = []
+                _sd_list: List[float] = []
+                _lmin_list: List[float] = []
+                _lmax_list: List[float] = []
+                _qmin_list: List[float] = []
+                _qmax_list: List[float] = []
+                _srb_list: List[float] = []
+                _sra_list: List[float] = []
 
-            for pred in preds_t:
-                beta_used = np.asarray(pred["beta_corrected"] if apply_correction else pred["beta_base"], dtype=float)
-                sr_before = float(np.linalg.norm(pred["res_before"]) / np.sqrt(dof_before))
-                sr_after = float(np.linalg.norm(pred["res_after"]) / np.sqrt(dof_after if apply_correction else dof_before))
-                sr_used = sr_after if apply_correction else sr_before
+                for pred in preds:
+                    beta_used = np.asarray(pred["beta_corrected"] if apply_correction else pred["beta_base"], dtype=float)
+                    sr_before = float(np.linalg.norm(pred["res_before"]) / np.sqrt(dof_before))
+                    sr_after = float(np.linalg.norm(pred["res_after"]) / np.sqrt(dof_after if apply_correction else dof_before))
+                    sr_used = sr_after if apply_correction else sr_before
 
-                if apply_correction and mode_factors_for_projection is not None:
-                    sensitivity_used = _compute_sensitivity_from_projection(
-                        loadings_matrix=loadings_matrix,
-                        latent_to_y=latent_to_y,
-                        sample_shape=sample_shape,
-                        interferent_mode_factors=mode_factors_for_projection,
+                    if apply_correction and mode_factors_for_projection is not None:
+                        sensitivity_used = _compute_sensitivity_from_projection(
+                            loadings_matrix=loadings_matrix,
+                            latent_to_y=latent_to_y,
+                            sample_shape=sample_shape,
+                            interferent_mode_factors=mode_factors_for_projection,
+                        )
+                    else:
+                        sensitivity_used = sensitivity_base_t
+
+                    lever = float("nan")
+                    if tpinv_t is not None:
+                        h_vec = tpinv_t @ beta_used.reshape(-1, 1)
+                        lever = float(np.linalg.norm(h_vec) ** 2 + 1.0 / max(1, i_cal))
+
+                    sen_abs = max(abs(float(sensitivity_used)), 1e-12)
+                    sd_val = float(np.sqrt(max(0.0, lever * sr_c_t ** 2 + lever * sr_used ** 2 / sen_abs ** 2 + sr_used ** 2 / sen_abs ** 2)))
+                    lmin, lmax, qmin, qmax = _compute_lod_loq_bounds(
+                        sr=sr_used,
+                        sensitivity=sensitivity_used,
+                        sr_c=sr_c_t,
+                        hmin=hmin_t,
+                        hmax=hmax_t,
+                        lod_confidence_factor=lod_factor,
                     )
-                else:
-                    sensitivity_used = sensitivity_base_t
 
-                lever = float("nan")
-                if tpinv_t is not None:
-                    h_vec = tpinv_t @ beta_used.reshape(-1, 1)
-                    lever = float(np.linalg.norm(h_vec) ** 2 + 1.0 / max(1, i_cal))
+                    _sens_list.append(float(sensitivity_used))
+                    _sd_list.append(sd_val)
+                    _lmin_list.append(lmin)
+                    _lmax_list.append(lmax)
+                    _qmin_list.append(qmin)
+                    _qmax_list.append(qmax)
+                    _srb_list.append(sr_before)
+                    _sra_list.append(sr_after)
 
-                sen_abs = max(abs(float(sensitivity_used)), 1e-12)
-                sd_val = float(np.sqrt(max(0.0, lever * sr_c_t ** 2 + lever * sr_used ** 2 / sen_abs ** 2 + sr_used ** 2 / sen_abs ** 2)))
-                lmin, lmax, qmin, qmax = _compute_lod_loq_bounds(
-                    sr=sr_used,
-                    sensitivity=sensitivity_used,
-                    sr_c=sr_c_t,
-                    hmin=hmin_t,
-                    hmax=hmax_t,
-                    lod_confidence_factor=lod_factor,
-                )
+                return _sens_list, _sd_list, _lmin_list, _lmax_list, _qmin_list, _qmax_list, _srb_list, _sra_list
 
-                _sens_list.append(float(sensitivity_used))
-                _sd_list.append(sd_val)
-                _lmin_list.append(lmin)
-                _lmax_list.append(lmax)
-                _qmin_list.append(qmin)
-                _qmax_list.append(qmax)
-                _srb_list.append(sr_before)
-                _sra_list.append(sr_after)
+            _cal_sens, _cal_sd, _cal_lmin, _cal_lmax, _cal_qmin, _cal_qmax, _cal_srb, _cal_sra = _compute_afom_lists(preds_cal_t)
+            _val_sens, _val_sd, _val_lmin, _val_lmax, _val_qmin, _val_qmax, _val_srb, _val_sra = _compute_afom_lists(preds_val_t)
 
-            _sensitivity_cols.append(np.asarray(_sens_list, dtype=float))
-            _sd_cols.append(np.asarray(_sd_list, dtype=float))
-            _lod_min_cols.append(np.asarray(_lmin_list, dtype=float))
-            _lod_max_cols.append(np.asarray(_lmax_list, dtype=float))
-            _loq_min_cols.append(np.asarray(_qmin_list, dtype=float))
-            _loq_max_cols.append(np.asarray(_qmax_list, dtype=float))
-            _sr_before_cols.append(np.asarray(_srb_list, dtype=float))
-            _sr_after_cols.append(np.asarray(_sra_list, dtype=float))
+            _sensitivity_cal_cols.append(np.asarray(_cal_sens, dtype=float))
+            _sd_cal_cols.append(np.asarray(_cal_sd, dtype=float))
+            _lod_min_cal_cols.append(np.asarray(_cal_lmin, dtype=float))
+            _lod_max_cal_cols.append(np.asarray(_cal_lmax, dtype=float))
+            _loq_min_cal_cols.append(np.asarray(_cal_qmin, dtype=float))
+            _loq_max_cal_cols.append(np.asarray(_cal_qmax, dtype=float))
+            _sensitivity_val_cols.append(np.asarray(_val_sens, dtype=float))
+            _sd_val_cols.append(np.asarray(_val_sd, dtype=float))
+            _lod_min_val_cols.append(np.asarray(_val_lmin, dtype=float))
+            _lod_max_val_cols.append(np.asarray(_val_lmax, dtype=float))
+            _loq_min_val_cols.append(np.asarray(_val_qmin, dtype=float))
+            _loq_max_val_cols.append(np.asarray(_val_qmax, dtype=float))
+            _sr_before_cols.append(np.asarray(_val_srb, dtype=float))
+            _sr_after_cols.append(np.asarray(_val_sra, dtype=float))
             _norm_before_cols.append(np.asarray(res_before_matrix[target_idx], dtype=float))
             _norm_after_cols.append(np.asarray(res_after_matrix[target_idx], dtype=float))
 
@@ -1348,12 +1419,26 @@ def npls_analysis(
                 return None
             return np.column_stack(cols) if len(cols) > 1 else cols[0].reshape(-1, 1)
 
-        sensitivity_values = _stack_cols(_sensitivity_cols)
-        concentration_sd = _stack_cols(_sd_cols)
-        lod_min = _stack_cols(_lod_min_cols)
-        lod_max = _stack_cols(_lod_max_cols)
-        loq_min = _stack_cols(_loq_min_cols)
-        loq_max = _stack_cols(_loq_max_cols)
+        sensitivity_cal = _stack_cols(_sensitivity_cal_cols)
+        concentration_sd_cal = _stack_cols(_sd_cal_cols)
+        lod_min_cal = _stack_cols(_lod_min_cal_cols)
+        lod_max_cal = _stack_cols(_lod_max_cal_cols)
+        loq_min_cal = _stack_cols(_loq_min_cal_cols)
+        loq_max_cal = _stack_cols(_loq_max_cal_cols)
+        sensitivity_val = _stack_cols(_sensitivity_val_cols)
+        concentration_sd_val = _stack_cols(_sd_val_cols)
+        lod_min_val = _stack_cols(_lod_min_val_cols)
+        lod_max_val = _stack_cols(_lod_max_val_cols)
+        loq_min_val = _stack_cols(_loq_min_val_cols)
+        loq_max_val = _stack_cols(_loq_max_val_cols)
+
+        # Backward compatibility: keep legacy outputs mapped to validation-set AFOM.
+        sensitivity_values = sensitivity_val
+        concentration_sd = concentration_sd_val
+        lod_min = lod_min_val
+        lod_max = lod_max_val
+        loq_min = loq_min_val
+        loq_max = loq_max_val
 
         residual_diagnostics = {
             "sample_residual_norm_before": _stack_cols(_norm_before_cols),
@@ -1370,6 +1455,18 @@ def npls_analysis(
             "lod_max": lod_max,
             "loq_min": loq_min,
             "loq_max": loq_max,
+            "sensitivity_cal": sensitivity_cal,
+            "concentration_sd_cal": concentration_sd_cal,
+            "lod_min_cal": lod_min_cal,
+            "lod_max_cal": lod_max_cal,
+            "loq_min_cal": loq_min_cal,
+            "loq_max_cal": loq_max_cal,
+            "sensitivity_val": sensitivity_val,
+            "concentration_sd_val": concentration_sd_val,
+            "lod_min_val": lod_min_val,
+            "lod_max_val": lod_max_val,
+            "loq_min_val": loq_min_val,
+            "loq_max_val": loq_max_val,
             "lod_confidence_factor": float(lod_factor),
             "lod_confidence_level": float(lod_level),
             "lod_distribution": str(lod_dist),
@@ -1601,6 +1698,18 @@ def npls_analysis(
         "lod_max": lod_max,
         "loq_min": loq_min,
         "loq_max": loq_max,
+        "sensitivity_cal": sensitivity_cal,
+        "concentration_sd_cal": concentration_sd_cal,
+        "lod_min_cal": lod_min_cal,
+        "lod_max_cal": lod_max_cal,
+        "loq_min_cal": loq_min_cal,
+        "loq_max_cal": loq_max_cal,
+        "sensitivity_val": sensitivity_val,
+        "concentration_sd_val": concentration_sd_val,
+        "lod_min_val": lod_min_val,
+        "lod_max_val": lod_max_val,
+        "loq_min_val": loq_min_val,
+        "loq_max_val": loq_max_val,
         "residual_diagnostics": residual_diagnostics,
         "explained_variance_by_lv": explained_variance_by_lv,
         "interferent_profiles": interferent_profiles,
@@ -1637,6 +1746,18 @@ _NPLS_RETURN_ORDER: Tuple[str, ...] = (
     "lod_max",
     "loq_min",
     "loq_max",
+    "sensitivity_cal",
+    "concentration_sd_cal",
+    "lod_min_cal",
+    "lod_max_cal",
+    "loq_min_cal",
+    "loq_max_cal",
+    "sensitivity_val",
+    "concentration_sd_val",
+    "lod_min_val",
+    "lod_max_val",
+    "loq_min_val",
+    "loq_max_val",
     "residual_diagnostics",
     "explained_variance_by_lv",
     "interferent_profiles",

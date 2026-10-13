@@ -34,8 +34,8 @@ def get_data_from_source(outputs: Mapping[str, Any], data_source: Any, nested_ke
         resolved_nested = data_source.get('nested_key', nested_key)
         return get_data_from_source(outputs, source_name, resolved_nested)
 
-    if data_source in ('__index__', 'row_index'):
-        return '__index__'
+    if data_source in ('__index__', 'row_index', '__index0__', '__index1__'):
+        return str(data_source)
 
     if data_source not in outputs:
         source_key = str(data_source) if data_source is not None else ''
@@ -156,15 +156,19 @@ def extract_axis_data(outputs: Mapping[str, Any], axis_config: Mapping[str, Any]
             if 0 <= axis < ndim:
                 return axis
 
-        return 0 if ndim == 1 else ndim - 1
+        # Default to the first axis (sample/row axis). This keeps "__index__"
+        # consistent with user-facing sample indexing without requiring
+        # per-graph "reference_axis": 0 in JSON configs.
+        return 0
 
     data_source = axis_config.get('data_source')
     if not data_source:
         return None
 
-    if data_source in ('__index__', 'row_index'):
+    if data_source in ('__index__', 'row_index', '__index0__', '__index1__'):
         length = None
         reference_axis_cfg = axis_config.get('reference_axis')
+        index_start = 1
 
         if ref_data is not None:
             if not isinstance(ref_data, np.ndarray):
@@ -193,7 +197,20 @@ def extract_axis_data(outputs: Mapping[str, Any], axis_config: Mapping[str, Any]
 
         if length is None:
             return None
-        data = np.arange(1, length + 1)
+
+        if data_source == '__index0__':
+            index_start = 0
+        elif data_source == '__index1__':
+            index_start = 1
+        else:
+            base_cfg = axis_config.get('index_base', axis_config.get('index_start'))
+            if base_cfg is not None:
+                try:
+                    index_start = int(base_cfg)
+                except (TypeError, ValueError):
+                    index_start = 1
+
+        data = np.arange(index_start, index_start + int(length))
     else:
         nested_key = axis_config.get('nested_key')
         data = get_data_from_source(outputs, data_source, nested_key)

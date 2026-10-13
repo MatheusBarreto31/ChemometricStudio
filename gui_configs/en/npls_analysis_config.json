@@ -40,6 +40,18 @@
     "lod_max": "LOD Max",
     "loq_min": "LOQ Min",
     "loq_max": "LOQ Max",
+    "sensitivity_cal": "Sensitivity (Calibration)",
+    "concentration_sd_cal": "Concentration SD (Calibration)",
+    "lod_min_cal": "LOD Min (Calibration)",
+    "lod_max_cal": "LOD Max (Calibration)",
+    "loq_min_cal": "LOQ Min (Calibration)",
+    "loq_max_cal": "LOQ Max (Calibration)",
+    "sensitivity_val": "Sensitivity (Validation)",
+    "concentration_sd_val": "Concentration SD (Validation)",
+    "lod_min_val": "LOD Min (Validation)",
+    "lod_max_val": "LOD Max (Validation)",
+    "loq_min_val": "LOQ Min (Validation)",
+    "loq_max_val": "LOQ Max (Validation)",
     "residual_diagnostics": "Residual Diagnostics",
     "explained_variance_by_lv": "Explained Variance by LV",
     "interferent_profiles": "Interferent Profiles",
@@ -668,9 +680,12 @@
             "type": "table",
             "config": {
               "title": "Calibration Error Table",
-              "row_label": "Sample",
-              "row_headers": "smp_cal",
+              "row_label": "Index",
               "columns": [
+                {
+                  "data_source": "smp_cal",
+                  "name": "Sample"
+                },
                 {
                   "data_source": "y_cal_true",
                   "name": "Reference"
@@ -713,9 +728,12 @@
             "type": "table",
             "config": {
               "title": "Validation Error Table",
-              "row_label": "Sample",
-              "row_headers": "smp_val",
+              "row_label": "Index",
               "columns": [
+                {
+                  "data_source": "smp_val",
+                  "name": "Sample"
+                },
                 {
                   "data_source": "y_val_true",
                   "name": "Reference"
@@ -946,15 +964,79 @@
       },
       {
         "title": "Analytical Figures of Merit",
-        "layout": "ns",
+        "layout": "fd",
         "sections": [
           {
             "type": "table",
             "config": {
-              "title": "Analytical Figures of Merit per Validation Sample",
-              "row_label": "Sample",
-              "row_headers": "smp_val",
+              "title": "Analytical Figures of Merit per Calibration Sample",
+              "row_label": "Index",
               "columns": [
+                {
+                  "data_source": "smp_cal",
+                  "name": "Sample"
+                },
+                {
+                  "data_source": "y_cal_true",
+                  "name": "Reference"
+                },
+                {
+                  "data_source": "y_cal_pred",
+                  "name": "Predicted"
+                },
+                {
+                  "data_source": "lod_min_cal",
+                  "name": "LOD Min"
+                },
+                {
+                  "data_source": "lod_max_cal",
+                  "name": "LOD Max"
+                },
+                {
+                  "data_source": "loq_min_cal",
+                  "name": "LOQ Min"
+                },
+                {
+                  "data_source": "loq_max_cal",
+                  "name": "LOQ Max"
+                },
+                {
+                  "data_source": "sensitivity_cal",
+                  "name": "Sensitivity"
+                },
+                {
+                  "data_source": "concentration_sd_cal",
+                  "name": "Concentration SD"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "default": 0,
+                  "nav_id": "npls_response",
+                  "show_navigation_menu": true,
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0
+                }
+              ],
+              "slice_title_source": "y_labels",
+              "slice_title_dimension": 1,
+              "decimal_places": 6,
+              "max_rows": 500
+            },
+            "short_description": "Reference and predicted concentrations with LOD, LOQ, sensitivity, and concentration SD per calibration sample."
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "Analytical Figures of Merit per Validation Sample",
+              "row_label": "Index",
+              "columns": [
+                {
+                  "data_source": "smp_val",
+                  "name": "Sample"
+                },
                 {
                   "data_source": "y_val_true",
                   "name": "Reference"
@@ -964,27 +1046,27 @@
                   "name": "Predicted"
                 },
                 {
-                  "data_source": "lod_min",
+                  "data_source": "lod_min_val",
                   "name": "LOD Min"
                 },
                 {
-                  "data_source": "lod_max",
+                  "data_source": "lod_max_val",
                   "name": "LOD Max"
                 },
                 {
-                  "data_source": "loq_min",
+                  "data_source": "loq_min_val",
                   "name": "LOQ Min"
                 },
                 {
-                  "data_source": "loq_max",
+                  "data_source": "loq_max_val",
                   "name": "LOQ Max"
                 },
                 {
-                  "data_source": "sensitivity",
+                  "data_source": "sensitivity_val",
                   "name": "Sensitivity"
                 },
                 {
-                  "data_source": "concentration_sd",
+                  "data_source": "concentration_sd_val",
                   "name": "Concentration SD"
                 }
               ],
@@ -1010,19 +1092,19 @@
             "type": "graph",
             "config": {
               "graph_type": "line",
-              "title": "LOD / LOQ Range by Sample",
+              "title": "LOD / LOQ Range by Calibration Sample",
               "line_style": "lines+markers",
               "datasets": [
                 {
                   "x_axis": {
                     "data_source": "__index__",
                     "axis_type": "linear",
-                    "label": "Sample",
+                    "label": "Calibration Sample",
                     "force_integer": true,
-                    "reference_source": "lod_min"
+                    "reference_source": "lod_min_cal"
                   },
                   "y_axis": {
-                    "data_source": "lod_min",
+                    "data_source": "lod_min_cal",
                     "axis_type": "linear",
                     "label": "Concentration"
                   },
@@ -1034,12 +1116,12 @@
                   "x_axis": {
                     "data_source": "__index__",
                     "axis_type": "linear",
-                    "label": "Sample",
+                    "label": "Calibration Sample",
                     "force_integer": true,
-                    "reference_source": "lod_max"
+                    "reference_source": "lod_max_cal"
                   },
                   "y_axis": {
-                    "data_source": "lod_max",
+                    "data_source": "lod_max_cal",
                     "axis_type": "linear",
                     "label": "Concentration"
                   },
@@ -1051,12 +1133,12 @@
                   "x_axis": {
                     "data_source": "__index__",
                     "axis_type": "linear",
-                    "label": "Sample",
+                    "label": "Calibration Sample",
                     "force_integer": true,
-                    "reference_source": "loq_min"
+                    "reference_source": "loq_min_cal"
                   },
                   "y_axis": {
-                    "data_source": "loq_min",
+                    "data_source": "loq_min_cal",
                     "axis_type": "linear",
                     "label": "Concentration"
                   },
@@ -1068,12 +1150,102 @@
                   "x_axis": {
                     "data_source": "__index__",
                     "axis_type": "linear",
-                    "label": "Sample",
+                    "label": "Calibration Sample",
                     "force_integer": true,
-                    "reference_source": "loq_max"
+                    "reference_source": "loq_max_cal"
                   },
                   "y_axis": {
-                    "data_source": "loq_max",
+                    "data_source": "loq_max_cal",
+                    "axis_type": "linear",
+                    "label": "Concentration"
+                  },
+                  "label": "LOQ Max",
+                  "marker": "s",
+                  "color": "#8c564b"
+                }
+              ],
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "y",
+                  "nav_id": "npls_response",
+                  "show_navigation_menu": true,
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0
+                }
+              ]
+            },
+            "short_description": "LOD and LOQ min/max bounds plotted across calibration samples."
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "LOD / LOQ Range by Validation Sample",
+              "line_style": "lines+markers",
+              "datasets": [
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Validation Sample",
+                    "force_integer": true,
+                    "reference_source": "lod_min_val"
+                  },
+                  "y_axis": {
+                    "data_source": "lod_min_val",
+                    "axis_type": "linear",
+                    "label": "Concentration"
+                  },
+                  "label": "LOD Min",
+                  "marker": "o",
+                  "color": "#2ca02c"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Validation Sample",
+                    "force_integer": true,
+                    "reference_source": "lod_max_val"
+                  },
+                  "y_axis": {
+                    "data_source": "lod_max_val",
+                    "axis_type": "linear",
+                    "label": "Concentration"
+                  },
+                  "label": "LOD Max",
+                  "marker": "o",
+                  "color": "#d62728"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Validation Sample",
+                    "force_integer": true,
+                    "reference_source": "loq_min_val"
+                  },
+                  "y_axis": {
+                    "data_source": "loq_min_val",
+                    "axis_type": "linear",
+                    "label": "Concentration"
+                  },
+                  "label": "LOQ Min",
+                  "marker": "s",
+                  "color": "#9467bd"
+                },
+                {
+                  "x_axis": {
+                    "data_source": "__index__",
+                    "axis_type": "linear",
+                    "label": "Validation Sample",
+                    "force_integer": true,
+                    "reference_source": "loq_max_val"
+                  },
+                  "y_axis": {
+                    "data_source": "loq_max_val",
                     "axis_type": "linear",
                     "label": "Concentration"
                   },

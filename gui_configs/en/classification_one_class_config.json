@@ -1584,9 +1584,8 @@
               "graph_type": "line",
               "title": "Decision Score by Sample (Validation)",
               "x_axis": {
-                "data_source": "__index__",
-                "reference_source": "one_class_score_val",
-                "label": "Sample Index"
+                "data_source": "smp_val",
+                "label": "Validation Sample"
               },
               "y_axis": {
                 "data_source": "one_class_score_val",

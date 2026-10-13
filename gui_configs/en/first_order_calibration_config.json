@@ -1542,9 +1542,12 @@
             "type": "table",
             "config": {
               "title": "Calibration Error Table",
-              "row_label": "Sample",
-              "row_headers": "smp_cal",
+              "row_label": "Index",
               "columns": [
+                {
+                  "data_source": "smp_cal",
+                  "name": "Sample"
+                },
                 {
                   "data_source": "y_cal_true",
                   "name": "Reference"
@@ -1587,9 +1590,12 @@
             "type": "table",
             "config": {
               "title": "Validation Error Table",
-              "row_label": "Sample",
-              "row_headers": "smp_val",
+              "row_label": "Index",
               "columns": [
+                {
+                  "data_source": "smp_val",
+                  "name": "Sample"
+                },
                 {
                   "data_source": "y_val_true",
                   "name": "Reference"

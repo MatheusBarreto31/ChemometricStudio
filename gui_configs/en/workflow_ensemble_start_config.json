@@ -971,9 +971,9 @@
             "type": "table",
             "config": {
               "title": "Calibration Error Table",
-              "row_label": "Sample",
-              "row_headers": "smp_cal",
+              "row_label": "Index",
               "columns": [
+                { "data_source": "smp_cal", "name": "Sample" },
                 { "data_source": "y_cal_true", "name": "Reference" },
                 { "data_source": "y_cal_pred", "name": "Predicted" },
                 { "data_source": "y_cal_error", "name": "Error" },
@@ -996,9 +996,9 @@
             "type": "table",
             "config": {
               "title": "Validation Error Table",
-              "row_label": "Sample",
-              "row_headers": "smp_val",
+              "row_label": "Index",
               "columns": [
+                { "data_source": "smp_val", "name": "Sample" },
                 { "data_source": "y_val_true", "name": "Reference" },
                 { "data_source": "y_val_pred", "name": "Predicted" },
                 { "data_source": "y_val_error", "name": "Error" }
@@ -1147,11 +1147,9 @@
               "datasets": [
                 {
                   "x_axis": {
-                    "data_source": "__index__",
+                    "data_source": "smp_val",
                     "axis_type": "linear",
-                    "label": "Sample Index",
-                    "reference_source": "member_val_predictions",
-                    "reference_axis": 0
+                    "label": "Validation Sample"
                   },
                   "y_axis": {
                     "data_source": "member_val_predictions",
@@ -1164,11 +1162,9 @@
                 },
                 {
                   "x_axis": {
-                    "data_source": "__index__",
+                    "data_source": "smp_val",
                     "axis_type": "linear",
-                    "label": "Sample Index",
-                    "reference_source": "y_val_pred",
-                    "reference_axis": 0
+                    "label": "Validation Sample"
                   },
                   "y_axis": {
                     "data_source": "y_val_pred",

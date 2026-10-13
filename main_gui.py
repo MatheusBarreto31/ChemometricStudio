@@ -13375,8 +13375,10 @@ class ChemometricsGUI:
                         each item can be a source name string or a dict containing
                         {'data_source': <name>, 'nested_key': <path>}.
                         Can also be special markers:
-                        - "__index__": Auto-generated row indices (requires reference_source)
+                        - "__index__": Auto-generated row indices (1-based by default)
                         - "row_index": Alias for __index__
+                        - "__index0__": Auto-generated row indices (0-based)
+                        - "__index1__": Auto-generated row indices (1-based)
             nested_key: Optional key for nested dictionary access (e.g., 'pct_variance_explained')
                        Can be a single key or dot-separated path (e.g., 'stats.mean')
         
@@ -14586,7 +14588,7 @@ class ChemometricsGUI:
                 # Stack columns into a 2D array
                 try:
                     min_len = min(len(col) for col in data_columns)
-                    trimmed_columns = [col[:min_len] for col in data_columns]
+                    trimmed_columns = [np.asarray(col[:min_len], dtype=object) for col in data_columns]
                     data = np.column_stack(trimmed_columns)
                 except ValueError:
                     label = ttk.Label(parent, text=self.language_manager.translate("ui.messages.column_lengths_mismatch", "Column lengths do not match. All columns must have the same length."), foreground="red")
@@ -19738,7 +19740,7 @@ Count:
                 local_headers.append(col_name)
             if data_columns:
                 min_len = min(len(col) for col in data_columns)
-                trimmed = [col[:min_len] for col in data_columns]
+                trimmed = [np.asarray(col[:min_len], dtype=object) for col in data_columns]
                 data = np.column_stack(trimmed)
                 headers = local_headers
         else:
