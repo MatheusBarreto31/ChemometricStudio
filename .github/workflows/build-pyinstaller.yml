@@ -247,7 +247,7 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_linux }}
     container:
-      image: python:3.11-bullseye
+      image: python:3.11-bookworm
     env:
       LINUX_PACKAGE_SELECTION: ${{ github.event_name == 'workflow_dispatch' && inputs.linux_package || 'all' }}
       DEB_ARCH: amd64
@@ -447,7 +447,7 @@ jobs:
             -e SHORT_SHA \
             -v "$PWD:/work" \
             -w /work \
-            python:3.11-bullseye bash -lc '
+            python:3.11-bookworm bash -lc '
               set -e
               apt-get update
               apt-get install -y --no-install-recommends tk tcl libx11-6 libxext6 libxrender1 libsm6 libxft2 libgl1 libglib2.0-0 patchelf rpm zstd file ruby ruby-dev build-essential libarchive-tools desktop-file-utils
