@@ -300,6 +300,21 @@ def _to_serializable_matrix(values: Any) -> Optional[List[List[float]]]:
     return [[float(v) for v in row] for row in arr.tolist()]
 
 
+def _to_serializable_feature_response_matrix(values: Any) -> Optional[List[List[float]]]:
+    """Serialize linear coefficients as [feature, response] for diagnostics slicing."""
+    if values is None:
+        return None
+    arr = np.asarray(values, dtype=float)
+    if arr.ndim == 1:
+        arr = arr.reshape(-1, 1)
+    elif arr.ndim == 2:
+        # sklearn multi-output linear models expose coef_ as [response, feature].
+        arr = arr.T
+    else:
+        return None
+    return [[float(v) for v in row] for row in arr.tolist()]
+
+
 def _autoscale_from_calibration(
     X_cal: np.ndarray,
     X_val: Optional[np.ndarray] = None,
@@ -863,7 +878,7 @@ def _build_model_specific_payload(
         return {
             'summary': f"Linear coefficients available ({'sparse' if model_type_norm == 'lasso' else 'dense'})",
             'linear': {
-                'coefficients': _to_serializable_vector(coef),
+                'coefficients': _to_serializable_feature_response_matrix(coef),
                 'intercept': _to_serializable_vector(intercept),
                 'nonzero_coefficients': nz,
                 'alpha': float(fitted_model.get('alpha')) if 'alpha' in fitted_model else None,

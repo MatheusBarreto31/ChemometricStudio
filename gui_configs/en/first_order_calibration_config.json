@@ -1631,6 +1631,11 @@
       {
         "title": "CV Fold Metrics",
         "layout": "fp",
+        "condition": {
+          "parameter": "out.cv_results",
+          "operator": "exists",
+          "value": true
+        },
         "sections": [
           {
             "type": "table",
@@ -1712,7 +1717,9 @@
                   "name": "Response",
                   "dimension": 1,
                   "axis": "y",
-                  "show_navigation_menu": true
+                  "show_navigation_menu": true,
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0
                 }
               ]
             }
@@ -1723,7 +1730,14 @@
               "title": "OLS Coefficients",
               "data_source": "model",
               "nested_key": "model_specific.linear.coefficients",
+              "column_headers": {
+                "data_source": "y_labels"
+              },
               "row_label": "Feature",
+              "row_headers": {
+                "data_source": "axis_n_info",
+                "nested_key": "1"
+              },
               "value_format": ".4g",
               "decimal_places": 6,
               "max_rows": 300
@@ -1780,7 +1794,9 @@
                   "name": "Response",
                   "dimension": 1,
                   "axis": "y",
-                  "show_navigation_menu": true
+                  "show_navigation_menu": true,
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0
                 }
               ]
             }
@@ -1791,7 +1807,14 @@
               "title": "Ridge Coefficients",
               "data_source": "model",
               "nested_key": "model_specific.linear.coefficients",
+              "column_headers": {
+                "data_source": "y_labels"
+              },
               "row_label": "Feature",
+              "row_headers": {
+                "data_source": "axis_n_info",
+                "nested_key": "1"
+              },
               "value_format": ".4g",
               "decimal_places": 6,
               "max_rows": 300
@@ -1848,7 +1871,9 @@
                   "name": "Response",
                   "dimension": 1,
                   "axis": "y",
-                  "show_navigation_menu": true
+                  "show_navigation_menu": true,
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0
                 }
               ]
             }
@@ -1876,7 +1901,14 @@
               "title": "Lasso Coefficients",
               "data_source": "model",
               "nested_key": "model_specific.linear.coefficients",
+              "column_headers": {
+                "data_source": "y_labels"
+              },
               "row_label": "Feature",
+              "row_headers": {
+                "data_source": "axis_n_info",
+                "nested_key": "1"
+              },
               "value_format": ".4g",
               "decimal_places": 6,
               "max_rows": 300
@@ -1916,7 +1948,9 @@
                   "name": "Response",
                   "dimension": 1,
                   "axis": "y",
-                  "show_navigation_menu": true
+                  "show_navigation_menu": true,
+                  "labels_source": "y_labels",
+                  "labels_dimension": 0
                 }
               ]
             }
@@ -1944,7 +1978,14 @@
               "title": "Elastic Net Coefficients",
               "data_source": "model",
               "nested_key": "model_specific.linear.coefficients",
+              "column_headers": {
+                "data_source": "y_labels"
+              },
               "row_label": "Feature",
+              "row_headers": {
+                "data_source": "axis_n_info",
+                "nested_key": "1"
+              },
               "value_format": ".4g",
               "decimal_places": 6,
               "max_rows": 300
