@@ -955,8 +955,12 @@ def _build_model_specific_payload(
         y_loadings = getattr(model, 'y_loadings_', None)
         x_scores = getattr(model, 'x_scores_', None)
         y_scores = getattr(model, 'y_scores_', None)
+        regression_coefficients = _to_serializable_feature_response_matrix(getattr(model, 'coef_', None))
         weight_norms = None
         loading_norms = None
+        w_p_norm_discrepancy = None
+        inner_regression_coefficients = None
+        inner_regression_coefficients_norm = None
         y_residual_variance_by_lv = None
         n_components_out = int(fitted_model.get('n_components', params.get('n_components', 0)))
 
@@ -968,6 +972,41 @@ def _build_model_specific_payload(
             xl = np.asarray(x_loadings, dtype=float)
             if xl.ndim == 2:
                 loading_norms = [float(v) for v in np.linalg.norm(xl, axis=0).tolist()]
+        if x_weights is not None and x_loadings is not None:
+            xw = np.asarray(x_weights, dtype=float)
+            xl = np.asarray(x_loadings, dtype=float)
+            if xw.ndim == 2 and xl.ndim == 2:
+                n_comp_wp = min(xw.shape[1], xl.shape[1])
+                if n_comp_wp > 0:
+                    w_p_norm_discrepancy = [
+                        float(np.linalg.norm(xw[:, k] - xl[:, k]))
+                        for k in range(n_comp_wp)
+                    ]
+
+        if x_scores is not None and y_scores is not None:
+            t_arr = np.asarray(x_scores, dtype=float)
+            u_arr = np.asarray(y_scores, dtype=float)
+            if t_arr.ndim == 1:
+                t_arr = t_arr.reshape(-1, 1)
+            if u_arr.ndim == 1:
+                u_arr = u_arr.reshape(-1, 1)
+            if t_arr.ndim == 2 and u_arr.ndim == 2 and t_arr.shape[0] == u_arr.shape[0]:
+                n_comp_inner = min(t_arr.shape[1], u_arr.shape[1])
+                if n_comp_inner > 0:
+                    inner_vals: List[float] = []
+                    for k in range(n_comp_inner):
+                        t_col = t_arr[:, k]
+                        u_col = u_arr[:, k]
+                        denom = float(np.dot(t_col, t_col))
+                        if denom <= 0.0:
+                            inner_vals.append(float('nan'))
+                        else:
+                            inner_vals.append(float(np.dot(u_col, t_col) / denom))
+                    inner_regression_coefficients = inner_vals
+                    inner_regression_coefficients_norm = [
+                        float(np.abs(v)) if np.isfinite(v) else float('nan')
+                        for v in inner_vals
+                    ]
 
         if Y_train is not None and x_scores is not None and y_loadings is not None:
             y_arr = np.asarray(Y_train, dtype=float)
@@ -1022,6 +1061,10 @@ def _build_model_specific_payload(
                 'lv_labels': lv_labels,
                 'x_weights_norm': weight_norms,
                 'x_loadings_norm': loading_norms,
+                'w_p_norm_discrepancy': w_p_norm_discrepancy,
+                'regression_coefficients': regression_coefficients,
+                'inner_regression_coefficients': inner_regression_coefficients,
+                'inner_regression_coefficients_norm': inner_regression_coefficients_norm,
                 'x_weights': _to_serializable_matrix(x_weights),
                 'x_loadings': _to_serializable_matrix(x_loadings),
                 'y_loadings': _to_serializable_matrix(y_loadings),
@@ -1038,8 +1081,11 @@ def _build_model_specific_payload(
 
     if model_type_norm == 'pcr':
         pca = fitted_model.get('pca')
+        reg = fitted_model.get('reg')
         evr = _to_serializable_vector(getattr(pca, 'explained_variance_ratio_', None))
         cumsum = None
+        regression_coefficients = None
+        component_regression_coefficients = None
         if evr is not None:
             cumsum = [float(v) for v in np.cumsum(np.asarray(evr, dtype=float)).tolist()]
         pca_scores = None
@@ -1056,6 +1102,20 @@ def _build_model_specific_payload(
             if components is not None:
                 # Transpose to (n_features, n_components) to match PLS loading convention
                 pca_loadings = _to_serializable_matrix(np.asarray(components, dtype=float).T)
+                if reg is not None and hasattr(reg, 'coef_'):
+                    try:
+                        comp_arr = np.asarray(components, dtype=float)  # (n_comp, n_features)
+                        coef_arr = np.asarray(getattr(reg, 'coef_'), dtype=float)
+                        component_regression_coefficients = _to_serializable_feature_response_matrix(coef_arr)
+                        if coef_arr.ndim == 1:
+                            coef_arr = coef_arr.reshape(1, -1)  # (1, n_comp)
+                        # Map PCR latent-space coefficients to original feature space:
+                        # (n_features, n_comp) @ (n_comp, n_responses) -> (n_features, n_responses)
+                        beta_feature = comp_arr.T @ coef_arr.T
+                        regression_coefficients = _to_serializable_matrix(beta_feature)
+                    except Exception:
+                        component_regression_coefficients = None
+                        regression_coefficients = None
 
         # Outlier statistics from PCA decomposition
         pcr_leverage: Optional[list] = None
@@ -1099,6 +1159,8 @@ def _build_model_specific_payload(
                 'pc_labels': pc_labels_list,
                 'pca_scores': pca_scores,
                 'pca_loadings': pca_loadings,
+                'regression_coefficients': regression_coefficients,
+                'component_regression_coefficients': component_regression_coefficients,
                 'leverage': pcr_leverage,
                 't2_hotelling': pcr_t2,
                 'q_residuals': pcr_q_residuals,

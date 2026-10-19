@@ -2218,8 +2218,8 @@
         ]
       },
       {
-        "title": "PLS Component Norms",
-        "layout": "ew",
+        "title": "PLS Coefficient & Latent Diagnostics",
+        "layout": "sd",
         "condition": {
           "parameter": "model_type",
           "operator": "==",
@@ -2230,44 +2230,54 @@
             "type": "graph",
             "config": {
               "graph_type": "line",
-              "title": "X Weight and Loading Norms by Component",
+              "show_origin": true,
+              "title": "Regression Coefficients by Feature",
               "line_style": "lines+markers",
-              "datasets": [
+              "x_axis": {
+                "data_source": "axis_n_info",
+                "axis_type": "linear",
+                "index": 1,
+                "label": "dim_labels",
+                "l_index": 1
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.pls.regression_coefficients",
+                "axis_type": "linear",
+                "label": "Coefficient"
+              },
+              "data_slicing": [
                 {
-                  "x_axis": {
-                    "data_source": "__index__",
-                    "axis_type": "linear",
-                    "label": "LV",
-                    "force_integer": true,
-                    "reference_source": "model",
-                    "reference_nested_key": "model_specific.pls.x_weights_norm"
-                  },
-                  "y_axis": {
-                    "data_source": "model",
-                    "nested_key": "model_specific.pls.x_weights_norm",
-                    "axis_type": "linear",
-                    "label": "Norm"
-                  },
-                  "label": "X Weights Norm"
-                },
-                {
-                  "x_axis": {
-                    "data_source": "__index__",
-                    "axis_type": "linear",
-                    "label": "LV",
-                    "force_integer": true,
-                    "reference_source": "model",
-                    "reference_nested_key": "model_specific.pls.x_loadings_norm"
-                  },
-                  "y_axis": {
-                    "data_source": "model",
-                    "nested_key": "model_specific.pls.x_loadings_norm",
-                    "axis_type": "linear",
-                    "label": "Norm"
-                  },
-                  "label": "X Loadings Norm"
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "y",
+                  "default": 0,
+                  "nav_id": "pls_response_coef",
+                  "show_navigation_menu": true
                 }
               ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "W vs P Norm Discrepancy by Component",
+              "line_style": "lines+markers",
+              "x_axis": {
+                "data_source": "__index__",
+                "axis_type": "linear",
+                "label": "LV",
+                "force_integer": true,
+                "reference_source": "model",
+                "reference_nested_key": "model_specific.pls.w_p_norm_discrepancy"
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.pls.w_p_norm_discrepancy",
+                "axis_type": "linear",
+                "label": "$||w_k - p_k||$"
+              }
             }
           },
           {
@@ -2604,6 +2614,120 @@
         ]
       },
       {
+        "title": "PCR Coefficients",
+        "layout": "fd",
+        "condition": {
+          "parameter": "model_type",
+          "operator": "==",
+          "value": "pcr"
+        },
+        "sections": [
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "PCR Coefficient Profile",
+              "show_origin": true,
+              "x_axis": {
+                "data_source": "axis_n_info",
+                "axis_type": "linear",
+                "index": 1,
+                "label": "dim_labels",
+                "l_index": 1
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.pcr.regression_coefficients",
+                "axis_type": "linear",
+                "label": "Coefficient"
+              },
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "y",
+                  "show_navigation_menu": true,
+                  "labels_source": "y_labels",
+                  "nav_id": "first_order_response",
+                  "labels_dimension": 0
+                }
+              ]
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "PCR Coefficients",
+              "data_source": "model",
+              "nested_key": "model_specific.pcr.regression_coefficients",
+              "column_headers": {
+                "data_source": "y_labels"
+              },
+              "row_label": "Feature",
+              "row_headers": {
+                "data_source": "axis_n_info",
+                "nested_key": "1"
+              },
+              "value_format": ".4g",
+              "decimal_places": 6,
+              "max_rows": 300
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "show_origin": true,
+              "title": "PCR Component Coefficient Profile",
+              "x_axis": {
+                "data_source": "__index__",
+                "axis_type": "linear",
+                "label": "Principal Component",
+                "force_integer": true,
+                "reference_source": "model",
+                "reference_nested_key": "model_specific.pcr.component_regression_coefficients"
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.pcr.component_regression_coefficients",
+                "axis_type": "linear",
+                "label": "Coefficient"
+              },
+              "data_slicing": [
+                {
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "y",
+                  "show_navigation_menu": true,
+                  "labels_source": "y_labels",
+                  "nav_id": "first_order_response",
+                  "labels_dimension": 0
+                }
+              ]
+            }
+          },
+          {
+            "type": "table",
+            "config": {
+              "title": "PCR Component Coefficients",
+              "data_source": "model",
+              "nested_key": "model_specific.pcr.component_regression_coefficients",
+              "column_headers": {
+                "data_source": "y_labels"
+              },
+              "row_label": "Component",
+              "row_headers": {
+                "data_source": "model",
+                "nested_key": "model_specific.pcr.pc_labels"
+              },
+              "value_format": ".4g",
+              "decimal_places": 6,
+              "max_rows": 300
+            }
+          }
+        ]
+      },
+      {
         "title": "Kernel PLS Diagnostics",
         "layout": "fd",
         "condition": {
@@ -2798,8 +2922,8 @@
         ]
       },
       {
-        "title": "Kernel PLS Component Norms",
-        "layout": "ed",
+        "title": "Kernel PLS Coefficient & Latent Diagnostics",
+        "layout": "sd",
         "condition": {
           "parameter": "model_type",
           "operator": "==",
@@ -2810,42 +2934,54 @@
             "type": "graph",
             "config": {
               "graph_type": "line",
-              "title": "Kernel PLS Component Norms",
+              "show_origin": true,
+              "title": "Kernel PLS Regression Coefficients by Feature",
               "line_style": "lines+markers",
-              "datasets": [
+              "x_axis": {
+                "data_source": "axis_n_info",
+                "axis_type": "linear",
+                "index": 1,
+                "label": "dim_labels",
+                "l_index": 1
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.pls.regression_coefficients",
+                "axis_type": "linear",
+                "label": "Coefficient"
+              },
+              "data_slicing": [
                 {
-                  "x_axis": {
-                    "data_source": "__index__",
-                    "axis_type": "linear",
-                    "label": "Component",
-                    "reference_source": "model",
-                    "reference_nested_key": "model_specific.pls.x_weights_norm"
-                  },
-                  "y_axis": {
-                    "data_source": "model",
-                    "nested_key": "model_specific.pls.x_weights_norm",
-                    "axis_type": "linear",
-                    "label": "Norm"
-                  },
-                  "label": "X Weights Norm"
-                },
-                {
-                  "x_axis": {
-                    "data_source": "__index__",
-                    "axis_type": "linear",
-                    "label": "Component",
-                    "reference_source": "model",
-                    "reference_nested_key": "model_specific.pls.x_loadings_norm"
-                  },
-                  "y_axis": {
-                    "data_source": "model",
-                    "nested_key": "model_specific.pls.x_loadings_norm",
-                    "axis_type": "linear",
-                    "label": "Norm"
-                  },
-                  "label": "X Loadings Norm"
+                  "name": "Response",
+                  "dimension": 1,
+                  "axis": "y",
+                  "default": 0,
+                  "nav_id": "kpls_response_coef",
+                  "show_navigation_menu": true
                 }
               ]
+            }
+          },
+          {
+            "type": "graph",
+            "config": {
+              "graph_type": "line",
+              "title": "Kernel PLS W vs P Norm Discrepancy by Component",
+              "line_style": "lines+markers",
+              "x_axis": {
+                "data_source": "__index__",
+                "axis_type": "linear",
+                "label": "LV",
+                "force_integer": true,
+                "reference_source": "model",
+                "reference_nested_key": "model_specific.pls.w_p_norm_discrepancy"
+              },
+              "y_axis": {
+                "data_source": "model",
+                "nested_key": "model_specific.pls.w_p_norm_discrepancy",
+                "axis_type": "linear",
+                "label": "||w_k - p_k||"
+              }
             }
           },
           {
@@ -2887,32 +3023,6 @@
                   "show_navigation_menu": true
                 }
               ]
-            }
-          },
-          {
-            "type": "table",
-            "config": {
-              "title": "Kernel PLS Parameters",
-              "row_label": "Metric",
-              "columns": [
-                {
-                  "data_source": "model",
-                  "nested_key": "kernel_pls_gamma",
-                  "name": "Kernel Gamma"
-                },
-                {
-                  "data_source": "model",
-                  "nested_key": "kernel_pls_n_features",
-                  "name": "Mapped Features"
-                },
-                {
-                  "data_source": "selected_parameter_value",
-                  "name": "Selected Components"
-                }
-              ],
-              "value_format": ".4g",
-              "decimal_places": 6,
-              "max_rows": 20
             }
           }
         ]
